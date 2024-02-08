@@ -1,8 +1,8 @@
 [package]
 name = "gg"
-version = "0.0.0"
-description = "A Tauri App"
-authors = ["you"]
+version = "0.14.1"
+description = "GG - Gui for JJ"
+authors = ["Thomas Castiglione"]
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -18,6 +18,8 @@ jj-lib = "0.14.0"
 jj-cli = { version = "0.14.0", default-features = false }
 anyhow = "1.0.79"
 itertools = "0.12.1"
+serde = { version = "1.0.196", features = ["derive"] }
+ts-rs = "7.1.1"
 
 [features]
 # this feature is used for production builds or when `devPath` points to the filesystem

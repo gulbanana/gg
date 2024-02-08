@@ -1,5 +1,5 @@
 <script lang="ts">
-  import LogView from './lib/LogView.svelte'
+  import LogView from "./LogView.svelte";
 </script>
 
 <div id="shell">

@@ -1,11 +1,30 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod format;
+mod messages;
+
 use std::{path::Path, sync::Arc};
 
 use anyhow::{anyhow, Result};
+use format::CommitOrChangeId;
 use itertools::Itertools;
-use jj_cli::{cli_util::start_repo_transaction, config::{default_config, LayeredConfigs}};
-use jj_lib::{backend::CommitId, id_prefix::IdPrefixContext, op_heads_store, operation::Operation, repo::{ReadonlyRepo, Repo, RepoLoader, StoreFactories}, revset::{self, RevsetAliasesMap, RevsetIteratorExt, RevsetParseContext, RevsetWorkspaceContext}, settings::{ConfigResultExt, UserSettings}, workspace::{self, WorkspaceLoader}};
+use jj_cli::{
+    cli_util::start_repo_transaction,
+    config::{default_config, LayeredConfigs},
+    time_util,
+};
+use jj_lib::{
+    backend::CommitId,
+    id_prefix::IdPrefixContext,
+    op_heads_store,
+    operation::Operation,
+    repo::{ReadonlyRepo, Repo, RepoLoader, StoreFactories},
+    revset::{
+        self, RevsetAliasesMap, RevsetIteratorExt, RevsetParseContext, RevsetWorkspaceContext,
+    },
+    settings::{ConfigResultExt, UserSettings},
+    workspace::{self, WorkspaceLoader},
+};
 
 fn main() {
     tauri::Builder::default()
@@ -16,14 +35,11 @@ fn main() {
 }
 
 #[tauri::command]
-fn load_log() -> String {
-    match get_log() {
-        Ok(x) => x,
-        Err(err) => format!("{err}")
-    }
+fn load_log() -> Result<Vec<messages::LogChange>, String> {
+    get_log().map_err(|err| format!("{err:?}"))
 }
 
-fn get_log() -> Result<String> {
+fn get_log() -> Result<Vec<messages::LogChange>> {
     let cwd = std::env::current_dir()?;
     let loader = WorkspaceLoader::init(find_workspace_dir(&cwd))?;
 
@@ -33,19 +49,23 @@ fn get_log() -> Result<String> {
     let config = configs.merge();
     let settings = UserSettings::from_config(config);
 
-    let workspace = loader.load(&settings, &StoreFactories::default(), &workspace::default_working_copy_factories())?;
+    let workspace = loader.load(
+        &settings,
+        &StoreFactories::default(),
+        &workspace::default_working_copy_factories(),
+    )?;
     let op_head = resolve_op_head(&settings, workspace.repo_loader())?;
     let repo = workspace.repo_loader().load_at(&op_head)?;
 
     let workspace_context = RevsetWorkspaceContext {
         cwd: &cwd,
         workspace_id: workspace.workspace_id(),
-        workspace_root: workspace.workspace_root()
+        workspace_root: workspace.workspace_root(),
     };
     let parse_context = RevsetParseContext {
         aliases_map: &load_revset_aliases(&configs)?,
         user_email: settings.user_email(),
-        workspace: Some(workspace_context)
+        workspace: Some(workspace_context),
     };
 
     let default_revset = "@ | ancestors(immutable_heads().., 2) | heads(immutable_heads())";
@@ -54,13 +74,29 @@ fn get_log() -> Result<String> {
     let prefix_context = IdPrefixContext::default();
     let symbol_resolver = revset_symbol_resolver(&repo, &prefix_context)?;
     let resolved_expression =
-    expression.resolve_user_expression(repo.as_ref(), &symbol_resolver)?;
+        expression.resolve_user_expression(repo.as_ref(), &symbol_resolver)?;
     let revset = resolved_expression.evaluate(repo.as_ref())?;
 
-    let mut output = String::new();
-    for commit in revset.iter().commits(repo.store()).take(10) {
-        output += commit?.description();
-        output += "\n";
+    let mut output = Vec::new();
+    for commit_or_error in revset.iter().commits(repo.store()) {
+        let commit = commit_or_error?;
+        let change_id = CommitOrChangeId::Change(commit.change_id().clone()).shortest(
+            repo.as_ref(),
+            &prefix_context,
+            12,
+        );
+        let commit_id = CommitOrChangeId::Commit(commit.id().clone()).shortest(
+            repo.as_ref(),
+            &prefix_context,
+            12,
+        );
+        output.push(messages::LogChange {
+            change_id: format!("{}|{}", change_id.prefix, change_id.rest),
+            commit_id: format!("{}|{}", commit_id.prefix, commit_id.rest),
+            description: commit.description().to_string(),
+            email: commit.author().email.clone(),
+            timestamp: time_util::format_absolute_timestamp(&commit.author().timestamp),
+        });
     }
 
     Ok(output)
@@ -72,9 +108,7 @@ fn find_workspace_dir(cwd: &Path) -> &Path {
         .unwrap_or(cwd)
 }
 
-fn load_revset_aliases(
-    layered_configs: &LayeredConfigs,
-) -> Result<RevsetAliasesMap> {
+fn load_revset_aliases(layered_configs: &LayeredConfigs) -> Result<RevsetAliasesMap> {
     const TABLE_KEY: &str = "revset-aliases";
     let mut aliases_map = RevsetAliasesMap::new();
     // Load from all config layers in order. 'f(x)' in default layer should be
@@ -95,14 +129,13 @@ fn load_revset_aliases(
     Ok(aliases_map)
 }
 
-pub fn resolve_op_head(settings: &UserSettings, repo_loader: &RepoLoader) -> Result<Operation> {
+fn resolve_op_head(settings: &UserSettings, repo_loader: &RepoLoader) -> Result<Operation> {
     op_heads_store::resolve_op_heads(
         repo_loader.op_heads_store().as_ref(),
         repo_loader.op_store(),
         |op_heads| {
             let base_repo = repo_loader.load_at(&op_heads[0])?;
-            let mut tx =
-                start_repo_transaction(&base_repo, &settings, &vec![]);
+            let mut tx = start_repo_transaction(&base_repo, &settings, &vec![]);
             for other_op_head in op_heads.into_iter().skip(1) {
                 tx.merge_operation(other_op_head)?;
                 let _num_rebased = tx.mut_repo().rebase_descendants(&settings)?;
@@ -112,11 +145,14 @@ pub fn resolve_op_head(settings: &UserSettings, repo_loader: &RepoLoader) -> Res
                 .leave_unpublished()
                 .operation()
                 .clone())
-        }
+        },
     )
 }
 
-fn revset_symbol_resolver<'context>(repo: &'context Arc<ReadonlyRepo>, id_prefix_context: &'context IdPrefixContext) -> Result<revset::DefaultSymbolResolver<'context>> {
+fn revset_symbol_resolver<'context>(
+    repo: &'context Arc<ReadonlyRepo>,
+    id_prefix_context: &'context IdPrefixContext,
+) -> Result<revset::DefaultSymbolResolver<'context>> {
     let commit_id_resolver: revset::PrefixResolver<CommitId> =
         Box::new(|repo, prefix| id_prefix_context.resolve_commit_prefix(repo, prefix));
     let change_id_resolver: revset::PrefixResolver<Vec<CommitId>> =
