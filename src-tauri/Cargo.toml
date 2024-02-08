@@ -12,13 +12,17 @@ tauri-build = { version = "2.0.0-beta", features = [] }
 
 [dependencies]
 tauri = { version = "2.0.0-beta", features = [] }
+tauri-plugin-dialog = "2.0.0-beta"
 tauri-plugin-shell = "2.0.0-beta"
-serde_json = "1.0"
+tauri-plugin-window-state = "2.0.0-beta.0"
+
 jj-lib = "0.14.0"
 jj-cli = { version = "0.14.0", default-features = false }
+
 anyhow = "1.0.79"
 itertools = "0.12.1"
 serde = { version = "1.0.196", features = ["derive"] }
+serde_json = "1.0"
 ts-rs = "7.1.1"
 
 [features]

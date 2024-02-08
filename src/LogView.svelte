@@ -1,5 +1,6 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
+  import { listen } from "@tauri-apps/api/event";
   import type { LogChange } from "./messages.js";
 
   let log_content: LogChange[] = [];
@@ -8,6 +9,7 @@
     log_content = await invoke<LogChange[]>("load_log");
   }
 
+  listen("gg://repo_loaded", load);
   load();
 </script>
 

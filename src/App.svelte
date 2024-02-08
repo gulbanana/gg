@@ -1,5 +1,13 @@
 <script lang="ts">
   import LogView from "./LogView.svelte";
+  import { invoke } from "@tauri-apps/api/core";
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "o" && event.ctrlKey) {
+      event.preventDefault();
+      invoke("forward_accelerator", { key: "o" });
+    }
+  });
 </script>
 
 <div id="shell">

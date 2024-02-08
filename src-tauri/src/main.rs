@@ -3,7 +3,10 @@
 mod format;
 mod messages;
 
-use std::{path::Path, sync::Arc};
+use std::{
+    path::{Path, PathBuf},
+    sync::{Arc, Mutex},
+};
 
 use anyhow::{anyhow, Result};
 use format::CommitOrChangeId;
@@ -25,22 +28,84 @@ use jj_lib::{
     settings::{ConfigResultExt, UserSettings},
     workspace::{self, WorkspaceLoader},
 };
+use tauri::{
+    menu::{Menu, MenuItem, Submenu},
+    Manager,
+};
+use tauri_plugin_dialog::DialogExt;
 
-fn main() {
+struct WorkspaceSession {
+    cwd: Mutex<PathBuf>,
+}
+
+fn main() -> Result<()> {
+    let cwd = std::env::current_dir()?;
+
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
-        .invoke_handler(tauri::generate_handler![load_log])
+        .plugin(tauri_plugin_window_state::Builder::default().build())
+        .plugin(tauri_plugin_dialog::init())
+        .invoke_handler(tauri::generate_handler![forward_accelerator, load_log])
+        .menu(|handle| {
+            Menu::with_items(
+                handle,
+                &[&Submenu::with_items(
+                    handle,
+                    "Repository",
+                    true,
+                    &[&MenuItem::with_id(
+                        handle,
+                        "open",
+                        "Open...",
+                        true,
+                        Some("cmdorctrl+o"),
+                    )?],
+                )?],
+            )
+        })
+        .setup(|app| {
+            let window = app.get_webview_window("main").unwrap();
+            window.manage(WorkspaceSession {
+                cwd: Mutex::from(cwd),
+            });
+            window.on_menu_event(|window, event| {
+                if event.id == "open" {
+                    menu_open_repository(window);
+                }
+            });
+            Ok(())
+        })
         .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .unwrap(); // use ? after https://github.com/tauri-apps/tauri/pull/8777
+
+    Ok(())
 }
 
 #[tauri::command]
-fn load_log() -> Result<Vec<messages::LogChange>, String> {
-    get_log().map_err(|err| format!("{err:?}"))
+fn forward_accelerator(window: tauri::Window, key: char) {
+    if key == 'o' {
+        menu_open_repository(&window);
+    }
 }
 
-fn get_log() -> Result<Vec<messages::LogChange>> {
-    let cwd = std::env::current_dir()?;
+#[tauri::command]
+fn load_log(window: tauri::Window) -> Result<Vec<messages::LogChange>, String> {
+    get_log(&window).map_err(|err| format!("{err:?}"))
+}
+
+fn menu_open_repository(window: &tauri::Window) {
+    let handle = window.clone();
+    window.dialog().file().pick_folder(move |picked| {
+        if let Some(path) = picked {
+            *handle.state::<WorkspaceSession>().cwd.lock().unwrap() = path;
+            handle.emit("gg://repo_loaded", ()).expect("emit event");
+        }
+    });
+}
+
+fn get_log(window: &tauri::Window) -> Result<Vec<messages::LogChange>> {
+    let session = window.state::<WorkspaceSession>();
+    let cwd = session.cwd.lock().unwrap();
     let loader = WorkspaceLoader::init(find_workspace_dir(&cwd))?;
 
     let mut configs = LayeredConfigs::from_environment(default_config());

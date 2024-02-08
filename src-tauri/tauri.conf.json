@@ -11,11 +11,13 @@
   "app": {
     "windows": [
       {
+        "label": "main",
+        "title": "GG - Gui for JJ",
         "fullscreen": false,
         "resizable": true,
-        "title": "GG - Gui for JJ",
-        "width": 1920,
-        "height": 1080
+        "focus": true,
+        "width": 1280,
+        "height": 720
       }
     ],
     "security": {
