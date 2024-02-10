@@ -194,7 +194,11 @@ impl WorkspaceSession {
     }
 
     fn lazy_load(&mut self) -> Result<&mut WorkspaceData> {
-        try_get_or_insert_with(&mut self.data, || WorkspaceData::from_cwd(&self.cwd))
+        let borrow = &mut self.data;
+        match borrow {
+            Some(value) => Ok(value),
+            None => Ok(borrow.get_or_insert(WorkspaceData::from_cwd(&self.cwd)?)),
+        }
     }
 }
 
@@ -251,14 +255,4 @@ fn revset_symbol_resolver<'context>(
         .with_commit_id_resolver(commit_id_resolver)
         .with_change_id_resolver(change_id_resolver);
     Ok(symbol_resolver)
-}
-
-fn try_get_or_insert_with<T, E, F>(option: &mut Option<T>, f: F) -> Result<&mut T, E>
-where
-    F: FnOnce() -> Result<T, E>,
-{
-    match option {
-        Some(value) => Ok(value),
-        None => Ok(option.get_or_insert(f()?)),
-    }
 }
