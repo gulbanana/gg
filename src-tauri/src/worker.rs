@@ -1,5 +1,8 @@
-use crate::{format::CommitOrChangeId, messages};
-use anyhow::{anyhow, Result};
+use crate::{
+    format::CommitOrChangeId,
+    messages::{self, RevDetail},
+};
+use anyhow::{anyhow, Context, Result};
 use itertools::Itertools;
 use jj_cli::{
     cli_util::start_repo_transaction,
@@ -8,6 +11,7 @@ use jj_cli::{
 };
 use jj_lib::{
     backend::CommitId,
+    commit::Commit,
     id_prefix::IdPrefixContext,
     op_heads_store,
     operation::Operation,
@@ -34,10 +38,10 @@ pub enum SessionEvent {
         cwd: PathBuf,
     },
     GetLog {
-        tx: Sender<Result<Vec<messages::LogChange>>>,
+        tx: Sender<Result<Vec<messages::RevHeader>>>,
     },
     GetChange {
-        tx: Sender<Result<Vec<messages::ChangePath>>>,
+        tx: Sender<Result<messages::RevDetail>>,
         revision: String,
     },
 }
@@ -102,11 +106,40 @@ impl WorkspaceData {
         let expression: std::rc::Rc<revset::RevsetExpression> =
             revset::parse(revision, &self.revset_parse_context())?;
         let expression = revset::optimize(expression);
-        let symbol_resolver = revset_symbol_resolver(&self.repo, &self.prefix_context)?;
+        let symbol_resolver = revset_symbol_resolver(&self.repo, &self.prefix_context)
+            .context("revset_symbol_resolver")?;
         let resolved_expression =
             expression.resolve_user_expression(self.repo.as_ref(), &symbol_resolver)?;
         let revset = resolved_expression.evaluate(self.repo.as_ref())?;
         Ok(revset)
+    }
+
+    pub fn format_commit_header(&self, commit: &Commit) -> messages::RevHeader {
+        let change_id = CommitOrChangeId::Change(commit.change_id().clone()).shortest(
+            self.repo.as_ref(),
+            &self.prefix_context,
+            12,
+        );
+
+        let commit_id = CommitOrChangeId::Commit(commit.id().clone()).shortest(
+            self.repo.as_ref(),
+            &self.prefix_context,
+            12,
+        );
+
+        messages::RevHeader {
+            change_id: messages::RevId {
+                prefix: change_id.prefix,
+                rest: change_id.rest,
+            },
+            commit_id: messages::RevId {
+                prefix: commit_id.prefix,
+                rest: commit_id.rest,
+            },
+            description: commit.description().into(),
+            email: commit.author().email.clone(),
+            timestamp: time_util::format_absolute_timestamp(&commit.author().timestamp),
+        }
     }
 
     fn revset_parse_context(&self) -> RevsetParseContext<'_> {
@@ -140,47 +173,26 @@ impl WorkspaceSession {
         self.data = None;
     }
 
-    pub fn get_log(&mut self) -> Result<Vec<messages::LogChange>> {
+    pub fn get_log(&mut self) -> Result<Vec<messages::RevHeader>> {
         let data = self.lazy_load()?;
 
-        let revset =
-            data.parse_revset("@ | ancestors(immutable_heads().., 2) | heads(immutable_heads())")?;
+        let revset = data
+            .parse_revset("@ | ancestors(immutable_heads().., 2) | heads(immutable_heads())")
+            .context("parse_revset")?;
 
         let mut output = Vec::new();
         for commit_or_error in revset.iter().commits(data.repo.store()) {
             let commit = commit_or_error?;
-            let change_id = CommitOrChangeId::Change(commit.change_id().clone()).shortest(
-                data.repo.as_ref(),
-                &data.prefix_context,
-                12,
-            );
-            let commit_id = CommitOrChangeId::Commit(commit.id().clone()).shortest(
-                data.repo.as_ref(),
-                &data.prefix_context,
-                12,
-            );
-            output.push(messages::LogChange {
-                change_id: messages::Id {
-                    prefix: change_id.prefix,
-                    rest: change_id.rest,
-                },
-                commit_id: messages::Id {
-                    prefix: commit_id.prefix,
-                    rest: commit_id.rest,
-                },
-                description: commit.description().into(),
-                email: commit.author().email.clone(),
-                timestamp: time_util::format_absolute_timestamp(&commit.author().timestamp),
-            });
+            output.push(data.format_commit_header(&commit));
         }
 
         Ok(output)
     }
 
-    pub fn get_change(&mut self, revision: String) -> Result<Vec<messages::ChangePath>> {
+    pub fn get_change(&mut self, revision: String) -> Result<messages::RevDetail> {
         let data = self.lazy_load()?;
 
-        let revset = data.parse_revset(&revision)?;
+        let revset = data.parse_revset(&revision).context("parse_revset")?;
 
         let commit = revset
             .iter()
@@ -188,9 +200,12 @@ impl WorkspaceSession {
             .next()
             .ok_or(anyhow!("commit not found"))??;
 
-        Ok(vec![messages::ChangePath {
-            relative_path: commit.description().into(),
-        }])
+        Ok(RevDetail {
+            header: data.format_commit_header(&commit),
+            paths: vec![messages::ChangePath {
+                relative_path: "fake/path/to/file".to_owned(),
+            }],
+        })
     }
 
     fn lazy_load(&mut self) -> Result<&mut WorkspaceData> {

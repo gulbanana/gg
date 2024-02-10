@@ -3,13 +3,6 @@ use ts_rs::TS;
 
 #[derive(TS, Serialize)]
 #[ts(export, export_to = "../src/messages/")]
-pub struct Id {
-    pub prefix: String,
-    pub rest: String,
-}
-
-#[derive(TS, Serialize)]
-#[ts(export, export_to = "../src/messages/")]
 pub struct Text {
     pub lines: Vec<String>,
 }
@@ -27,9 +20,16 @@ where
 
 #[derive(TS, Serialize)]
 #[ts(export, export_to = "../src/messages/")]
-pub struct LogChange {
-    pub change_id: Id,
-    pub commit_id: Id,
+pub struct RevId {
+    pub prefix: String,
+    pub rest: String,
+}
+
+#[derive(TS, Serialize)]
+#[ts(export, export_to = "../src/messages/")]
+pub struct RevHeader {
+    pub change_id: RevId,
+    pub commit_id: RevId,
     pub description: Text,
     pub email: String,
     pub timestamp: String,
@@ -37,6 +37,13 @@ pub struct LogChange {
 
 #[derive(TS, Serialize)]
 #[ts(export, export_to = "../src/messages/")]
+pub struct RevDetail {
+    pub header: RevHeader,
+    pub paths: Vec<ChangePath>,
+}
+
+#[derive(TS, Serialize)]
+#[ts(export, export_to = "../src/messages/")]
 pub struct ChangePath {
-    pub relative_path: Text,
+    pub relative_path: String,
 }

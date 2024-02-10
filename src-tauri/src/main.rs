@@ -83,7 +83,7 @@ fn forward_accelerator(window: tauri::Window, key: char) {
 }
 
 #[tauri::command]
-fn load_log(window: tauri::Window) -> Result<Vec<messages::LogChange>, InvokeError> {
+fn load_log(window: tauri::Window) -> Result<Vec<messages::RevHeader>, InvokeError> {
     let state = window.state::<SharedSession>();
     let session_tx = state.channel.lock().expect("session lock poisoned");
     let (call_tx, call_rx) = channel();
@@ -101,8 +101,7 @@ fn load_log(window: tauri::Window) -> Result<Vec<messages::LogChange>, InvokeErr
 fn load_change(
     window: tauri::Window,
     revision: String,
-) -> Result<Vec<messages::ChangePath>, InvokeError> {
-    println!("{revision}");
+) -> Result<messages::RevDetail, InvokeError> {
     let state = window.state::<SharedSession>();
     let session_tx = state.channel.lock().expect("session lock poisoned");
     let (call_tx, call_rx) = channel();

@@ -1,3 +1,5 @@
+// imitates the output of commit_templater, which is mostly private
+
 use std::cmp::max;
 
 use jj_lib::{
@@ -8,7 +10,6 @@ use jj_lib::{
     repo::Repo,
 };
 
-// imitating the output of commit_templater, which is mostly private
 pub enum CommitOrChangeId {
     Commit(CommitId),
     Change(ChangeId),
