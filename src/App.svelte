@@ -30,6 +30,8 @@
       invoke("forward_accelerator", { key: "o" });
     }
   });
+
+  invoke("notify_window_ready");
 </script>
 
 <div id="shell">

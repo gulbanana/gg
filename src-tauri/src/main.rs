@@ -9,12 +9,14 @@ use std::sync::Mutex;
 use std::thread::{self, JoinHandle};
 
 use anyhow::Result;
+use tauri::Window;
 use tauri::{
     ipc::InvokeError,
     menu::{Menu, MenuItem, Submenu},
     Manager,
 };
 use tauri_plugin_dialog::DialogExt;
+use tauri_plugin_window_state::StateFlags;
 
 use worker::SessionEvent;
 
@@ -26,9 +28,19 @@ struct SharedSession {
 fn main() -> Result<()> {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
-        .plugin(tauri_plugin_window_state::Builder::default().build())
+        .plugin(
+            tauri_plugin_window_state::Builder::default()
+                .with_state_flags(
+                    StateFlags::SIZE
+                        | StateFlags::POSITION
+                        | StateFlags::SIZE
+                        | StateFlags::FULLSCREEN,
+                )
+                .build(),
+        )
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
+            notify_window_ready,
             forward_accelerator,
             load_log,
             load_change
@@ -75,15 +87,20 @@ fn main() -> Result<()> {
     Ok(())
 }
 
+#[tauri::command(async)]
+fn notify_window_ready(window: Window) {
+    window.show().unwrap();
+}
+
 #[tauri::command]
-fn forward_accelerator(window: tauri::Window, key: char) {
+fn forward_accelerator(window: Window, key: char) {
     if key == 'o' {
         menu_open_repository(&window);
     }
 }
 
 #[tauri::command]
-fn load_log(window: tauri::Window) -> Result<Vec<messages::RevHeader>, InvokeError> {
+fn load_log(window: Window) -> Result<Vec<messages::RevHeader>, InvokeError> {
     let state = window.state::<SharedSession>();
     let session_tx = state.channel.lock().expect("session lock poisoned");
     let (call_tx, call_rx) = channel();
@@ -98,10 +115,7 @@ fn load_log(window: tauri::Window) -> Result<Vec<messages::RevHeader>, InvokeErr
 }
 
 #[tauri::command]
-fn load_change(
-    window: tauri::Window,
-    revision: String,
-) -> Result<messages::RevDetail, InvokeError> {
+fn load_change(window: Window, revision: String) -> Result<messages::RevDetail, InvokeError> {
     let state = window.state::<SharedSession>();
     let session_tx = state.channel.lock().expect("session lock poisoned");
     let (call_tx, call_rx) = channel();
@@ -118,7 +132,7 @@ fn load_change(
         .map_err(InvokeError::from_anyhow)
 }
 
-fn menu_open_repository(window: &tauri::Window) {
+fn menu_open_repository(window: &Window) {
     let window_handle = window.clone();
     window.dialog().file().pick_folder(move |picked| {
         if let Some(cwd) = picked {

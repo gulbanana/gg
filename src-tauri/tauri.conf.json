@@ -13,11 +13,12 @@
       {
         "label": "main",
         "title": "GG - Gui for JJ",
-        "fullscreen": false,
+        "decorations": true,
         "resizable": true,
         "focus": true,
         "width": 1280,
-        "height": 720
+        "height": 720,
+        "visible": false
       }
     ],
     "security": {
