@@ -1746,9 +1746,11 @@ name = "gg"
 version = "0.14.1"
 dependencies = [
  "anyhow",
+ "futures-util",
  "itertools 0.12.1",
  "jj-cli",
  "jj-lib",
+ "pollster",
  "serde",
  "serde_json",
  "tauri",

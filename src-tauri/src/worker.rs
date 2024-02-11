@@ -1,8 +1,11 @@
+//! Duplicates some features of cli_util which are coupled to the TUI
+
 use crate::{
     format::CommitOrChangeId,
-    messages::{self, RevDetail},
+    messages::{self, ChangePath, RevDetail},
 };
 use anyhow::{anyhow, Context, Result};
+use futures_util::StreamExt;
 use itertools::Itertools;
 use jj_cli::{
     cli_util::start_repo_transaction,
@@ -13,6 +16,7 @@ use jj_lib::{
     backend::CommitId,
     commit::Commit,
     id_prefix::IdPrefixContext,
+    matchers::EverythingMatcher,
     op_heads_store,
     operation::Operation,
     repo::{ReadonlyRepo, Repo, RepoLoader, StoreFactories},
@@ -20,9 +24,11 @@ use jj_lib::{
         self, Revset, RevsetAliasesMap, RevsetIteratorExt, RevsetParseContext,
         RevsetWorkspaceContext,
     },
+    rewrite::merge_commit_trees,
     settings::{ConfigResultExt, UserSettings},
     workspace::{self, Workspace, WorkspaceLoader},
 };
+use pollster::FutureExt;
 use std::{
     path::{Path, PathBuf},
     sync::{
@@ -200,11 +206,33 @@ impl WorkspaceSession {
             .next()
             .ok_or(anyhow!("commit not found"))??;
 
+        let parent_tree = merge_commit_trees(data.repo.as_ref(), &commit.parents())?;
+        let tree = commit.tree()?;
+        let mut tree_diff = parent_tree.diff_stream(&tree, &EverythingMatcher);
+
+        let mut paths = Vec::new();
+        async {
+            while let Some((repo_path, diff)) = tree_diff.next().await {
+                let mut path = String::new();
+                let (before, after) = diff.unwrap();
+                if before.is_present() && after.is_present() {
+                    path += "M ";
+                } else if before.is_absent() {
+                    path += "A ";
+                } else {
+                    path += "D ";
+                }
+                path += &repo_path.to_internal_dir_string();
+                paths.push(ChangePath {
+                    relative_path: path,
+                });
+            }
+        }
+        .block_on();
+
         Ok(RevDetail {
             header: data.format_commit_header(&commit),
-            paths: vec![messages::ChangePath {
-                relative_path: "fake/path/to/file".to_owned(),
-            }],
+            paths,
         })
     }
 

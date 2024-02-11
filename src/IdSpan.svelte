@@ -1,6 +1,5 @@
 <script lang="ts">
     import type { RevId } from "./messages/RevId";
-
     export let id: RevId;
     export let type: "change" | "commit";
 </script>

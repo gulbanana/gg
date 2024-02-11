@@ -7,6 +7,8 @@
   import type { RevId } from "./messages/RevId.js";
   import Bound from "./Bound.svelte";
   import IdSpan from "./IdSpan.svelte";
+  import Icon from "./Icon.svelte";
+  import Pane from "./Pane.svelte";
 
   let log_content = init<RevHeader[]>();
   let change_content = init<RevDetail>();
@@ -14,6 +16,9 @@
   async function load_log() {
     log_content = await call<RevHeader[]>("load_log");
     change_content = init();
+    if (log_content.type == "data") {
+      await load_change(log_content.value[0].change_id);
+    }
   }
 
   async function load_change(id: RevId) {
@@ -36,41 +41,57 @@
 </script>
 
 <div id="shell">
-  <div id="log" class="pane">
-    <Bound ipc={log_content} let:value>
-      {#each value as change}
-        <!-- svelte-ignore a11y-click-events-have-key-events -->
-        <!-- svelte-ignore a11y-no-static-element-interactions -->
-        <div class="change" on:click={() => load_change(change.change_id)}>
-          <code class="change-line">
-            <IdSpan id={change.change_id} type="change" />
-            <span class="author">{change.email}</span>
-            <span class="timestamp">{change.timestamp}</span>
-            <IdSpan id={change.commit_id} type="commit" />
-          </code>
-          <span class="change-line">
-            {change.description.lines[0]}
-          </span>
-        </div>
-      {/each}
-    </Bound>
-  </div>
+  <Pane>
+    <div slot="header" class="log-selector">
+      <select>
+        <option selected>revsets.log</option>
+        <option>all()</option>
+      </select>
+      <input
+        type="text"
+        value="@ | ancestors(immutable_heads().., 2) | heads(immutable_heads())"
+      />
+    </div>
+    <div slot="body" class="log-commits">
+      <Bound ipc={log_content} let:value>
+        {#each value as change}
+          <!-- svelte-ignore a11y-click-events-have-key-events -->
+          <!-- svelte-ignore a11y-no-static-element-interactions -->
+          <div class="change" on:click={() => load_change(change.change_id)}>
+            <code class="change-line">
+              <IdSpan id={change.change_id} type="change" />
+              <span class="author">{change.email}</span>
+              <span class="timestamp">{change.timestamp}</span>
+              <IdSpan id={change.commit_id} type="commit" />
+            </code>
+            <span class="change-line">
+              {change.description.lines[0]}
+            </span>
+          </div>
+        {/each}
+      </Bound>
+    </div>
+  </Pane>
 
-  <div id="selected-change" class="pane">
-    <Bound ipc={change_content} let:value>
-      <textarea>foo bar</textarea>
-      {#each value.header.description.lines as line}
-        <div>{line}</div>
-      {/each}
-      {#each value.paths as path}
-        <p>{path.relative_path}</p>
-      {/each}
-    </Bound>
-  </div>
+  <Bound ipc={change_content} let:value>
+    <Pane>
+      <h2 slot="header">
+        <IdSpan id={value.header.change_id} type="change" />
+        <button class="pin-commit"><Icon name="map-pin" /> Pin</button>
+      </h2>
+
+      <div slot="body">
+        <textarea>{value.header.description.lines.join("\n")}</textarea>
+        {#each value.paths as path}
+          <div>{path.relative_path}</div>
+        {/each}
+      </div>
+    </Pane>
+  </Bound>
 
   <div id="status-bar">
     <span>C:\Users\user\repository</span>
-    <button>Undo!</button>
+    <button><Icon name="rotate-ccw" /> Undo</button>
   </div>
 </div>
 
@@ -81,58 +102,43 @@
 
     display: grid;
     grid-template-columns: 1fr 1fr;
-    grid-template-rows: 1fr 2em;
-    gap: 10px;
+    grid-template-rows: 1fr 26px;
+    gap: 3px;
 
-    background: var(--ctp-base);
+    background: var(--ctp-overlay0);
     color: var(--ctp-text);
   }
 
-  #log {
+  .log-selector {
+    height: 100%;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 3px;
+  }
+
+  .log-commits {
     overflow-x: hidden;
     overflow-y: scroll;
-    scrollbar-color: var(--ctp-text) var(--ctp-mantle);
-    border-width: 1px 1px 1px 0;
+    scrollbar-color: var(--ctp-text) var(--ctp-base);
     display: flex;
     flex-direction: column;
     gap: 1em;
-  }
-
-  #selected-change {
-    border-width: 1px 0 1px 1px;
+    user-select: none;
   }
 
   #status-bar {
     grid-column: 1/3;
     background: var(--ctp-crust);
-    border-top: 1px solid var(--ctp-overlay0);
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 0 5px;
-  }
-
-  #status-bar > button {
-    background: var(--ctp-peach);
-    border-width: 1px;
-    border-radius: 2px;
-    border-color: var(--ctp-overlay0);
-    &:active,
-    &:hover {
-      border-color: var(--ctp-lavender);
-    }
-  }
-
-  .pane {
-    background: var(--ctp-mantle);
-    border: solid var(--ctp-overlay0);
-    margin-top: 10px;
-    padding: 5px;
+    padding: 0 3px;
   }
 
   .change {
     display: flex;
     flex-direction: column;
+    cursor: pointer;
   }
 
   .change-line {
@@ -151,17 +157,9 @@
     color: var(--ctp-teal);
   }
 
-  textarea {
-    width: 100%;
-    caret-color: var(--ctp-rosewater);
-    outline: none;
-    border-color: var(--ctp-overlay0);
-    &:focus-visible {
-      border-color: var(--ctp-lavender);
-    }
-  }
-
-  ::selection {
-    background: var(--ctp-rosewater);
+  h2 {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
   }
 </style>

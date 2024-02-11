@@ -21,6 +21,8 @@ jj-cli = { version = "0.14.0", default-features = false }
 
 anyhow = "1.0.79"
 itertools = "0.12.1"
+futures-util = "0.3.30"
+pollster = "0.3.0"
 serde = { version = "1.0.196", features = ["derive"] }
 serde_json = "1.0"
 ts-rs = "7.1.1"

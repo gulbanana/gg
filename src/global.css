@@ -67,3 +67,61 @@
     --ctp-rosewater: var(--ctp-macchiato-rosewater);
   }
 }
+
+button {
+  height: 24px;
+  font-size: 16px;
+
+  background: var(--ctp-peach);
+  border-width: 1px;
+  border-radius: 3px;
+  border-color: var(--ctp-overlay0);
+
+  &:active,
+  &:hover {
+    border-color: var(--ctp-lavender);
+  }
+
+  font-family: Bahnschrift,
+  "DIN Alternate",
+  "Franklin Gothic Medium",
+  "Nimbus Sans Narrow",
+  sans-serif-condensed,
+  sans-serif;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+::selection {
+  background: var(--ctp-rosewater);
+}
+
+textarea,
+select,
+input {
+  outline: none;
+  border: 1px solid var(--ctp-overlay0);
+  border-radius: 3px;
+
+  &:focus-visible {
+    border-color: var(--ctp-lavender);
+  }
+
+  caret-color: var(--ctp-rosewater);
+
+  background-color: var(--ctp-base);
+  color: var(--ctp-text);
+}
+
+textarea {
+  width: 100%;
+  height: 150px;
+  scrollbar-color: var(--ctp-text) var(--ctp-base);
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+}
