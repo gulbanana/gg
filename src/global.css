@@ -1,0 +1,69 @@
+@import "modern-normalize";
+@import "@catppuccin/palette/css/catppuccin.css";
+
+:root {
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-text-size-adjust: 100%;
+
+  /* catppuccin latte */
+  --ctp-crust: var(--ctp-latte-crust);
+  --ctp-mantle: var(--ctp-latte-mantle);
+  --ctp-base: var(--ctp-latte-base);
+  --ctp-surface0: var(--ctp-latte-surface0);
+  --ctp-surface1: var(--ctp-latte-surface1);
+  --ctp-surface2: var(--ctp-latte-surface2);
+  --ctp-overlay0: var(--ctp-latte-overlay0);
+  --ctp-overlay1: var(--ctp-latte-overlay1);
+  --ctp-overlay2: var(--ctp-latte-overlay2);
+  --ctp-subtext0: var(--ctp-latte-subtext0);
+  --ctp-subtext1: var(--ctp-latte-subtext1);
+  --ctp-text: var(--ctp-latte-text);
+  --ctp-lavender: var(--ctp-latte-lavender);
+  --ctp-blue: var(--ctp-latte-blue);
+  --ctp-sapphire: var(--ctp-latte-sapphire);
+  --ctp-sky: var(--ctp-latte-sky);
+  --ctp-teal: var(--ctp-latte-teal);
+  --ctp-green: var(--ctp-latte-green);
+  --ctp-yellow: var(--ctp-latte-yellow);
+  --ctp-peach: var(--ctp-latte-peach);
+  --ctp-maroon: var(--ctp-latte-maroon);
+  --ctp-red: var(--ctp-latte-red);
+  --ctp-mauve: var(--ctp-latte-mauve);
+  --ctp-pink: var(--ctp-latte-pink);
+  --ctp-flamingo: var(--ctp-latte-flamingo);
+  --ctp-rosewater: var(--ctp-latte-rosewater);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ctp-crust: var(--ctp-macchiato-crust);
+    --ctp-mantle: var(--ctp-macchiato-mantle);
+    --ctp-base: var(--ctp-macchiato-base);
+    --ctp-surface0: var(--ctp-macchiato-surface0);
+    --ctp-surface1: var(--ctp-macchiato-surface1);
+    --ctp-surface2: var(--ctp-macchiato-surface2);
+    --ctp-overlay0: var(--ctp-macchiato-overlay0);
+    --ctp-overlay1: var(--ctp-macchiato-overlay1);
+    --ctp-overlay2: var(--ctp-macchiato-overlay2);
+    --ctp-subtext0: var(--ctp-macchiato-subtext0);
+    --ctp-subtext1: var(--ctp-macchiato-subtext1);
+    --ctp-text: var(--ctp-macchiato-text);
+    --ctp-lavender: var(--ctp-macchiato-lavender);
+    --ctp-blue: var(--ctp-macchiato-blue);
+    --ctp-sapphire: var(--ctp-macchiato-sapphire);
+    --ctp-sky: var(--ctp-macchiato-sky);
+    --ctp-teal: var(--ctp-macchiato-teal);
+    --ctp-green: var(--ctp-macchiato-green);
+    --ctp-yellow: var(--ctp-macchiato-yellow);
+    --ctp-peach: var(--ctp-macchiato-peach);
+    --ctp-maroon: var(--ctp-macchiato-maroon);
+    --ctp-red: var(--ctp-macchiato-red);
+    --ctp-mauve: var(--ctp-macchiato-mauve);
+    --ctp-pink: var(--ctp-macchiato-pink);
+    --ctp-flamingo: var(--ctp-macchiato-flamingo);
+    --ctp-rosewater: var(--ctp-macchiato-rosewater);
+  }
+}

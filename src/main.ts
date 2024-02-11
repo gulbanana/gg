@@ -1,5 +1,4 @@
-import "modern-normalize";
-import "./styles.css";
+import "./global.css";
 import App from "./App.svelte";
 
 const app = new App({

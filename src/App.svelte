@@ -6,6 +6,7 @@
   import type { RevDetail } from "./messages/RevDetail.js";
   import type { RevId } from "./messages/RevId.js";
   import Bound from "./Bound.svelte";
+  import IdSpan from "./IdSpan.svelte";
 
   let log_content = init<RevHeader[]>();
   let change_content = init<RevDetail>();
@@ -35,17 +36,17 @@
 </script>
 
 <div id="shell">
-  <div id="log">
+  <div id="log" class="pane">
     <Bound ipc={log_content} let:value>
       {#each value as change}
         <!-- svelte-ignore a11y-click-events-have-key-events -->
         <!-- svelte-ignore a11y-no-static-element-interactions -->
         <div class="change" on:click={() => load_change(change.change_id)}>
           <code class="change-line">
-            <span><b>{change.change_id.prefix}</b>{change.change_id.rest}</span>
-            {change.email}
-            {change.timestamp}
-            <span><b>{change.commit_id.prefix}</b>{change.commit_id.rest}</span>
+            <IdSpan id={change.change_id} type="change" />
+            <span class="author">{change.email}</span>
+            <span class="timestamp">{change.timestamp}</span>
+            <IdSpan id={change.commit_id} type="commit" />
           </code>
           <span class="change-line">
             {change.description.lines[0]}
@@ -54,8 +55,10 @@
       {/each}
     </Bound>
   </div>
-  <div id="selected-change">
+
+  <div id="selected-change" class="pane">
     <Bound ipc={change_content} let:value>
+      <textarea>foo bar</textarea>
       {#each value.header.description.lines as line}
         <div>{line}</div>
       {/each}
@@ -64,30 +67,67 @@
       {/each}
     </Bound>
   </div>
+
+  <div id="status-bar">
+    <span>C:\Users\user\repository</span>
+    <button>Undo!</button>
+  </div>
 </div>
 
 <style>
   #shell {
     width: 100vw;
     height: 100vh;
+
     display: grid;
     grid-template-columns: 1fr 1fr;
-    column-gap: 10px;
+    grid-template-rows: 1fr 2em;
+    gap: 10px;
+
+    background: var(--ctp-base);
+    color: var(--ctp-text);
   }
 
   #log {
-    border-right: 1px solid black;
     overflow-x: hidden;
     overflow-y: scroll;
-  }
-
-  #log > div:nth-child(even) {
-    background: white;
-    color: black;
+    scrollbar-color: var(--ctp-text) var(--ctp-mantle);
+    border-width: 1px 1px 1px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1em;
   }
 
   #selected-change {
-    border-left: 1px solid black;
+    border-width: 1px 0 1px 1px;
+  }
+
+  #status-bar {
+    grid-column: 1/3;
+    background: var(--ctp-crust);
+    border-top: 1px solid var(--ctp-overlay0);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 5px;
+  }
+
+  #status-bar > button {
+    background: var(--ctp-peach);
+    border-width: 1px;
+    border-radius: 2px;
+    border-color: var(--ctp-overlay0);
+    &:active,
+    &:hover {
+      border-color: var(--ctp-lavender);
+    }
+  }
+
+  .pane {
+    background: var(--ctp-mantle);
+    border: solid var(--ctp-overlay0);
+    margin-top: 10px;
+    padding: 5px;
   }
 
   .change {
@@ -99,5 +139,29 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+
+  .author {
+    color: var(--ctp-yellow);
+    display: inline-block;
+    width: 24ch;
+  }
+
+  .timestamp {
+    color: var(--ctp-teal);
+  }
+
+  textarea {
+    width: 100%;
+    caret-color: var(--ctp-rosewater);
+    outline: none;
+    border-color: var(--ctp-overlay0);
+    &:focus-visible {
+      border-color: var(--ctp-lavender);
+    }
+  }
+
+  ::selection {
+    background: var(--ctp-rosewater);
   }
 </style>
