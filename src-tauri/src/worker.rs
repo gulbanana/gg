@@ -2,19 +2,20 @@
 
 use crate::{
     format::CommitOrChangeId,
-    messages::{self, ChangePath, RevDetail},
+    messages::{self, DiffPath, RevDetail},
 };
 use anyhow::{anyhow, Context, Result};
+use chrono::{DateTime, FixedOffset, Local, LocalResult, TimeZone, Utc};
 use futures_util::StreamExt;
 use itertools::Itertools;
 use jj_cli::{
     cli_util::start_repo_transaction,
     config::{default_config, LayeredConfigs},
-    time_util,
 };
 use jj_lib::{
-    backend::CommitId,
+    backend::{CommitId, Timestamp},
     commit::Commit,
+    file_util,
     id_prefix::IdPrefixContext,
     matchers::EverythingMatcher,
     op_heads_store,
@@ -94,6 +95,7 @@ impl WorkspaceData {
         )?;
 
         let op_head = resolve_op_head(&settings, workspace.repo_loader())?;
+
         let repo = workspace.repo_loader().load_at(&op_head)?;
 
         let aliases_map = load_revset_aliases(&configs)?;
@@ -133,6 +135,10 @@ impl WorkspaceData {
             12,
         );
 
+        let timestamp = datetime_from_timestamp(&commit.author().timestamp)
+            .unwrap()
+            .with_timezone(&Local);
+
         messages::RevHeader {
             change_id: messages::RevId {
                 prefix: change_id.prefix,
@@ -143,8 +149,9 @@ impl WorkspaceData {
                 rest: commit_id.rest,
             },
             description: commit.description().into(),
+            author: commit.author().name.clone(),
             email: commit.author().email.clone(),
-            timestamp: time_util::format_absolute_timestamp(&commit.author().timestamp),
+            timestamp,
         }
     }
 
@@ -181,9 +188,10 @@ impl WorkspaceSession {
 
     pub fn get_log(&mut self) -> Result<Vec<messages::RevHeader>> {
         let data = self.lazy_load()?;
+        dbg!(&data.repo.operation().store_operation().metadata.description);
 
         let revset = data
-            .parse_revset("@ | ancestors(immutable_heads().., 2) | heads(immutable_heads())")
+            .parse_revset("..@ | ancestors(immutable_heads().., 2) | heads(immutable_heads())")
             .context("parse_revset")?;
 
         let mut output = Vec::new();
@@ -213,26 +221,27 @@ impl WorkspaceSession {
         let mut paths = Vec::new();
         async {
             while let Some((repo_path, diff)) = tree_diff.next().await {
-                let mut path = String::new();
+                let base_path = data.workspace.workspace_root();
+                let relative_path =
+                    file_util::relative_path(base_path, &repo_path.to_fs_path(base_path))
+                        .to_string_lossy()
+                        .into_owned();
                 let (before, after) = diff.unwrap();
+
                 if before.is_present() && after.is_present() {
-                    path += "M ";
+                    paths.push(DiffPath::Modified { relative_path });
                 } else if before.is_absent() {
-                    path += "A ";
+                    paths.push(DiffPath::Added { relative_path });
                 } else {
-                    path += "D ";
+                    paths.push(DiffPath::Deleted { relative_path });
                 }
-                path += &repo_path.to_internal_dir_string();
-                paths.push(ChangePath {
-                    relative_path: path,
-                });
             }
         }
         .block_on();
 
         Ok(RevDetail {
             header: data.format_commit_header(&commit),
-            paths,
+            diff: paths,
         })
     }
 
@@ -298,4 +307,25 @@ fn revset_symbol_resolver<'context>(
         .with_commit_id_resolver(commit_id_resolver)
         .with_change_id_resolver(change_id_resolver);
     Ok(symbol_resolver)
+}
+
+// from time_util; not pub
+fn datetime_from_timestamp(context: &Timestamp) -> Option<DateTime<FixedOffset>> {
+    let utc = match Utc.timestamp_opt(
+        context.timestamp.0.div_euclid(1000),
+        (context.timestamp.0.rem_euclid(1000)) as u32 * 1000000,
+    ) {
+        LocalResult::None => {
+            return None;
+        }
+        LocalResult::Single(x) => x,
+        LocalResult::Ambiguous(y, _z) => y,
+    };
+
+    Some(
+        utc.with_timezone(
+            &FixedOffset::east_opt(context.tz_offset * 60)
+                .unwrap_or_else(|| FixedOffset::east_opt(0).unwrap()),
+        ),
+    )
 }

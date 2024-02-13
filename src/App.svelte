@@ -9,9 +9,12 @@
   import IdSpan from "./IdSpan.svelte";
   import Icon from "./Icon.svelte";
   import Pane from "./Pane.svelte";
+  import PathSpan from "./PathSpan.svelte";
 
   let log_content = init<RevHeader[]>();
   let change_content = init<RevDetail>();
+  let selected_change = "";
+  let selected_path = "";
 
   async function load_log() {
     log_content = await call<RevHeader[]>("load_log");
@@ -22,6 +25,8 @@
   }
 
   async function load_change(id: RevId) {
+    selected_change = id.prefix;
+    selected_path = "";
     change_content = await call<RevDetail>("load_change", {
       revision: id.prefix + id.rest,
     });
@@ -49,7 +54,7 @@
       </select>
       <input
         type="text"
-        value="@ | ancestors(immutable_heads().., 2) | heads(immutable_heads())"
+        value="..@ | ancestors(immutable_heads().., 2) | heads(immutable_heads())"
       />
     </div>
     <div slot="body" class="log-commits">
@@ -57,14 +62,15 @@
         {#each value as change}
           <!-- svelte-ignore a11y-click-events-have-key-events -->
           <!-- svelte-ignore a11y-no-static-element-interactions -->
-          <div class="change" on:click={() => load_change(change.change_id)}>
-            <code class="change-line">
-              <IdSpan id={change.change_id} type="change" />
-              <span class="author">{change.email}</span>
-              <span class="timestamp">{change.timestamp}</span>
-              <IdSpan id={change.commit_id} type="commit" />
-            </code>
+          <div
+            class="change"
+            class:selected={selected_change == change.change_id.prefix}
+            on:click={() => load_change(change.change_id)}
+          >
             <span class="change-line">
+              <code>
+                <IdSpan id={change.change_id} type="change" />
+              </code>
               {change.description.lines[0]}
             </span>
           </div>
@@ -76,21 +82,50 @@
   <Bound ipc={change_content} let:value>
     <Pane>
       <h2 slot="header">
-        <IdSpan id={value.header.change_id} type="change" />
+        <span>
+          <IdSpan id={value.header.change_id} type="change" />
+          /
+          <IdSpan id={value.header.commit_id} type="commit" />
+        </span>
         <button class="pin-commit"><Icon name="map-pin" /> Pin</button>
       </h2>
 
-      <div slot="body">
-        <textarea>{value.header.description.lines.join("\n")}</textarea>
-        {#each value.paths as path}
-          <div>{path.relative_path}</div>
-        {/each}
-      </div>
-    </Pane>
+      <div slot="body" class="commit-body">
+        <textarea spellcheck="false"
+          >{value.header.description.lines.join("\n")}</textarea
+        >
+        <div class="author">
+          <span>{value.header.author}</span>
+          <span>{new Date(value.header.timestamp).toLocaleTimeString()}</span>
+          <span></span>
+          <button><Icon name="file-text" /> Describe</button>
+        </div>
+        <div class="diff">
+          {#each value.diff as path}
+            <!-- svelte-ignore a11y-click-events-have-key-events -->
+            <!-- svelte-ignore a11y-no-static-element-interactions -->
+            <div
+              class="path"
+              class:selected={selected_path == path.relative_path}
+              on:click={() => (selected_path = path.relative_path)}
+            >
+              <PathSpan {path} />
+            </div>
+          {/each}
+        </div>
+        <div class="commands">
+          <button>Abandon</button>
+          <button>Squash</button>
+          <button>Restore</button>
+        </div>
+      </div></Pane
+    >
   </Bound>
 
   <div id="status-bar">
-    <span>C:\Users\user\repository</span>
+    <span>C:\Users\banana\Documents\code\gg</span>
+    <span />
+    <span>abandon commit d59a92df72aa220cdcc0dd0cfe6e7e02a0b35f28</span>
     <button><Icon name="rotate-ccw" /> Undo</button>
   </div>
 </div>
@@ -119,7 +154,7 @@
   .log-commits {
     overflow-x: hidden;
     overflow-y: scroll;
-    scrollbar-color: var(--ctp-text) var(--ctp-base);
+    scrollbar-color: var(--ctp-text) var(--ctp-crust);
     display: flex;
     flex-direction: column;
     gap: 1em;
@@ -129,9 +164,10 @@
   #status-bar {
     grid-column: 1/3;
     background: var(--ctp-crust);
-    display: flex;
+    display: grid;
+    grid-template-columns: auto 1fr auto auto;
     align-items: center;
-    justify-content: space-between;
+    gap: 6px;
     padding: 0 3px;
   }
 
@@ -139,6 +175,8 @@
     display: flex;
     flex-direction: column;
     cursor: pointer;
+    background: var(--ctp-mantle);
+    border-radius: 3px;
   }
 
   .change-line {
@@ -157,9 +195,71 @@
     color: var(--ctp-teal);
   }
 
+  .diff {
+    background: var(--ctp-mantle);
+    border-radius: 6px;
+    padding: 3px;
+    display: flex;
+    flex-direction: column;
+  }
+  .path {
+    height: 24px;
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+  }
+
   h2 {
     display: flex;
     align-items: center;
     justify-content: space-between;
+  }
+
+  input {
+    font-family: var(--stack-code);
+    font-size: 14px;
+  }
+
+  textarea {
+    border-radius: 6px;
+    width: 100%;
+    height: 5em;
+  }
+
+  .commit-body {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 3px;
+  }
+
+  .selected {
+    background: var(--ctp-base);
+  }
+
+  .pin-commit {
+    background: var(--ctp-sapphire);
+  }
+
+  .author {
+    color: var(--ctp-subtext1);
+    width: 100%;
+    display: grid;
+    grid-template-columns: auto auto 1fr auto;
+    gap: 6px;
+  }
+
+  .author > button {
+    background: var(--ctp-peach);
+  }
+
+  .commands {
+    display: flex;
+    justify-content: end;
+    gap: 6px;
+  }
+
+  .commands > button {
+    background: var(--ctp-maroon);
   }
 </style>

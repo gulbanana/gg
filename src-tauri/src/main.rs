@@ -48,18 +48,22 @@ fn main() -> Result<()> {
         .menu(|handle| {
             Menu::with_items(
                 handle,
-                &[&Submenu::with_items(
-                    handle,
-                    "Repository",
-                    true,
-                    &[&MenuItem::with_id(
+                &[
+                    &Submenu::with_items(
                         handle,
-                        "open",
-                        "Open...",
+                        "Repository",
                         true,
-                        Some("cmdorctrl+o"),
-                    )?],
-                )?],
+                        &[&MenuItem::with_id(
+                            handle,
+                            "open",
+                            "Open...",
+                            true,
+                            Some("cmdorctrl+o"),
+                        )?],
+                    )?,
+                    &Submenu::with_items(handle, "Commit", true, &[])?,
+                    &Submenu::with_items(handle, "Operation", true, &[])?,
+                ],
             )
         })
         .setup(|app| {

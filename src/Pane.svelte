@@ -13,7 +13,7 @@
         grid-template-rows: 40px 1fr;
         grid-template-columns: 100%;
         overflow: hidden;
-        background: var(--ctp-mantle);
+        background: var(--ctp-crust);
     }
 
     header {
@@ -23,5 +23,7 @@
 
     article {
         padding: 3px 6px 6px 6px;
+        display: grid;
+        overflow: hidden;
     }
 </style>

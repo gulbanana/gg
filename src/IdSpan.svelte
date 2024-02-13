@@ -8,7 +8,7 @@
 
 <style>
     .id {
-        color: var(--ctp-overlay1);
+        color: var(--ctp-subtext1);
     }
     .change {
         color: var(--ctp-pink);

@@ -8,6 +8,21 @@
   -moz-osx-font-smoothing: grayscale;
   -webkit-text-size-adjust: 100%;
 
+  /* system fonts */
+  --stack-code: ui-monospace,
+    'Cascadia Code',
+    'Source Code Pro',
+    Menlo,
+    Consolas,
+    'DejaVu Sans Mono',
+    monospace;
+  --stack-industrial: Bahnschrift,
+    "DIN Alternate",
+    "Franklin Gothic Medium",
+    "Nimbus Sans Narrow",
+    sans-serif-condensed,
+    sans-serif;
+
   /* catppuccin latte */
   --ctp-crust: var(--ctp-latte-crust);
   --ctp-mantle: var(--ctp-latte-mantle);
@@ -72,22 +87,17 @@ button {
   height: 24px;
   font-size: 16px;
 
-  background: var(--ctp-peach);
+  background: var(--ctp-green);
   border-width: 1px;
   border-radius: 3px;
   border-color: var(--ctp-overlay0);
+  box-shadow: 2px 2px var(--ctp-overlay0);
 
-  &:active,
   &:hover {
     border-color: var(--ctp-lavender);
   }
 
-  font-family: Bahnschrift,
-  "DIN Alternate",
-  "Franklin Gothic Medium",
-  "Nimbus Sans Narrow",
-  sans-serif-condensed,
-  sans-serif;
+  font-family: var(--stack-industrial);
   display: flex;
   align-items: center;
   gap: 3px;
@@ -112,11 +122,6 @@ input {
 
   background-color: var(--ctp-base);
   color: var(--ctp-text);
-}
-
-textarea {
-  width: 100%;
-  height: 150px;
   scrollbar-color: var(--ctp-text) var(--ctp-base);
 }
 

@@ -1,3 +1,4 @@
+use chrono::Local;
 use serde::Serialize;
 use ts_rs::TS;
 
@@ -31,19 +32,23 @@ pub struct RevHeader {
     pub change_id: RevId,
     pub commit_id: RevId,
     pub description: Text,
+    pub author: String,
     pub email: String,
-    pub timestamp: String,
+    pub timestamp: chrono::DateTime<Local>,
 }
 
 #[derive(TS, Serialize)]
 #[ts(export, export_to = "../src/messages/")]
 pub struct RevDetail {
     pub header: RevHeader,
-    pub paths: Vec<ChangePath>,
+    pub diff: Vec<DiffPath>,
 }
 
 #[derive(TS, Serialize)]
 #[ts(export, export_to = "../src/messages/")]
-pub struct ChangePath {
-    pub relative_path: String,
+#[serde(tag = "type")]
+pub enum DiffPath {
+    Added { relative_path: String },
+    Deleted { relative_path: String },
+    Modified { relative_path: String },
 }

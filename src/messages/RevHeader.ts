@@ -2,4 +2,4 @@
 import type { RevId } from "./RevId";
 import type { Text } from "./Text";
 
-export interface RevHeader { change_id: RevId, commit_id: RevId, description: Text, email: string, timestamp: string, }
+export interface RevHeader { change_id: RevId, commit_id: RevId, description: Text, author: string, email: string, timestamp: string, }
