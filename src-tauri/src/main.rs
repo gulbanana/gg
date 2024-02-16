@@ -4,25 +4,41 @@ mod format;
 mod messages;
 mod worker;
 
+use std::collections::HashMap;
 use std::sync::mpsc::{channel, Sender};
 use std::sync::Mutex;
 use std::thread::{self, JoinHandle};
 
 use anyhow::Result;
-use tauri::Window;
 use tauri::{
     ipc::InvokeError,
     menu::{Menu, MenuItem, Submenu},
     Manager,
 };
+use tauri::{State, Window};
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_window_state::StateFlags;
 
 use worker::SessionEvent;
 
-struct SharedSession {
+#[derive(Default)]
+struct AppState(Mutex<HashMap<String, WindowState>>);
+
+struct WindowState {
     _worker: JoinHandle<()>,
-    channel: Mutex<Sender<SessionEvent>>,
+    channel: Sender<SessionEvent>,
+}
+
+impl AppState {
+    fn get_sender(&self, window: &Window) -> Sender<SessionEvent> {
+        self.0
+            .lock()
+            .expect("state mutex poisoned")
+            .get(window.label())
+            .expect("session not found")
+            .channel
+            .clone()
+    }
 }
 
 fn main() -> Result<()> {
@@ -74,17 +90,24 @@ fn main() -> Result<()> {
                     panic!("{:?}", err);
                 }
             });
-            window.manage(SharedSession {
-                _worker: window_worker,
-                channel: Mutex::from(sender),
-            });
             window.on_menu_event(|window, event| {
                 if event.id == "open" {
-                    menu_open_repository(window);
+                    menu_open_repository(window.clone());
                 }
             });
+
+            let app_state = app.state::<AppState>();
+            app_state.0.lock().unwrap().insert(
+                window.label().to_owned(),
+                WindowState {
+                    _worker: window_worker,
+                    channel: sender,
+                },
+            );
+
             Ok(())
         })
+        .manage(AppState::default())
         .run(tauri::generate_context!())
         .unwrap(); // use ? after https://github.com/tauri-apps/tauri/pull/8777
 
@@ -99,14 +122,16 @@ fn notify_window_ready(window: Window) {
 #[tauri::command]
 fn forward_accelerator(window: Window, key: char) {
     if key == 'o' {
-        menu_open_repository(&window);
+        menu_open_repository(window);
     }
 }
 
 #[tauri::command]
-fn load_log(window: Window) -> Result<Vec<messages::RevHeader>, InvokeError> {
-    let state = window.state::<SharedSession>();
-    let session_tx = state.channel.lock().expect("session lock poisoned");
+fn load_log(
+    window: Window,
+    app_state: State<AppState>,
+) -> Result<Vec<messages::RevHeader>, InvokeError> {
+    let session_tx: Sender<SessionEvent> = app_state.get_sender(&window);
     let (call_tx, call_rx) = channel();
 
     session_tx
@@ -119,9 +144,12 @@ fn load_log(window: Window) -> Result<Vec<messages::RevHeader>, InvokeError> {
 }
 
 #[tauri::command]
-fn load_change(window: Window, revision: String) -> Result<messages::RevDetail, InvokeError> {
-    let state = window.state::<SharedSession>();
-    let session_tx = state.channel.lock().expect("session lock poisoned");
+fn load_change(
+    window: Window,
+    app_state: State<AppState>,
+    revision: String,
+) -> Result<messages::RevDetail, InvokeError> {
+    let session_tx: Sender<SessionEvent> = app_state.get_sender(&window);
     let (call_tx, call_rx) = channel();
 
     session_tx
@@ -136,12 +164,11 @@ fn load_change(window: Window, revision: String) -> Result<messages::RevDetail, 
         .map_err(InvokeError::from_anyhow)
 }
 
-fn menu_open_repository(window: &Window) {
-    let window_handle = window.clone();
+fn menu_open_repository(window: Window) {
     window.dialog().file().pick_folder(move |picked| {
         if let Some(cwd) = picked {
-            let state = window_handle.state::<SharedSession>();
-            let session_tx = state.channel.lock().expect("session lock poisoned");
+            let app_state = window.state::<AppState>();
+            let session_tx: Sender<SessionEvent> = app_state.get_sender(&window);
             let (call_tx, call_rx) = channel();
 
             session_tx
@@ -150,9 +177,7 @@ fn menu_open_repository(window: &Window) {
                 .expect("send message to worker thread");
             call_rx.recv().unwrap().unwrap();
 
-            window_handle
-                .emit("gg://repo_loaded", ())
-                .expect("emit event");
+            window.emit("gg://repo_loaded", ()).expect("emit event");
         }
     });
 }
