@@ -2,12 +2,15 @@
     import type { RevId } from "./messages/RevId";
     export let id: RevId;
     export let type: "change" | "commit";
+
+    let suffix = id.rest.substring(0, 7 - id.prefix.length);
 </script>
 
-<span class="id"><span class={type}>{id.prefix}</span>{id.rest}</span>
+<span class="id"><span class={type}>{id.prefix}</span>{suffix}</span>
 
 <style>
     .id {
+        user-select: text;
         color: var(--ctp-subtext1);
     }
     .change {

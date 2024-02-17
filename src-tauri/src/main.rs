@@ -1,11 +1,11 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-mod format;
 mod gui_util;
 mod messages;
 mod worker;
 
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::mpsc::{channel, Sender};
 use std::sync::Mutex;
 use std::thread::{self, JoinHandle};
@@ -59,8 +59,8 @@ fn main() -> Result<()> {
         .invoke_handler(tauri::generate_handler![
             notify_window_ready,
             forward_accelerator,
-            load_log,
-            load_change
+            query_log,
+            get_revision
         ])
         .menu(|handle| {
             Menu::with_items(
@@ -110,13 +110,14 @@ fn main() -> Result<()> {
         })
         .manage(AppState::default())
         .run(tauri::generate_context!())
-        .unwrap(); // use ? after https://github.com/tauri-apps/tauri/pull/8777
+        .unwrap(); // XXX https://github.com/tauri-apps/tauri/pull/8777
 
     Ok(())
 }
 
 #[tauri::command(async)]
 fn notify_window_ready(window: Window) {
+    try_open_repository(window.clone(), std::env::current_dir().unwrap()).unwrap();
     window.show().unwrap();
 }
 
@@ -128,35 +129,18 @@ fn forward_accelerator(window: Window, key: char) {
 }
 
 #[tauri::command]
-fn load_log(
+fn query_log(
     window: Window,
     app_state: State<AppState>,
+    revset: String,
 ) -> Result<Vec<messages::RevHeader>, InvokeError> {
     let session_tx: Sender<SessionEvent> = app_state.get_sender(&window);
     let (call_tx, call_rx) = channel();
 
     session_tx
-        .send(SessionEvent::GetLog { tx: call_tx })
-        .map_err(InvokeError::from_error)?;
-    call_rx
-        .recv()
-        .map_err(InvokeError::from_error)?
-        .map_err(InvokeError::from_anyhow)
-}
-
-#[tauri::command]
-fn load_change(
-    window: Window,
-    app_state: State<AppState>,
-    revision: String,
-) -> Result<messages::RevDetail, InvokeError> {
-    let session_tx: Sender<SessionEvent> = app_state.get_sender(&window);
-    let (call_tx, call_rx) = channel();
-
-    session_tx
-        .send(SessionEvent::GetChange {
+        .send(SessionEvent::QueryLog {
             tx: call_tx,
-            revision,
+            revset,
         })
         .map_err(InvokeError::from_error)?;
     call_rx
@@ -165,20 +149,42 @@ fn load_change(
         .map_err(InvokeError::from_anyhow)
 }
 
+#[tauri::command]
+fn get_revision(
+    window: Window,
+    app_state: State<AppState>,
+    rev: String,
+) -> Result<messages::RevDetail, InvokeError> {
+    let session_tx: Sender<SessionEvent> = app_state.get_sender(&window);
+    let (call_tx, call_rx) = channel();
+
+    session_tx
+        .send(SessionEvent::GetRevision { tx: call_tx, rev })
+        .map_err(InvokeError::from_error)?;
+    call_rx
+        .recv()
+        .map_err(InvokeError::from_error)?
+        .map_err(InvokeError::from_anyhow)
+}
+
+fn try_open_repository(window: Window, cwd: PathBuf) -> Result<()> {
+    let app_state = window.state::<AppState>();
+
+    let session_tx: Sender<SessionEvent> = app_state.get_sender(&window);
+    let (call_tx, call_rx) = channel();
+
+    session_tx.send(SessionEvent::OpenRepository { tx: call_tx, cwd })?;
+    let config = call_rx.recv()??;
+
+    window.emit("gg://repo_loaded", config).unwrap(); // XXX https://github.com/tauri-apps/tauri/pull/8777
+
+    Ok(())
+}
+
 fn menu_open_repository(window: Window) {
     window.dialog().file().pick_folder(move |picked| {
         if let Some(cwd) = picked {
-            let app_state = window.state::<AppState>();
-            let session_tx: Sender<SessionEvent> = app_state.get_sender(&window);
-            let (call_tx, call_rx) = channel();
-
-            session_tx
-                .send(SessionEvent::SetCwd { tx: call_tx, cwd })
-                .map_err(InvokeError::from_error)
-                .expect("send message to worker thread");
-            call_rx.recv().unwrap().unwrap();
-
-            window.emit("gg://repo_loaded", ()).expect("emit event");
+            try_open_repository(window, cwd).expect("open repository");
         }
     });
 }

@@ -1,10 +1,12 @@
 <script lang="ts">
   import { invoke } from "@tauri-apps/api/core";
   import { listen } from "@tauri-apps/api/event";
-  import { call, init } from "./ipc.js";
+  import type { Event } from "@tauri-apps/api/event";
   import type { RevHeader } from "./messages/RevHeader.js";
   import type { RevDetail } from "./messages/RevDetail.js";
   import type { RevId } from "./messages/RevId.js";
+  import type { RepoConfig } from "./messages/RepoConfig.js";
+  import { call, init } from "./ipc.js";
   import Bound from "./Bound.svelte";
   import IdSpan from "./IdSpan.svelte";
   import Icon from "./Icon.svelte";
@@ -13,27 +15,36 @@
 
   let log_content = init<RevHeader[]>();
   let change_content = init<RevDetail>();
+  let entered_query = "";
   let selected_change = "";
   let selected_path = "";
 
+  async function load_repo({ payload }: Event<RepoConfig>) {
+    entered_query = payload.default_revset;
+    await load_log();
+  }
+
   async function load_log() {
-    log_content = await call<RevHeader[]>("load_log");
+    console.log(entered_query);
+    log_content = await call<RevHeader[]>("query_log", {
+      revset: entered_query,
+    });
     change_content = init();
     if (log_content.type == "data") {
-      await load_change(log_content.value[0].change_id);
+      await load_change(log_content.value[0].commit_id);
     }
   }
 
   async function load_change(id: RevId) {
     selected_change = id.prefix;
     selected_path = "";
-    change_content = await call<RevDetail>("load_change", {
-      revision: id.prefix + id.rest,
+    change_content = await call<RevDetail>("get_revision", {
+      rev: id.prefix + id.rest,
     });
   }
 
-  listen("gg://repo_loaded", load_log);
-  load_log();
+  listen<RepoConfig>("gg://repo_loaded", load_repo);
+  //load_log();
 
   document.addEventListener("keydown", (event) => {
     if (event.key === "o" && event.ctrlKey) {
@@ -52,10 +63,7 @@
         <option selected>revsets.log</option>
         <option>all()</option>
       </select>
-      <input
-        type="text"
-        value="..@ | ancestors(immutable_heads().., 2) | heads(immutable_heads())"
-      />
+      <input type="text" bind:value={entered_query} on:change={load_log} />
     </div>
     <div slot="body" class="log-commits">
       <Bound ipc={log_content} let:value>
@@ -64,8 +72,8 @@
           <!-- svelte-ignore a11y-no-static-element-interactions -->
           <div
             class="change"
-            class:selected={selected_change == change.change_id.prefix}
-            on:click={() => load_change(change.change_id)}
+            class:selected={selected_change == change.commit_id.prefix}
+            on:click={() => load_change(change.commit_id)}
           >
             <span class="change-line">
               <code>
@@ -142,6 +150,8 @@
 
     background: var(--ctp-overlay0);
     color: var(--ctp-text);
+
+    user-select: none;
   }
 
   .log-selector {
@@ -183,16 +193,6 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-  }
-
-  .author {
-    color: var(--ctp-yellow);
-    display: inline-block;
-    width: 24ch;
-  }
-
-  .timestamp {
-    color: var(--ctp-teal);
   }
 
   .diff {
@@ -242,7 +242,7 @@
   }
 
   .author {
-    color: var(--ctp-subtext1);
+    color: var(--ctp-subtext0);
     width: 100%;
     display: grid;
     grid-template-columns: auto auto 1fr auto;

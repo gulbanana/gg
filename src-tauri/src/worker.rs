@@ -8,73 +8,99 @@ use std::{
 use anyhow::{anyhow, Context, Result};
 use futures_util::StreamExt;
 use jj_lib::{
-    file_util, matchers::EverythingMatcher, repo::Repo, revset::RevsetIteratorExt,
-    rewrite::merge_commit_trees,
+    backend::CommitId, file_util, matchers::EverythingMatcher, repo::Repo,
+    revset::RevsetIteratorExt, rewrite::merge_commit_trees,
 };
 use pollster::FutureExt;
 
 use crate::{
-    gui_util::{SessionOperation, WorkspaceSession},
+    gui_util::{SessionEvaluator, SessionOperation, WorkspaceSession},
     messages,
 };
 
 #[derive(Debug)]
 pub enum SessionEvent {
-    SetCwd {
-        tx: Sender<Result<messages::WSStatus>>,
+    OpenRepository {
+        tx: Sender<Result<messages::RepoConfig>>,
         cwd: PathBuf,
     },
-    GetLog {
+    QueryLog {
         tx: Sender<Result<Vec<messages::RevHeader>>>,
+        revset: String,
     },
-    GetChange {
+    GetRevision {
         tx: Sender<Result<messages::RevDetail>>,
-        revision: String,
+        rev: String,
     },
 }
 
 pub fn main(rx: Receiver<SessionEvent>) -> Result<()> {
-    let mut session = WorkspaceSession::from_cwd(&std::env::current_dir()?)?;
-    let mut op = session.load_at_head()?;
+    let mut session;
+    let mut op;
+    let mut eval;
 
     loop {
         match rx.recv() {
+            Ok(SessionEvent::OpenRepository { tx, cwd }) => {
+                tx.send({
+                    session = WorkspaceSession::from_cwd(&cwd)?;
+                    op = SessionOperation::from_head(&session)?;
+                    eval = SessionEvaluator::from_operation(&op);
+                    Ok(op.format_config())
+                })?;
+                break;
+            }
+            Ok(_) => {
+                return Err(anyhow::anyhow!(
+                    "A repo must be loaded before any other operations"
+                ))
+            }
             Err(err) => return Err(anyhow!(err)),
-            Ok(SessionEvent::SetCwd { tx, cwd }) => tx.send({
-                session = WorkspaceSession::from_cwd(&cwd).context("load repo")?;
-                op = session.load_at_head().context("load op head")?;
-                Ok(op.format_status())
+        };
+    }
+
+    loop {
+        match rx.recv() {
+            Ok(SessionEvent::OpenRepository { tx, cwd }) => tx.send({
+                drop(eval);
+                session = WorkspaceSession::from_cwd(&cwd)?;
+                op = SessionOperation::from_head(&session)?;
+                eval = SessionEvaluator::from_operation(&op);
+                Ok(op.format_config())
             })?,
-            Ok(SessionEvent::GetLog { tx }) => tx.send(get_log(&op))?,
-            Ok(SessionEvent::GetChange { tx, revision }) => tx.send(get_change(&op, revision))?,
+            Ok(SessionEvent::QueryLog {
+                tx,
+                revset: rev_set,
+            }) => tx.send(query_log(&op, &eval, &rev_set))?,
+            Ok(SessionEvent::GetRevision { tx, rev: rev_id }) => {
+                tx.send(get_revision(&op, &rev_id))?
+            }
+            Err(err) => return Err(anyhow!(err)),
         };
     }
 }
 
-fn get_log(op: &SessionOperation) -> Result<Vec<messages::RevHeader>> {
-    let revset = op
-        .evaluate_revset("..@ | ancestors(immutable_heads().., 2) | heads(immutable_heads())")
+fn query_log(
+    op: &SessionOperation,
+    eval: &SessionEvaluator,
+    revset_str: &str,
+) -> Result<Vec<messages::RevHeader>> {
+    let revset = eval
+        .evaluate_revset(revset_str)
         .context("evaluate revset")?;
 
     let mut output = Vec::new();
     for commit_or_error in revset.iter().commits(op.repo.store()) {
         let commit = commit_or_error?;
-        output.push(op.format_rev_header(&commit));
+        output.push(op.format_header(&commit));
     }
 
     Ok(output)
 }
 
-fn get_change(op: &SessionOperation, revision_str: String) -> Result<messages::RevDetail> {
-    let revset = op
-        .evaluate_revset(&revision_str)
-        .context("evaluate revset")?;
-
-    let commit = revset
-        .iter()
-        .commits(op.repo.store())
-        .next()
-        .ok_or(anyhow!("commit not found"))??;
+fn get_revision(op: &SessionOperation, id_str: &str) -> Result<messages::RevDetail> {
+    let id = CommitId::try_from_hex(id_str)?;
+    let commit = op.repo.store().get_commit(&id)?;
 
     let parent_tree = merge_commit_trees(op.repo.as_ref(), &commit.parents())?;
     let tree = commit.tree()?;
@@ -84,10 +110,8 @@ fn get_change(op: &SessionOperation, revision_str: String) -> Result<messages::R
     async {
         while let Some((repo_path, diff)) = tree_diff.next().await {
             let base_path = op.session.workspace.workspace_root();
-            let relative_path =
-                file_util::relative_path(base_path, &repo_path.to_fs_path(base_path))
-                    .to_string_lossy()
-                    .into_owned();
+            let relative_path: messages::DisplayPath =
+                (&file_util::relative_path(base_path, &repo_path.to_fs_path(base_path))).into();
             let (before, after) = diff.unwrap();
 
             if before.is_present() && after.is_present() {
@@ -102,7 +126,7 @@ fn get_change(op: &SessionOperation, revision_str: String) -> Result<messages::R
     .block_on();
 
     Ok(messages::RevDetail {
-        header: op.format_rev_header(&commit),
+        header: op.format_header(&commit),
         diff: paths,
     })
 }

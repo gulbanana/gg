@@ -104,7 +104,8 @@ button {
 }
 
 ::selection {
-  background: var(--ctp-rosewater);
+  background-color: transparent;
+  color: var(--ctp-rosewater);
 }
 
 textarea,
