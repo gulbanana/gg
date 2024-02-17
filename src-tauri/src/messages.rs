@@ -2,6 +2,7 @@ use chrono::Local;
 use serde::Serialize;
 use ts_rs::TS;
 
+/// Utility multiline-string type, used to abstract crlf/<br>/etc
 #[derive(TS, Serialize)]
 #[ts(export, export_to = "../src/messages/")]
 pub struct Text {
@@ -19,6 +20,12 @@ where
     }
 }
 
+pub struct WSStatus {
+    pub root_path: String,
+    pub operation_description: String,
+}
+
+/// A change or commit id with a disambiguated prefix
 #[derive(TS, Serialize)]
 #[ts(export, export_to = "../src/messages/")]
 pub struct RevId {

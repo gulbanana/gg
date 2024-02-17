@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod format;
+mod gui_util;
 mod messages;
 mod worker;
 

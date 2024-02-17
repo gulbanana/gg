@@ -1,4 +1,4 @@
-// imitates the output of commit_templater, which is mostly private
+//! functions to imitate the output of commit_templater, which is mostly private
 
 use std::cmp::max;
 
