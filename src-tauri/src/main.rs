@@ -176,7 +176,7 @@ fn try_open_repository(window: Window, cwd: PathBuf) -> Result<()> {
     session_tx.send(SessionEvent::OpenRepository { tx: call_tx, cwd })?;
     let config = call_rx.recv()??;
 
-    window.emit("gg://repo_loaded", config).unwrap(); // XXX https://github.com/tauri-apps/tauri/pull/8777
+    window.emit("gg://repo/config", config).unwrap(); // XXX https://github.com/tauri-apps/tauri/pull/8777
 
     Ok(())
 }

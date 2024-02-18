@@ -31,7 +31,12 @@ pub struct DisplayPath(String);
 
 impl From<&PathBuf> for DisplayPath {
     fn from(value: &PathBuf) -> Self {
-        DisplayPath(value.to_string_lossy().into_owned())
+        DisplayPath(
+            value
+                .to_string_lossy()
+                .trim_start_matches("\\\\?\\")
+                .to_owned(),
+        )
     }
 }
 

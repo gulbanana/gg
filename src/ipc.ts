@@ -20,3 +20,9 @@ export async function call<T>(cmd: string, args?: InvokeArgs, options?: InvokeOp
         return { type: "error", message: error.toString() };
     }
 }
+
+export function delayInit<T>(): Promise<IPC<T>> {
+    return new Promise(function (resolve) {
+        setTimeout(() => resolve({ type: "wait" }), 200);
+    });
+}

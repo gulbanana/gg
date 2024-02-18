@@ -6,30 +6,46 @@
   import type { RevDetail } from "./messages/RevDetail.js";
   import type { RevId } from "./messages/RevId.js";
   import type { RepoConfig } from "./messages/RepoConfig.js";
-  import { call, init } from "./ipc.js";
+  import { call, delayInit, init } from "./ipc.js";
   import Bound from "./Bound.svelte";
   import IdSpan from "./IdSpan.svelte";
   import Icon from "./Icon.svelte";
   import Pane from "./Pane.svelte";
-  import PathSpan from "./PathSpan.svelte";
+  import RevisionPane from "./RevisionPane.svelte";
+  import type { RepoStatus } from "./messages/RepoStatus.js";
 
+  let shell_repo = "";
+  let shell_op = "";
+  let shell_wc = "";
   let log_content = init<RevHeader[]>();
   let change_content = init<RevDetail>();
   let entered_query = "";
   let selected_change = "";
-  let selected_path = "";
 
-  async function load_repo({ payload }: Event<RepoConfig>) {
-    entered_query = payload.default_revset;
+  async function load_repo(config: RepoConfig) {
+    log_content = init();
+    change_content = init();
+
+    entered_query = config.default_revset;
+    shell_repo = config.absolute_path;
+
+    update_repo(config.status);
+
     await load_log();
   }
 
+  function update_repo(status: RepoStatus) {
+    shell_op = status.operation_description;
+    shell_wc = status.working_copy.prefix;
+  }
+
   async function load_log() {
-    console.log(entered_query);
-    log_content = await call<RevHeader[]>("query_log", {
+    let fetch = call<RevHeader[]>("query_log", {
       revset: entered_query,
     });
-    change_content = init();
+    log_content = await Promise.race([fetch, delayInit<RevHeader[]>()]);
+    log_content = await fetch;
+
     if (log_content.type == "data") {
       await load_change(log_content.value[0].commit_id);
     }
@@ -37,14 +53,16 @@
 
   async function load_change(id: RevId) {
     selected_change = id.prefix;
-    selected_path = "";
-    change_content = await call<RevDetail>("get_revision", {
+    let fetch = call<RevDetail>("get_revision", {
       rev: id.prefix + id.rest,
     });
+
+    change_content = await Promise.race([fetch, delayInit<RevDetail>()]);
+    change_content = await fetch;
   }
 
-  listen<RepoConfig>("gg://repo_loaded", load_repo);
-  //load_log();
+  listen<RepoConfig>("gg://repo/config", (e) => load_repo(e.payload));
+  listen<RepoStatus>("gg://repo/status", (e) => update_repo(e.payload));
 
   document.addEventListener("keydown", (event) => {
     if (event.key === "o" && event.ctrlKey) {
@@ -88,52 +106,14 @@
   </Pane>
 
   <Bound ipc={change_content} let:value>
-    <Pane>
-      <h2 slot="header">
-        <span>
-          <IdSpan id={value.header.change_id} type="change" />
-          /
-          <IdSpan id={value.header.commit_id} type="commit" />
-        </span>
-        <button class="pin-commit"><Icon name="map-pin" /> Pin</button>
-      </h2>
-
-      <div slot="body" class="commit-body">
-        <textarea spellcheck="false"
-          >{value.header.description.lines.join("\n")}</textarea
-        >
-        <div class="author">
-          <span>{value.header.author}</span>
-          <span>{new Date(value.header.timestamp).toLocaleTimeString()}</span>
-          <span></span>
-          <button><Icon name="file-text" /> Describe</button>
-        </div>
-        <div class="diff">
-          {#each value.diff as path}
-            <!-- svelte-ignore a11y-click-events-have-key-events -->
-            <!-- svelte-ignore a11y-no-static-element-interactions -->
-            <div
-              class="path"
-              class:selected={selected_path == path.relative_path}
-              on:click={() => (selected_path = path.relative_path)}
-            >
-              <PathSpan {path} />
-            </div>
-          {/each}
-        </div>
-        <div class="commands">
-          <button>Abandon</button>
-          <button>Squash</button>
-          <button>Restore</button>
-        </div>
-      </div></Pane
-    >
+    <RevisionPane rev={value} />
+    <Pane slot="wait" />
   </Bound>
 
   <div id="status-bar">
-    <span>C:\Users\banana\Documents\code\gg</span>
+    <span>{shell_repo}</span>
     <span />
-    <span>abandon commit d59a92df72aa220cdcc0dd0cfe6e7e02a0b35f28</span>
+    <span>{shell_op}</span>
     <button><Icon name="rotate-ccw" /> Undo</button>
   </div>
 </div>
@@ -154,6 +134,16 @@
     user-select: none;
   }
 
+  #status-bar {
+    grid-column: 1/3;
+    background: var(--ctp-crust);
+    display: grid;
+    grid-template-columns: auto 1fr auto auto;
+    align-items: center;
+    gap: 6px;
+    padding: 0 3px;
+  }
+
   .log-selector {
     height: 100%;
     display: grid;
@@ -171,14 +161,8 @@
     user-select: none;
   }
 
-  #status-bar {
-    grid-column: 1/3;
-    background: var(--ctp-crust);
-    display: grid;
-    grid-template-columns: auto 1fr auto auto;
-    align-items: center;
-    gap: 6px;
-    padding: 0 3px;
+  .selected {
+    background: var(--ctp-base);
   }
 
   .change {
@@ -195,71 +179,8 @@
     text-overflow: ellipsis;
   }
 
-  .diff {
-    background: var(--ctp-mantle);
-    border-radius: 6px;
-    padding: 3px;
-    display: flex;
-    flex-direction: column;
-  }
-  .path {
-    height: 24px;
-    display: flex;
-    align-items: center;
-    cursor: pointer;
-  }
-
-  h2 {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
-
   input {
     font-family: var(--stack-code);
     font-size: 14px;
-  }
-
-  textarea {
-    border-radius: 6px;
-    width: 100%;
-    height: 5em;
-  }
-
-  .commit-body {
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-    gap: 3px;
-  }
-
-  .selected {
-    background: var(--ctp-base);
-  }
-
-  .pin-commit {
-    background: var(--ctp-sapphire);
-  }
-
-  .author {
-    color: var(--ctp-subtext0);
-    width: 100%;
-    display: grid;
-    grid-template-columns: auto auto 1fr auto;
-    gap: 6px;
-  }
-
-  .author > button {
-    background: var(--ctp-peach);
-  }
-
-  .commands {
-    display: flex;
-    justify-content: end;
-    gap: 6px;
-  }
-
-  .commands > button {
-    background: var(--ctp-maroon);
   }
 </style>

@@ -101,6 +101,12 @@ button {
   display: flex;
   align-items: center;
   gap: 3px;
+
+  padding: 1px 6px;
+
+  &:active {
+    padding: 2px 5px 0px 7px;
+  }
 }
 
 ::selection {
