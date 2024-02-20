@@ -8,8 +8,12 @@ use std::{
 use anyhow::{anyhow, Context, Result};
 use futures_util::StreamExt;
 use jj_lib::{
-    backend::CommitId, file_util, matchers::EverythingMatcher, repo::Repo,
-    revset::RevsetIteratorExt, rewrite::merge_commit_trees,
+    backend::CommitId,
+    file_util,
+    matchers::EverythingMatcher,
+    repo::Repo,
+    revset_graph::{RevsetGraphEdgeType, TopoGroupedRevsetGraphIterator},
+    rewrite::merge_commit_trees,
 };
 use pollster::FutureExt;
 
@@ -25,7 +29,7 @@ pub enum SessionEvent {
         cwd: PathBuf,
     },
     QueryLog {
-        tx: Sender<Result<Vec<messages::RevHeader>>>,
+        tx: Sender<Result<messages::LogPage>>,
         revset: String,
     },
     GetRevision {
@@ -84,18 +88,49 @@ fn query_log(
     op: &SessionOperation,
     eval: &SessionEvaluator,
     revset_str: &str,
-) -> Result<Vec<messages::RevHeader>> {
+) -> Result<messages::LogPage> {
     let revset = eval
         .evaluate_revset(revset_str)
         .context("evaluate revset")?;
 
-    let mut output = Vec::new();
-    for commit_or_error in revset.iter().commits(op.repo.store()) {
-        let commit = commit_or_error?;
-        output.push(op.format_header(&commit));
+    let mut nodes = Vec::new();
+
+    // XXX investigate paging for perf
+    let iter = TopoGroupedRevsetGraphIterator::new(revset.iter_graph());
+
+    // XXX if building the graph in JS is slow, we could do transformations here
+    // the 1000 limit is temporary - we can load them at an ok speed, but that is too many dom nodes
+    // to draw without virtualisation
+    for (commit_id, commit_edges) in iter.take(1000) {
+        let commit = op.repo.store().get_commit(&commit_id)?;
+        let mut edges = Vec::new();
+
+        for edge in commit_edges {
+            match edge.edge_type {
+                RevsetGraphEdgeType::Missing => {
+                    edges.push(messages::LogEdge::Missing);
+                }
+                RevsetGraphEdgeType::Direct => {
+                    edges.push(messages::LogEdge::Direct(op.format_commit_id(&edge.target)));
+                }
+                RevsetGraphEdgeType::Indirect => {
+                    edges.push(messages::LogEdge::Indirect(
+                        op.format_commit_id(&edge.target),
+                    ));
+                }
+            }
+        }
+
+        nodes.push(messages::LogNode {
+            revision: op.format_header(&commit),
+            edges,
+        });
     }
 
-    Ok(output)
+    Ok(messages::LogPage {
+        nodes,
+        has_more: false,
+    })
 }
 
 fn get_revision(op: &SessionOperation, id_str: &str) -> Result<messages::RevDetail> {

@@ -1,7 +1,8 @@
 <script lang="ts">
     import { invoke } from "@tauri-apps/api/core";
-    import type { RevDetail } from "./messages/RevDetail.js";
     import type { RevId } from "./messages/RevId.js";
+    import type { RevHeader } from "./messages/RevHeader.js";
+    import type { RevDetail } from "./messages/RevDetail.js";
     import type { RepoConfig } from "./messages/RepoConfig.js";
     import type { RepoStatus } from "./messages/RepoStatus.js";
     import { command, event } from "./ipc.js";
@@ -9,15 +10,15 @@
     import Icon from "./Icon.svelte";
     import Pane from "./Pane.svelte";
     import LogPane from "./LogPane.svelte";
-    import RevisionPane from "./RevisionPane.svelte";    
+    import RevisionPane from "./RevisionPane.svelte";
 
     const repo_config = event<RepoConfig>("gg://repo/config");
     const repo_status = event<RepoStatus>("gg://repo/status");
-    const change_selection = event<RevId>("gg://change/select");
+    const change_selection = event<RevHeader>("gg://change/select");
     const change_content = command<RevDetail>("get_revision");
-    
+
     $: if ($repo_config) load_repo($repo_config);
-    $: if ($change_selection) load_change($change_selection);
+    $: if ($change_selection) load_change($change_selection.commit_id);
 
     async function load_repo(config: RepoConfig) {
         change_content.reset();
@@ -44,7 +45,7 @@
     {#if $repo_config}
         {#key $repo_config.absolute_path}
             <LogPane query={$repo_config.default_revset} />
-        {/key}        
+        {/key}
     {:else}
         <Pane />
     {/if}
@@ -80,13 +81,13 @@
 
     #status-bar {
         grid-column: 1/3;
-        padding: 0 3px;        
-        
+        padding: 0 3px;
+
         display: grid;
         grid-template-columns: auto 1fr auto auto;
         gap: 6px;
         align-items: center;
-        
+
         background: var(--ctp-crust);
     }
 </style>

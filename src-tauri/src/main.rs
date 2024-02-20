@@ -133,7 +133,7 @@ fn query_log(
     window: Window,
     app_state: State<AppState>,
     revset: String,
-) -> Result<Vec<messages::RevHeader>, InvokeError> {
+) -> Result<messages::LogPage, InvokeError> {
     let session_tx: Sender<SessionEvent> = app_state.get_sender(&window);
     let (call_tx, call_rx) = channel();
 

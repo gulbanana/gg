@@ -55,6 +55,29 @@ pub struct RepoStatus {
     pub working_copy: RevId,
 }
 
+#[derive(TS, Serialize)]
+#[ts(export, export_to = "../src/messages/")]
+pub struct LogPage {
+    pub nodes: Vec<LogNode>,
+    pub has_more: bool,
+}
+
+#[derive(TS, Serialize)]
+#[ts(export, export_to = "../src/messages/")]
+pub struct LogNode {
+    pub revision: RevHeader,
+    pub edges: Vec<LogEdge>,
+}
+
+#[derive(TS, Serialize)]
+#[ts(export, export_to = "../src/messages/")]
+#[serde(tag = "type")]
+pub enum LogEdge {
+    Direct(RevId),
+    Indirect(RevId),
+    Missing,
+}
+
 /// A change or commit id with a disambiguated prefix
 #[derive(TS, Serialize, Clone)]
 #[ts(export, export_to = "../src/messages/")]
