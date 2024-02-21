@@ -16,8 +16,10 @@ tauri-plugin-dialog = "2.0.0-beta"
 tauri-plugin-shell = "2.0.0-beta"
 tauri-plugin-window-state = "2.0.0-beta.0"
 
-jj-lib = "0.14.0"
-jj-cli = { version = "0.14.0", default-features = false }
+jj-lib = { version = "0.14.0", features = ["vendored-openssl"] }
+jj-cli = { version = "0.14.0", default-features = false, features = [
+    "vendored-openssl",
+] }
 
 anyhow = "1.0.79"
 chrono = { version = "0.4.34", features = ["serde"] }
