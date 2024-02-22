@@ -55,27 +55,45 @@ pub struct RepoStatus {
     pub working_copy: RevId,
 }
 
-#[derive(TS, Serialize)]
+#[derive(TS, Serialize, Clone, Copy)]
 #[ts(export, export_to = "../src/messages/")]
-pub struct LogPage {
-    pub nodes: Vec<LogNode>,
-    pub has_more: bool,
-}
-
-#[derive(TS, Serialize)]
-#[ts(export, export_to = "../src/messages/")]
-pub struct LogNode {
-    pub revision: RevHeader,
-    pub edges: Vec<LogEdge>,
-}
+pub struct LogCoordinates(pub usize, pub usize);
 
 #[derive(TS, Serialize)]
 #[ts(export, export_to = "../src/messages/")]
 #[serde(tag = "type")]
-pub enum LogEdge {
-    Direct(RevId),
-    Indirect(RevId),
-    Missing,
+pub enum LogLine {
+    FromNode {
+        source: LogCoordinates,
+        target: LogCoordinates,
+        indirect: bool,
+    },
+    ToNode {
+        source: LogCoordinates,
+        target: LogCoordinates,
+        indirect: bool,
+    },
+    ToIntersection {
+        source: LogCoordinates,
+        target: LogCoordinates,
+        indirect: bool,
+    },
+}
+
+#[derive(TS, Serialize)]
+#[ts(export, export_to = "../src/messages/")]
+pub struct LogRow {
+    pub location: LogCoordinates,
+    pub padding: usize,
+    pub revision: RevHeader,
+}
+
+#[derive(TS, Serialize)]
+#[ts(export, export_to = "../src/messages/")]
+pub struct LogPage {
+    pub rows: Vec<LogRow>,
+    pub lines: Vec<LogLine>,
+    pub has_more: bool,
 }
 
 /// A change or commit id with a disambiguated prefix
@@ -96,7 +114,7 @@ pub struct RevHeader {
     pub email: String,
     pub timestamp: chrono::DateTime<Local>,
     pub has_conflict: bool,
-    pub branches: Vec<RefName>
+    pub branches: Vec<RefName>,
 }
 
 #[derive(TS, Serialize)]

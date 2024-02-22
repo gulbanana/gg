@@ -19,7 +19,7 @@ use pollster::FutureExt;
 
 use crate::{
     gui_util::{SessionEvaluator, SessionOperation, WorkspaceSession},
-    messages,
+    messages::{self, LogCoordinates, LogLine, LogRow},
 };
 
 #[derive(Debug)]
@@ -47,7 +47,9 @@ pub fn main(rx: Receiver<SessionEvent>) -> Result<()> {
         match rx.recv() {
             Ok(SessionEvent::OpenRepository { tx, cwd }) => {
                 tx.send({
-                    session = WorkspaceSession::from_cwd(&cwd.unwrap_or_else(|| std::env::current_dir().unwrap()))?;
+                    session = WorkspaceSession::from_cwd(
+                        &cwd.unwrap_or_else(|| std::env::current_dir().unwrap()),
+                    )?;
                     op = SessionOperation::from_head(&session)?;
                     eval = SessionEvaluator::from_operation(&op);
                     Ok(op.format_config())
@@ -67,7 +69,9 @@ pub fn main(rx: Receiver<SessionEvent>) -> Result<()> {
         match rx.recv() {
             Ok(SessionEvent::OpenRepository { tx, cwd }) => tx.send({
                 drop(eval);
-                session = WorkspaceSession::from_cwd(&cwd.unwrap_or_else(|| session.workspace.workspace_root().clone()))?;
+                session = WorkspaceSession::from_cwd(
+                    &cwd.unwrap_or_else(|| session.workspace.workspace_root().clone()),
+                )?;
                 op = SessionOperation::from_head(&session)?;
                 eval = SessionEvaluator::from_operation(&op);
                 Ok(op.format_config())
@@ -84,6 +88,13 @@ pub fn main(rx: Receiver<SessionEvent>) -> Result<()> {
     }
 }
 
+struct GraphStem {
+    source: messages::LogCoordinates,
+    target: CommitId,
+    indirect: bool,
+    was_inserted: bool,
+}
+
 fn query_log(
     op: &SessionOperation,
     eval: &SessionEvaluator,
@@ -93,41 +104,113 @@ fn query_log(
         .evaluate_revset(revset_str)
         .context("evaluate revset")?;
 
-    let mut nodes = Vec::new();
+    // ongoing vertical lines; nodes will be placed on or around these
+    let mut stems: Vec<Option<GraphStem>> = Vec::new();
+
+    // output drawing primitives
+    let mut lines: Vec<LogLine> = Vec::new();
+    let mut rows: Vec<LogRow> = Vec::new();
 
     // XXX investigate paging for perf
     let iter = TopoGroupedRevsetGraphIterator::new(revset.iter_graph());
+    for (row, (commit_id, commit_edges)) in iter.enumerate() {
+        // find an existing stem targeting the current node
+        let mut column = stems.len();
+        let mut padding = 0; // used to offset the commit summary past some edges
 
-    // XXX if building the graph in JS is slow, we could do transformations here
-    for (commit_id, mut commit_edges) in iter {
-        let commit = op.repo.store().get_commit(&commit_id)?;
-        let mut edges = Vec::new();
-
-        commit_edges.sort_by_key(|e| -op.repo.store().get_commit(&e.target).unwrap().author().timestamp.timestamp.0);
-        for edge in commit_edges {
-            match edge.edge_type {
-                RevsetGraphEdgeType::Missing => {
-                    edges.push(messages::LogEdge::Missing);
-                }
-                RevsetGraphEdgeType::Direct => {
-                    edges.push(messages::LogEdge::Direct(op.format_commit_id(&edge.target)));
-                }
-                RevsetGraphEdgeType::Indirect => {
-                    edges.push(messages::LogEdge::Indirect(
-                        op.format_commit_id(&edge.target),
-                    ));
+        for (slot, stem) in stems.iter().enumerate() {
+            if let Some(GraphStem { target, .. }) = stem {
+                if *target == commit_id {
+                    column = slot;
+                    padding = stems.len() - column - 1;
+                    break;
                 }
             }
         }
 
-        nodes.push(messages::LogNode {
-            revision: op.format_header(&commit)?,
-            edges,
+        // terminate any existing stem, removing it from the end or leaving a gap
+        if column < stems.len() {
+            if let Some(terminated_stem) = &stems[column] {
+                lines.push(if terminated_stem.was_inserted {
+                    LogLine::FromNode {
+                        indirect: terminated_stem.indirect,
+                        source: terminated_stem.source,
+                        target: LogCoordinates(column, row),
+                    }
+                } else {
+                    LogLine::ToNode {
+                        indirect: terminated_stem.indirect,
+                        source: terminated_stem.source,
+                        target: LogCoordinates(column, row),
+                    }
+                });
+            }
+            stems[column] = None;
+        }
+        // otherwise, slot into any gaps that might exist
+        else {
+            for (slot, stem) in stems.iter().enumerate() {
+                if stem.is_none() {
+                    column = slot;
+                    padding = stems.len() - slot - 1;
+                    break;
+                }
+            }
+        }
+
+        // remove empty stems on the right edge
+        let empty_stems = stems.iter().rev().take_while(|stem| stem.is_none()).count();
+        stems.truncate(stems.len() - empty_stems);
+
+        // merge edges into existing stems or add new ones to the right
+        'edges: for edge in commit_edges.iter() {
+            if edge.edge_type == RevsetGraphEdgeType::Missing {
+                continue;
+            }
+
+            for (slot, stem) in stems.iter().enumerate() {
+                if let Some(stem) = stem {
+                    if stem.target == edge.target {
+                        lines.push(LogLine::ToIntersection {
+                            indirect: edge.edge_type == RevsetGraphEdgeType::Indirect,
+                            source: LogCoordinates(column, row),
+                            target: LogCoordinates(slot, row + 1),
+                        });
+                        continue 'edges;
+                    }
+                }
+            }
+
+            for stem in stems.iter_mut() {
+                if stem.is_none() {
+                    *stem = Some(GraphStem {
+                        source: LogCoordinates(column, row),
+                        target: edge.target.clone(),
+                        indirect: edge.edge_type == RevsetGraphEdgeType::Indirect,
+                        was_inserted: true,
+                    });
+                    continue 'edges;
+                }
+            }
+
+            stems.push(Some(GraphStem {
+                source: LogCoordinates(column, row),
+                target: edge.target.clone(),
+                indirect: edge.edge_type == RevsetGraphEdgeType::Indirect,
+                was_inserted: false,
+            }));
+        }
+
+        rows.push(LogRow {
+            location: LogCoordinates(column, row),
+            padding,
+            revision: op.format_header(&op.repo.store().get_commit(&commit_id)?)?,
         });
     }
 
     Ok(messages::LogPage {
-        nodes,
+        rows,
+        lines,
         has_more: false,
     })
 }
@@ -159,11 +242,15 @@ fn get_revision(op: &SessionOperation, id_str: &str) -> Result<messages::RevDeta
     }
     .block_on();
 
-    let parents: Result<Vec<messages::RevHeader>> = commit.parents().iter().map(|p| op.format_header(p)).collect();
+    let parents: Result<Vec<messages::RevHeader>> = commit
+        .parents()
+        .iter()
+        .map(|p| op.format_header(p))
+        .collect();
 
     Ok(messages::RevDetail {
         header: op.format_header(&commit)?,
         diff: paths,
-        parents: parents?
+        parents: parents?,
     })
 }

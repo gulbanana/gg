@@ -5,6 +5,7 @@
     export let r2: number;
     export let hasElisions: boolean;
     export let isMerge: boolean;
+    export let allowEarlyBreak: boolean;
 
     // draw path downward, from child to parent
     let path: string;
@@ -33,7 +34,7 @@
         // different-column, curved line
         let childX = c1 * 18 + 9;
         let parentX = c2 * 18 + 9;
-        let midY = c2 > c1 ? childY + 9 : parentY - 9;
+        let midY = allowEarlyBreak && c1 > c2 ? parentY - 9 : childY + 9;
         let radius = c2 > c1 ? 6 : -6;
         let sweep = c2 > c1 ? 0 : 1;
         path = `M${childX},${childY} 

@@ -38,7 +38,7 @@
     <div slot="body" class="log-commits">
         <Bound query={$log_content} let:data>
             <div slot="wait">Loading changes...</div>
-            <Graph nodes={data.nodes} />
+            <Graph page={data} />
         </Bound>
     </div>
 </Pane>
@@ -50,7 +50,7 @@
         grid-template-columns: auto 1fr;
         gap: 3px;
     }
-    
+
     input {
         font-family: var(--stack-code);
         font-size: 14px;
