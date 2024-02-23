@@ -5,8 +5,6 @@ description = "GG - Gui for JJ"
 authors = ["Thomas Castiglione"]
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [build-dependencies]
 tauri-build = { version = "2.0.0-beta", features = [] }
 
@@ -28,9 +26,7 @@ futures-util = "0.3.30"
 pollster = "0.3.0"
 serde = { version = "1.0.196", features = ["derive"] }
 serde_json = "1.0"
-ts-rs = { version = "7.1.1", features = ["chrono-impl"] }
+ts-rs = { version = "7.1.1", features = ["chrono-impl"], optional = true }
 
 [features]
-# this feature is used for production builds or when `devPath` points to the filesystem
-# DO NOT REMOVE!!
-custom-protocol = ["tauri/custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"] # required for tauri build/dev

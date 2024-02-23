@@ -27,6 +27,8 @@ use crate::{
 
 #[derive(Debug)]
 pub enum SessionEvent {
+    #[allow(dead_code)]
+    EndSession,
     OpenWorkspace {
         tx: Sender<Result<messages::RepoConfig>>,
         cwd: Option<PathBuf>,
@@ -47,24 +49,22 @@ pub enum SessionEvent {
 pub fn state_main(rx: &Receiver<SessionEvent>) -> Result<()> {
     loop {
         match rx.recv() {
-            Ok(SessionEvent::OpenWorkspace {
-                mut tx,
-                cwd: mut wd,
-            }) => loop {
-                let cwd = &wd
+            Ok(SessionEvent::EndSession) => return Ok(()),
+            Ok(SessionEvent::OpenWorkspace { mut tx, mut cwd }) => loop {
+                let wd = &cwd
                     .clone()
                     .unwrap_or_else(|| std::env::current_dir().unwrap());
 
-                let session = match WorkspaceSession::from_cwd(cwd) {
+                let session = match WorkspaceSession::from_cwd(wd) {
                     Ok(session) => session,
                     Err(err) => {
                         // XXX this is failing - for some reason the channel is closed
-                        // tx.send(Ok(messages::RepoConfig::NoWorkspace {
-                        //     absolute_path: cwd.into(),
-                        //     error: format!("{err:#}"),
-                        // }))
-                        // .context("send NoWorkspace")?;
-                        continue;
+                        tx.send(Ok(messages::RepoConfig::NoWorkspace {
+                            absolute_path: wd.into(),
+                            error: format!("{err:#}"),
+                        }))
+                        .context("send NoWorkspace")?;
+                        break;
                     }
                 };
 
@@ -72,11 +72,11 @@ pub fn state_main(rx: &Receiver<SessionEvent>) -> Result<()> {
                     Ok(op) => op,
                     Err(err) => {
                         tx.send(Ok(messages::RepoConfig::NoOperation {
-                            absolute_path: cwd.into(),
+                            absolute_path: wd.into(),
                             error: format!("{err:#}"),
                         }))
                         .context("send NoOperation")?;
-                        continue;
+                        break;
                     }
                 };
 
@@ -84,8 +84,10 @@ pub fn state_main(rx: &Receiver<SessionEvent>) -> Result<()> {
 
                 tx.send(Ok(op.format_config())).context("send RepoConfig")?;
 
-                (tx, wd) = state_workspace(rx, &session, &op, &eval).context("state_workspace")?;
-                // XXX the send works here, but not once we go around the loop
+                match state_workspace(rx, &session, &op, &eval).context("state_workspace")? {
+                    WorkspaceResult::Reopen(new_tx, new_cwd) => (tx, cwd) = (new_tx, new_cwd),
+                    WorkspaceResult::SessionComplete => return Ok(()),
+                };
             },
             Ok(_) => {
                 return Err(anyhow::anyhow!(
@@ -97,7 +99,10 @@ pub fn state_main(rx: &Receiver<SessionEvent>) -> Result<()> {
     }
 }
 
-type WorkspaceResult = (Sender<Result<messages::RepoConfig>>, Option<PathBuf>);
+enum WorkspaceResult {
+    Reopen(Sender<Result<messages::RepoConfig>>, Option<PathBuf>),
+    SessionComplete,
+}
 
 fn state_workspace(
     rx: &Receiver<SessionEvent>,
@@ -107,8 +112,9 @@ fn state_workspace(
 ) -> Result<WorkspaceResult> {
     loop {
         match rx.recv() {
+            Ok(SessionEvent::EndSession) => return Ok(WorkspaceResult::SessionComplete),
             Ok(SessionEvent::OpenWorkspace { tx, cwd }) => {
-                return Ok((tx, cwd));
+                return Ok(WorkspaceResult::Reopen(tx, cwd));
             }
             Ok(SessionEvent::QueryLog {
                 mut tx,
@@ -160,8 +166,11 @@ fn state_query(
 ) -> Result<QueryResult> {
     loop {
         match rx.recv() {
+            Ok(SessionEvent::EndSession) => {
+                return Ok(QueryResult::Workspace(WorkspaceResult::SessionComplete));
+            }
             Ok(SessionEvent::OpenWorkspace { tx, cwd }) => {
-                return Ok(QueryResult::Workspace((tx, cwd)));
+                return Ok(QueryResult::Workspace(WorkspaceResult::Reopen(tx, cwd)));
             }
             Ok(SessionEvent::QueryLog { tx, revset }) => {
                 return Ok(QueryResult::Requery(tx, revset));

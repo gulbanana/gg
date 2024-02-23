@@ -2,6 +2,8 @@
 
 mod gui_util;
 mod messages;
+#[cfg(all(test, not(feature = "ts-rs")))]
+mod tests;
 mod worker;
 
 use std::collections::HashMap;

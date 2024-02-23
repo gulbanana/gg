@@ -4,11 +4,16 @@ use std::path::PathBuf;
 
 use chrono::Local;
 use serde::Serialize;
+#[cfg(feature = "ts-rs")]
 use ts_rs::TS;
 
 /// Utility type used to abstract crlf/<br>/etc
-#[derive(TS, Serialize)]
-#[ts(export, export_to = "../src/messages/")]
+#[derive(Serialize)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(TS),
+    ts(export, export_to = "../src/messages/")
+)]
 pub struct MultilineString {
     pub lines: Vec<String>,
 }
@@ -25,8 +30,12 @@ where
 }
 
 /// Utility type used for platform-specific display
-#[derive(TS, Serialize, Clone)]
-#[ts(export, export_to = "../src/messages/")]
+#[derive(Serialize, Clone)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(TS),
+    ts(export, export_to = "../src/messages/")
+)]
 pub struct DisplayPath(String);
 
 impl From<&PathBuf> for DisplayPath {
@@ -40,9 +49,13 @@ impl From<&PathBuf> for DisplayPath {
     }
 }
 
-#[derive(TS, Serialize, Clone)]
-#[ts(export, export_to = "../src/messages/")]
+#[derive(Serialize, Clone)]
 #[serde(tag = "type")]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(TS),
+    ts(export, export_to = "../src/messages/")
+)]
 pub enum RepoConfig {
     Workspace {
         absolute_path: DisplayPath,
@@ -62,22 +75,34 @@ pub enum RepoConfig {
     },
 }
 
-#[derive(TS, Serialize, Clone)]
-#[ts(export, export_to = "../src/messages/")]
+#[derive(Serialize, Clone)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(TS),
+    ts(export, export_to = "../src/messages/")
+)]
 pub struct RepoStatus {
     pub operation_description: String,
     pub working_copy: RevId,
 }
 
-#[derive(TS, Serialize)]
-#[ts(export, export_to = "../src/messages/")]
+#[derive(Serialize)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(TS),
+    ts(export, export_to = "../src/messages/")
+)]
 pub struct LogPage {
     pub rows: Vec<LogRow>,
     pub has_more: bool,
 }
 
-#[derive(TS, Serialize)]
-#[ts(export, export_to = "../src/messages/")]
+#[derive(Serialize)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(TS),
+    ts(export, export_to = "../src/messages/")
+)]
 pub struct LogRow {
     pub revision: RevHeader,
     pub location: LogCoordinates,
@@ -85,9 +110,13 @@ pub struct LogRow {
     pub lines: Vec<LogLine>,
 }
 
-#[derive(TS, Serialize)]
-#[ts(export, export_to = "../src/messages/")]
+#[derive(Serialize)]
 #[serde(tag = "type")]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(TS),
+    ts(export, export_to = "../src/messages/")
+)]
 pub enum LogLine {
     FromNode {
         source: LogCoordinates,
@@ -106,20 +135,32 @@ pub enum LogLine {
     },
 }
 
-#[derive(TS, Serialize, Clone, Copy)]
-#[ts(export, export_to = "../src/messages/")]
+#[derive(Serialize, Clone, Copy)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(TS),
+    ts(export, export_to = "../src/messages/")
+)]
 pub struct LogCoordinates(pub usize, pub usize);
 
 /// A change or commit id with a disambiguated prefix
-#[derive(TS, Serialize, Clone)]
-#[ts(export, export_to = "../src/messages/")]
+#[derive(Serialize, Clone)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(TS),
+    ts(export, export_to = "../src/messages/")
+)]
 pub struct RevId {
     pub prefix: String,
     pub rest: String,
 }
 
-#[derive(TS, Serialize)]
-#[ts(export, export_to = "../src/messages/")]
+#[derive(Serialize)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(TS),
+    ts(export, export_to = "../src/messages/")
+)]
 pub struct RevHeader {
     pub change_id: RevId,
     pub commit_id: RevId,
@@ -131,17 +172,25 @@ pub struct RevHeader {
     pub branches: Vec<RefName>,
 }
 
-#[derive(TS, Serialize)]
-#[ts(export, export_to = "../src/messages/")]
+#[derive(Serialize)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(TS),
+    ts(export, export_to = "../src/messages/")
+)]
 pub struct RevDetail {
     pub header: RevHeader,
     pub parents: Vec<RevHeader>,
     pub diff: Vec<DiffPath>,
 }
 
-#[derive(TS, Serialize)]
-#[ts(export, export_to = "../src/messages/")]
+#[derive(Serialize)]
 #[serde(tag = "type")]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(TS),
+    ts(export, export_to = "../src/messages/")
+)]
 pub enum DiffPath {
     Added { relative_path: DisplayPath },
     Deleted { relative_path: DisplayPath },
@@ -149,8 +198,12 @@ pub enum DiffPath {
 }
 
 /// Branch or tag name with metadata.
-#[derive(TS, Serialize, Clone)]
-#[ts(export, export_to = "../src/messages/")]
+#[derive(Serialize, Clone)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(TS),
+    ts(export, export_to = "../src/messages/")
+)]
 pub struct RefName {
     /// Local name.
     pub name: String,
