@@ -1,23 +1,33 @@
 <script lang="ts">
+    import type { RepoStatus } from "./messages/RepoStatus";
+    import type { RevDetail } from "./messages/RevDetail";
+    import { event } from "./ipc.js";
+    import Action from "./Action.svelte";
     import Icon from "./Icon.svelte";
     import IdSpan from "./IdSpan.svelte";
     import Pane from "./Pane.svelte";
     import PathSpan from "./PathSpan.svelte";
-    import type { RevDetail } from "./messages/RevDetail";
+    import RevisionSummary from "./RevisionSummary.svelte";
 
     export let rev: RevDetail;
 
-    $: selected_path = "";
+    const repo_status = event<RepoStatus>("gg://repo/status");
+
+    let selected_path = "";
+
+    console.log("render revision", rev);
 </script>
 
 <Pane>
     <h2 slot="header" class="header">
         <span>
             <IdSpan type="change" id={rev.header.change_id} />
-            /
-            <IdSpan type="commit" id={rev.header.commit_id} />
+            | <IdSpan type="commit" id={rev.header.commit_id} />
+            {#if $repo_status?.working_copy?.prefix == rev.header.commit_id.prefix}
+                | Working copy
+            {/if}
         </span>
-        <button><Icon name="map-pin" /> Pin</button>
+        <Action><Icon name="map-pin" /> Pin</Action>
     </h2>
 
     <div slot="body" class="body">
@@ -29,38 +39,37 @@
             <span>{rev.header.author}</span>
             <span>{new Date(rev.header.timestamp).toLocaleTimeString()}</span>
             <span></span>
-            <button><Icon name="file-text" /> Describe</button>
+            <Action><Icon name="file-text" /> Describe</Action>
         </div>
 
-        <div class="diff">
-            <h3>File changes</h3>
-            {#each rev.diff as path}
-                <!-- svelte-ignore a11y-click-events-have-key-events -->
-                <!-- svelte-ignore a11y-no-static-element-interactions -->
-                <div
-                    class="path"
-                    class:selected={selected_path == path.relative_path}
-                    on:click={() => (selected_path = path.relative_path)}
-                >
-                    <PathSpan {path} />
-                </div>
-            {/each}
-        </div>
+        <main>
+            {#if rev.diff.length > 0}
+                <section>
+                    <h3>File changes</h3>
+                    {#each rev.diff as path}
+                        <!-- svelte-ignore a11y-click-events-have-key-events -->
+                        <!-- svelte-ignore a11y-no-static-element-interactions -->
+                        <div
+                            class="path"
+                            class:selected={selected_path == path.relative_path}
+                            on:click={() =>
+                                (selected_path = path.relative_path)}
+                        >
+                            <PathSpan {path} />
+                        </div>
+                    {/each}
+                </section>
+            {/if}
 
-        <div class="diff">
-            <h3>Parents</h3>
-            {#each rev.parents as parent}
-                <div class="parent">
-                    <code>
-                        <IdSpan type="change" id={parent.change_id} />
-                    </code>
-                    <span>{parent.description.lines[0]}</span>
-                    <code>
-                        <IdSpan type="commit" id={parent.commit_id} />
-                    </code>
-                </div>
-            {/each}
-        </div>
+            {#if rev.parents.length > 0}
+                <section>
+                    <h3>Parents</h3>
+                    {#each rev.parents as parent}
+                        <RevisionSummary revision={parent} selected={false} />
+                    {/each}
+                </section>
+            {/if}
+        </main>
     </div>
 </Pane>
 
@@ -70,15 +79,13 @@
         align-items: center;
         justify-content: space-between;
     }
-    .header > button {
-        background: var(--ctp-sapphire);
-    }
 
     .body {
         display: flex;
         flex-direction: column;
         align-items: stretch;
         gap: 3px;
+        overflow: hidden;
     }
 
     .desc {
@@ -94,11 +101,14 @@
         grid-template-columns: auto auto 1fr auto;
         gap: 6px;
     }
-    .author > button {
-        background: var(--ctp-peach);
+
+    main {
+        flex: 1;
+        overflow: auto;
+        scrollbar-color: var(--ctp-text) var(--ctp-mantle);
     }
 
-    .diff {
+    section {
         background: var(--ctp-mantle);
         border-radius: 6px;
         padding: 3px;
@@ -106,20 +116,18 @@
         flex-direction: column;
         margin-top: 9px;
     }
+
     .path {
         height: 24px;
         display: flex;
         align-items: center;
         cursor: pointer;
     }
+
     .selected {
         background: var(--ctp-base);
     }
-    .parent {
-        display: grid;
-        grid-template-columns: auto 1fr auto;
-        gap: 6px;
-    }
+
     h3 {
         font-size: 1rem;
     }

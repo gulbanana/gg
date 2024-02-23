@@ -6,12 +6,13 @@
     let suffix = id.rest.substring(0, 8 - id.prefix.length);
 </script>
 
-<span class="idd"><span class={type}>{id.prefix}</span>{suffix}</span>
+<span class="id"><span class={type}>{id.prefix}</span>{suffix}</span>
 
 <style>
     .id {
         user-select: text;
         color: var(--ctp-subtext1);
+        font-family: var(--stack-code);
     }
 
     .change {

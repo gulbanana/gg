@@ -2,13 +2,13 @@
     import type { Query as Query } from "./ipc";
 
     export let query: Query<T>;
-    let type = query.type;
-        
     interface $$Slots {
         wait: {};
         error: { message: string };
         default: { data: T };
     }
+
+    let type = query.type;
 </script>
 
 {#key query}

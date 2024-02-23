@@ -6,14 +6,22 @@ export type Query<T> = { type: "wait" } | { type: "data", value: T } | { type: "
 
 class EventStore<T> implements Readable<T | undefined> {
     #name: string;
+    #unsubscribing: boolean;
 
     constructor(name: string) {
         this.#name = name;
     }
 
     subscribe(run: Subscriber<T>): Unsubscriber {
-        let unlisten = listen<T>(this.#name, event => run(event.payload));
-        return async () => (await unlisten)();
+        let unlisten = listen<T>(this.#name, event => {
+            if (!this.#unsubscribing) {
+                run(event.payload);
+            }
+        });
+        return async () => {
+            this.#unsubscribing = true;
+            (await unlisten)();
+        }
     }
 
     set(value: T) {

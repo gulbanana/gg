@@ -11,10 +11,11 @@
     import Pane from "./Pane.svelte";
     import LogPane from "./LogPane.svelte";
     import RevisionPane from "./RevisionPane.svelte";
+    import Action from "./Action.svelte";
 
     const repo_config = event<RepoConfig>("gg://repo/config");
     const repo_status = event<RepoStatus>("gg://repo/status");
-    const change_selection = event<RevHeader>("gg://change/select");
+    const change_selection = event<RevHeader>("gg://revision/select");
     const change_content = command<RevDetail>("get_revision");
 
     $: if ($repo_config) load_repo($repo_config);
@@ -60,7 +61,7 @@
             <span>{$repo_config?.absolute_path}</span>
             <span />
             <span>{$repo_status?.operation_description}</span>
-            <button><Icon name="rotate-ccw" /> Undo</button>
+            <Action><Icon name="rotate-ccw" /> Undo</Action>
         </div>
     {:else if !$repo_config}
         <div id="error-overlay">

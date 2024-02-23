@@ -4,11 +4,12 @@
   import type { RevHeader } from "./messages/RevHeader.js";
   import { call, event } from "./ipc.js";
   import Pane from "./Pane.svelte";
-  import Graph from "./Graph.svelte";
+  import GraphLog from "./GraphLog.svelte";
+  import RevisionSummary from "./RevisionSummary.svelte";
 
   export let query: string;
 
-  const change_content = event<RevHeader>("gg://change/select");
+  const select = event<RevHeader>("gg://revision/select");
 
   let entered_query = query;
   let log_rows: LogRow[] | undefined;
@@ -23,11 +24,11 @@
     });
 
     if (page.type == "data") {
-      if (page.value.rows.length > 0) {
-        $change_content = page.value.rows[0].revision;
-      }
-
       log_rows = page.value.rows;
+
+      if (page.value.rows.length > 0) {
+        $select = page.value.rows[0].revision;
+      }
 
       while (page.value.has_more) {
         let next_page = await call<LogPage>("query_log_more");
@@ -53,7 +54,12 @@
 
   <div slot="body" class="log-commits">
     {#if log_rows}
-      <Graph rows={log_rows} />
+      <GraphLog rows={log_rows} let:row>
+        <RevisionSummary
+          revision={row.revision}
+          selected={$select?.change_id.prefix == row.revision.change_id.prefix}
+        />
+      </GraphLog>
     {:else}
       <div>Loading changes...</div>
     {/if}

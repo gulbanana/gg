@@ -1,11 +1,14 @@
 <script lang="ts">
-    export let c1: number;
-    export let r1: number;
-    export let c2: number;
-    export let r2: number;
-    export let hasElisions: boolean;
-    export let isMerge: boolean;
-    export let allowEarlyBreak: boolean;
+    import type { LogLine } from "./messages/LogLine";
+
+    export let line: LogLine;
+
+    let isMerge = line.type == "ToIntersection";
+    let allowEarlyBreak = line.type == "FromNode";
+    let c1 = line.source[0];
+    let c2 = line.target[0];
+    let r1 = line.source[1];
+    let r2 = line.target[1];
 
     // draw path downward, from child to parent
     let path: string;
@@ -46,4 +49,10 @@
     }
 </script>
 
-<path d={path} fill="none" stroke-dasharray={hasElisions ? "1,2" : "none"} />
+<path d={path} fill="none" stroke-dasharray={line.indirect ? "1,2" : "none"} />
+
+<style>
+    path {
+        pointer-events: none;
+    }
+</style>
