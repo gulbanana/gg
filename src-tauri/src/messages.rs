@@ -57,6 +57,9 @@ pub enum RepoConfig {
         absolute_path: DisplayPath,
         error: String,
     },
+    DeadWorker {
+        error: String,
+    },
 }
 
 #[derive(TS, Serialize, Clone)]

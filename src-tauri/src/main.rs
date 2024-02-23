@@ -10,7 +10,7 @@ use std::sync::mpsc::{channel, Sender};
 use std::sync::Mutex;
 use std::thread::{self, JoinHandle};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use tauri::{
     ipc::InvokeError,
     menu::{Menu, MenuItem, Submenu},
@@ -87,9 +87,17 @@ fn main() -> Result<()> {
         .setup(|app| {
             let window = app.get_webview_window("main").unwrap();
             let (sender, receiver) = channel();
+            let handle = window.clone();
             let window_worker = thread::spawn(move || {
-                if let Err(err) = worker::state_main(receiver) {
-                    panic!("{:?}", err);
+                while let Err(err) = worker::state_main(&receiver).context("state_main") {
+                    handle
+                        .emit(
+                            "gg://repo/config",
+                            messages::RepoConfig::DeadWorker {
+                                error: format!("{err:#}"),
+                            },
+                        )
+                        .unwrap();
                 }
             });
             window.on_menu_event(|window, event| {

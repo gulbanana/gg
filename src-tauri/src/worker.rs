@@ -44,7 +44,7 @@ pub enum SessionEvent {
     },
 }
 
-pub fn state_main(rx: Receiver<SessionEvent>) -> Result<()> {
+pub fn state_main(rx: &Receiver<SessionEvent>) -> Result<()> {
     loop {
         match rx.recv() {
             Ok(SessionEvent::OpenWorkspace {
@@ -58,10 +58,12 @@ pub fn state_main(rx: Receiver<SessionEvent>) -> Result<()> {
                 let session = match WorkspaceSession::from_cwd(cwd) {
                     Ok(session) => session,
                     Err(err) => {
-                        tx.send(Ok(messages::RepoConfig::NoWorkspace {
-                            absolute_path: cwd.into(),
-                            error: format!("{err}"),
-                        }))?;
+                        // XXX this is failing - for some reason the channel is closed
+                        // tx.send(Ok(messages::RepoConfig::NoWorkspace {
+                        //     absolute_path: cwd.into(),
+                        //     error: format!("{err:#}"),
+                        // }))
+                        // .context("send NoWorkspace")?;
                         continue;
                     }
                 };
@@ -71,17 +73,19 @@ pub fn state_main(rx: Receiver<SessionEvent>) -> Result<()> {
                     Err(err) => {
                         tx.send(Ok(messages::RepoConfig::NoOperation {
                             absolute_path: cwd.into(),
-                            error: format!("{err}"),
-                        }))?;
+                            error: format!("{err:#}"),
+                        }))
+                        .context("send NoOperation")?;
                         continue;
                     }
                 };
 
                 let eval = SessionEvaluator::from_operation(&op);
 
-                tx.send(Ok(op.format_config()))?;
+                tx.send(Ok(op.format_config())).context("send RepoConfig")?;
 
-                (tx, wd) = state_workspace(&rx, &session, &op, &eval)?;
+                (tx, wd) = state_workspace(rx, &session, &op, &eval).context("state_workspace")?;
+                // XXX the send works here, but not once we go around the loop
             },
             Ok(_) => {
                 return Err(anyhow::anyhow!(
@@ -119,12 +123,12 @@ fn state_workspace(
                 tx.send(Ok(first_page))?;
 
                 if incomplete {
-                    match state_workspace_query(rx, session, &op, &eval, &mut query)? {
-                        WorkspaceAndQueryResult::Workspace(r) => return Ok(r),
-                        WorkspaceAndQueryResult::Requery(new_tx, new_revset_string) => {
+                    match state_query(rx, session, &op, &eval, &mut query).context("state_query")? {
+                        QueryResult::Workspace(r) => return Ok(r),
+                        QueryResult::Requery(new_tx, new_revset_string) => {
                             (tx, revset_string) = (new_tx, new_revset_string)
                         }
-                        WorkspaceAndQueryResult::QueryComplete => break,
+                        QueryResult::QueryComplete => break,
                     };
                 } else {
                     break;
@@ -141,26 +145,26 @@ fn state_workspace(
     }
 }
 
-enum WorkspaceAndQueryResult {
+enum QueryResult {
     Workspace(WorkspaceResult),
     Requery(Sender<Result<messages::LogPage>>, String),
     QueryComplete,
 }
 
-fn state_workspace_query(
+fn state_query(
     rx: &Receiver<SessionEvent>,
     _session: &WorkspaceSession,
     op: &SessionOperation,
     _eval: &SessionEvaluator,
     query: &mut LogQuery,
-) -> Result<WorkspaceAndQueryResult> {
+) -> Result<QueryResult> {
     loop {
         match rx.recv() {
             Ok(SessionEvent::OpenWorkspace { tx, cwd }) => {
-                return Ok(WorkspaceAndQueryResult::Workspace((tx, cwd)));
+                return Ok(QueryResult::Workspace((tx, cwd)));
             }
             Ok(SessionEvent::QueryLog { tx, revset }) => {
-                return Ok(WorkspaceAndQueryResult::Requery(tx, revset));
+                return Ok(QueryResult::Requery(tx, revset));
             }
             Ok(SessionEvent::QueryLogMore { tx }) => {
                 let page = query.get(&op);
@@ -172,7 +176,7 @@ fn state_workspace_query(
                     p
                 }))?;
                 if complete {
-                    return Ok(WorkspaceAndQueryResult::QueryComplete);
+                    return Ok(QueryResult::QueryComplete);
                 }
             }
             Ok(SessionEvent::GetRevision { tx, rev: rev_id }) => {

@@ -51,16 +51,50 @@
         <Bound query={$change_content} let:data>
             <RevisionPane rev={data} />
             <Pane slot="wait" />
+            <Pane slot="error">
+                <h2 slot="header">Error</h2>
+            </Pane>
         </Bound>
-    
+
         <div id="status-bar">
             <span>{$repo_config?.absolute_path}</span>
             <span />
             <span>{$repo_status?.operation_description}</span>
             <button><Icon name="rotate-ccw" /> Undo</button>
-        </div>    
+        </div>
+    {:else if !$repo_config}
+        <div id="error-overlay">
+            <div id="error-content">
+                <p class="error-text">
+                    Error communicating with backend. You'll need to restart GG
+                    to continue.
+                </p>
+            </div>
+        </div>
+        <div id="status-bar">
+            <span>Internal Error</span>
+        </div>
     {:else}
-        <div>{$repo_config?.error}</div>
+        <div id="error-overlay">
+            <div id="error-content">
+                {#if $repo_config.type == "NoWorkspace"}
+                    <h2>No Workspace Loaded</h2>
+                {:else if $repo_config.type == "NoOperation"}
+                    <h2 class="error-text">Workspace Load Failed</h2>
+                {:else}
+                    <h2 class="error-text">Internal Error</h2>
+                {/if}
+                <p>{$repo_config.error}</p>
+                <p>Try opening a workspace from the Repository menu.</p>
+            </div>
+        </div>
+        <div id="status-bar">
+            {#if $repo_config.type != "DeadWorker"}
+                <span>{$repo_config?.absolute_path}</span>
+            {:else}
+                <span>Internal Error</span>
+            {/if}
+        </div>
     {/if}
 </div>
 
@@ -90,5 +124,26 @@
         align-items: center;
 
         background: var(--ctp-crust);
+    }
+
+    #error-overlay {
+        grid-column: 1/3;
+        display: grid;
+        align-items: center;
+        justify-content: center;
+    }
+
+    #error-content {
+        background: var(--ctp-mantle);
+        padding: 30px;
+        border-radius: 9px;
+    }
+
+    #error-content > p:last-child {
+        margin-bottom: 0;
+    }
+
+    .error-text {
+        color: var(--ctp-red);
     }
 </style>
