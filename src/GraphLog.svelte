@@ -1,17 +1,14 @@
 <!-- Renders commit rows with an SVG graph drawn over them -->
 
 <script lang="ts">
-  import { event } from "./ipc.js";
-  import type { RepoStatus } from "./messages/RepoStatus.js";
   import type { LogRow } from "./messages/LogRow.js";
   import GraphLine from "./GraphLine.svelte";
+  import { repoStatus } from "./events.js";
 
   export let rows: LogRow[];
   interface $$Slots {
     default: { row: LogRow };
   }
-
-  const repo_status = event<RepoStatus>("gg://repo/status");
 </script>
 
 <svg class="graph" style="width: 100%; height: {rows.length * 30}px;">
@@ -29,7 +26,7 @@
       </foreignObject>
 
       <circle cx="9" cy="15" r="6" fill="none" />
-      {#if $repo_status?.working_copy?.prefix == row.revision.commit_id.prefix}
+      {#if $repoStatus?.working_copy?.prefix == row.revision.commit_id.prefix}
         <circle cx="9" cy="15" r="3" />
       {/if}
     </g>

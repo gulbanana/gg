@@ -1,11 +1,11 @@
 <script lang="ts">
     import { invoke } from "@tauri-apps/api/core";
     import type { RevId } from "./messages/RevId.js";
-    import type { RevHeader } from "./messages/RevHeader.js";
     import type { RevDetail } from "./messages/RevDetail.js";
     import type { RepoConfig } from "./messages/RepoConfig.js";
-    import type { RepoStatus } from "./messages/RepoStatus.js";
-    import { command, event } from "./ipc.js";
+    import { command } from "./ipc.js";
+    import { repoConfig, repoStatus } from "./events.js";
+    import { revisionSelect } from "./events.js";
     import Bound from "./Bound.svelte";
     import Icon from "./Icon.svelte";
     import Pane from "./Pane.svelte";
@@ -13,23 +13,20 @@
     import RevisionPane from "./RevisionPane.svelte";
     import Action from "./Action.svelte";
 
-    const repo_config = event<RepoConfig>("gg://repo/config");
-    const repo_status = event<RepoStatus>("gg://repo/status");
-    const change_selection = event<RevHeader>("gg://revision/select");
-    const change_content = command<RevDetail>("get_revision");
+    const changeCommand = command<RevDetail>("get_revision");
 
-    $: if ($repo_config) load_repo($repo_config);
-    $: if ($change_selection) load_change($change_selection.commit_id);
+    $: if ($repoConfig) load_repo($repoConfig);
+    $: if ($revisionSelect) load_change($revisionSelect.commit_id);
 
     async function load_repo(config: RepoConfig) {
-        change_content.reset();
+        changeCommand.reset();
         if (config.type == "Workspace") {
-            $repo_status = config.status;
+            $repoStatus = config.status;
         }
     }
 
     async function load_change(id: RevId) {
-        change_content.call({
+        changeCommand.call({
             rev: id.prefix + id.rest,
         });
     }
@@ -45,11 +42,11 @@
 </script>
 
 <div id="shell">
-    {#if $repo_config?.type == "Workspace"}
-        {#key $repo_config.absolute_path}
-            <LogPane query={$repo_config.default_revset} />
+    {#if $repoConfig?.type == "Workspace"}
+        {#key $repoConfig.absolute_path}
+            <LogPane query={$repoConfig.default_revset} />
         {/key}
-        <Bound query={$change_content} let:data>
+        <Bound query={$changeCommand} let:data>
             <RevisionPane rev={data} />
             <Pane slot="wait" />
             <Pane slot="error">
@@ -58,12 +55,12 @@
         </Bound>
 
         <div id="status-bar">
-            <span>{$repo_config?.absolute_path}</span>
+            <span>{$repoConfig?.absolute_path}</span>
             <span />
-            <span>{$repo_status?.operation_description}</span>
+            <span>{$repoStatus?.operation_description}</span>
             <Action><Icon name="rotate-ccw" /> Undo</Action>
         </div>
-    {:else if !$repo_config}
+    {:else if !$repoConfig}
         <div id="error-overlay">
             <div id="error-content">
                 <p class="error-text">
@@ -78,20 +75,20 @@
     {:else}
         <div id="error-overlay">
             <div id="error-content">
-                {#if $repo_config.type == "NoWorkspace"}
+                {#if $repoConfig.type == "NoWorkspace"}
                     <h2>No Workspace Loaded</h2>
-                {:else if $repo_config.type == "NoOperation"}
+                {:else if $repoConfig.type == "NoOperation"}
                     <h2 class="error-text">Workspace Load Failed</h2>
                 {:else}
                     <h2 class="error-text">Internal Error</h2>
                 {/if}
-                <p>{$repo_config.error}</p>
+                <p>{$repoConfig.error}</p>
                 <p>Try opening a workspace from the Repository menu.</p>
             </div>
         </div>
         <div id="status-bar">
-            {#if $repo_config.type != "DeadWorker"}
-                <span>{$repo_config?.absolute_path}</span>
+            {#if $repoConfig.type != "DeadWorker"}
+                <span>{$repoConfig?.absolute_path}</span>
             {:else}
                 <span>Internal Error</span>
             {/if}

@@ -1,15 +1,13 @@
 <script lang="ts">
   import type { LogPage } from "./messages/LogPage.js";
   import type { LogRow } from "./messages/LogRow.js";
-  import type { RevHeader } from "./messages/RevHeader.js";
-  import { call, event } from "./ipc.js";
+  import { call } from "./ipc.js";
+  import { revisionSelect } from "./events.js";
   import Pane from "./Pane.svelte";
   import GraphLog from "./GraphLog.svelte";
   import RevisionSummary from "./RevisionSummary.svelte";
 
   export let query: string;
-
-  const select = event<RevHeader>("gg://revision/select");
 
   let entered_query = query;
   let log_rows: LogRow[] | undefined;
@@ -27,7 +25,7 @@
       log_rows = page.value.rows;
 
       if (page.value.rows.length > 0) {
-        $select = page.value.rows[0].revision;
+        $revisionSelect = page.value.rows[0].revision;
       }
 
       while (page.value.has_more) {
@@ -57,7 +55,8 @@
       <GraphLog rows={log_rows} let:row>
         <RevisionSummary
           revision={row.revision}
-          selected={$select?.change_id.prefix == row.revision.change_id.prefix}
+          selected={$revisionSelect?.change_id.prefix ==
+            row.revision.change_id.prefix}
         />
       </GraphLog>
     {:else}

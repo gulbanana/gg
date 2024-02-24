@@ -1,19 +1,17 @@
 <script lang="ts">
     import type { RevHeader } from "./messages/RevHeader";
-    import { event } from "./ipc.js";
+    import { revisionSelect } from "./events.js";
     import IdSpan from "./IdSpan.svelte";
 
     export let revision: RevHeader;
-    export let selected: boolean; // XXX reads from the below event, but in parent - it's undefined at this point for some reason
-
-    const select = event<RevHeader>("gg://revision/select");
+    export let selected: boolean; // same as the imported event, but parent may want to force a value
 </script>
 
 <button
     class="layout"
     class:selected
     class:conflict={revision.has_conflict}
-    on:click={() => ($select = revision)}
+    on:click={() => ($revisionSelect = revision)}
 >
     <IdSpan type="change" id={revision.change_id} />
 

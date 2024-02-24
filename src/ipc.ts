@@ -1,38 +1,48 @@
 import { invoke, type InvokeArgs } from "@tauri-apps/api/core";
-import { emit, listen } from "@tauri-apps/api/event"
+import { emit, listen, type UnlistenFn } from "@tauri-apps/api/event"
 import type { Readable, Subscriber, Unsubscriber } from "svelte/store";
 
 export type Query<T> = { type: "wait" } | { type: "data", value: T } | { type: "error", message: string };
 
-class EventStore<T> implements Readable<T | undefined> {
-    #name: string;
-    #unsubscribing: boolean;
+export interface Settable<T> extends Readable<T> {
+    set: (value: T) => void;
+}
 
-    constructor(name: string) {
-        this.#name = name;
-    }
+// multiplexes tauri events into a svelte store; never actually unsubscribes because the store protocol isn't async
+export async function event<T>(name: string): Promise<Settable<T | undefined>> {
+    const subscribers = new Set<Subscriber<T>>();
+    let lastValue: T | undefined;
 
-    subscribe(run: Subscriber<T>): Unsubscriber {
-        let unlisten = listen<T>(this.#name, event => {
-            if (!this.#unsubscribing) {
-                run(event.payload);
-            }
-        });
-        return async () => {
-            this.#unsubscribing = true;
-            (await unlisten)();
+    const unlisten = await listen<T>(name, event => {
+        for (let subscriber of subscribers) {
+            subscriber(event.payload);
         }
-    }
+    });
 
-    set(value: T) {
-        emit(this.#name, value);
+    return {
+        subscribe(run: Subscriber<T>): Unsubscriber {
+            // send current value to stream
+            if (typeof lastValue != "undefined") {
+                run(lastValue);
+            }
+
+            // listen for new values
+            subscribers.add(run);
+
+            return () => subscribers.delete(run);
+        },
+
+        set(value: T | undefined) {
+            lastValue = value;
+            emit(name, value);
+        }
     }
 }
 
 class CommandStore<T> implements Readable<Query<T>> {
     #name: string;
     #response: Query<T>;
-    #subscribers = new Set<(result: Query<T>) => void>();
+    #subscribers = new Set<Subscriber<Query<T>>>();
 
     constructor(name: string, initialData?: T) {
         this.#name = name;
@@ -82,10 +92,6 @@ class CommandStore<T> implements Readable<Query<T>> {
 
 export function command<T>(name: string, initialData?: T): CommandStore<T> {
     return new CommandStore(name, initialData);
-}
-
-export function event<T>(name: string): EventStore<T> {
-    return new EventStore(name);
 }
 
 export async function call<T>(name: string, request?: InvokeArgs): Promise<Query<T>> {

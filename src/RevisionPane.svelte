@@ -1,7 +1,6 @@
 <script lang="ts">
-    import type { RepoStatus } from "./messages/RepoStatus";
     import type { RevDetail } from "./messages/RevDetail";
-    import { event } from "./ipc.js";
+    import { repoStatus } from "./events.js";
     import Action from "./Action.svelte";
     import Icon from "./Icon.svelte";
     import IdSpan from "./IdSpan.svelte";
@@ -11,11 +10,7 @@
 
     export let rev: RevDetail;
 
-    const repo_status = event<RepoStatus>("gg://repo/status");
-
     let selected_path = "";
-
-    console.log("render revision", rev);
 </script>
 
 <Pane>
@@ -23,7 +18,7 @@
         <span>
             <IdSpan type="change" id={rev.header.change_id} />
             | <IdSpan type="commit" id={rev.header.commit_id} />
-            {#if $repo_status?.working_copy?.prefix == rev.header.commit_id.prefix}
+            {#if $repoStatus?.working_copy?.prefix == rev.header.commit_id.prefix}
                 | Working copy
             {/if}
         </span>
