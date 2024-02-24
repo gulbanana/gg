@@ -111,3 +111,12 @@ h2,
 h3 {
   margin: 0;
 }
+
+button.unbutton {
+  background: transparent;
+  border: none;
+  margin: 0;
+  padding: 0;
+  color: inherit;
+  text-align: left;
+}

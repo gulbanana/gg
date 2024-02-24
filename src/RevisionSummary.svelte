@@ -8,7 +8,7 @@
 </script>
 
 <button
-    class="layout"
+    class="unbutton layout"
     class:selected
     class:conflict={revision.has_conflict}
     on:click={() => ($revisionSelect = revision)}
@@ -33,14 +33,6 @@
 
 <style>
     .layout {
-        /* remove button defaults */
-        background: transparent;
-        border: none;
-        margin: 0;
-        padding: 0;
-        color: inherit;
-        text-align: left;
-
         /* layout summary components along a text line */
         height: 100%;
         width: 100%;

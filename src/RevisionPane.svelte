@@ -42,16 +42,14 @@
                 <section>
                     <h3>File changes</h3>
                     {#each rev.diff as path}
-                        <!-- svelte-ignore a11y-click-events-have-key-events -->
-                        <!-- svelte-ignore a11y-no-static-element-interactions -->
-                        <div
-                            class="path"
+                        <button
+                            class="unbutton path"
                             class:selected={selected_path == path.relative_path}
                             on:click={() =>
                                 (selected_path = path.relative_path)}
                         >
                             <PathSpan {path} />
-                        </div>
+                        </button>
                     {/each}
                 </section>
             {/if}
