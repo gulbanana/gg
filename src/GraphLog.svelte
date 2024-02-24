@@ -16,11 +16,9 @@
     <g transform="translate({row.location[0] * 18} {row.location[1] * 30})">
       <foreignObject
         class="row"
-        x={row.padding * 18 + 18}
-        y="0"
         height="30"
         style="width: calc(100% - {(row.location[0] + row.padding) * 18 +
-          18}px)"
+          18}px); --leftpad: {row.padding * 18 + 18}px;"
       >
         <slot {row} />
       </foreignObject>

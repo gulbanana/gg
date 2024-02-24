@@ -47,6 +47,9 @@
         display: flex;
         align-items: baseline;
         gap: 6px;
+
+        /* skip past svg lines when used in a graph */
+        padding-left: var(--leftpad);
     }
 
     .layout :global(span) {
