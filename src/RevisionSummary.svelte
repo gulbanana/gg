@@ -11,7 +11,7 @@
     class="unbutton layout"
     class:selected
     class:conflict={revision.has_conflict}
-    on:click={() => ($revisionSelect = revision)}
+    on:click={() => revisionSelect.set(revision)}
 >
     <IdSpan type="change" id={revision.change_id} />
 
