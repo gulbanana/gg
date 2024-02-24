@@ -2,4 +2,4 @@
 import type { DisplayPath } from "./DisplayPath";
 import type { RepoStatus } from "./RepoStatus";
 
-export type RepoConfig = { "type": "Workspace", absolute_path: DisplayPath, default_revset: string, status: RepoStatus, } | { "type": "NoWorkspace", absolute_path: DisplayPath, error: string, } | { "type": "NoOperation", absolute_path: DisplayPath, error: string, } | { "type": "DeadWorker", error: string, };
+export type RepoConfig = { "type": "Workspace", absolute_path: DisplayPath, default_query: string, latest_query: string, status: RepoStatus, } | { "type": "NoWorkspace", absolute_path: DisplayPath, error: string, } | { "type": "NoOperation", absolute_path: DisplayPath, error: string, } | { "type": "DeadWorker", error: string, };

@@ -22,7 +22,7 @@ use tauri::{State, Window};
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_window_state::StateFlags;
 
-use worker::SessionEvent;
+use worker::{Session, SessionEvent};
 
 #[derive(Default)]
 struct AppState(Mutex<HashMap<String, WindowState>>);
@@ -91,7 +91,7 @@ fn main() -> Result<()> {
             let (sender, receiver) = channel();
             let handle = window.clone();
             let window_worker = thread::spawn(move || {
-                while let Err(err) = worker::state_main(&receiver).context("state_main") {
+                while let Err(err) = Session::default().main(&receiver).context("worker") {
                     handle
                         .emit(
                             "gg://repo/config",
@@ -151,7 +151,7 @@ fn query_log(
     session_tx
         .send(SessionEvent::QueryLog {
             tx: call_tx,
-            revset,
+            query: revset,
         })
         .map_err(InvokeError::from_error)?;
     call_rx
@@ -169,7 +169,7 @@ fn query_log_more(
     let (call_tx, call_rx) = channel();
 
     session_tx
-        .send(SessionEvent::QueryLogMore { tx: call_tx })
+        .send(SessionEvent::QueryLogNextPage { tx: call_tx })
         .map_err(InvokeError::from_error)?;
     call_rx
         .recv()

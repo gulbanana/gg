@@ -24,7 +24,7 @@
             : revision.description.lines[0]}
     </span>
 
-    {#each revision.branches as ref}
+    {#each revision.branches.filter((b) => b.remote == null || !b.is_synced) as ref}
         <code class="tag" class:conflict={ref.has_conflict}>
             {ref.remote == null ? ref.name : `${ref.name}@${ref.remote}`}
         </code>

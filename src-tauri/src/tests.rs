@@ -3,15 +3,15 @@ use std::{path::PathBuf, sync::mpsc::channel};
 use anyhow::Result;
 
 use crate::{
-    messages::RepoConfig,
-    worker::{self, SessionEvent},
+    messages::{LogPage, RepoConfig},
+    worker::{Session, SessionEvent},
 };
 
 #[test]
 fn start_and_stop() -> Result<()> {
     let (tx, rx) = channel::<SessionEvent>();
     tx.send(SessionEvent::EndSession)?;
-    worker::state_main(&rx)?;
+    Session::default().main(&rx)?;
     Ok(())
 }
 
@@ -31,7 +31,7 @@ fn load_repo() -> Result<()> {
     })?;
     tx.send(SessionEvent::EndSession)?;
 
-    worker::state_main(&rx)?;
+    Session::default().main(&rx)?;
 
     let config = rx_good_repo.recv()??;
     assert!(matches!(config, RepoConfig::Workspace { .. }));
@@ -58,13 +58,46 @@ fn reload_repo() -> Result<()> {
     })?;
     tx.send(SessionEvent::EndSession)?;
 
-    worker::state_main(&rx)?;
+    Session::default().main(&rx)?;
 
     let config = rx_first_repo.recv()??;
     assert!(matches!(config, RepoConfig::Workspace { .. }));
 
     let config = rx_second_repo.recv()??;
     assert!(matches!(config, RepoConfig::Workspace { .. }));
+
+    Ok(())
+}
+
+#[test]
+fn reload_with_default_query() -> Result<()> {
+    let (tx, rx) = channel::<SessionEvent>();
+    let (tx_load, rx_load) = channel::<Result<RepoConfig>>();
+    let (tx_query, rx_query) = channel::<Result<LogPage>>();
+    let (tx_reload, rx_reload) = channel::<Result<RepoConfig>>();
+
+    tx.send(SessionEvent::OpenWorkspace {
+        tx: tx_load,
+        cwd: None,
+    })?;
+    tx.send(SessionEvent::QueryLog {
+        tx: tx_query,
+        query: "none()".to_owned(),
+    })?;
+    tx.send(SessionEvent::OpenWorkspace {
+        tx: tx_reload,
+        cwd: None,
+    })?;
+    tx.send(SessionEvent::EndSession)?;
+
+    Session::default().main(&rx)?;
+
+    _ = rx_load.recv()??;
+    _ = rx_query.recv()??;
+    let config = rx_reload.recv()??;
+    assert!(
+        matches!(config, RepoConfig::Workspace { latest_query, .. } if latest_query == "none()")
+    );
 
     Ok(())
 }

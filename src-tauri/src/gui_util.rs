@@ -181,11 +181,14 @@ impl SessionOperation<'_> {
         index
     }
 
-    pub fn format_config(&self) -> messages::RepoConfig {
+    pub fn format_config(&self, default_revset: Option<String>) -> messages::RepoConfig {
+        let default_query = self.session.settings.default_revset();
+
         messages::RepoConfig::Workspace {
             absolute_path: self.session.workspace.workspace_root().into(),
-            default_revset: self.session.settings.default_revset(),
             status: self.format_status(),
+            latest_query: default_revset.unwrap_or_else(|| default_query.clone()),
+            default_query,
         }
     }
 

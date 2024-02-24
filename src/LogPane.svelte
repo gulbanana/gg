@@ -1,25 +1,59 @@
 <script lang="ts">
   import type { LogPage } from "./messages/LogPage.js";
   import type { LogRow } from "./messages/LogRow.js";
-  import { call } from "./ipc.js";
+  import { call, delay } from "./ipc.js";
   import { revisionSelect } from "./events.js";
   import Pane from "./Pane.svelte";
   import GraphLog from "./GraphLog.svelte";
   import RevisionSummary from "./RevisionSummary.svelte";
+  import { onMount } from "svelte";
 
-  export let query: string;
+  export let default_query: string;
+  export let latest_query: string;
 
-  let entered_query = query;
+  const presets = [
+    { label: "Default", query: default_query },
+    { label: "Tracked Branches", query: "@ | ancestors(branches(), 5)" },
+    { label: "Remote Branches", query: "@ | ancestors(remote_branches(), 5)" },
+    { label: "All Revisions", query: "all()" },
+  ];
+
+  let choices: ReturnType<typeof get_choices>;
+  $: if (entered_query) choices = get_choices();
+
+  let entered_query = latest_query;
   let log_rows: LogRow[] | undefined;
 
-  load_log();
+  onMount(load_log);
+
+  function get_choices() {
+    let choices = presets.map((p) => ({ ...p, selected: false }));
+    for (let choice of choices) {
+      if (entered_query == choice.query) {
+        choice.selected = true;
+        return choices;
+      }
+    }
+
+    choices = [
+      { label: "Custom", query: entered_query, selected: true },
+      ...choices,
+    ];
+
+    return choices;
+  }
 
   async function load_log() {
-    log_rows = undefined;
-
-    let page = await call<LogPage>("query_log", {
+    let fetch = call<LogPage>("query_log", {
       revset: entered_query == "" ? "all()" : entered_query,
     });
+
+    let page = await Promise.race([fetch, delay<LogPage>(200)]);
+
+    if (page.type == "wait") {
+      log_rows = undefined;
+      page = await fetch;
+    }
 
     if (page.type == "data") {
       log_rows = page.value.rows;
@@ -43,9 +77,12 @@
 
 <Pane>
   <div slot="header" class="log-selector">
-    <select>
-      <option selected>revsets.log</option>
-      <option>all()</option>
+    <select bind:value={entered_query} on:change={load_log}>
+      {#each choices as choice}
+        <option selected={choice.selected} value={choice.query}
+          >{choice.label}</option
+        >
+      {/each}
     </select>
     <input type="text" bind:value={entered_query} on:change={load_log} />
   </div>

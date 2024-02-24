@@ -59,7 +59,8 @@ impl From<&PathBuf> for DisplayPath {
 pub enum RepoConfig {
     Workspace {
         absolute_path: DisplayPath,
-        default_revset: String,
+        default_query: String,
+        latest_query: String,
         status: RepoStatus,
     },
     NoWorkspace {

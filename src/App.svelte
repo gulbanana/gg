@@ -44,7 +44,10 @@
 <div id="shell">
     {#if $repoConfig?.type == "Workspace"}
         {#key $repoConfig.absolute_path}
-            <LogPane query={$repoConfig.default_revset} />
+            <LogPane
+                default_query={$repoConfig.default_query}
+                latest_query={$repoConfig.latest_query}
+            />
         {/key}
         <Bound query={$changeCommand} let:data>
             <RevisionPane rev={data} />

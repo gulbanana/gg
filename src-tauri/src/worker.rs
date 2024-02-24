@@ -36,9 +36,9 @@ pub enum SessionEvent {
     },
     QueryLog {
         tx: Sender<Result<messages::LogPage>>,
-        revset: String,
+        query: String,
     },
-    QueryLogMore {
+    QueryLogNextPage {
         tx: Sender<Result<messages::LogPage>>,
     },
     GetRevision {
@@ -47,109 +47,15 @@ pub enum SessionEvent {
     },
 }
 
-pub fn state_main(rx: &Receiver<SessionEvent>) -> Result<()> {
-    loop {
-        match rx.recv() {
-            Ok(SessionEvent::EndSession) => return Ok(()),
-            Ok(SessionEvent::OpenWorkspace { mut tx, mut cwd }) => loop {
-                let wd = &cwd
-                    .clone()
-                    .unwrap_or_else(|| std::env::current_dir().unwrap());
-
-                let session = match WorkspaceSession::from_cwd(wd) {
-                    Ok(session) => session,
-                    Err(err) => {
-                        // XXX this is failing - for some reason the channel is closed
-                        tx.send(Ok(messages::RepoConfig::NoWorkspace {
-                            absolute_path: wd.into(),
-                            error: format!("{err:#}"),
-                        }))
-                        .context("send NoWorkspace")?;
-                        break;
-                    }
-                };
-
-                let op = match SessionOperation::from_head(&session) {
-                    Ok(op) => op,
-                    Err(err) => {
-                        tx.send(Ok(messages::RepoConfig::NoOperation {
-                            absolute_path: wd.into(),
-                            error: format!("{err:#}"),
-                        }))
-                        .context("send NoOperation")?;
-                        break;
-                    }
-                };
-
-                let eval = SessionEvaluator::from_operation(&op);
-
-                tx.send(Ok(op.format_config())).context("send RepoConfig")?;
-
-                match state_workspace(rx, &session, &op, &eval).context("state_workspace")? {
-                    WorkspaceResult::Reopen(new_tx, new_cwd) => (tx, cwd) = (new_tx, new_cwd),
-                    WorkspaceResult::SessionComplete => return Ok(()),
-                };
-            },
-            Ok(_) => {
-                return Err(anyhow::anyhow!(
-                    "A repo must be loaded before any other operations"
-                ))
-            }
-            Err(err) => return Err(anyhow!(err)),
-        };
-    }
+// mutable state that doesn't depend on jj-lib borrowings
+#[derive(Default)]
+pub struct Session {
+    latest_query: Option<String>,
 }
 
 enum WorkspaceResult {
     Reopen(Sender<Result<messages::RepoConfig>>, Option<PathBuf>),
     SessionComplete,
-}
-
-fn state_workspace(
-    rx: &Receiver<SessionEvent>,
-    session: &WorkspaceSession,
-    op: &SessionOperation,
-    eval: &SessionEvaluator,
-) -> Result<WorkspaceResult> {
-    loop {
-        match rx.recv() {
-            Ok(SessionEvent::EndSession) => return Ok(WorkspaceResult::SessionComplete),
-            Ok(SessionEvent::OpenWorkspace { tx, cwd }) => {
-                return Ok(WorkspaceResult::Reopen(tx, cwd));
-            }
-            Ok(SessionEvent::QueryLog {
-                mut tx,
-                revset: mut revset_string,
-            }) => loop {
-                let revset = eval
-                    .evaluate_revset(&revset_string)
-                    .context("evaluate revset")?;
-                let mut query = LogQuery::new(&*revset);
-                let first_page = query.get(&op)?;
-                let incomplete = first_page.has_more;
-                tx.send(Ok(first_page))?;
-
-                if incomplete {
-                    match state_query(rx, session, &op, &eval, &mut query).context("state_query")? {
-                        QueryResult::Workspace(r) => return Ok(r),
-                        QueryResult::Requery(new_tx, new_revset_string) => {
-                            (tx, revset_string) = (new_tx, new_revset_string)
-                        }
-                        QueryResult::QueryComplete => break,
-                    };
-                } else {
-                    break;
-                }
-            },
-            Ok(SessionEvent::QueryLogMore { tx: _tx }) => {
-                return Err(anyhow!("No log query is in progress"))
-            }
-            Ok(SessionEvent::GetRevision { tx, rev: rev_id }) => {
-                tx.send(get_revision(&op, &rev_id))?
-            }
-            Err(err) => return Err(anyhow!(err)),
-        };
-    }
 }
 
 enum QueryResult {
@@ -158,42 +64,148 @@ enum QueryResult {
     QueryComplete,
 }
 
-fn state_query(
-    rx: &Receiver<SessionEvent>,
-    _session: &WorkspaceSession,
-    op: &SessionOperation,
-    _eval: &SessionEvaluator,
-    query: &mut LogQuery,
-) -> Result<QueryResult> {
-    loop {
-        match rx.recv() {
-            Ok(SessionEvent::EndSession) => {
-                return Ok(QueryResult::Workspace(WorkspaceResult::SessionComplete));
-            }
-            Ok(SessionEvent::OpenWorkspace { tx, cwd }) => {
-                return Ok(QueryResult::Workspace(WorkspaceResult::Reopen(tx, cwd)));
-            }
-            Ok(SessionEvent::QueryLog { tx, revset }) => {
-                return Ok(QueryResult::Requery(tx, revset));
-            }
-            Ok(SessionEvent::QueryLogMore { tx }) => {
-                let page = query.get(&op);
-                let mut complete = false;
-                tx.send(page.map(|p| {
-                    if !p.has_more {
-                        complete = true;
-                    }
-                    p
-                }))?;
-                if complete {
-                    return Ok(QueryResult::QueryComplete);
+impl Session {
+    pub fn main(&mut self, rx: &Receiver<SessionEvent>) -> Result<()> {
+        loop {
+            match rx.recv() {
+                Ok(SessionEvent::EndSession) => return Ok(()),
+                Ok(SessionEvent::OpenWorkspace { mut tx, mut cwd }) => loop {
+                    let wd = &cwd
+                        .clone()
+                        .unwrap_or_else(|| std::env::current_dir().unwrap());
+
+                    let session = match WorkspaceSession::from_cwd(wd) {
+                        Ok(session) => session,
+                        Err(err) => {
+                            tx.send(Ok(messages::RepoConfig::NoWorkspace {
+                                absolute_path: wd.into(),
+                                error: format!("{err:#}"),
+                            }))?;
+                            break;
+                        }
+                    };
+
+                    let op = match SessionOperation::from_head(&session) {
+                        Ok(op) => op,
+                        Err(err) => {
+                            tx.send(Ok(messages::RepoConfig::NoOperation {
+                                absolute_path: wd.into(),
+                                error: format!("{err:#}"),
+                            }))?;
+                            break;
+                        }
+                    };
+
+                    let eval = SessionEvaluator::from_operation(&op);
+
+                    tx.send(Ok(op.format_config(self.latest_query.clone())))?;
+
+                    match self
+                        .with_workspace(rx, &session, &op, &eval)
+                        .context("with_workspace")?
+                    {
+                        WorkspaceResult::Reopen(new_tx, new_cwd) => (tx, cwd) = (new_tx, new_cwd),
+                        WorkspaceResult::SessionComplete => return Ok(()),
+                    };
+                },
+                Ok(_) => {
+                    return Err(anyhow::anyhow!(
+                        "A repo must be loaded before any other operations"
+                    ))
                 }
-            }
-            Ok(SessionEvent::GetRevision { tx, rev: rev_id }) => {
-                tx.send(get_revision(&op, &rev_id))?
-            }
-            Err(err) => return Err(anyhow!(err)),
-        };
+                Err(err) => return Err(anyhow!(err)),
+            };
+        }
+    }
+
+    fn with_workspace(
+        &mut self,
+        rx: &Receiver<SessionEvent>,
+        session: &WorkspaceSession,
+        op: &SessionOperation,
+        eval: &SessionEvaluator,
+    ) -> Result<WorkspaceResult> {
+        loop {
+            match rx.recv() {
+                Ok(SessionEvent::EndSession) => return Ok(WorkspaceResult::SessionComplete),
+                Ok(SessionEvent::OpenWorkspace { tx, cwd }) => {
+                    return Ok(WorkspaceResult::Reopen(tx, cwd));
+                }
+                Ok(SessionEvent::QueryLog {
+                    mut tx,
+                    query: mut revset_string,
+                }) => loop {
+                    let revset = eval
+                        .evaluate_revset(&revset_string)
+                        .context("evaluate revset")?;
+                    self.latest_query = Some(revset_string);
+                    let mut query = LogQuery::new(&*revset);
+                    let first_page = query.get(&op)?;
+                    let incomplete = first_page.has_more;
+                    tx.send(Ok(first_page))?;
+
+                    if incomplete {
+                        match Self::with_query(rx, session, &op, &eval, &mut query)
+                            .context("state_query")?
+                        {
+                            QueryResult::Workspace(r) => return Ok(r),
+                            QueryResult::Requery(new_tx, new_revset_string) => {
+                                (tx, revset_string) = (new_tx, new_revset_string)
+                            }
+                            QueryResult::QueryComplete => break,
+                        };
+                    } else {
+                        break;
+                    }
+                },
+                Ok(SessionEvent::QueryLogNextPage { tx: _tx }) => {
+                    return Err(anyhow!("No log query is in progress"))
+                }
+                Ok(SessionEvent::GetRevision { tx, rev: rev_id }) => {
+                    tx.send(get_revision(&op, &rev_id))?
+                }
+                Err(err) => return Err(anyhow!(err)),
+            };
+        }
+    }
+
+    fn with_query(
+        rx: &Receiver<SessionEvent>,
+        _session: &WorkspaceSession,
+        op: &SessionOperation,
+        _eval: &SessionEvaluator,
+        query: &mut LogQuery,
+    ) -> Result<QueryResult> {
+        loop {
+            match rx.recv() {
+                Ok(SessionEvent::EndSession) => {
+                    return Ok(QueryResult::Workspace(WorkspaceResult::SessionComplete));
+                }
+                Ok(SessionEvent::OpenWorkspace { tx, cwd }) => {
+                    return Ok(QueryResult::Workspace(WorkspaceResult::Reopen(tx, cwd)));
+                }
+                Ok(SessionEvent::QueryLog { tx, query }) => {
+                    return Ok(QueryResult::Requery(tx, query));
+                }
+                Ok(SessionEvent::QueryLogNextPage { tx }) => {
+                    let page = query.get(&op);
+                    let mut complete = false;
+                    tx.send(page.map(|p| {
+                        if !p.has_more {
+                            complete = true;
+                        }
+                        p
+                    }))?;
+                    if complete {
+                        return Ok(QueryResult::QueryComplete);
+                    }
+                }
+                Ok(SessionEvent::GetRevision { tx, rev: rev_id }) => {
+                    tx.send(get_revision(&op, &rev_id))?
+                }
+                Err(err) => return Err(anyhow!(err)),
+            };
+        }
     }
 }
 
