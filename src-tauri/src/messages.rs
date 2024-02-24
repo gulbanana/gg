@@ -165,10 +165,8 @@ pub struct RevHeader {
     pub change_id: RevId,
     pub commit_id: RevId,
     pub description: MultilineString,
-    pub author: String,
-    pub email: String,
-    pub timestamp: chrono::DateTime<Local>,
     pub has_conflict: bool,
+    pub is_working_copy: bool,
     pub branches: Vec<RefName>,
 }
 
@@ -180,6 +178,9 @@ pub struct RevHeader {
 )]
 pub struct RevDetail {
     pub header: RevHeader,
+    pub author: String,
+    pub email: String,
+    pub timestamp: chrono::DateTime<Local>,
     pub parents: Vec<RevHeader>,
     pub diff: Vec<DiffPath>,
 }

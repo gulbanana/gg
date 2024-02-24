@@ -4,7 +4,7 @@
 use std::{cell::OnceCell, collections::HashMap, path::Path, rc::Rc, sync::Arc};
 
 use anyhow::{anyhow, Context, Result};
-use chrono::{DateTime, FixedOffset, Local, LocalResult, TimeZone, Utc};
+use chrono::{DateTime, FixedOffset, LocalResult, TimeZone, Utc};
 use itertools::Itertools;
 use jj_cli::config::{default_config, LayeredConfigs};
 use jj_lib::{
@@ -37,6 +37,7 @@ pub struct SessionOperation<'a> {
     pub repo: Arc<ReadonlyRepo>,
     parse_context: RevsetParseContext<'a>,
     prefix_context: IdPrefixContext,
+    working_copy_id: CommitId,
     branches_index: OnceCell<Rc<RefNamesIndex>>,
 }
 
@@ -130,12 +131,19 @@ impl SessionOperation<'_> {
             prefix_context = prefix_context.disambiguate_within(disambiguation_revset);
         };
 
+        let working_copy_id = repo
+            .view()
+            .get_wc_commit_id(session.workspace.workspace_id())
+            .ok_or_else(|| anyhow!("No working copy found for workspace"))?
+            .clone();
+
         Ok(SessionOperation {
             session,
             repo,
             parse_context,
             prefix_context,
-            branches_index: OnceCell::new()
+            working_copy_id,
+            branches_index: OnceCell::new(),
         })
     }
 
@@ -190,20 +198,11 @@ impl SessionOperation<'_> {
                 .metadata
                 .description
                 .clone(),
-            working_copy: self.format_commit_id(
-                self.repo
-                    .view()
-                    .get_wc_commit_id(self.session.workspace.workspace_id())
-                    .expect("working copy not found for workspace"),
-            ),
+            working_copy: self.format_commit_id(&self.working_copy_id),
         }
     }
 
     pub fn format_header(&self, commit: &Commit) -> Result<messages::RevHeader> {
-        let timestamp = datetime_from_timestamp(&commit.author().timestamp)
-            .unwrap()
-            .with_timezone(&Local);
-
         let index = self.branches_index();
         let branches = index.get(commit.id()).iter().cloned().collect();
 
@@ -211,11 +210,9 @@ impl SessionOperation<'_> {
             change_id: self.format_change_id(commit.change_id()),
             commit_id: self.format_commit_id(commit.id()),
             description: commit.description().into(),
-            author: commit.author().name.clone(),
-            email: commit.author().email.clone(),
             has_conflict: commit.has_conflict()?,
-            timestamp,
-            branches 
+            is_working_copy: *commit.id() == self.working_copy_id,
+            branches,
         })
     }
 
@@ -301,7 +298,7 @@ fn parse_revset(
 }
 
 // from time_util; not pub
-fn datetime_from_timestamp(context: &Timestamp) -> Option<DateTime<FixedOffset>> {
+pub fn datetime_from_timestamp(context: &Timestamp) -> Option<DateTime<FixedOffset>> {
     let utc = match Utc.timestamp_opt(
         context.timestamp.0.div_euclid(1000),
         (context.timestamp.0.rem_euclid(1000)) as u32 * 1000000,

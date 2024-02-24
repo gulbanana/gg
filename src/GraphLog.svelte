@@ -3,7 +3,6 @@
 <script lang="ts">
   import type { LogRow } from "./messages/LogRow.js";
   import GraphLine from "./GraphLine.svelte";
-  import { repoStatus } from "./events.js";
 
   export let rows: LogRow[];
   interface $$Slots {
@@ -24,7 +23,7 @@
       </foreignObject>
 
       <circle cx="9" cy="15" r="6" fill="none" />
-      {#if $repoStatus?.working_copy?.prefix == row.revision.commit_id.prefix}
+      {#if row.revision.is_working_copy}
         <circle cx="9" cy="15" r="3" />
       {/if}
     </g>

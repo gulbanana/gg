@@ -1,6 +1,5 @@
 <script lang="ts">
     import type { RevDetail } from "./messages/RevDetail";
-    import { repoStatus } from "./events.js";
     import Action from "./Action.svelte";
     import Icon from "./Icon.svelte";
     import IdSpan from "./IdSpan.svelte";
@@ -18,7 +17,7 @@
         <span>
             <IdSpan type="change" id={rev.header.change_id} />
             | <IdSpan type="commit" id={rev.header.commit_id} />
-            {#if $repoStatus?.working_copy?.prefix == rev.header.commit_id.prefix}
+            {#if rev.header.is_working_copy}
                 | Working copy
             {/if}
         </span>
@@ -31,8 +30,8 @@
         >
 
         <div class="author">
-            <span>{rev.header.author}</span>
-            <span>{new Date(rev.header.timestamp).toLocaleTimeString()}</span>
+            <span>{rev.author}</span>
+            <span>{new Date(rev.timestamp).toLocaleTimeString()}</span>
             <span></span>
             <Action><Icon name="file-text" /> Describe</Action>
         </div>

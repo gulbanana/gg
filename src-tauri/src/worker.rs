@@ -8,6 +8,7 @@ use std::{
 };
 
 use anyhow::{anyhow, Context, Result};
+use chrono::Local;
 use futures_util::StreamExt;
 use jj_lib::{
     backend::CommitId,
@@ -21,7 +22,7 @@ use jj_lib::{
 use pollster::FutureExt;
 
 use crate::{
-    gui_util::{SessionEvaluator, SessionOperation, WorkspaceSession},
+    gui_util::{datetime_from_timestamp, SessionEvaluator, SessionOperation, WorkspaceSession},
     messages::{self, LogCoordinates, LogLine, LogRow},
 };
 
@@ -141,7 +142,7 @@ fn state_workspace(
                 }
             },
             Ok(SessionEvent::QueryLogMore { tx: _tx }) => {
-                return Err(anyhow::anyhow!("No log query is in progress"))
+                return Err(anyhow!("No log query is in progress"))
             }
             Ok(SessionEvent::GetRevision { tx, rev: rev_id }) => {
                 tx.send(get_revision(&op, &rev_id))?
@@ -383,6 +384,11 @@ fn get_revision(op: &SessionOperation, id_str: &str) -> Result<messages::RevDeta
 
     Ok(messages::RevDetail {
         header: op.format_header(&commit)?,
+        author: commit.author().name.clone(),
+        email: commit.author().email.clone(),
+        timestamp: datetime_from_timestamp(&commit.author().timestamp)
+            .unwrap()
+            .with_timezone(&Local),
         diff: paths,
         parents: parents?,
     })
