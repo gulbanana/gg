@@ -5,30 +5,36 @@ use std::{cell::OnceCell, collections::HashMap, path::Path, rc::Rc, sync::Arc};
 
 use anyhow::{anyhow, Context, Result};
 use itertools::Itertools;
-use jj_cli::config::{default_config, LayeredConfigs};
+use jj_cli::{
+    config::{default_config, LayeredConfigs},
+    git_util::is_colocated_git_workspace,
+};
 use jj_lib::{
     backend::{ChangeId, CommitId},
     commit::Commit,
+    git,
+    git_backend::GitBackend,
     hex_util::to_reverse_hex,
     id_prefix::IdPrefixContext,
     object_id::ObjectId,
     op_heads_store,
     operation::Operation,
-    repo::{ReadonlyRepo, StoreFactories},
+    repo::{ReadonlyRepo, Repo, StoreFactories},
     revset::{
         self, DefaultSymbolResolver, Revset, RevsetAliasesMap, RevsetExpression,
         RevsetParseContext, RevsetWorkspaceContext,
     },
     settings::{ConfigResultExt, UserSettings},
+    transaction::Transaction,
     workspace::{self, Workspace, WorkspaceLoader},
 };
 
-use crate::messages;
+use crate::messages::{self, MutationResult};
 
 pub struct WorkspaceSession {
-    settings: UserSettings,
-    aliases_map: RevsetAliasesMap,
+    pub settings: UserSettings,
     pub workspace: Workspace,
+    aliases_map: RevsetAliasesMap,
 }
 
 pub struct SessionOperation<'a> {
@@ -234,6 +240,91 @@ impl SessionOperation<'_> {
             .shortest_change_prefix_len(self.repo.as_ref(), id);
         let rest = hex.split_off(prefix_len);
         messages::RevId { prefix: hex, rest }
+    }
+
+    pub fn check_rewritable<'a>(&self, commits: impl IntoIterator<Item = &'a Commit>) -> bool {
+        todo!()
+    }
+
+    pub fn start_transaction(&self) -> Transaction {
+        self.repo.start_transaction(&self.session.settings)
+    }
+
+    pub fn finish_transaction(
+        &self,
+        mut tx: Transaction,
+        description: impl Into<String>,
+    ) -> Result<MutationResult> {
+        if !tx.mut_repo().has_changes() {
+            return Ok(MutationResult::Unchanged);
+        }
+
+        tx.mut_repo().rebase_descendants(&self.session.settings)?;
+
+        let old_repo = tx.base_repo().clone();
+
+        let maybe_old_wc_commit = old_repo
+            .view()
+            .get_wc_commit_id(self.session.workspace.workspace_id())
+            .map(|commit_id| tx.base_repo().store().get_commit(commit_id))
+            .transpose()?;
+        let maybe_new_wc_commit = tx
+            .repo()
+            .view()
+            .get_wc_commit_id(self.session.workspace.workspace_id())
+            .map(|commit_id| tx.repo().store().get_commit(commit_id))
+            .transpose()?;
+        if is_colocated_git_workspace(&self.session.workspace, &self.repo) {
+            let git_repo = self
+                .repo
+                .store()
+                .backend_impl()
+                .downcast_ref::<GitBackend>()
+                .unwrap()
+                .open_git_repo()?;
+            if let Some(wc_commit) = &maybe_new_wc_commit {
+                git::reset_head(tx.mut_repo(), &git_repo, wc_commit)?;
+            }
+            let failed_branches = git::export_refs(tx.mut_repo())?;
+            //print_failed_git_export(ui, &failed_branches)?;
+        }
+        let new_repo = tx.commit(description);
+
+        if true
+        // self.loaded_at_head
+        {
+            if let Some(new_commit) = &maybe_new_wc_commit {
+                self.update_working_copy(maybe_old_wc_commit.as_ref(), new_commit)?;
+            }
+        }
+
+        Ok(MutationResult::Updated {
+            new_status: todo!(),
+        })
+    }
+
+    fn update_working_copy(
+        &self,
+        maybe_old_commit: Option<&Commit>,
+        new_commit: &Commit,
+    ) -> Result<()> {
+        let old_tree_id = maybe_old_commit.map(|commit| commit.tree_id().clone());
+
+        let stats = if Some(new_commit.tree_id()) != old_tree_id.as_ref() {
+            let stats = self.session.workspace.check_out(
+                self.repo.op_id().clone(),
+                old_tree_id.as_ref(),
+                new_commit,
+            )?;
+            Some(stats)
+        } else {
+            // Record new operation id which represents the latest working-copy state
+            let locked_ws = self.session.workspace.start_working_copy_mutation()?;
+            locked_ws.finish(self.repo.op_id().clone())?;
+            None
+        };
+
+        Ok(())
     }
 }
 

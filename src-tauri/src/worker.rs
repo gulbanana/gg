@@ -159,7 +159,7 @@ impl Session {
                     tx.send(queries::query_revision(&op, &rev_id))?
                 }
                 Ok(SessionEvent::DescribeRevision { tx, mutation }) => {
-                    tx.send(mutations::describe_revision(mutation))?
+                    tx.send(mutations::describe_revision(&op, mutation)?)?
                 }
                 Err(err) => return Err(anyhow!(err)),
             };
@@ -201,7 +201,7 @@ impl Session {
                     tx.send(queries::query_revision(&op, &rev_id))?
                 }
                 Ok(SessionEvent::DescribeRevision { tx, mutation }) => {
-                    tx.send(mutations::describe_revision(mutation))?
+                    tx.send(mutations::describe_revision(&op, mutation)?)?
                 }
                 Err(err) => return Err(anyhow!(err)),
             };
