@@ -21,7 +21,6 @@
                 | Working copy
             {/if}
         </span>
-        <Action><Icon name="map-pin" /> Pin</Action>
     </h2>
 
     <div slot="body" class="body">
