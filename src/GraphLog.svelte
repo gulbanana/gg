@@ -28,9 +28,11 @@
       {/if}
     </g>
 
-    {#each row.lines as line}
-      <GraphLine {line} />
-    {/each}
+    {#key row}
+      {#each row.lines as line}
+        <GraphLine {line} />
+      {/each}
+    {/key}
   {/each}
 </svg>
 
