@@ -2,29 +2,19 @@
 //! The worker is organised as a matryoshka doll of state machines, each owning more session data than the one in which it is contained
 
 use std::{
-    iter::Peekable,
     path::PathBuf,
     sync::mpsc::{Receiver, Sender},
 };
 
 use anyhow::{anyhow, Context, Result};
-use chrono::Local;
-use futures_util::StreamExt;
-use jj_lib::{
-    backend::CommitId,
-    file_util,
-    matchers::EverythingMatcher,
-    repo::Repo,
-    revset::Revset,
-    revset_graph::{RevsetGraphEdge, RevsetGraphEdgeType, TopoGroupedRevsetGraphIterator},
-    rewrite::merge_commit_trees,
-};
-use pollster::FutureExt;
 
 use crate::{
-    gui_util::{datetime_from_timestamp, SessionEvaluator, SessionOperation, WorkspaceSession},
-    messages::{self, LogCoordinates, LogLine, LogRow},
+    gui_util::{SessionEvaluator, SessionOperation, WorkspaceSession},
+    messages,
 };
+
+mod mutations;
+mod queries;
 
 #[derive(Debug)]
 pub enum SessionEvent {
@@ -41,9 +31,13 @@ pub enum SessionEvent {
     QueryLogNextPage {
         tx: Sender<Result<messages::LogPage>>,
     },
-    GetRevision {
+    QueryRevision {
         tx: Sender<Result<messages::RevDetail>>,
         rev: String,
+    },
+    DescribeRevision {
+        tx: Sender<messages::MutationResult>,
+        mutation: messages::DescribeRevision,
     },
 }
 
@@ -139,7 +133,7 @@ impl Session {
                         .evaluate_revset(&revset_string)
                         .context("evaluate revset")?;
                     self.latest_query = Some(revset_string);
-                    let mut query = LogQuery::new(&*revset);
+                    let mut query = queries::LogQuery::new(&*revset);
                     let first_page = query.get(&op)?;
                     let incomplete = first_page.has_more;
                     tx.send(Ok(first_page))?;
@@ -161,8 +155,11 @@ impl Session {
                 Ok(SessionEvent::QueryLogNextPage { tx: _tx }) => {
                     return Err(anyhow!("No log query is in progress"))
                 }
-                Ok(SessionEvent::GetRevision { tx, rev: rev_id }) => {
-                    tx.send(get_revision(&op, &rev_id))?
+                Ok(SessionEvent::QueryRevision { tx, rev: rev_id }) => {
+                    tx.send(queries::query_revision(&op, &rev_id))?
+                }
+                Ok(SessionEvent::DescribeRevision { tx, mutation }) => {
+                    tx.send(mutations::describe_revision(mutation))?
                 }
                 Err(err) => return Err(anyhow!(err)),
             };
@@ -174,7 +171,7 @@ impl Session {
         _session: &WorkspaceSession,
         op: &SessionOperation,
         _eval: &SessionEvaluator,
-        query: &mut LogQuery,
+        query: &mut queries::LogQuery,
     ) -> Result<QueryResult> {
         loop {
             match rx.recv() {
@@ -200,208 +197,14 @@ impl Session {
                         return Ok(QueryResult::QueryComplete);
                     }
                 }
-                Ok(SessionEvent::GetRevision { tx, rev: rev_id }) => {
-                    tx.send(get_revision(&op, &rev_id))?
+                Ok(SessionEvent::QueryRevision { tx, rev: rev_id }) => {
+                    tx.send(queries::query_revision(&op, &rev_id))?
+                }
+                Ok(SessionEvent::DescribeRevision { tx, mutation }) => {
+                    tx.send(mutations::describe_revision(mutation))?
                 }
                 Err(err) => return Err(anyhow!(err)),
             };
         }
     }
-}
-
-const LOG_PAGE_SIZE: usize = 1000; // XXX configurable?
-
-struct LogStem {
-    source: messages::LogCoordinates,
-    target: CommitId,
-    indirect: bool,
-    was_inserted: bool,
-}
-
-struct LogQuery<'a> {
-    /// ongoing vertical lines; nodes will be placed on or around these
-    stems: Vec<Option<LogStem>>,
-    iter: Peekable<
-        TopoGroupedRevsetGraphIterator<
-            Box<dyn Iterator<Item = (CommitId, Vec<RevsetGraphEdge>)> + 'a>,
-        >,
-    >,
-    row: usize,
-}
-
-impl LogQuery<'_> {
-    fn new(revset: &dyn Revset) -> LogQuery {
-        LogQuery {
-            stems: Vec::new(),
-            iter: TopoGroupedRevsetGraphIterator::new(revset.iter_graph()).peekable(),
-            row: 0,
-        }
-    }
-
-    fn get(&mut self, op: &SessionOperation) -> Result<messages::LogPage> {
-        // output rows to draw
-        let mut rows: Vec<LogRow> = Vec::new();
-
-        let mut row = self.row;
-        let max = row + LOG_PAGE_SIZE;
-        while let Some((commit_id, commit_edges)) = self.iter.next() {
-            // output lines to draw for the current row
-            let mut lines: Vec<LogLine> = Vec::new();
-
-            // find an existing stem targeting the current node
-            let mut column = self.stems.len();
-            let mut padding = 0; // used to offset the commit summary past some edges
-
-            for (slot, stem) in self.stems.iter().enumerate() {
-                if let Some(LogStem { target, .. }) = stem {
-                    if *target == commit_id {
-                        column = slot;
-                        padding = self.stems.len() - column - 1;
-                        break;
-                    }
-                }
-            }
-
-            // terminate any existing stem, removing it from the end or leaving a gap
-            if column < self.stems.len() {
-                if let Some(terminated_stem) = &self.stems[column] {
-                    lines.push(if terminated_stem.was_inserted {
-                        LogLine::FromNode {
-                            indirect: terminated_stem.indirect,
-                            source: terminated_stem.source,
-                            target: LogCoordinates(column, row),
-                        }
-                    } else {
-                        LogLine::ToNode {
-                            indirect: terminated_stem.indirect,
-                            source: terminated_stem.source,
-                            target: LogCoordinates(column, row),
-                        }
-                    });
-                }
-                self.stems[column] = None;
-            }
-            // otherwise, slot into any gaps that might exist
-            else {
-                for (slot, stem) in self.stems.iter().enumerate() {
-                    if stem.is_none() {
-                        column = slot;
-                        padding = self.stems.len() - slot - 1;
-                        break;
-                    }
-                }
-            }
-
-            // remove empty stems on the right edge
-            let empty_stems = self
-                .stems
-                .iter()
-                .rev()
-                .take_while(|stem| stem.is_none())
-                .count();
-            self.stems.truncate(self.stems.len() - empty_stems);
-
-            // merge edges into existing stems or add new ones to the right
-            'edges: for edge in commit_edges.iter() {
-                if edge.edge_type == RevsetGraphEdgeType::Missing {
-                    continue;
-                }
-
-                for (slot, stem) in self.stems.iter().enumerate() {
-                    if let Some(stem) = stem {
-                        if stem.target == edge.target {
-                            lines.push(LogLine::ToIntersection {
-                                indirect: edge.edge_type == RevsetGraphEdgeType::Indirect,
-                                source: LogCoordinates(column, row),
-                                target: LogCoordinates(slot, row + 1),
-                            });
-                            continue 'edges;
-                        }
-                    }
-                }
-
-                for stem in self.stems.iter_mut() {
-                    if stem.is_none() {
-                        *stem = Some(LogStem {
-                            source: LogCoordinates(column, row),
-                            target: edge.target.clone(),
-                            indirect: edge.edge_type == RevsetGraphEdgeType::Indirect,
-                            was_inserted: true,
-                        });
-                        continue 'edges;
-                    }
-                }
-
-                self.stems.push(Some(LogStem {
-                    source: LogCoordinates(column, row),
-                    target: edge.target.clone(),
-                    indirect: edge.edge_type == RevsetGraphEdgeType::Indirect,
-                    was_inserted: false,
-                }));
-            }
-
-            rows.push(LogRow {
-                revision: op.format_header(&op.repo.store().get_commit(&commit_id)?)?,
-                location: LogCoordinates(column, row),
-                padding,
-                lines,
-            });
-
-            row = row + 1;
-            if row == max {
-                break;
-            }
-        }
-
-        self.row = row;
-        Ok(messages::LogPage {
-            rows,
-            has_more: self.iter.peek().is_some(),
-        })
-    }
-}
-
-fn get_revision(op: &SessionOperation, id_str: &str) -> Result<messages::RevDetail> {
-    let id = CommitId::try_from_hex(id_str)?;
-    let commit = op.repo.store().get_commit(&id)?;
-
-    let parent_tree = merge_commit_trees(op.repo.as_ref(), &commit.parents())?;
-    let tree = commit.tree()?;
-    let mut tree_diff = parent_tree.diff_stream(&tree, &EverythingMatcher);
-
-    let mut paths = Vec::new();
-    async {
-        while let Some((repo_path, diff)) = tree_diff.next().await {
-            let base_path = op.session.workspace.workspace_root();
-            let relative_path: messages::DisplayPath =
-                (&file_util::relative_path(base_path, &repo_path.to_fs_path(base_path))).into();
-            let (before, after) = diff.unwrap();
-
-            if before.is_present() && after.is_present() {
-                paths.push(messages::DiffPath::Modified { relative_path });
-            } else if before.is_absent() {
-                paths.push(messages::DiffPath::Added { relative_path });
-            } else {
-                paths.push(messages::DiffPath::Deleted { relative_path });
-            }
-        }
-    }
-    .block_on();
-
-    let parents: Result<Vec<messages::RevHeader>> = commit
-        .parents()
-        .iter()
-        .map(|p| op.format_header(p))
-        .collect();
-
-    Ok(messages::RevDetail {
-        header: op.format_header(&commit)?,
-        author: commit.author().name.clone(),
-        email: commit.author().email.clone(),
-        timestamp: datetime_from_timestamp(&commit.author().timestamp)
-            .unwrap()
-            .with_timezone(&Local),
-        diff: paths,
-        parents: parents?,
-    })
 }

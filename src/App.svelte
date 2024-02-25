@@ -4,8 +4,12 @@
     import type { RevDetail } from "./messages/RevDetail.js";
     import type { RepoConfig } from "./messages/RepoConfig.js";
     import { command } from "./ipc.js";
-    import { repoConfig, repoStatus } from "./events.js";
-    import { revisionSelect } from "./events.js";
+    import {
+        currentMutation,
+        repoConfigEvent,
+        repoStatusEvent,
+    } from "./stores.js";
+    import { revisionSelectEvent } from "./stores.js";
     import Bound from "./Bound.svelte";
     import Icon from "./Icon.svelte";
     import Pane from "./Pane.svelte";
@@ -13,23 +17,7 @@
     import RevisionPane from "./RevisionPane.svelte";
     import Action from "./Action.svelte";
 
-    const changeCommand = command<RevDetail>("get_revision");
-
-    $: if ($repoConfig) load_repo($repoConfig);
-    $: if ($revisionSelect) load_change($revisionSelect.commit_id);
-
-    async function load_repo(config: RepoConfig) {
-        changeCommand.reset();
-        if (config.type == "Workspace") {
-            $repoStatus = config.status;
-        }
-    }
-
-    async function load_change(id: RevId) {
-        changeCommand.call({
-            rev: id.prefix + id.rest,
-        });
-    }
+    const changeCommand = command<RevDetail>("query_revision");
 
     document.addEventListener("keydown", (event) => {
         if (event.key === "o" && event.ctrlKey) {
@@ -39,14 +27,32 @@
     });
 
     invoke("notify_window_ready");
+
+    $: if ($repoConfigEvent) load_repo($repoConfigEvent);
+    $: if ($revisionSelectEvent) load_change($revisionSelectEvent.commit_id);
+
+    async function load_repo(config: RepoConfig) {
+        changeCommand.reset();
+        if (config.type == "Workspace") {
+            $repoStatusEvent = config.status;
+        }
+    }
+
+    async function load_change(id: RevId) {
+        changeCommand.query({
+            rev: id.prefix + id.rest,
+        });
+    }
+
+    function onUndo() {}
 </script>
 
 <div id="shell">
-    {#if $repoConfig?.type == "Workspace"}
-        {#key $repoConfig.absolute_path}
+    {#if $repoConfigEvent?.type == "Workspace"}
+        {#key $repoConfigEvent.absolute_path}
             <LogPane
-                default_query={$repoConfig.default_query}
-                latest_query={$repoConfig.latest_query}
+                default_query={$repoConfigEvent.default_query}
+                latest_query={$repoConfigEvent.latest_query}
             />
         {/key}
         <Bound query={$changeCommand} let:data>
@@ -58,13 +64,49 @@
         </Bound>
 
         <div id="status-bar">
-            <span>{$repoConfig?.absolute_path}</span>
+            <span>{$repoConfigEvent?.absolute_path}</span>
             <span />
-            <span>{$repoStatus?.operation_description}</span>
-            <Action><Icon name="rotate-ccw" /> Undo</Action>
+            <span>{$repoStatusEvent?.operation_description}</span>
+            <Action onClick={onUndo}><Icon name="rotate-ccw" /> Undo</Action>
         </div>
-    {:else if !$repoConfig}
-        <div id="error-overlay">
+
+        {#if $currentMutation}
+            <div id="overlay">
+                {#if $currentMutation.type == "data"}
+                    {#if $currentMutation.value.type == "Failure"}
+                        <div id="overlay-chrome">
+                            <div id="overlay-content">
+                                <h3 class="error-text">Command Error</h3>
+                                <p>
+                                    {$currentMutation.value.message}
+                                </p>
+                            </div>
+
+                            <Action
+                                safe
+                                onClick={() => ($currentMutation = null)}
+                                ><Icon name="x" /></Action
+                            >
+                        </div>
+                    {/if}
+                {:else if $currentMutation.type == "error"}
+                    <div id="overlay-chrome">
+                        <div id="overlay-content">
+                            <h3 class="error-text">IPC Error</h3>
+                            <p>
+                                {$currentMutation.message}
+                            </p>
+                        </div>
+
+                        <Action safe onClick={() => ($currentMutation = null)}
+                            ><Icon name="x" /></Action
+                        >
+                    </div>
+                {/if}
+            </div>
+        {/if}
+    {:else if !$repoConfigEvent}
+        <div id="fatal-error">
             <div id="error-content">
                 <p class="error-text">
                     Error communicating with backend. You'll need to restart GG
@@ -76,22 +118,22 @@
             <span>Internal Error</span>
         </div>
     {:else}
-        <div id="error-overlay">
+        <div id="fatal-error">
             <div id="error-content">
-                {#if $repoConfig.type == "NoWorkspace"}
+                {#if $repoConfigEvent.type == "NoWorkspace"}
                     <h2>No Workspace Loaded</h2>
-                {:else if $repoConfig.type == "NoOperation"}
+                {:else if $repoConfigEvent.type == "NoOperation"}
                     <h2 class="error-text">Workspace Load Failed</h2>
                 {:else}
                     <h2 class="error-text">Internal Error</h2>
                 {/if}
-                <p>{$repoConfig.error}</p>
+                <p>{$repoConfigEvent.error}</p>
                 <p>Try opening a workspace from the Repository menu.</p>
             </div>
         </div>
         <div id="status-bar">
-            {#if $repoConfig.type != "DeadWorker"}
-                <span>{$repoConfig?.absolute_path}</span>
+            {#if $repoConfigEvent.type != "DeadWorker"}
+                <span>{$repoConfigEvent?.absolute_path}</span>
             {:else}
                 <span>Internal Error</span>
             {/if}
@@ -127,7 +169,51 @@
         background: var(--ctp-crust);
     }
 
-    #error-overlay {
+    #overlay {
+        z-index: 1;
+        position: absolute;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        left: 0;
+        background: rgb(var(--ctp-overlay1-rgb) / 40%);
+
+        display: grid;
+        grid-template-columns: 1fr auto 1fr;
+        grid-template-rows: 1fr auto 2fr;
+    }
+
+    #overlay-chrome {
+        grid-area: 2/2/2/2;
+
+        background: var(--ctp-mantle);
+        border-radius: 9px;
+        border: 3px solid var(--ctp-overlay1);
+
+        display: grid;
+        grid-template-columns: 30px 1fr 30px;
+        grid-template-rows: 30px auto 30px;
+    }
+
+    #overlay-chrome > :global(button) {
+        grid-area: 1/3/1/3;
+        height: 30px;
+    }
+
+    #overlay-content {
+        grid-area: 2/2/2/2;
+        padding: 0 30px;
+    }
+
+    #overlay-content > :first-child {
+        margin-top: 0;
+    }
+
+    #overlay-content > :last-child {
+        margin-bottom: 0;
+    }
+
+    #fatal-error {
         grid-column: 1/3;
         display: grid;
         align-items: center;

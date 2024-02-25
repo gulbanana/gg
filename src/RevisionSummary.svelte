@@ -1,6 +1,6 @@
 <script lang="ts">
     import type { RevHeader } from "./messages/RevHeader";
-    import { revisionSelect } from "./events.js";
+    import { revisionSelectEvent } from "./stores.js";
     import IdSpan from "./IdSpan.svelte";
 
     export let revision: RevHeader;
@@ -11,7 +11,7 @@
     class="unbutton layout"
     class:selected
     class:conflict={revision.has_conflict}
-    on:click={() => revisionSelect.set(revision)}
+    on:click={() => revisionSelectEvent.set(revision)}
 >
     <IdSpan type="change" id={revision.change_id} />
 

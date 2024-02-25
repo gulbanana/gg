@@ -1,5 +1,7 @@
 <script lang="ts">
     import type { RevDetail } from "./messages/RevDetail";
+    import type { DescribeRevision } from "./messages/DescribeRevision";
+    import { mutate } from "./ipc";
     import Action from "./Action.svelte";
     import Icon from "./Icon.svelte";
     import IdSpan from "./IdSpan.svelte";
@@ -9,7 +11,15 @@
 
     export let rev: RevDetail;
 
-    let selected_path = "";
+    let fullDescription = rev.header.description.lines.join("\n");
+    let selectedPath = "";
+
+    function onDescribe() {
+        mutate<DescribeRevision>("describe_revision", {
+            commit_id: rev.header.commit_id,
+            new_description: fullDescription,
+        });
+    }
 </script>
 
 <Pane>
@@ -24,15 +34,19 @@
     </h2>
 
     <div slot="body" class="body">
-        <textarea class="desc" spellcheck="false"
-            >{rev.header.description.lines.join("\n")}</textarea
-        >
+        <textarea
+            class="desc"
+            spellcheck="false"
+            bind:value={fullDescription}
+        />
 
         <div class="author">
             <span>{rev.author}</span>
             <span>{new Date(rev.timestamp).toLocaleTimeString()}</span>
             <span></span>
-            <Action><Icon name="file-text" /> Describe</Action>
+            <Action onClick={onDescribe}
+                ><Icon name="file-text" /> Describe</Action
+            >
         </div>
 
         <main>
@@ -42,9 +56,8 @@
                     {#each rev.diff as path}
                         <button
                             class="unbutton path"
-                            class:selected={selected_path == path.relative_path}
-                            on:click={() =>
-                                (selected_path = path.relative_path)}
+                            class:selected={selectedPath == path.relative_path}
+                            on:click={() => (selectedPath = path.relative_path)}
                         >
                             <PathSpan {path} />
                         </button>

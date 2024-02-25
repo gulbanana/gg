@@ -1,4 +1,9 @@
-<button>
+<script lang="ts">
+    export let safe: boolean = false;
+    export let onClick: (event: MouseEvent) => void;
+</script>
+
+<button on:click={onClick} class:safe>
     <slot />
 </button>
 
@@ -14,7 +19,7 @@
         box-shadow: 2px 2px var(--ctp-overlay0);
 
         &:hover {
-            border-color: var(--ctp-lavender);
+            background: var(--ctp-maroon);
         }
 
         font-family: var(--stack-industrial);
@@ -26,6 +31,13 @@
 
         &:active {
             padding: 2px 5px 0px 7px;
+        }
+    }
+
+    .safe {
+        background: var(--ctp-green);
+        &:hover {
+            background: var(--ctp-teal);
         }
     }
 </style>

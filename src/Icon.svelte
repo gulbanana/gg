@@ -9,8 +9,8 @@
 
 <style>
     .feather {
-        height: 12px;
-        width: 12px;
+        height: 16px;
+        width: 16px;
         fill: none;
         stroke: currentColor;
         stroke-linecap: round;

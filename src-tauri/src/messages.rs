@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 
 use chrono::Local;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 #[cfg(feature = "ts-rs")]
 use ts_rs::TS;
 
@@ -47,6 +47,19 @@ impl From<&PathBuf> for DisplayPath {
                 .to_owned(),
         )
     }
+}
+
+/// Common result type for mutating commands
+#[derive(Serialize, Clone)]
+#[serde(tag = "type")]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(TS),
+    ts(export, export_to = "../src/messages/")
+)]
+pub enum MutationResult {
+    Success { new_status: RepoStatus },
+    Failure { message: String },
 }
 
 #[derive(Serialize, Clone)]
@@ -145,7 +158,7 @@ pub enum LogLine {
 pub struct LogCoordinates(pub usize, pub usize);
 
 /// A change or commit id with a disambiguated prefix
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
@@ -216,4 +229,15 @@ pub struct RefName {
     /// Local ref is synchronized with all tracking remotes, or tracking remote
     /// ref is synchronized with the local.
     pub is_synced: bool,
+}
+
+#[derive(Deserialize, Debug)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(TS),
+    ts(export, export_to = "../src/messages/")
+)]
+pub struct DescribeRevision {
+    commit_id: RevId,
+    new_description: String,
 }

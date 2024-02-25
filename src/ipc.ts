@@ -1,6 +1,8 @@
 import { invoke, type InvokeArgs } from "@tauri-apps/api/core";
 import { emit, listen, type UnlistenFn } from "@tauri-apps/api/event"
 import type { Readable, Subscriber, Unsubscriber } from "svelte/store";
+import type { MutationResult } from "./messages/MutationResult";
+import { currentMutation } from "./stores";
 
 export type Query<T> = { type: "wait" } | { type: "data", value: T } | { type: "error", message: string };
 
@@ -67,7 +69,7 @@ class CommandStore<T> implements Readable<Query<T>> {
         }
     }
 
-    async call(request: InvokeArgs): Promise<Query<T>> {
+    async query(request: InvokeArgs): Promise<Query<T>> {
         // set a wait state then the data state, unless the data comes in hella fast
         try {
             let fetch = invoke<T>(this.#name, request).then<Query<T>>(result => { return { type: "data", value: result }; });
@@ -94,10 +96,13 @@ export function command<T>(name: string, initialData?: T): CommandStore<T> {
     return new CommandStore(name, initialData);
 }
 
-export async function call<T>(name: string, request?: InvokeArgs): Promise<Query<T>> {
+/**
+ * call an IPC which provides readonly information about the repo
+ */
+export async function query<T>(command: string, request?: InvokeArgs): Promise<Query<T>> {
     // set a wait state then the data state, unless the data comes in hella fast
     try {
-        let result = await invoke<T>(name, request);
+        let result = await invoke<T>(command, request);
         return { type: "data", value: result };
     } catch (error: any) {
         console.log(error);
@@ -105,6 +110,28 @@ export async function call<T>(name: string, request?: InvokeArgs): Promise<Query
     }
 }
 
+/**
+ * call an IPC which, if successful, modifies the repo
+ */
+export function mutate<T>(command: string, mutation: T) {
+    (async () => {
+        try {
+            currentMutation.set({ type: "wait" });
+            let value = await invoke<MutationResult>(command, { mutation });
+            currentMutation.set({ type: "data", value })
+            if (value.type == "Success") {
+                currentMutation.set(null);
+            }
+        } catch (error: any) {
+            console.log(error);
+            currentMutation.set({ type: "error", message: error.toString() });
+        }
+    })();
+}
+
+/**
+ * utility function for composing IPCs with delayed loading states
+ */
 export function delay<T>(ms: number): Promise<Query<T>> {
     return new Promise(function (resolve) {
         setTimeout(() => resolve({ type: "wait" }), ms);

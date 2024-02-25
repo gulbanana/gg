@@ -13,6 +13,7 @@ use std::sync::Mutex;
 use std::thread::{self, JoinHandle};
 
 use anyhow::{Context, Result};
+use messages::{DescribeRevision, MutationResult};
 use tauri::{
     ipc::InvokeError,
     menu::{Menu, MenuItem, Submenu},
@@ -62,8 +63,9 @@ fn main() -> Result<()> {
             notify_window_ready,
             forward_accelerator,
             query_log,
-            query_log_more,
-            get_revision
+            query_log_next_page,
+            query_revision,
+            describe_revision
         ])
         .menu(|handle| {
             Menu::with_items(
@@ -161,7 +163,7 @@ fn query_log(
 }
 
 #[tauri::command(async)]
-fn query_log_more(
+fn query_log_next_page(
     window: Window,
     app_state: State<AppState>,
 ) -> Result<messages::LogPage, InvokeError> {
@@ -178,7 +180,7 @@ fn query_log_more(
 }
 
 #[tauri::command(async)]
-fn get_revision(
+fn query_revision(
     window: Window,
     app_state: State<AppState>,
     rev: String,
@@ -187,12 +189,30 @@ fn get_revision(
     let (call_tx, call_rx) = channel();
 
     session_tx
-        .send(SessionEvent::GetRevision { tx: call_tx, rev })
+        .send(SessionEvent::QueryRevision { tx: call_tx, rev })
         .map_err(InvokeError::from_error)?;
     call_rx
         .recv()
         .map_err(InvokeError::from_error)?
         .map_err(InvokeError::from_anyhow)
+}
+
+#[tauri::command(async)]
+fn describe_revision(
+    window: Window,
+    app_state: State<AppState>,
+    mutation: DescribeRevision,
+) -> Result<MutationResult, InvokeError> {
+    let session_tx: Sender<SessionEvent> = app_state.get_sender(&window);
+    let (call_tx, call_rx) = channel();
+
+    session_tx
+        .send(SessionEvent::DescribeRevision {
+            tx: call_tx,
+            mutation,
+        })
+        .map_err(InvokeError::from_error)?;
+    call_rx.recv().map_err(InvokeError::from_error)
 }
 
 fn try_open_repository(window: Window, cwd: Option<PathBuf>) -> Result<()> {

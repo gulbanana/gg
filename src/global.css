@@ -31,8 +31,11 @@
   --ctp-surface1: var(--ctp-latte-surface1);
   --ctp-surface2: var(--ctp-latte-surface2);
   --ctp-overlay0: var(--ctp-latte-overlay0);
+  --ctp-overlay0-rgb: var(--ctp-latte-overlay0-rgb);
   --ctp-overlay1: var(--ctp-latte-overlay1);
+  --ctp-overlay1-rgb: var(--ctp-latte-overlay1-rgb);
   --ctp-overlay2: var(--ctp-latte-overlay2);
+  --ctp-overlay2-rgb: var(--ctp-latte-overlay2-rgb);
   --ctp-subtext0: var(--ctp-latte-subtext0);
   --ctp-subtext1: var(--ctp-latte-subtext1);
   --ctp-text: var(--ctp-latte-text);
@@ -61,8 +64,11 @@
     --ctp-surface1: var(--ctp-macchiato-surface1);
     --ctp-surface2: var(--ctp-macchiato-surface2);
     --ctp-overlay0: var(--ctp-macchiato-overlay0);
+    --ctp-overlay0-rgb: var(--ctp-latte-overlay0-rgb);
     --ctp-overlay1: var(--ctp-macchiato-overlay1);
+    --ctp-overlay1-rgb: var(--ctp-latte-overlay1-rgb);
     --ctp-overlay2: var(--ctp-macchiato-overlay2);
+    --ctp-overlay2-rgb: var(--ctp-latte-overlay2-rgb);
     --ctp-subtext0: var(--ctp-macchiato-subtext0);
     --ctp-subtext1: var(--ctp-macchiato-subtext1);
     --ctp-text: var(--ctp-macchiato-text);

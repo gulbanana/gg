@@ -4,11 +4,10 @@
 use std::{cell::OnceCell, collections::HashMap, path::Path, rc::Rc, sync::Arc};
 
 use anyhow::{anyhow, Context, Result};
-use chrono::{DateTime, FixedOffset, LocalResult, TimeZone, Utc};
 use itertools::Itertools;
 use jj_cli::config::{default_config, LayeredConfigs};
 use jj_lib::{
-    backend::{ChangeId, CommitId, Timestamp},
+    backend::{ChangeId, CommitId},
     commit::Commit,
     hex_util::to_reverse_hex,
     id_prefix::IdPrefixContext,
@@ -298,27 +297,6 @@ fn parse_revset(
     let expression = revset::parse(revision, parse_context).context("parse revset")?;
     let expression = revset::optimize(expression);
     Ok(expression)
-}
-
-// from time_util; not pub
-pub fn datetime_from_timestamp(context: &Timestamp) -> Option<DateTime<FixedOffset>> {
-    let utc = match Utc.timestamp_opt(
-        context.timestamp.0.div_euclid(1000),
-        (context.timestamp.0.rem_euclid(1000)) as u32 * 1000000,
-    ) {
-        LocalResult::None => {
-            return None;
-        }
-        LocalResult::Single(x) => x,
-        LocalResult::Ambiguous(y, _z) => y,
-    };
-
-    Some(
-        utc.with_timezone(
-            &FixedOffset::east_opt(context.tz_offset * 60)
-                .unwrap_or_else(|| FixedOffset::east_opt(0).unwrap()),
-        ),
-    )
 }
 
 /*************************/

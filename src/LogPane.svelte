@@ -1,12 +1,12 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import type { LogPage } from "./messages/LogPage.js";
   import type { LogRow } from "./messages/LogRow.js";
-  import { call, delay } from "./ipc.js";
-  import { revisionSelect } from "./events.js";
+  import { query, delay } from "./ipc.js";
+  import { revisionSelectEvent } from "./stores.js";
   import Pane from "./Pane.svelte";
   import GraphLog from "./GraphLog.svelte";
   import RevisionSummary from "./RevisionSummary.svelte";
-  import { onMount } from "svelte";
 
   export let default_query: string;
   export let latest_query: string;
@@ -44,7 +44,7 @@
   }
 
   async function load_log() {
-    let fetch = call<LogPage>("query_log", {
+    let fetch = query<LogPage>("query_log", {
       revset: entered_query == "" ? "all()" : entered_query,
     });
 
@@ -59,11 +59,11 @@
       log_rows = page.value.rows;
 
       if (page.value.rows.length > 0) {
-        $revisionSelect = page.value.rows[0].revision;
+        $revisionSelectEvent = page.value.rows[0].revision;
       }
 
       while (page.value.has_more) {
-        let next_page = await call<LogPage>("query_log_more");
+        let next_page = await query<LogPage>("query_log_next_page");
         if (next_page.type == "data") {
           log_rows = log_rows?.concat(next_page.value.rows);
           page = next_page;
@@ -92,7 +92,7 @@
       <GraphLog rows={log_rows} let:row>
         <RevisionSummary
           revision={row.revision}
-          selected={$revisionSelect?.change_id.prefix ==
+          selected={$revisionSelectEvent?.change_id.prefix ==
             row.revision.change_id.prefix}
         />
       </GraphLog>
