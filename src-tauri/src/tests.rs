@@ -4,8 +4,8 @@ use anyhow::Result;
 
 use crate::{
     gui_util::WorkerSession,
-    messages::{LogPage, RepoConfig},
-    worker::{Session, SessionEvent},
+    messages::{DescribeRevision, LogPage, RepoConfig, RevId},
+    worker::{mutations, queries, Session, SessionEvent},
 };
 
 #[test]
@@ -134,4 +134,32 @@ fn snapshot_harness() -> Result<()> {
     let mut ws = session.load_directory(&std::env::current_dir()?)?;
     ws.snapshot_working_copy()?;
     Ok(())
+}
+
+#[test]
+fn describe_harness() -> Result<()> {
+    let mut session = WorkerSession::default();
+    let mut ws = session.load_directory(&std::env::current_dir()?)?;
+    let mut pager = queries::LogQuery::new("kvqolurw".into());
+    let mut page = pager.get_page(&ws)?;
+    let mut rev = queries::query_revision(&ws, &page.rows[0].revision.commit_id.hex)?;
+    mutations::describe_revision(
+        &mut ws,
+        DescribeRevision {
+            change_id: chid("kvqolurw"),
+            new_description: "wip".to_owned(),
+        },
+    )?;
+    pager = queries::LogQuery::new("kvqolurw".into());
+    page = pager.get_page(&ws)?;
+    rev = queries::query_revision(&ws, &page.rows[0].revision.commit_id.hex)?;
+    Ok(())
+}
+
+fn chid(id: &str) -> RevId {
+    RevId {
+        hex: id.to_owned(),
+        prefix: id.to_owned(),
+        rest: "".to_owned(),
+    }
 }

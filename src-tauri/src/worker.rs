@@ -11,8 +11,8 @@ use anyhow::{anyhow, Context, Result};
 use crate::gui_util::{WorkerSession, WorkspaceSession};
 use crate::messages;
 
-mod mutations;
-mod queries;
+pub mod mutations;
+pub mod queries;
 
 #[derive(Debug)]
 pub enum SessionEvent {
