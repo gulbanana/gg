@@ -1,15 +1,16 @@
 //! Analogous to cli_util from jj-cli
 //! We reuse a bit of jj-cli code, but many of its modules include TUI concerns or are not suitable for a long-running server
 
-use std::{cell::OnceCell, collections::HashMap, path::Path, rc::Rc, sync::Arc};
+use std::{cell::OnceCell, collections::HashMap, env::VarError, path::{Path, PathBuf}, rc::Rc, sync::Arc};
 
 use anyhow::{anyhow, Context, Result};
 use itertools::Itertools;
 use jj_cli::{
+    cli_util::{check_stale_working_copy, short_operation_hash, WorkingCopyFreshness},
     config::{default_config, LayeredConfigs},
     git_util::is_colocated_git_workspace,
 };
-use jj_lib::repo::RepoLoaderError;
+use jj_lib::{gitignore::GitIgnoreFile, op_store::WorkspaceId, repo::RepoLoaderError, working_copy::SnapshotOptions};
 use jj_lib::{
     backend::{ChangeId, CommitId},
     commit::Commit,
@@ -48,6 +49,7 @@ pub struct WorkspaceSession<'a> {
     pub prefix_context: IdPrefixContext,
     // operation-specific data, containing a repo view and derived extras
     pub operation: SessionOperation,
+    pub colocated: bool
 }
 
 /// state specific to an operation which may be swapped out
@@ -90,6 +92,8 @@ impl WorkerSession {
 
         let operation = WorkspaceSession::load_at_head(&settings, &workspace)?;
 
+        let colocated = is_colocated_git_workspace(&workspace, &operation.repo);
+
         Ok(WorkspaceSession {
             session: self,
             settings,
@@ -97,6 +101,7 @@ impl WorkerSession {
             aliases_map,
             prefix_context,
             operation,
+            colocated
         })
     }
 }
@@ -117,7 +122,7 @@ impl WorkspaceSession<'_> {
                 let mut tx = base_repo.start_transaction(settings);
                 for other_op_head in op_heads.into_iter().skip(1) {
                     tx.merge_operation(other_op_head)?;
-                    let _num_rebased = tx.mut_repo().rebase_descendants(settings)?;
+                    tx.mut_repo().rebase_descendants(settings)?;
                 }
                 Ok::<Operation, RepoLoaderError>(
                     tx.write("resolve concurrent operations")
@@ -133,17 +138,7 @@ impl WorkspaceSession<'_> {
             .load_at(&op)
             .context("load op head")?;
 
-        let wc_id = repo
-            .view()
-            .get_wc_commit_id(workspace.workspace_id())
-            .ok_or_else(|| anyhow!("No working copy found for workspace"))?
-            .clone();
-
-        Ok(SessionOperation {
-            repo,
-            wc_id,
-            branches_index: Default::default(),
-        })
+        Ok(SessionOperation::new(repo, workspace.workspace_id()))
     }
 
     // XXX creates a parse context and a symbol resolver every time - they need to borrow many things
@@ -245,20 +240,39 @@ impl WorkspaceSession<'_> {
         })
     }
 
+    /*********************************************************************
+     * Transaction functions - these are very similar to cli_util        *
+     * Ideally in future the code can be extracted to not depend on TUI. *
+     *********************************************************************/
+
     pub fn check_rewritable<'a>(&self, commits: impl IntoIterator<Item = &'a Commit>) -> bool {
         true // XXX not necessarily ;_;
              // also, probably do this in the log query
     }
 
-    pub fn start_transaction(&self) -> Transaction {
-        self.operation.repo.start_transaction(&self.settings)
+    pub fn start_transaction(&mut self) -> Result<Transaction> {
+        if self.colocated {
+            self.import_git_head()?;
+        }
+
+        self.snapshot_working_copy()?;
+
+        if self.colocated {
+            self.import_git_refs()?;
+        }
+
+        Ok(self.operation.repo.start_transaction(&self.settings))
     }
 
     pub fn finish_transaction(
         &mut self,
         mut tx: Transaction,
         description: impl Into<String>,
-    ) -> Result<messages::RepoStatus> {
+    ) -> Result<Option<messages::RepoStatus>> {
+        if !tx.mut_repo().has_changes() {
+            return Ok(None);
+        }
+
         tx.mut_repo().rebase_descendants(&self.settings)?;
 
         let old_repo = tx.base_repo().clone();
@@ -274,20 +288,16 @@ impl WorkspaceSession<'_> {
             .get_wc_commit_id(self.workspace.workspace_id())
             .map(|commit_id| tx.repo().store().get_commit(commit_id))
             .transpose()?;
-        if is_colocated_git_workspace(&self.workspace, &self.operation.repo) {
+        if self.colocated {
             let git_repo = self
                 .operation
-                .repo
-                .store()
-                .backend_impl()
-                .downcast_ref::<GitBackend>()
+                .git_backend()
                 .unwrap()
                 .open_git_repo()?;
             if let Some(wc_commit) = &maybe_new_wc_commit {
                 git::reset_head(tx.mut_repo(), &git_repo, wc_commit)?;
             }
-            let failed_branches = git::export_refs(tx.mut_repo())?;
-            //XXX print_failed_git_export(ui, &failed_branches)?;
+            git::export_refs(tx.mut_repo())?;
         }
         let new_repo = tx.commit(description);
 
@@ -299,19 +309,92 @@ impl WorkspaceSession<'_> {
             }
         }
 
-        let wc_id = new_repo
-            .view()
-            .get_wc_commit_id(self.workspace.workspace_id())
-            .ok_or_else(|| anyhow!("No working copy found for workspace"))?
-            .clone();
+        self.operation = SessionOperation::new(new_repo, self.workspace.workspace_id());
 
-        self.operation = SessionOperation {
-            repo: new_repo,
-            wc_id,
-            branches_index: Default::default(),
+        Ok(Some(self.format_status()))
+    }
+
+    pub fn snapshot_working_copy(&mut self) -> Result<()> {
+        let workspace_id = self.workspace.workspace_id().to_owned();
+        let get_wc_commit = |repo: &ReadonlyRepo| -> Result<Option<_>, _> {
+            repo.view()
+                .get_wc_commit_id(&workspace_id)
+                .map(|id| repo.store().get_commit(id))
+                .transpose()
+        };
+        let repo = self.operation.repo.clone();
+        let Some(wc_commit) = get_wc_commit(&repo)? else {
+            return Ok(()); // The workspace has been deleted
         };
 
-        Ok(self.format_status())
+        let base_ignores = self.base_ignores();
+
+        // Compare working-copy tree and operation with repo's, and reload as needed.
+        let mut locked_ws = self.workspace.start_working_copy_mutation()?;
+        let old_op_id = locked_ws.locked_wc().old_operation_id().clone();
+        let (repo, wc_commit) = match check_stale_working_copy(
+            locked_ws.locked_wc(),
+            &wc_commit,
+            &repo,
+        )? {
+            WorkingCopyFreshness::Fresh => (repo, wc_commit),
+            WorkingCopyFreshness::Updated(wc_operation) => {
+                let repo = repo.reload_at(&wc_operation)?;
+                let wc_commit = if let Some(wc_commit) = get_wc_commit(&repo)? {
+                    wc_commit
+                } else {
+                    return Ok(()); // The workspace has been deleted
+                };
+                (repo, wc_commit)
+            }
+            WorkingCopyFreshness::WorkingCopyStale => {
+                return Err(anyhow!(
+                    format!(
+                        "The working copy is stale (not updated since operation {}). Run `jj workspace update-stale` to update it.",
+                        short_operation_hash(&old_op_id)
+                    )                    
+                ));
+            }
+            WorkingCopyFreshness::SiblingOperation => {
+                return Err(anyhow!(format!(
+                    "The repo was loaded at operation {}, which seems to be a sibling of the \
+                         working copy's operation {}",
+                    short_operation_hash(repo.op_id()),
+                    short_operation_hash(&old_op_id)
+                )));
+            }
+        };
+
+        // originally there was an unconditional reload here, which doesn't seem necessary
+        
+        let new_tree_id = locked_ws.locked_wc().snapshot(SnapshotOptions {
+            base_ignores,
+            fsmonitor_kind: self.settings.fsmonitor_kind()?,
+            progress: None,
+            max_new_file_size: self.settings.max_new_file_size()?,
+        })?;
+        if new_tree_id != *wc_commit.tree_id() {
+            let mut tx =
+                repo.start_transaction(&self.settings);
+            let mut_repo = tx.mut_repo();
+            let commit = mut_repo
+                .rewrite_commit(&self.settings, &wc_commit)
+                .set_tree_id(new_tree_id)
+                .write()?;
+            mut_repo.set_wc_commit(workspace_id.clone(), commit.id().clone())?;
+
+            mut_repo.rebase_descendants(&self.settings)?;
+
+            if self.colocated {
+                git::export_refs(mut_repo)?;
+            }
+
+            self.operation = SessionOperation::new(tx.commit("snapshot working copy"), &workspace_id);
+        }
+        
+        locked_ws.finish(self.operation.repo.op_id().clone())?;
+
+        Ok(())
     }
 
     fn update_working_copy(
@@ -335,9 +418,107 @@ impl WorkspaceSession<'_> {
 
         Ok(())
     }
+
+    fn base_ignores(&self) -> Arc<GitIgnoreFile> {
+        fn get_excludes_file_path(config: &gix::config::File) -> Option<PathBuf> {
+            // TODO: maybe use path_by_key() and interpolate(), which can process non-utf-8
+            // path on Unix.
+            if let Some(value) = config.string_by_key("core.excludesFile") {
+                std::str::from_utf8(&value)
+                    .ok()
+                    .map(jj_cli::git_util::expand_git_path)
+            } else {
+                xdg_config_home().ok().map(|x| x.join("git").join("ignore"))
+            }
+        }
+
+        fn xdg_config_home() -> Result<PathBuf, VarError> {
+            if let Ok(x) = std::env::var("XDG_CONFIG_HOME") {
+                if !x.is_empty() {
+                    return Ok(PathBuf::from(x));
+                }
+            }
+            std::env::var("HOME").map(|x| Path::new(&x).join(".config"))
+        }
+
+        let mut git_ignores = GitIgnoreFile::empty();
+        if let Some(git_backend) = self.operation.git_backend() {
+            let git_repo = git_backend.git_repo();
+            if let Some(excludes_file_path) = get_excludes_file_path(&git_repo.config_snapshot()) {
+                git_ignores = git_ignores.chain_with_file("", excludes_file_path);
+            }
+            git_ignores = git_ignores
+                .chain_with_file("", git_backend.git_repo_path().join("info").join("exclude"));
+        } else if let Ok(git_config) = gix::config::File::from_globals() {
+            if let Some(excludes_file_path) = get_excludes_file_path(&git_config) {
+                git_ignores = git_ignores.chain_with_file("", excludes_file_path);
+            }
+        }
+        git_ignores
+    }
+
+    fn import_git_head(&mut self) -> Result<()> {
+        let mut tx = self.operation.repo.start_transaction(&self.settings);
+        git::import_head(tx.mut_repo())?;
+        if !tx.mut_repo().has_changes() {
+            return Ok(());
+        }
+
+        let new_git_head = tx.mut_repo().view().git_head().clone();
+        if let Some(new_git_head_id) = new_git_head.as_normal() {
+            let workspace_id = self.workspace.workspace_id().to_owned();
+            if let Some(old_wc_commit_id) = self.operation.repo.view().get_wc_commit_id(&workspace_id) {
+                tx.mut_repo()
+                    .record_abandoned_commit(old_wc_commit_id.clone());
+            }
+            let new_git_head_commit = tx.mut_repo().store().get_commit(new_git_head_id)?;
+            tx.mut_repo()
+                .check_out(workspace_id.clone(), &self.settings, &new_git_head_commit)?;
+            let mut locked_ws = self.workspace.start_working_copy_mutation()?;
+
+            locked_ws.locked_wc().reset(&new_git_head_commit)?;
+            tx.mut_repo().rebase_descendants(&self.settings)?;
+            self.operation = SessionOperation::new(tx.commit("import git head"), &workspace_id);
+            locked_ws.finish(self.operation.repo.op_id().clone())?;
+        } else {
+            self.finish_transaction( tx, "import git head")?;
+        }
+        Ok(())
+    }
+
+    pub fn import_git_refs(&mut self) -> Result<()> {
+        let git_settings = self.settings.git_settings();
+        let mut tx = self.operation.repo.start_transaction(&self.settings);
+        // Automated import shouldn't fail because of reserved remote name.
+        git::import_some_refs(tx.mut_repo(), &git_settings, |ref_name| {
+            !git::is_reserved_git_remote_ref(ref_name)
+        })?;
+        if !tx.mut_repo().has_changes() {
+            return Ok(());
+        }
+
+        tx.mut_repo().rebase_descendants(&self.settings)?;
+            
+        self.finish_transaction(tx, "import git refs")?;
+        Ok(())
+    } 
 }
 
 impl SessionOperation {
+    pub fn new(repo: Arc<ReadonlyRepo>, id: &WorkspaceId) -> SessionOperation {
+        let wc_id = repo
+            .view()
+            .get_wc_commit_id(id)
+            .expect("No working copy found for workspace")
+            .clone();
+
+        SessionOperation {
+            repo, 
+            wc_id,
+            branches_index: OnceCell::default()
+        }
+    }
+
     pub fn branches_index(&self) -> &Rc<RefNamesIndex> {
         self.branches_index
             .get_or_init(|| Rc::new(self.build_branches_index()))
@@ -370,6 +551,10 @@ impl SessionOperation {
             }
         }
         index
+    }
+
+    fn git_backend(&self) -> Option<&GitBackend> {
+        self.repo.store().backend_impl().downcast_ref()
     }
 }
 

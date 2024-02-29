@@ -127,3 +127,11 @@ fn evaluate_query() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn snapshot_harness() -> Result<()> {
+    let mut session = WorkerSession::default();
+    let mut ws = session.load_directory(&std::env::current_dir()?)?;
+    ws.snapshot_working_copy()?;
+    Ok(())
+}

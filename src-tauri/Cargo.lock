@@ -1750,6 +1750,7 @@ dependencies = [
  "anyhow",
  "chrono",
  "futures-util",
+ "gix",
  "itertools 0.12.1",
  "jj-cli",
  "jj-lib",

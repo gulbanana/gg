@@ -10,6 +10,8 @@ pub fn describe_revision(
     ws: &mut WorkspaceSession,
     mutation: DescribeRevision,
 ) -> Result<MutationResult> {
+    let mut tx = ws.start_transaction()?;
+
     let id = CommitId::try_from_hex(&mutation.commit_id.hex)?;
     let commit = ws.operation.repo.store().get_commit(&id)?;
 
@@ -20,21 +22,16 @@ pub fn describe_revision(
     } else if mutation.new_description == commit.description() {
         Ok(MutationResult::Unchanged)
     } else {
-        let mut tx = ws.start_transaction();
         let commit_builder = tx
             .mut_repo()
             .rewrite_commit(&ws.settings, &commit)
             .set_description(mutation.new_description);
         commit_builder.write()?;
 
-        if !tx.mut_repo().has_changes() {
-            return Ok(MutationResult::Unchanged);
+        match ws.finish_transaction(tx, format!("describe commit {}", commit.id().hex()))? {
+            Some(new_status) => Ok(MutationResult::Updated { new_status }),
+            None => Ok(MutationResult::Unchanged),
         }
-
-        let new_status =
-            ws.finish_transaction(tx, format!("describe commit {}", commit.id().hex()))?;
-
-        Ok(MutationResult::Updated { new_status })
     }
 }
 
