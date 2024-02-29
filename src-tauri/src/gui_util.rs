@@ -311,14 +311,13 @@ impl WorkspaceSession<'_> {
             }
             git::export_refs(tx.mut_repo())?;
         }
-        let new_repo = tx.commit(description);
+
+        self.operation = SessionOperation::new(tx.commit(description), self.workspace.workspace_id());
 
         // XXX do this only if loaded at head, which is currently always true, but won't be once we have undo-redo
         if let Some(new_commit) = &maybe_new_wc_commit {
             self.update_working_copy(maybe_old_wc_commit.as_ref(), new_commit)?;
         }
-
-        self.operation = SessionOperation::new(new_repo, self.workspace.workspace_id());
 
         Ok(Some(self.format_status()))
     }
