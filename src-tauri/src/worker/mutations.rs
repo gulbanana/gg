@@ -1,5 +1,5 @@
 use anyhow::Result;
-use jj_lib::{backend::CommitId, object_id::ObjectId, repo::Repo};
+use jj_lib::{backend::CommitId, object_id::ObjectId};
 
 use crate::{
     gui_util::WorkspaceSession,
@@ -12,8 +12,7 @@ pub fn describe_revision(
 ) -> Result<MutationResult> {
     let mut tx = ws.start_transaction()?;
 
-    let id = CommitId::try_from_hex(&mutation.commit_id.hex)?;
-    let commit = ws.operation.repo.store().get_commit(&id)?;
+    let commit = ws.evaluate_revision(&mutation.change_id.hex)?;
 
     if !ws.check_rewritable([&commit]) {
         Ok(MutationResult::Failed {
@@ -26,6 +25,7 @@ pub fn describe_revision(
             .mut_repo()
             .rewrite_commit(&ws.settings, &commit)
             .set_description(mutation.new_description);
+
         commit_builder.write()?;
 
         match ws.finish_transaction(tx, format!("describe commit {}", commit.id().hex()))? {

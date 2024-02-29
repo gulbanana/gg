@@ -10,7 +10,7 @@ use jj_cli::{
     config::{default_config, LayeredConfigs},
     git_util::is_colocated_git_workspace,
 };
-use jj_lib::{gitignore::GitIgnoreFile, op_store::WorkspaceId, repo::RepoLoaderError, working_copy::SnapshotOptions};
+use jj_lib::{gitignore::GitIgnoreFile, op_store::WorkspaceId, repo::RepoLoaderError, revset::RevsetIteratorExt, working_copy::SnapshotOptions};
 use jj_lib::{
     backend::{ChangeId, CommitId},
     commit::Commit,
@@ -151,6 +151,18 @@ impl WorkspaceSession<'_> {
         Ok(revset)
     }
 
+    pub fn evaluate_revision(&self, revision_str: &str) -> Result<Commit> {
+        let revset = self.evaluate_revset(revision_str)?;      
+        let mut iter = revset.iter().commits(self.operation.repo.store()).fuse();
+        match (iter.next(), iter.next()) {
+            (Some(commit), None) => Ok(commit?),
+            (None, _) => Err(anyhow!(r#"Revset "{revision_str}" didn't resolve to any revisions"#)),
+            (Some(_), Some(_)) => {
+                Err(anyhow!(r#"Revset "{revision_str}" resolved to more than one revision"#))
+            }
+        }
+    }
+
     /*************************************************************
      * Functions for creating temporary per-request derived data *
      *************************************************************/
@@ -220,8 +232,8 @@ impl WorkspaceSession<'_> {
             .prefix_context
             .shortest_change_prefix_len(self.operation.repo.as_ref(), id);
 
-        let hex = id.hex();
-        let mut prefix = to_reverse_hex(&hex).expect("format change id as reverse hex");
+        let hex = to_reverse_hex(&id.hex()).expect("format change id as reverse hex");
+        let mut prefix = hex.clone();
         let rest = prefix.split_off(prefix_len);
         messages::RevId { hex, prefix, rest }
     }
@@ -301,12 +313,9 @@ impl WorkspaceSession<'_> {
         }
         let new_repo = tx.commit(description);
 
-        if true
-        // XXX self.loaded_at_head
-        {
-            if let Some(new_commit) = &maybe_new_wc_commit {
-                self.update_working_copy(maybe_old_wc_commit.as_ref(), new_commit)?;
-            }
+        // XXX do this only if loaded at head, which is currently always true, but won't be once we have undo-redo
+        if let Some(new_commit) = &maybe_new_wc_commit {
+            self.update_working_copy(maybe_old_wc_commit.as_ref(), new_commit)?;
         }
 
         self.operation = SessionOperation::new(new_repo, self.workspace.workspace_id());
@@ -348,20 +357,17 @@ impl WorkspaceSession<'_> {
                 (repo, wc_commit)
             }
             WorkingCopyFreshness::WorkingCopyStale => {
-                return Err(anyhow!(
-                    format!(
-                        "The working copy is stale (not updated since operation {}). Run `jj workspace update-stale` to update it.",
-                        short_operation_hash(&old_op_id)
-                    )                    
+                return Err(anyhow!(     
+                    "The working copy is stale (not updated since operation {}). Run `jj workspace update-stale` to update it.",
+                    short_operation_hash(&old_op_id)                                      
                 ));
             }
             WorkingCopyFreshness::SiblingOperation => {
-                return Err(anyhow!(format!(
-                    "The repo was loaded at operation {}, which seems to be a sibling of the \
-                         working copy's operation {}",
+                return Err(anyhow!(
+                    "The repo was loaded at operation {}, which seems to be a sibling of the working copy's operation {}",
                     short_operation_hash(repo.op_id()),
                     short_operation_hash(&old_op_id)
-                )));
+                ));
             }
         };
 

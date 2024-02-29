@@ -236,6 +236,6 @@ pub struct RefName {
     ts(export, export_to = "../src/messages/")
 )]
 pub struct DescribeRevision {
-    pub commit_id: RevId,
+    pub change_id: RevId,
     pub new_description: String,
 }

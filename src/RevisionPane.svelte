@@ -16,7 +16,7 @@
 
     function onDescribe() {
         mutate<DescribeRevision>("describe_revision", {
-            commit_id: rev.header.commit_id,
+            change_id: rev.header.change_id,
             new_description: fullDescription,
         });
     }
