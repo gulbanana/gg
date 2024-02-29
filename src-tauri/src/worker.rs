@@ -123,7 +123,7 @@ impl Session for WorkspaceSession<'_> {
                     tx.send(queries::query_revision(&self, &rev_id))?
                 }
                 Ok(SessionEvent::DescribeRevision { tx, mutation }) => {
-                    tx.send(mutations::describe_revision(&mut self, mutation))?
+                    tx.send(mutations::describe_revision(&mut self, mutation)?)?
                 }
                 Err(err) => return Err(anyhow!(err)),
             };

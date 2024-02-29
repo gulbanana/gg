@@ -58,8 +58,9 @@ impl From<&PathBuf> for DisplayPath {
     ts(export, export_to = "../src/messages/")
 )]
 pub enum MutationResult {
-    Success { new_status: RepoStatus },
-    Failure { message: String },
+    Unchanged,
+    Updated { new_status: RepoStatus },
+    Failed { message: String },
 }
 
 #[derive(Serialize, Clone)]
@@ -161,6 +162,7 @@ pub struct LogCoordinates(pub usize, pub usize);
     ts(export, export_to = "../src/messages/")
 )]
 pub struct RevId {
+    pub hex: String,
     pub prefix: String,
     pub rest: String,
 }
