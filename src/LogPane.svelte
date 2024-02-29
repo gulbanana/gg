@@ -3,7 +3,7 @@
   import type { LogPage } from "./messages/LogPage.js";
   import type { LogRow } from "./messages/LogRow.js";
   import { query, delay } from "./ipc.js";
-  import { revisionSelectEvent } from "./stores.js";
+  import { repoStatusEvent, revisionSelectEvent } from "./stores.js";
   import Pane from "./Pane.svelte";
   import GraphLog from "./GraphLog.svelte";
   import RevisionSummary from "./RevisionSummary.svelte";
@@ -19,12 +19,13 @@
   ];
 
   let choices: ReturnType<typeof get_choices>;
-  $: if (entered_query) choices = get_choices();
-
   let entered_query = latest_query;
   let log_rows: LogRow[] | undefined;
 
   onMount(load_log);
+
+  $: if (entered_query) choices = get_choices();
+  $: if ($repoStatusEvent) reload_log();
 
   function get_choices() {
     let choices = presets.map((p) => ({ ...p, selected: false }));
@@ -73,18 +74,45 @@
       }
     }
   }
+
+  async function reload_log() {
+    let fetch = query<LogPage>("query_log", {
+      revset: entered_query == "" ? "all()" : entered_query,
+    });
+
+    let page = await Promise.race([fetch, delay<LogPage>(200)]);
+
+    if (page.type == "wait") {
+      log_rows = undefined;
+      page = await fetch;
+    }
+
+    if (page.type == "data") {
+      log_rows = page.value.rows;
+
+      while (page.value.has_more) {
+        let next_page = await query<LogPage>("query_log_next_page");
+        if (next_page.type == "data") {
+          log_rows = log_rows?.concat(next_page.value.rows);
+          page = next_page;
+        } else {
+          break;
+        }
+      }
+    }
+  }
 </script>
 
 <Pane>
   <div slot="header" class="log-selector">
-    <select bind:value={entered_query} on:change={load_log}>
+    <select bind:value={entered_query} on:change={reload_log}>
       {#each choices as choice}
         <option selected={choice.selected} value={choice.query}
           >{choice.label}</option
         >
       {/each}
     </select>
-    <input type="text" bind:value={entered_query} on:change={load_log} />
+    <input type="text" bind:value={entered_query} on:change={reload_log} />
   </div>
 
   <div slot="body" class="log-commits">

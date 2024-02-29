@@ -2,7 +2,7 @@ import { invoke, type InvokeArgs } from "@tauri-apps/api/core";
 import { emit, listen, type UnlistenFn } from "@tauri-apps/api/event"
 import type { Readable, Subscriber, Unsubscriber } from "svelte/store";
 import type { MutationResult } from "./messages/MutationResult";
-import { currentMutation } from "./stores";
+import { currentMutation, repoStatusEvent } from "./stores";
 
 export type Query<T> = { type: "wait" } | { type: "data", value: T } | { type: "error", message: string };
 
@@ -116,10 +116,14 @@ export async function query<T>(command: string, request?: InvokeArgs): Promise<Q
 export function mutate<T>(command: string, mutation: T) {
     (async () => {
         try {
-            currentMutation.set({ type: "wait" });
-            let value = await invoke<MutationResult>(command, { mutation });
-            currentMutation.set({ type: "data", value })
-            if (value.type == "Success") {
+            let fetch = invoke<MutationResult>(command, { mutation });
+            let result = await Promise.race([fetch.then(r => Promise.resolve<Query<MutationResult>>({ type: "data", value: r })), delay<MutationResult>(200)]);
+            currentMutation.set(result);
+            let value = await fetch;
+            if (value.type != "Failed") {
+                if (value.type == "Updated") {
+                    repoStatusEvent.set(value.new_status);
+                }
                 currentMutation.set(null);
             }
         } catch (error: any) {

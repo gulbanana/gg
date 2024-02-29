@@ -73,7 +73,7 @@
         {#if $currentMutation}
             <div id="overlay">
                 {#if $currentMutation.type == "data"}
-                    {#if $currentMutation.value.type == "Failure"}
+                    {#if $currentMutation.value.type == "Failed"}
                         <div id="overlay-chrome">
                             <div id="overlay-content">
                                 <h3 class="error-text">Command Error</h3>
@@ -122,8 +122,6 @@
             <div id="error-content">
                 {#if $repoConfigEvent.type == "NoWorkspace"}
                     <h2>No Workspace Loaded</h2>
-                {:else if $repoConfigEvent.type == "NoOperation"}
-                    <h2 class="error-text">Workspace Load Failed</h2>
                 {:else}
                     <h2 class="error-text">Internal Error</h2>
                 {/if}
