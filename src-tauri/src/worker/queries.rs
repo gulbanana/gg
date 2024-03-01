@@ -200,7 +200,6 @@ pub fn query_revision(ws: &WorkspaceSession, id_str: &str) -> Result<RevDetail> 
     Ok(RevDetail {
         header: ws.format_header(&commit)?,
         author: commit.author().name.clone(),
-        email: commit.author().email.clone(),
         timestamp: datetime_from_timestamp(&commit.author().timestamp)
             .unwrap()
             .with_timezone(&Local),

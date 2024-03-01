@@ -2,4 +2,4 @@
 import type { DiffPath } from "./DiffPath";
 import type { RevHeader } from "./RevHeader";
 
-export interface RevDetail { header: RevHeader, author: string, email: string, timestamp: string, parents: Array<RevHeader>, diff: Array<DiffPath>, }
+export interface RevDetail { header: RevHeader, author: string, timestamp: string, parents: Array<RevHeader>, diff: Array<DiffPath>, }

@@ -3,4 +3,4 @@ import type { MultilineString } from "./MultilineString";
 import type { RefName } from "./RefName";
 import type { RevId } from "./RevId";
 
-export interface RevHeader { change_id: RevId, commit_id: RevId, description: MultilineString, has_conflict: boolean, is_working_copy: boolean, branches: Array<RefName>, }
+export interface RevHeader { change_id: RevId, commit_id: RevId, description: MultilineString, email: string, has_conflict: boolean, is_working_copy: boolean, branches: Array<RefName>, }

@@ -16,7 +16,7 @@
       <foreignObject
         class="row"
         height="30"
-        style="width: calc(100% - {(row.location[0] + row.padding) * 18 +
+        style="width: calc(100% - {row.location[0] *
           18}px); --leftpad: {row.padding * 18 + 18}px;"
       >
         <slot {row} />

@@ -257,6 +257,7 @@ impl WorkspaceSession<'_> {
             change_id: self.format_change_id(commit.change_id()),
             commit_id: self.format_commit_id(commit.id()),
             description: commit.description().into(),
+            email: commit.author().email.clone(),
             has_conflict: commit.has_conflict()?,
             is_working_copy: *commit.id() == self.operation.wc_id,
             branches,

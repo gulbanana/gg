@@ -16,7 +16,7 @@
     <IdSpan type="change" id={revision.change_id} />
 
     <span
-        class="desc"
+        class="desc truncate"
         class:indescribable={revision.description.lines[0] == ""}
     >
         {revision.description.lines[0] == ""
@@ -24,11 +24,15 @@
             : revision.description.lines[0]}
     </span>
 
-    {#each revision.branches.filter((b) => b.remote == null || !b.is_synced) as ref}
-        <code class="tag" class:conflict={ref.has_conflict}>
-            {ref.remote == null ? ref.name : `${ref.name}@${ref.remote}`}
-        </code>
-    {/each}
+    <span class="email truncate">{revision.email}</span>
+
+    <span class="tags">
+        {#each revision.branches.filter((b) => b.remote == null || !b.is_synced) as ref}
+            <code class="tag" class:conflict={ref.has_conflict}>
+                {ref.remote == null ? ref.name : `${ref.name}@${ref.remote}`}
+            </code>
+        {/each}
+    </span>
 </button>
 
 <style>
@@ -36,7 +40,9 @@
         /* layout summary components along a text line */
         height: 100%;
         width: 100%;
-        display: flex;
+        display: grid;
+        grid-template-areas: ". desc tags";
+        grid-template-columns: auto 1fr auto;
         align-items: baseline;
         gap: 6px;
 
@@ -53,14 +59,22 @@
     }
 
     .desc {
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        flex: 1;
+        grid-area: desc;
     }
 
     .desc.indescribable {
         color: var(--ctp-subtext0);
+    }
+
+    .email {
+        display: none;
+        grid-area: email;
+        color: var(--ctp-surface2);
+        text-align: right;
+    }
+
+    .tags {
+        grid-area: tags;
     }
 
     .tag {
@@ -72,6 +86,13 @@
         padding: 0 6px;
         background: var(--ctp-crust);
         white-space: nowrap;
+    }
+
+    /* multiple elements can have this */
+    .truncate {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
 
     /* both nodes and refs can have this */
@@ -93,5 +114,17 @@
             var(--ctp-base) 12px,
             var(--ctp-base) 15px
         );
+    }
+
+    @media (width >= 1920px) {
+        .layout {
+            grid-template-areas: ". desc tags email";
+            grid-template-columns: auto 1fr auto 300px;
+            gap: 9px;
+        }
+
+        .email {
+            display: initial;
+        }
     }
 </style>
