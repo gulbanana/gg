@@ -17,7 +17,7 @@
     import RevisionPane from "./RevisionPane.svelte";
     import Action from "./Action.svelte";
 
-    const changeCommand = command<RevDetail>("query_revision");
+    const queryRevisionCommand = command<RevDetail>("query_revision");
 
     document.addEventListener("keydown", (event) => {
         if (event.key === "o" && event.ctrlKey) {
@@ -29,17 +29,18 @@
     invoke("notify_window_ready");
 
     $: if ($repoConfigEvent) load_repo($repoConfigEvent);
-    $: if ($revisionSelectEvent) load_change($revisionSelectEvent.commit_id);
+    $: if ($repoStatusEvent && $revisionSelectEvent)
+        load_change($revisionSelectEvent.change_id);
 
     async function load_repo(config: RepoConfig) {
-        changeCommand.reset();
+        queryRevisionCommand.reset();
         if (config.type == "Workspace") {
             $repoStatusEvent = config.status;
         }
     }
 
     async function load_change(id: RevId) {
-        changeCommand.query({
+        queryRevisionCommand.query({
             rev: id.prefix + id.rest,
         });
     }
@@ -55,7 +56,7 @@
                 latest_query={$repoConfigEvent.latest_query}
             />
         {/key}
-        <Bound query={$changeCommand} let:data>
+        <Bound query={$queryRevisionCommand} let:data>
             <RevisionPane rev={data} />
             <Pane slot="wait" />
             <Pane slot="error">

@@ -168,8 +168,7 @@ impl LogQuery {
 }
 
 pub fn query_revision(ws: &WorkspaceSession, id_str: &str) -> Result<RevDetail> {
-    let id = CommitId::try_from_hex(id_str)?;
-    let commit = ws.get_commit(&id)?;
+    let commit = ws.evaluate_revision(id_str)?;
 
     let parent_tree = merge_commit_trees(ws.repo(), &commit.parents())?;
     let tree = commit.tree()?;

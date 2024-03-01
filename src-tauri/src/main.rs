@@ -193,7 +193,10 @@ fn query_revision(
     let (call_tx, call_rx) = channel();
 
     session_tx
-        .send(SessionEvent::QueryRevision { tx: call_tx, rev })
+        .send(SessionEvent::QueryRevision {
+            tx: call_tx,
+            change_id: rev,
+        })
         .map_err(InvokeError::from_error)?;
     call_rx
         .recv()

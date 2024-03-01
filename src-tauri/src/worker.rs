@@ -31,7 +31,7 @@ pub enum SessionEvent {
     },
     QueryRevision {
         tx: Sender<Result<messages::RevDetail>>,
-        rev: String,
+        change_id: String,
     },
     DescribeRevision {
         tx: Sender<messages::MutationResult>,
@@ -119,8 +119,8 @@ impl Session for WorkspaceSession<'_> {
                         tx.send(Ok(page))?;
                     }
                 },
-                Ok(SessionEvent::QueryRevision { tx, rev: rev_id }) => {
-                    tx.send(queries::query_revision(&self, &rev_id))?
+                Ok(SessionEvent::QueryRevision { tx, change_id }) => {
+                    tx.send(queries::query_revision(&self, &change_id))?
                 }
                 Ok(SessionEvent::DescribeRevision { tx, mutation }) => {
                     tx.send(mutations::describe_revision(&mut self, mutation)?)?
