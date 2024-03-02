@@ -8,7 +8,6 @@ contextless commit actions (good initial candidates: reset author, squash)
     - context menu on a revsummary
 contextless file actions
     - restore
-repo menu - reload
 undo (maybe in repo menu)
 dnd rebase 
     - drop on node to reparent
@@ -16,7 +15,6 @@ dnd rebase
     - drag extra parents in to merge
 dnd move
     - drag files onto commits
-fix main/repo menu on macos
 universal macos builds in CI
 snapshot/op-head-merge on focus
 investigate interaction with other repo mutators
