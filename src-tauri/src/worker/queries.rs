@@ -40,7 +40,7 @@ impl LogQuery {
 
     pub fn get_page(&mut self, ws: &WorkspaceSession) -> Result<LogPage> {
         let revset = ws
-            .evaluate_revset(&self.expression)
+            .evaluate_revset_str(&self.expression)
             .context("evaluate revset")?;
 
         let mut rows: Vec<LogRow> = Vec::new(); // output rows to draw

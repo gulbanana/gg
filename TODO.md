@@ -1,6 +1,7 @@
 probably mvp
 ------------
-immutability in revheader, used to control ui actions
+move immutability to revheader, use for action vis
+missing graph nodes
 contextless commit actions (good initial candidates: reset author, squash)
     - rev pane buttons
     - commit menu

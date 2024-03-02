@@ -131,17 +131,25 @@ impl WorkspaceSession<'_> {
     }
 
     // XXX creates a parse context and a symbol resolver every time - they need to borrow many things
-    pub fn evaluate_revset<'op>(&'op self, revset_str: &str) -> Result<Box<dyn Revset + 'op>> {
-        let expression = parse_revset(&self.parse_context(), revset_str)?;
+    pub fn evaluate_revset_str<'op>(&'op self, revset_str: &str) -> Result<Box<dyn Revset + 'op>> {
+        let revset_expr = parse_revset(&self.parse_context(), revset_str)?;
         let resolved_expression =
-            expression.resolve_user_expression(self.operation.repo.as_ref(), &self.resolver())?;
+            revset_expr.resolve_user_expression(self.operation.repo.as_ref(), &self.resolver())?;
+        let revset = resolved_expression.evaluate(self.operation.repo.as_ref())?;
+
+        Ok(revset)
+    }
+
+    pub fn evaluate_revset_expr<'op>(&'op self, revset_expr: Rc<RevsetExpression>) -> Result<Box<dyn Revset + 'op>> {
+        let resolved_expression =
+            revset_expr.resolve_user_expression(self.operation.repo.as_ref(), &self.resolver())?;
         let revset = resolved_expression.evaluate(self.operation.repo.as_ref())?;
 
         Ok(revset)
     }
 
     pub fn evaluate_revision(&self, revision_str: &str) -> Result<Commit> {
-        let revset = self.evaluate_revset(revision_str)?;      
+        let revset = self.evaluate_revset_str(revision_str)?;      
         let mut iter = revset.iter().commits(self.operation.repo.store()).fuse();
         match (iter.next(), iter.next()) {
             (Some(commit), None) => Ok(commit?),
@@ -274,9 +282,34 @@ impl WorkspaceSession<'_> {
      * Ideally in future the code can be extracted to not depend on TUI. *
      *********************************************************************/
 
-    pub fn check_rewritable<'a>(&self, commits: impl IntoIterator<Item = &'a Commit>) -> bool {
-        true // XXX not necessarily ;_;
-             // also, probably do this in the log query
+    // XXX do this in log queries so that the ui can avoid issuing such commands
+    pub fn check_rewritable<'a>(&self, commits: impl IntoIterator<Item = &'a Commit>) -> Result<bool> {
+        let to_rewrite_revset = RevsetExpression::commits(
+            commits
+                .into_iter()
+                .map(|commit| commit.id().clone())
+                .collect(),
+        );
+        let (params, immutable_heads_str) = self
+            .aliases_map
+            .get_function("immutable_heads")
+            .unwrap();
+        if !params.is_empty() {
+            return Err(anyhow!(r#"The `revset-aliases.immutable_heads()` function must be declared without arguments."#));
+        }
+        let immutable_heads_revset = parse_revset(&self.parse_context(), immutable_heads_str)?;
+        let immutable_revset = immutable_heads_revset
+            .ancestors()
+            .union(&RevsetExpression::commit(
+                self.repo().store().root_commit_id().clone(),
+            ));
+        let revset = self.evaluate_revset_expr(to_rewrite_revset.intersection(&immutable_revset))?;
+        let mut iter = revset.iter().commits(self.repo().store());
+        if let Some(_) = iter.next() {
+            Ok(false)
+        } else {
+            Ok(true)
+        }
     }
 
     pub fn start_transaction(&mut self) -> Result<Transaction> {
