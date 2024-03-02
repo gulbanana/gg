@@ -32,9 +32,11 @@ mod session {
 
     use crate::{
         gui_util::WorkerSession,
-        messages::{LogPage, RepoConfig},
+        messages::{LogPage, RepoConfig, RevDetail},
         worker::{Session, SessionEvent},
     };
+
+    use super::mkrepo;
 
     #[test]
     fn start_and_stop() -> Result<()> {
@@ -132,7 +134,7 @@ mod session {
     }
 
     #[test]
-    fn load_log() -> Result<()> {
+    fn query_log_single() -> Result<()> {
         let (tx, rx) = channel::<SessionEvent>();
         let (tx_load, rx_load) = channel::<Result<RepoConfig>>();
         let (tx_query, rx_query) = channel::<Result<LogPage>>();
@@ -152,6 +154,138 @@ mod session {
         _ = rx_load.recv()??;
         let page = rx_query.recv()??;
         assert_eq!(1, page.rows.len());
+        assert_eq!(false, page.has_more);
+
+        Ok(())
+    }
+
+    #[test]
+    fn query_log_multi() -> Result<()> {
+        let repo = mkrepo();
+        let (tx, rx) = channel::<SessionEvent>();
+        let (tx_load, rx_load) = channel::<Result<RepoConfig>>();
+        let (tx_page1, rx_page1) = channel::<Result<LogPage>>();
+        let (tx_page2, rx_page2) = channel::<Result<LogPage>>();
+
+        tx.send(SessionEvent::OpenWorkspace {
+            tx: tx_load,
+            cwd: Some(repo.path().to_owned()),
+        })?;
+        tx.send(SessionEvent::QueryLog {
+            tx: tx_page1,
+            query: "all()".to_owned(),
+        })?;
+        tx.send(SessionEvent::QueryLogNextPage { tx: tx_page2 })?;
+        tx.send(SessionEvent::EndSession)?;
+
+        WorkerSession {
+            log_page_size: 5,
+            ..Default::default()
+        }
+        .handle_events(&rx)?;
+
+        rx_load.recv()??;
+
+        let page1 = rx_page1.recv()??;
+        assert_eq!(5, page1.rows.len());
+        assert_eq!(true, page1.has_more);
+
+        let page2 = rx_page2.recv()??;
+        assert_eq!(4, page2.rows.len());
+        assert_eq!(false, page2.has_more);
+
+        Ok(())
+    }
+
+    #[test]
+    fn query_log_multi_restart() -> Result<()> {
+        let repo = mkrepo();
+        let (tx, rx) = channel::<SessionEvent>();
+        let (tx_load, rx_load) = channel::<Result<RepoConfig>>();
+        let (tx_page1, rx_page1) = channel::<Result<LogPage>>();
+        let (tx_page1b, rx_page1b) = channel::<Result<LogPage>>();
+        let (tx_page2, rx_page2) = channel::<Result<LogPage>>();
+
+        tx.send(SessionEvent::OpenWorkspace {
+            tx: tx_load,
+            cwd: Some(repo.path().to_owned()),
+        })?;
+        tx.send(SessionEvent::QueryLog {
+            tx: tx_page1,
+            query: "all()".to_owned(),
+        })?;
+        tx.send(SessionEvent::QueryLog {
+            tx: tx_page1b,
+            query: "all()".to_owned(),
+        })?;
+        tx.send(SessionEvent::QueryLogNextPage { tx: tx_page2 })?;
+        tx.send(SessionEvent::EndSession)?;
+
+        WorkerSession {
+            log_page_size: 5,
+            ..Default::default()
+        }
+        .handle_events(&rx)?;
+
+        rx_load.recv()??;
+
+        let page1 = rx_page1.recv()??;
+        assert_eq!(5, page1.rows.len());
+        assert_eq!(true, page1.has_more);
+
+        let page1b = rx_page1b.recv()??;
+        assert_eq!(5, page1b.rows.len());
+        assert_eq!(true, page1b.has_more);
+
+        let page2 = rx_page2.recv()??;
+        assert_eq!(4, page2.rows.len());
+        assert_eq!(false, page2.has_more);
+
+        Ok(())
+    }
+
+    #[test]
+    fn query_log_multi_interrupt() -> Result<()> {
+        let repo = mkrepo();
+        let (tx, rx) = channel::<SessionEvent>();
+        let (tx_load, rx_load) = channel::<Result<RepoConfig>>();
+        let (tx_page1, rx_page1) = channel::<Result<LogPage>>();
+        let (tx_rev, rx_rev) = channel::<Result<RevDetail>>();
+        let (tx_page2, rx_page2) = channel::<Result<LogPage>>();
+
+        tx.send(SessionEvent::OpenWorkspace {
+            tx: tx_load,
+            cwd: Some(repo.path().to_owned()),
+        })?;
+        tx.send(SessionEvent::QueryLog {
+            tx: tx_page1,
+            query: "all()".to_owned(),
+        })?;
+        tx.send(SessionEvent::QueryRevision {
+            tx: tx_rev,
+            change_id: "@".to_owned(),
+        })?;
+        tx.send(SessionEvent::QueryLogNextPage { tx: tx_page2 })?;
+        tx.send(SessionEvent::EndSession)?;
+
+        WorkerSession {
+            log_page_size: 5,
+            ..Default::default()
+        }
+        .handle_events(&rx)?;
+
+        rx_load.recv()??;
+
+        let page1 = rx_page1.recv()??;
+        assert_eq!(5, page1.rows.len());
+        assert_eq!(true, page1.has_more);
+
+        let rev = rx_rev.recv()??;
+        assert!(rev.header.is_working_copy);
+
+        let page2 = rx_page2.recv()??;
+        assert_eq!(4, page2.rows.len());
+        assert_eq!(false, page2.has_more);
 
         Ok(())
     }
@@ -258,13 +392,13 @@ mod mutation {
     #[test]
     fn describe() -> Result<()> {
         let repo = mkrepo();
-        let wc_str = String::from("romxvykp");
-        let wc_chid = mkchid("romxvykp");
+        let wc_str = String::from("ntukvtlz");
+        let wc_chid = mkchid("ntukvtlz");
 
         let mut session = WorkerSession::default();
         let mut ws = session.load_directory(repo.path())?;
 
-        let page = queries::LogQuery::new(wc_str.clone()).get_page(&ws)?;
+        let page = queries::LogQuery::new(2, wc_str.clone()).get_page(&ws)?;
         assert_eq!(1, page.rows.len());
         assert_eq!("", page.rows[0].revision.description.lines[0]);
 
@@ -276,7 +410,7 @@ mod mutation {
             },
         )?;
 
-        let page = queries::LogQuery::new(wc_str.clone()).get_page(&ws)?;
+        let page = queries::LogQuery::new(2, wc_str.clone()).get_page(&ws)?;
         assert_eq!(1, page.rows.len());
         assert_eq!("wip", page.rows[0].revision.description.lines[0]); // this passes if we recreate the WS from the directory
 
@@ -286,13 +420,13 @@ mod mutation {
     #[test]
     fn describe_with_snapshot() -> Result<()> {
         let repo = mkrepo();
-        let wc_str = String::from("romxvykp");
-        let wc_chid = mkchid("romxvykp");
+        let wc_str = String::from("ntukvtlz");
+        let wc_chid = mkchid("ntukvtlz");
 
         let mut session = WorkerSession::default();
         let mut ws = session.load_directory(repo.path())?;
 
-        let page = queries::LogQuery::new(wc_str.clone()).get_page(&ws)?;
+        let page = queries::LogQuery::new(2, wc_str.clone()).get_page(&ws)?;
         assert_eq!(1, page.rows.len());
         assert_eq!("", &page.rows[0].revision.description.lines[0]);
 
@@ -308,7 +442,7 @@ mod mutation {
             },
         )?;
 
-        let page = queries::LogQuery::new(wc_str.clone()).get_page(&ws)?;
+        let page = queries::LogQuery::new(2, wc_str.clone()).get_page(&ws)?;
         assert_eq!(1, page.rows.len());
         assert_eq!("wip", page.rows[0].revision.description.lines[0]);
 

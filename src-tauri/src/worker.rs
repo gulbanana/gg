@@ -106,7 +106,10 @@ impl Session for WorkspaceSession<'_> {
                     tx,
                     query: revset_string,
                 }) => {
-                    let query = current_query.insert(queries::LogQuery::new(revset_string.clone()));
+                    let query = current_query.insert(queries::LogQuery::new(
+                        self.session.log_page_size,
+                        revset_string.clone(),
+                    ));
                     let page = query.get_page(&self)?;
                     tx.send(Ok(page))?;
 

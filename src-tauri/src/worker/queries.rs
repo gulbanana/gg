@@ -13,8 +13,6 @@ use crate::messages::{DiffPath, LogCoordinates, LogLine, LogPage, LogRow, RevDet
 
 use super::WorkspaceSession;
 
-const LOG_PAGE_SIZE: usize = 1000; // XXX configurable?
-
 struct LogStem {
     source: LogCoordinates,
     target: CommitId,
@@ -23,18 +21,23 @@ struct LogStem {
 }
 
 pub struct LogQuery {
+    /// max number of rows per page
+    page_size: usize,
+    /// unevaluated revset
+    expression: String,
+    /// number of rows already yielded
+    current_row: usize,
     /// ongoing vertical lines; nodes will be placed on or around these
     stems: Vec<Option<LogStem>>,
-    row: usize,
-    expression: String,
 }
 
 impl LogQuery {
-    pub fn new(expression: String) -> LogQuery {
+    pub fn new(page_size: usize, expression: String) -> LogQuery {
         LogQuery {
-            stems: Vec::new(),
-            row: 0,
+            page_size,
             expression,
+            current_row: 0,
+            stems: Vec::new(),
         }
     }
 
@@ -44,8 +47,8 @@ impl LogQuery {
             .context("evaluate revset")?;
 
         let mut rows: Vec<LogRow> = Vec::new(); // output rows to draw
-        let mut row = self.row;
-        let max = row + LOG_PAGE_SIZE;
+        let mut row = self.current_row;
+        let max = row + self.page_size;
 
         let mut iter = TopoGroupedRevsetGraphIterator::new(revset.iter_graph())
             .skip(row)
@@ -159,7 +162,7 @@ impl LogQuery {
             }
         }
 
-        self.row = row;
+        self.current_row = row;
         Ok(LogPage {
             rows,
             has_more: iter.peek().is_some(),

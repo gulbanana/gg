@@ -34,9 +34,18 @@ use jj_lib::{
 use crate::messages;
 
 /// state that doesn't depend on jj-lib borrowings
-#[derive(Default)]
 pub struct WorkerSession {
+    pub log_page_size: usize,
     pub latest_query: Option<String>,
+}
+
+impl Default for WorkerSession {
+    fn default() -> Self {
+        WorkerSession {
+            log_page_size: 1000,
+            latest_query: None
+        }
+    }    
 }
 
 /// jj-dependent state, available when a workspace is open
