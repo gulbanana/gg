@@ -180,6 +180,9 @@ impl Session for WorkspaceSession<'_> {
                 SessionEvent::OpenWorkspace { tx, cwd } => {
                     return Ok(WorkspaceResult::Reopen(tx, cwd));
                 }
+                SessionEvent::QueryRevision { tx, change_id } => {
+                    tx.send(queries::query_revision(&self, &change_id))?
+                }
                 SessionEvent::QueryLog {
                     tx,
                     query: revset_string,
@@ -199,9 +202,6 @@ impl Session for WorkspaceSession<'_> {
 
                     state.handle_query(&self, tx, rx, revset_string, None)?;
                 }
-                SessionEvent::QueryRevision { tx, change_id } => {
-                    tx.send(queries::query_revision(&self, &change_id))?
-                }
                 SessionEvent::DescribeRevision { tx, mutation } => {
                     tx.send(mutations::describe_revision(&mut self, mutation)?)?
                 }
@@ -218,6 +218,9 @@ impl Session for queries::LogQuery<'_, '_> {
     fn handle_events(mut self, rx: &Receiver<SessionEvent>) -> Result<Self::Transition> {
         loop {
             match rx.recv() {
+                Ok(SessionEvent::QueryRevision { tx, change_id }) => {
+                    tx.send(queries::query_revision(&self.ws, &change_id))?
+                }
                 Ok(SessionEvent::QueryLogNextPage { tx }) => tx.send(self.get_page())?,
                 Ok(unhandled) => return Ok(QueryResult(unhandled, self.state)),
                 Err(err) => return Err(anyhow!(err)),

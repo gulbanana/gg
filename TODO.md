@@ -20,6 +20,7 @@ snapshot/op-head-merge on focus
 investigate interaction with other repo mutators
 draw file conflict markers 
 improve logpane resize
+double-click to edit (possibly: to update)
 
 possibly not mvp
 ----------------
