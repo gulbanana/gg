@@ -1,8 +1,6 @@
 probably mvp
 ------------
-virt: draw lines that neither start nor end on the screen
 move immutability to revheader, use for action vis
-missing graph nodes
 contextless commit actions (good initial candidates: reset author, squash)
     - rev pane buttons
     - commit menu
@@ -20,11 +18,12 @@ universal macos builds in CI
 snapshot/op-head-merge on focus
 investigate interaction with other repo mutators
 draw file conflict markers 
-improve logpane resize
 double-click to edit (possibly: to update)
 
 possibly not mvp
 ----------------
+missing graph nodes
+virt: draw lines that neither start nor end on the screen
 fix doubled+ open dialogue
 log keyboard support
 log multiselect
@@ -39,3 +38,4 @@ remotes/fetch/push
 design updates 
     - edge colours
     - conflict markers
+    - buttons?
