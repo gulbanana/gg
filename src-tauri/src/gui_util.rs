@@ -32,6 +32,7 @@ use jj_lib::{
 };
 
 use crate::messages;
+use crate::settings::GGSettings;
 
 /// state that doesn't depend on jj-lib borrowings
 pub struct WorkerSession {
@@ -62,12 +63,13 @@ pub struct WorkspaceSession<'a> {
     colocated: bool
 }
 
-/// state specific to an operation which may be swapped out as a whole
+/// state derived from a specific operation
 pub struct SessionOperation {
     pub repo: Arc<ReadonlyRepo>,
     pub wc_id: CommitId,
     branches_index: OnceCell<Rc<RefNamesIndex>>,
-    prefix_context: OnceCell<Rc<IdPrefixContext>>
+    prefix_context: OnceCell<Rc<IdPrefixContext>>,
+    immutable_revisions: OnceCell<Rc<RevsetExpression>>
 }
 
 impl WorkerSession {
@@ -193,11 +195,6 @@ impl WorkspaceSession<'_> {
     fn prefix_context(&self) -> &Rc<IdPrefixContext> {
         self.operation.prefix_context.get_or_init(|| Rc::new(build_prefix_context(&self.settings, &self.workspace, &self.aliases_map).expect("init prefix context")))
     }
-    
-    pub fn branches_index(&self) -> &Rc<RefNamesIndex> {
-        self.operation.branches_index
-            .get_or_init(|| Rc::new(build_branches_index(self.operation.repo.as_ref())))
-    }
 
     fn resolver(&self) -> DefaultSymbolResolver {
         let commit_id_resolver: revset::PrefixResolver<CommitId> =
@@ -207,6 +204,15 @@ impl WorkspaceSession<'_> {
         DefaultSymbolResolver::new(self.operation.repo.as_ref())
             .with_commit_id_resolver(commit_id_resolver)
             .with_change_id_resolver(change_id_resolver)
+    }
+
+    fn immutable_revisions(&self) -> &Rc<RevsetExpression> {
+        self.operation.immutable_revisions.get_or_init(|| build_immutable_revisions(&self.operation.repo, &self.aliases_map, &self.parse_context()).expect("init immutable heads"))
+    }
+
+    pub fn branches_index(&self) -> &Rc<RefNamesIndex> {
+        self.operation.branches_index
+            .get_or_init(|| Rc::new(build_branches_index(self.operation.repo.as_ref())))
     }
 
     /************************************
@@ -266,7 +272,7 @@ impl WorkspaceSession<'_> {
         messages::RevId { hex, prefix, rest }
     }
 
-    pub fn format_header(&self, commit: &Commit) -> Result<messages::RevHeader> {
+    pub fn format_header(&self, commit: &Commit, known_immutable: bool) -> Result<messages::RevHeader> {
         let index = self.branches_index();
         let branches = index.get(commit.id()).iter().cloned().collect();
 
@@ -274,9 +280,10 @@ impl WorkspaceSession<'_> {
             change_id: self.format_change_id(commit.change_id()),
             commit_id: self.format_commit_id(commit.id()),
             description: commit.description().into(),
-            email: commit.author().email.clone(),
+            author: commit.author().into(),
             has_conflict: commit.has_conflict()?,
             is_working_copy: *commit.id() == self.operation.wc_id,
+            is_immutable: known_immutable || self.check_immutable(commit.id().clone())?,
             branches,
         })
     }
@@ -286,40 +293,41 @@ impl WorkspaceSession<'_> {
         (&relative_path(base_path, &repo_path.to_fs_path(base_path))).into()
     }
 
+    pub fn check_immutable(&self, id: CommitId) -> Result<bool> {
+        if !self.settings.check_immutable() {
+            return Ok(false);
+        }
+
+        let check_revset = RevsetExpression::commit(id);
+        // or: 
+        // commits: impl IntoIterator<Item = &'a Commit
+        // let check_revset = RevsetExpression::commits(
+        //     commits
+        //         .into_iter()
+        //         .map(|commit| commit.id().clone())
+        //         .collect(),
+        // );
+
+        let immutable_revset = self.immutable_revisions();
+        let intersection_revset = check_revset.intersection(&immutable_revset);
+        
+        // note: slow! jj may add a caching contains() API in future, in which case we'd be able 
+        // to materialise the immutable revset statefully and use it here; for now, avoid calling
+        // this function unnecessarily
+        let immutable_revs = self.evaluate_revset_expr(intersection_revset)?; 
+
+        let mut iter = immutable_revs.iter();
+        if let Some(_) = iter.next() {
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
+
     /*********************************************************************
      * Transaction functions - these are very similar to cli_util        *
      * Ideally in future the code can be extracted to not depend on TUI. *
      *********************************************************************/
-
-    // XXX do this in log queries so that the ui can avoid issuing such commands
-    pub fn check_rewritable<'a>(&self, commits: impl IntoIterator<Item = &'a Commit>) -> Result<bool> {
-        let to_rewrite_revset = RevsetExpression::commits(
-            commits
-                .into_iter()
-                .map(|commit| commit.id().clone())
-                .collect(),
-        );
-        let (params, immutable_heads_str) = self
-            .aliases_map
-            .get_function("immutable_heads")
-            .unwrap();
-        if !params.is_empty() {
-            return Err(anyhow!(r#"The `revset-aliases.immutable_heads()` function must be declared without arguments."#));
-        }
-        let immutable_heads_revset = parse_revset(&self.parse_context(), immutable_heads_str)?;
-        let immutable_revset = immutable_heads_revset
-            .ancestors()
-            .union(&RevsetExpression::commit(
-                self.repo().store().root_commit_id().clone(),
-            ));
-        let revset = self.evaluate_revset_expr(to_rewrite_revset.intersection(&immutable_revset))?;
-        let mut iter = revset.iter().commits(self.repo().store());
-        if let Some(_) = iter.next() {
-            Ok(false)
-        } else {
-            Ok(true)
-        }
-    }
 
     pub fn start_transaction(&mut self) -> Result<Transaction> {
         if self.colocated {
@@ -581,7 +589,8 @@ impl SessionOperation {
             repo, 
             wc_id,
             branches_index: OnceCell::default(),
-            prefix_context: OnceCell::default()
+            prefix_context: OnceCell::default(),
+            immutable_revisions: OnceCell::default()
         }
     }
 
@@ -680,6 +689,24 @@ fn build_branches_index(repo: &ReadonlyRepo) -> RefNamesIndex {
         }
     }
     index
+}
+
+fn build_immutable_revisions(repo: &ReadonlyRepo, aliases_map: &RevsetAliasesMap, parse_context: &RevsetParseContext) -> Result<Rc<RevsetExpression>> {
+    let (params, immutable_heads_str) = aliases_map
+        .get_function("immutable_heads")
+        .unwrap();
+
+    if !params.is_empty() {
+        return Err(anyhow!(r#"The `revset-aliases.immutable_heads()` function must be declared without arguments."#));
+    }
+
+    let immutable_heads = parse_revset(parse_context, immutable_heads_str)?;
+
+    Ok(immutable_heads
+        .ancestors()
+        .union(&RevsetExpression::commit(
+            repo.store().root_commit_id().clone(),
+        )))
 }
 
 fn parse_revset(

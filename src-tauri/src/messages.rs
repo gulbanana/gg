@@ -2,7 +2,8 @@
 
 use std::path::PathBuf;
 
-use chrono::Local;
+use chrono::{DateTime, FixedOffset, Local, LocalResult, TimeZone, Utc};
+use jj_lib::backend::{Signature, Timestamp};
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "ts-rs")]
 use ts_rs::TS;
@@ -173,13 +174,38 @@ pub struct RevId {
     derive(TS),
     ts(export, export_to = "../src/messages/")
 )]
+pub struct RevAuthor {
+    pub email: String,
+    pub name: String,
+    pub timestamp: chrono::DateTime<Local>,
+}
+
+impl From<&Signature> for RevAuthor {
+    fn from(value: &Signature) -> Self {
+        RevAuthor {
+            name: value.name.clone(),
+            email: value.email.clone(),
+            timestamp: datetime_from_timestamp(&value.timestamp)
+                .unwrap()
+                .with_timezone(&Local),
+        }
+    }
+}
+
+#[derive(Serialize, Debug)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(TS),
+    ts(export, export_to = "../src/messages/")
+)]
 pub struct RevHeader {
     pub change_id: RevId,
     pub commit_id: RevId,
     pub description: MultilineString,
-    pub email: String,
+    pub author: RevAuthor,
     pub has_conflict: bool,
     pub is_working_copy: bool,
+    pub is_immutable: bool,
     pub branches: Vec<RefName>,
 }
 
@@ -191,8 +217,6 @@ pub struct RevHeader {
 )]
 pub struct RevDetail {
     pub header: RevHeader,
-    pub author: String,
-    pub timestamp: chrono::DateTime<Local>,
     pub parents: Vec<RevHeader>,
     pub diff: Vec<DiffPath>,
 }
@@ -238,4 +262,25 @@ pub struct RefName {
 pub struct DescribeRevision {
     pub change_id: RevId,
     pub new_description: String,
+}
+
+// from time_util, which is not pub
+fn datetime_from_timestamp(context: &Timestamp) -> Option<DateTime<FixedOffset>> {
+    let utc = match Utc.timestamp_opt(
+        context.timestamp.0.div_euclid(1000),
+        (context.timestamp.0.rem_euclid(1000)) as u32 * 1000000,
+    ) {
+        LocalResult::None => {
+            return None;
+        }
+        LocalResult::Single(x) => x,
+        LocalResult::Ambiguous(y, _z) => y,
+    };
+
+    Some(
+        utc.with_timezone(
+            &FixedOffset::east_opt(context.tz_offset * 60)
+                .unwrap_or_else(|| FixedOffset::east_opt(0).unwrap()),
+        ),
+    )
 }

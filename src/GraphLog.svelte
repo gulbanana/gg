@@ -14,6 +14,7 @@
 <script lang="ts">
   import type { LogRow } from "./messages/LogRow.js";
   import GraphLine from "./GraphLine.svelte";
+  import GraphNode from "./GraphNode.svelte";
 
   interface $$Slots {
     default: { row: EnhancedRow | null };
@@ -81,20 +82,17 @@
           ?.location[1] ?? 0) * rowHeight})"
       >
         <foreignObject
-          class="row"
           height={rowHeight}
           style="width: calc(100% - {(row?.location[0] ?? 0) *
             columnWidth}px); --leftpad: {(row?.padding ?? 0) * columnWidth +
-            columnWidth}px;"
+            columnWidth +
+            6}px;"
         >
           <slot {row} />
         </foreignObject>
 
         {#if row}
-          <circle cx="9" cy="15" r="6" fill="none" />
-          {#if row.revision.is_working_copy}
-            <circle cx="9" cy="15" r="3" />
-          {/if}
+          <GraphNode revision={row.revision} />
         {/if}
       </g>
 
@@ -112,11 +110,7 @@
     overflow: hidden;
   }
 
-  circle {
-    pointer-events: none;
-  }
-
-  .row {
+  foreignObject {
     overflow: hidden;
   }
 </style>

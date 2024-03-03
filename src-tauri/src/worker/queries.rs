@@ -1,10 +1,10 @@
 use std::iter::{Peekable, Skip};
 
 use anyhow::Result;
-use chrono::{DateTime, FixedOffset, Local, LocalResult, TimeZone, Utc};
+
 use futures_util::StreamExt;
 use jj_lib::{
-    backend::{CommitId, Timestamp},
+    backend::CommitId,
     matchers::EverythingMatcher,
     revset::Revset,
     revset_graph::{RevsetGraphEdge, RevsetGraphEdgeType, TopoGroupedRevsetGraphIterator},
@@ -21,6 +21,7 @@ struct LogStem {
     target: CommitId,
     indirect: bool,
     was_inserted: bool,
+    known_immutable: bool,
 }
 
 /// state used for init or restart of a query
@@ -70,7 +71,7 @@ impl<'a, 'b> LogQuery<'a, 'b> {
     }
 
     pub fn get_page(&mut self) -> Result<LogPage> {
-        let mut rows: Vec<LogRow> = Vec::new(); // output rows to draw
+        let mut rows: Vec<LogRow> = Vec::with_capacity(self.state.page_size); // output rows to draw
         let mut row = self.state.next_row;
         let max = row + self.state.page_size;
 
@@ -80,6 +81,7 @@ impl<'a, 'b> LogQuery<'a, 'b> {
 
             // find an existing stem targeting the current node
             let mut column = self.state.stems.len();
+            let mut stem_known_immutable = false;
             let mut padding = 0; // used to offset the commit summary past some edges
 
             for (slot, stem) in self.state.stems.iter().enumerate() {
@@ -95,6 +97,7 @@ impl<'a, 'b> LogQuery<'a, 'b> {
             // terminate any existing stem, removing it from the end or leaving a gap
             if column < self.state.stems.len() {
                 if let Some(terminated_stem) = &self.state.stems[column] {
+                    stem_known_immutable = terminated_stem.known_immutable;
                     lines.push(if terminated_stem.was_inserted {
                         LogLine::FromNode {
                             indirect: terminated_stem.indirect,
@@ -121,6 +124,10 @@ impl<'a, 'b> LogQuery<'a, 'b> {
                     }
                 }
             }
+
+            let header = self
+                .ws
+                .format_header(&self.ws.get_commit(&commit_id)?, stem_known_immutable)?;
 
             // remove empty stems on the right edge
             let empty_stems = self
@@ -160,6 +167,7 @@ impl<'a, 'b> LogQuery<'a, 'b> {
                             target: edge.target.clone(),
                             indirect: edge.edge_type == RevsetGraphEdgeType::Indirect,
                             was_inserted: true,
+                            known_immutable: header.is_immutable,
                         });
                         continue 'edges;
                     }
@@ -170,11 +178,12 @@ impl<'a, 'b> LogQuery<'a, 'b> {
                     target: edge.target.clone(),
                     indirect: edge.edge_type == RevsetGraphEdgeType::Indirect,
                     was_inserted: false,
+                    known_immutable: header.is_immutable,
                 }));
             }
 
             rows.push(LogRow {
-                revision: self.ws.format_header(&self.ws.get_commit(&commit_id)?)?,
+                revision: header,
                 location: LogCoordinates(column, row),
                 padding,
                 lines,
@@ -194,6 +203,7 @@ impl<'a, 'b> LogQuery<'a, 'b> {
     }
 }
 
+// XXX this is reloading the header, which the client already has
 pub fn query_revision(ws: &WorkspaceSession, rev_str: &str) -> Result<RevDetail> {
     let commit = ws.evaluate_revision(rev_str)?;
 
@@ -218,40 +228,18 @@ pub fn query_revision(ws: &WorkspaceSession, rev_str: &str) -> Result<RevDetail>
     }
     .block_on();
 
+    let header = ws.format_header(&commit, false)?;
+
     let parents: Result<Vec<RevHeader>> = commit
         .parents()
         .iter()
-        .map(|p| ws.format_header(p))
+        .map(|p| ws.format_header(p, header.is_immutable))
         .collect();
+    let parents = parents?;
 
     Ok(RevDetail {
-        header: ws.format_header(&commit)?,
-        author: commit.author().name.clone(),
-        timestamp: datetime_from_timestamp(&commit.author().timestamp)
-            .unwrap()
-            .with_timezone(&Local),
+        header,
+        parents,
         diff: paths,
-        parents: parents?,
     })
-}
-
-// from time_util, which is not pub
-pub fn datetime_from_timestamp(context: &Timestamp) -> Option<DateTime<FixedOffset>> {
-    let utc = match Utc.timestamp_opt(
-        context.timestamp.0.div_euclid(1000),
-        (context.timestamp.0.rem_euclid(1000)) as u32 * 1000000,
-    ) {
-        LocalResult::None => {
-            return None;
-        }
-        LocalResult::Single(x) => x,
-        LocalResult::Ambiguous(y, _z) => y,
-    };
-
-    Some(
-        utc.with_timezone(
-            &FixedOffset::east_opt(context.tz_offset * 60)
-                .unwrap_or_else(|| FixedOffset::east_opt(0).unwrap()),
-        ),
-    )
 }

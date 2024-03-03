@@ -2,6 +2,7 @@
 
 mod gui_util;
 mod messages;
+mod settings;
 #[cfg(all(test, not(feature = "ts-rs")))]
 mod tests;
 mod worker;

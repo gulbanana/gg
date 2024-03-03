@@ -1,6 +1,6 @@
 probably mvp
 ------------
-move immutability to revheader, use for action vis
+use immutability for action vis
 contextless commit actions (good initial candidates: reset author, squash)
     - rev pane buttons
     - commit menu
@@ -19,11 +19,13 @@ snapshot/op-head-merge on focus
 investigate interaction with other repo mutators
 draw file conflict markers 
 double-click to edit (possibly: to update)
+virt: draw lines that neither start nor end on the screen
 
 possibly not mvp
 ----------------
+more settings (force dark theme on/off)
+optimise revdetail loads - we already have the header
 missing graph nodes
-virt: draw lines that neither start nor end on the screen
 fix doubled+ open dialogue
 log keyboard support
 log multiselect
@@ -39,3 +41,4 @@ design updates
     - edge colours
     - conflict markers
     - buttons?
+better solution to slow immutability check

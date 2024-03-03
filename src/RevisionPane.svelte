@@ -41,8 +41,12 @@
         />
 
         <div class="author">
-            <span>{rev.author}</span>
-            <span>{new Date(rev.timestamp).toLocaleTimeString()}</span>
+            <span>{rev.header.author.name}</span>
+            <span
+                >{new Date(
+                    rev.header.author.timestamp,
+                ).toLocaleTimeString()}</span
+            >
             <span></span>
             <Action onClick={onDescribe}
                 ><Icon name="file-text" /> Describe</Action

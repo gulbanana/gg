@@ -14,7 +14,7 @@ pub fn describe_revision(
 
     let commit = ws.evaluate_revision(&mutation.change_id.hex)?;
 
-    if !ws.check_rewritable([&commit])? {
+    if ws.check_immutable(commit.id().clone())? {
         Ok(MutationResult::Failed {
             message: format!("Commit {} is immutable", short_commit_hash(commit.id())),
         })

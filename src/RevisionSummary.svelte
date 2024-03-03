@@ -24,7 +24,7 @@
             : revision.description.lines[0]}
     </span>
 
-    <span class="email truncate">{revision.email}</span>
+    <span class="email truncate">{revision.author.email}</span>
 
     <span class="tags">
         {#each revision.branches.filter((b) => b.remote == null || !b.is_synced) as ref}
@@ -50,8 +50,8 @@
         padding-left: var(--leftpad);
     }
 
-    .layout :global(span) {
-        line-height: 30px;
+    .layout > :global(span) {
+        line-height: 27px;
     }
 
     .layout.selected {

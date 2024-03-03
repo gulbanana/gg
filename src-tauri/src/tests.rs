@@ -289,6 +289,39 @@ mod session {
 
         Ok(())
     }
+
+    #[test]
+    fn query_check_immutable() -> Result<()> {
+        let repo = mkrepo();
+        let (tx, rx) = channel::<SessionEvent>();
+        let (tx_load, rx_load) = channel::<Result<RepoConfig>>();
+        let (tx_page, rx_page) = channel::<Result<LogPage>>();
+
+        tx.send(SessionEvent::OpenWorkspace {
+            tx: tx_load,
+            cwd: Some(repo.path().to_owned()),
+        })?;
+        tx.send(SessionEvent::QueryLog {
+            tx: tx_page,
+            query: "root()|root()+".to_owned(),
+        })?;
+        tx.send(SessionEvent::EndSession)?;
+
+        WorkerSession {
+            log_page_size: 2,
+            ..Default::default()
+        }
+        .handle_events(&rx)?;
+
+        rx_load.recv()??;
+
+        let page = rx_page.recv()??;
+        assert_eq!(2, page.rows.len());
+        assert!(!page.rows[0].revision.is_immutable);
+        assert!(page.rows[1].revision.is_immutable);
+
+        Ok(())
+    }
 }
 
 mod mutation {

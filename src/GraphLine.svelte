@@ -54,5 +54,6 @@
 <style>
     path {
         pointer-events: none;
+        stroke: var(--ctp-blue);
     }
 </style>
