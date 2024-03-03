@@ -61,12 +61,12 @@ impl<'a, 'b> LogQuery<'a, 'b> {
         ws: &'a WorkspaceSession<'b>,
         revset: &'a dyn Revset,
         state: LogQueryState,
-    ) -> Result<LogQuery<'a, 'b>> {
+    ) -> LogQuery<'a, 'b> {
         let iter = TopoGroupedRevsetGraphIterator::new(revset.iter_graph())
             .skip(state.next_row)
             .peekable();
 
-        Ok(LogQuery { ws, iter, state })
+        LogQuery { ws, iter, state }
     }
 
     pub fn get_page(&mut self) -> Result<LogPage> {
