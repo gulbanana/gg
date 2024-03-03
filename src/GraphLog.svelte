@@ -1,35 +1,104 @@
-<!-- Renders commit rows with an SVG graph drawn over them -->
+<!-- Renders commit rows with an SVG graph drawn over them, virtualising the ui to allow for long graphs -->
+
+<script context="module" lang="ts">
+  import type { LogLine } from "./messages/LogLine.js";
+
+  export type EnhancedLine = LogLine & { key: number };
+
+  export interface EnhancedRow extends LogRow {
+    linesTo: Array<EnhancedLine>;
+    linesFrom: Array<EnhancedLine>;
+  }
+</script>
 
 <script lang="ts">
   import type { LogRow } from "./messages/LogRow.js";
   import GraphLine from "./GraphLine.svelte";
 
-  export let rows: LogRow[];
   interface $$Slots {
-    default: { row: LogRow };
+    default: { row: EnhancedRow | null };
   }
+
+  const columnWidth = 18;
+  const rowHeight = 30;
+  export let containerHeight: number;
+  export let scrollTop: number;
+  export let rows: (EnhancedRow | null)[];
+
+  function sliceArray(arr: (EnhancedRow | null)[], start: number, end: number) {
+    arr = arr.slice(start, end);
+
+    let expectedLength = end - start;
+
+    while (arr.length < expectedLength) {
+      arr.push(null); // placeholders when there aren't enough items to fill the container
+    }
+
+    return arr;
+  }
+
+  function shiftArray(arr: (EnhancedRow | null)[], count: number) {
+    for (let i = 0; i < count; i++) {
+      arr.unshift(arr.pop()!);
+    }
+    return arr;
+  }
+
+  function distinctLines(
+    keys: Set<number>,
+    row: EnhancedRow | null,
+  ): EnhancedLine[] {
+    if (row === null) {
+      return [];
+    }
+
+    return row.linesFrom.concat(row.linesTo).filter((l) => {
+      if (keys.has(l.key)) {
+        return false;
+      } else {
+        keys.add(l.key);
+        return true;
+      }
+    });
+  }
+
+  $: graphHeight = Math.max(containerHeight, rows.length * rowHeight);
+  $: visibleRows = Math.ceil(containerHeight / rowHeight) + 1;
+  $: startIndex = Math.floor(scrollTop / rowHeight);
+  $: endIndex = startIndex + visibleRows;
+  $: overlap = startIndex % visibleRows;
+  $: visibleSlice = {
+    rows: shiftArray(sliceArray(rows, startIndex, endIndex), overlap),
+    keys: new Set<number>(),
+  };
 </script>
 
-<svg class="graph" style="width: 100%; height: {rows.length * 30}px;">
-  {#each rows as row}
-    <g transform="translate({row.location[0] * 18} {row.location[1] * 30})">
-      <foreignObject
-        class="row"
-        height="30"
-        style="width: calc(100% - {row.location[0] *
-          18}px); --leftpad: {row.padding * 18 + 18}px;"
-      >
-        <slot {row} />
-      </foreignObject>
-
-      <circle cx="9" cy="15" r="6" fill="none" />
-      {#if row.revision.is_working_copy}
-        <circle cx="9" cy="15" r="3" />
-      {/if}
-    </g>
-
+<svg class="graph" style="width: 100%; height: {graphHeight}px;">
+  {#each visibleSlice.rows as row}
     {#key row}
-      {#each row.lines as line}
+      <g
+        transform="translate({(row?.location[0] ?? 0) * columnWidth} {(row
+          ?.location[1] ?? 0) * rowHeight})"
+      >
+        <foreignObject
+          class="row"
+          height={rowHeight}
+          style="width: calc(100% - {(row?.location[0] ?? 0) *
+            columnWidth}px); --leftpad: {(row?.padding ?? 0) * columnWidth +
+            columnWidth}px;"
+        >
+          <slot {row} />
+        </foreignObject>
+
+        {#if row}
+          <circle cx="9" cy="15" r="6" fill="none" />
+          {#if row.revision.is_working_copy}
+            <circle cx="9" cy="15" r="3" />
+          {/if}
+        {/if}
+      </g>
+
+      {#each distinctLines(visibleSlice.keys, row) as line}
         <GraphLine {line} />
       {/each}
     {/key}
@@ -40,6 +109,7 @@
   svg {
     stroke: var(--ctp-text);
     fill: var(--ctp-text);
+    overflow: hidden;
   }
 
   circle {

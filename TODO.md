@@ -1,5 +1,6 @@
 probably mvp
 ------------
+virt: draw lines that neither start nor end on the screen
 move immutability to revheader, use for action vis
 missing graph nodes
 contextless commit actions (good initial candidates: reset author, squash)

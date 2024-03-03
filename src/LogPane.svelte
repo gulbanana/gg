@@ -5,7 +5,11 @@
   import { query, delay } from "./ipc.js";
   import { repoStatusEvent, revisionSelectEvent } from "./stores.js";
   import Pane from "./Pane.svelte";
-  import GraphLog from "./GraphLog.svelte";
+  import {
+    type EnhancedRow,
+    default as GraphLog,
+    type EnhancedLine,
+  } from "./GraphLog.svelte";
   import RevisionSummary from "./RevisionSummary.svelte";
 
   export let default_query: string;
@@ -18,16 +22,19 @@
     { label: "All Revisions", query: "all()" },
   ];
 
-  let choices: ReturnType<typeof get_choices>;
+  let choices: ReturnType<typeof getChoices>;
   let entered_query = latest_query;
-  let log_rows: LogRow[] | undefined;
+  let graphRows: EnhancedRow[] | undefined;
 
-  onMount(load_log);
+  let log: HTMLElement;
+  let logHeight = 0;
+  let logScrollTop = 0;
+  let pollFrame;
 
-  $: if (entered_query) choices = get_choices();
-  $: if ($repoStatusEvent) reload_log();
+  $: if (entered_query) choices = getChoices();
+  $: if ($repoStatusEvent) reloadLog();
 
-  function get_choices() {
+  function getChoices() {
     let choices = presets.map((p) => ({ ...p, selected: false }));
     for (let choice of choices) {
       if (entered_query == choice.query) {
@@ -44,7 +51,7 @@
     return choices;
   }
 
-  async function load_log() {
+  async function loadLog() {
     let fetch = query<LogPage>("query_log", {
       revset: entered_query == "" ? "all()" : entered_query,
     });
@@ -52,12 +59,13 @@
     let page = await Promise.race([fetch, delay<LogPage>(200)]);
 
     if (page.type == "wait") {
-      log_rows = undefined;
+      graphRows = undefined;
       page = await fetch;
     }
 
     if (page.type == "data") {
-      log_rows = page.value.rows;
+      graphRows = [];
+      graphRows = addPageToGraph(graphRows, page.value.rows);
 
       if (page.value.rows.length > 0) {
         $revisionSelectEvent = page.value.rows[0].revision;
@@ -66,7 +74,7 @@
       while (page.value.has_more) {
         let next_page = await query<LogPage>("query_log_next_page");
         if (next_page.type == "data") {
-          log_rows = log_rows?.concat(next_page.value.rows);
+          graphRows = addPageToGraph(graphRows, next_page.value.rows);
           page = next_page;
         } else {
           break;
@@ -75,7 +83,7 @@
     }
   }
 
-  async function reload_log() {
+  async function reloadLog() {
     let fetch = query<LogPage>("query_log", {
       revset: entered_query == "" ? "all()" : entered_query,
     });
@@ -83,17 +91,18 @@
     let page = await Promise.race([fetch, delay<LogPage>(200)]);
 
     if (page.type == "wait") {
-      log_rows = undefined;
+      graphRows = undefined;
       page = await fetch;
     }
 
     if (page.type == "data") {
-      log_rows = page.value.rows;
+      graphRows = [];
+      graphRows = addPageToGraph(graphRows, page.value.rows);
 
       while (page.value.has_more) {
         let next_page = await query<LogPage>("query_log_next_page");
         if (next_page.type == "data") {
-          log_rows = log_rows?.concat(next_page.value.rows);
+          graphRows = addPageToGraph(graphRows, next_page.value.rows);
           page = next_page;
         } else {
           break;
@@ -101,28 +110,79 @@
       }
     }
   }
+
+  // we want to augment rows with *all* lines that involve them
+  // ToIntersection lines begin at their owning row; others end at it
+  let lineKey = 0;
+  function addPageToGraph(graph: EnhancedRow[], page: LogRow[]): EnhancedRow[] {
+    for (let row of page) {
+      let enhancedRow = row as EnhancedRow;
+      enhancedRow.linesTo = [];
+      enhancedRow.linesFrom = [];
+
+      for (let line of enhancedRow.lines) {
+        let enhancedLine = line as EnhancedLine;
+        enhancedLine.key = lineKey++;
+        if (line.type == "ToIntersection") {
+          enhancedRow.linesFrom.push(enhancedLine);
+        } else {
+          enhancedRow.linesTo.push(enhancedLine);
+          graph[line.source[1]].linesFrom.push(enhancedLine);
+        }
+      }
+
+      graph.push(enhancedRow);
+    }
+
+    return graph;
+  }
+
+  function pollScroll() {
+    if (log && log.scrollTop !== logScrollTop) {
+      logScrollTop = log.scrollTop;
+    }
+
+    pollFrame = requestAnimationFrame(pollScroll);
+  }
+
+  onMount(() => {
+    loadLog();
+    pollFrame = requestAnimationFrame(pollScroll);
+  });
 </script>
 
 <Pane>
   <div slot="header" class="log-selector">
-    <select bind:value={entered_query} on:change={reload_log}>
+    <select bind:value={entered_query} on:change={reloadLog}>
       {#each choices as choice}
         <option selected={choice.selected} value={choice.query}
           >{choice.label}</option
         >
       {/each}
     </select>
-    <input type="text" bind:value={entered_query} on:change={reload_log} />
+    <input type="text" bind:value={entered_query} on:change={reloadLog} />
   </div>
 
-  <div slot="body" class="log-commits">
-    {#if log_rows}
-      <GraphLog rows={log_rows} let:row>
-        <RevisionSummary
-          revision={row.revision}
-          selected={$revisionSelectEvent?.change_id.prefix ==
-            row.revision.change_id.prefix}
-        />
+  <div
+    slot="body"
+    class="log-commits"
+    bind:this={log}
+    bind:clientHeight={logHeight}
+  >
+    {#if graphRows}
+      <GraphLog
+        containerHeight={logHeight}
+        scrollTop={logScrollTop}
+        rows={graphRows}
+        let:row
+      >
+        {#if row}
+          <RevisionSummary
+            revision={row.revision}
+            selected={$revisionSelectEvent?.change_id.prefix ==
+              row.revision.change_id.prefix}
+          />
+        {/if}
       </GraphLog>
     {:else}
       <div>Loading changes...</div>
