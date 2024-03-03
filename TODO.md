@@ -23,10 +23,12 @@ improve logpane resize
 
 possibly not mvp
 ----------------
+fix doubled+ open dialogue
+log keyboard support
+log multiselect
 redo/undo stack
 operation menu - restores or views
 file menu, file actions
-multiselect
 fill out more commit actions (incl. multiselect)
 fill out more dnd actions (incl. multiselect)
 diffs and/or difftool
