@@ -18,6 +18,8 @@ dnd move
 universal macos builds in CI
 snapshot/op-head-merge on focus
 investigate interaction with other repo mutators
+draw file conflict markers 
+improve logpane resize
 
 possibly not mvp
 ----------------
@@ -32,3 +34,4 @@ resolve (other than rebasing)
 remotes/fetch/push
 design updates 
     - edge colours
+    - conflict markers

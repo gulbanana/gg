@@ -1,10 +1,13 @@
-use anyhow::{Context, Result};
+use std::iter::{Peekable, Skip};
+
+use anyhow::Result;
 use chrono::{DateTime, FixedOffset, Local, LocalResult, TimeZone, Utc};
 use futures_util::StreamExt;
 use jj_lib::{
     backend::{CommitId, Timestamp},
     matchers::EverythingMatcher,
-    revset_graph::{RevsetGraphEdgeType, TopoGroupedRevsetGraphIterator},
+    revset::Revset,
+    revset_graph::{RevsetGraphEdge, RevsetGraphEdgeType, TopoGroupedRevsetGraphIterator},
     rewrite::merge_commit_trees,
 };
 use pollster::FutureExt;
@@ -20,60 +23,78 @@ struct LogStem {
     was_inserted: bool,
 }
 
-pub struct LogQuery {
+/// state used for init or restart of a query
+pub struct LogQueryState {
     /// max number of rows per page
     page_size: usize,
-    /// unevaluated revset
-    expression: String,
     /// number of rows already yielded
-    current_row: usize,
+    next_row: usize,
     /// ongoing vertical lines; nodes will be placed on or around these
     stems: Vec<Option<LogStem>>,
 }
 
-impl LogQuery {
-    pub fn new(page_size: usize, expression: String) -> LogQuery {
-        LogQuery {
+impl LogQueryState {
+    pub fn new(page_size: usize) -> LogQueryState {
+        LogQueryState {
             page_size,
-            expression,
-            current_row: 0,
+            next_row: 0,
             stems: Vec::new(),
         }
     }
+}
 
-    pub fn get_page(&mut self, ws: &WorkspaceSession) -> Result<LogPage> {
-        let revset = ws
-            .evaluate_revset_str(&self.expression)
-            .context("evaluate revset")?;
+/// live instance of a query
+pub struct LogQuery<'a, 'b: 'a> {
+    pub ws: &'a WorkspaceSession<'b>,
+    iter: Peekable<
+        Skip<
+            TopoGroupedRevsetGraphIterator<
+                Box<dyn Iterator<Item = (CommitId, Vec<RevsetGraphEdge>)> + 'a>,
+            >,
+        >,
+    >,
+    pub state: LogQueryState,
+}
 
-        let mut rows: Vec<LogRow> = Vec::new(); // output rows to draw
-        let mut row = self.current_row;
-        let max = row + self.page_size;
-
-        let mut iter = TopoGroupedRevsetGraphIterator::new(revset.iter_graph())
-            .skip(row)
+impl<'a, 'b> LogQuery<'a, 'b> {
+    pub fn new(
+        ws: &'a WorkspaceSession<'b>,
+        revset: &'a dyn Revset,
+        state: LogQueryState,
+    ) -> Result<LogQuery<'a, 'b>> {
+        let iter = TopoGroupedRevsetGraphIterator::new(revset.iter_graph())
+            .skip(state.next_row)
             .peekable();
-        while let Some((commit_id, commit_edges)) = iter.next() {
+
+        Ok(LogQuery { ws, iter, state })
+    }
+
+    pub fn get_page(&mut self) -> Result<LogPage> {
+        let mut rows: Vec<LogRow> = Vec::new(); // output rows to draw
+        let mut row = self.state.next_row;
+        let max = row + self.state.page_size;
+
+        while let Some((commit_id, commit_edges)) = self.iter.next() {
             // output lines to draw for the current row
             let mut lines: Vec<LogLine> = Vec::new();
 
             // find an existing stem targeting the current node
-            let mut column = self.stems.len();
+            let mut column = self.state.stems.len();
             let mut padding = 0; // used to offset the commit summary past some edges
 
-            for (slot, stem) in self.stems.iter().enumerate() {
+            for (slot, stem) in self.state.stems.iter().enumerate() {
                 if let Some(LogStem { target, .. }) = stem {
                     if *target == commit_id {
                         column = slot;
-                        padding = self.stems.len() - column - 1;
+                        padding = self.state.stems.len() - column - 1;
                         break;
                     }
                 }
             }
 
             // terminate any existing stem, removing it from the end or leaving a gap
-            if column < self.stems.len() {
-                if let Some(terminated_stem) = &self.stems[column] {
+            if column < self.state.stems.len() {
+                if let Some(terminated_stem) = &self.state.stems[column] {
                     lines.push(if terminated_stem.was_inserted {
                         LogLine::FromNode {
                             indirect: terminated_stem.indirect,
@@ -88,14 +109,14 @@ impl LogQuery {
                         }
                     });
                 }
-                self.stems[column] = None;
+                self.state.stems[column] = None;
             }
             // otherwise, slot into any gaps that might exist
             else {
-                for (slot, stem) in self.stems.iter().enumerate() {
+                for (slot, stem) in self.state.stems.iter().enumerate() {
                     if stem.is_none() {
                         column = slot;
-                        padding = self.stems.len() - slot - 1;
+                        padding = self.state.stems.len() - slot - 1;
                         break;
                     }
                 }
@@ -103,12 +124,15 @@ impl LogQuery {
 
             // remove empty stems on the right edge
             let empty_stems = self
+                .state
                 .stems
                 .iter()
                 .rev()
                 .take_while(|stem| stem.is_none())
                 .count();
-            self.stems.truncate(self.stems.len() - empty_stems);
+            self.state
+                .stems
+                .truncate(self.state.stems.len() - empty_stems);
 
             // merge edges into existing stems or add new ones to the right
             'edges: for edge in commit_edges.iter() {
@@ -116,7 +140,7 @@ impl LogQuery {
                     continue;
                 }
 
-                for (slot, stem) in self.stems.iter().enumerate() {
+                for (slot, stem) in self.state.stems.iter().enumerate() {
                     if let Some(stem) = stem {
                         if stem.target == edge.target {
                             lines.push(LogLine::ToIntersection {
@@ -129,7 +153,7 @@ impl LogQuery {
                     }
                 }
 
-                for stem in self.stems.iter_mut() {
+                for stem in self.state.stems.iter_mut() {
                     if stem.is_none() {
                         *stem = Some(LogStem {
                             source: LogCoordinates(column, row),
@@ -141,7 +165,7 @@ impl LogQuery {
                     }
                 }
 
-                self.stems.push(Some(LogStem {
+                self.state.stems.push(Some(LogStem {
                     source: LogCoordinates(column, row),
                     target: edge.target.clone(),
                     indirect: edge.edge_type == RevsetGraphEdgeType::Indirect,
@@ -150,7 +174,7 @@ impl LogQuery {
             }
 
             rows.push(LogRow {
-                revision: ws.format_header(&ws.get_commit(&commit_id)?)?,
+                revision: self.ws.format_header(&self.ws.get_commit(&commit_id)?)?,
                 location: LogCoordinates(column, row),
                 padding,
                 lines,
@@ -162,16 +186,16 @@ impl LogQuery {
             }
         }
 
-        self.current_row = row;
+        self.state.next_row = row;
         Ok(LogPage {
             rows,
-            has_more: iter.peek().is_some(),
+            has_more: self.iter.peek().is_some(),
         })
     }
 }
 
-pub fn query_revision(ws: &WorkspaceSession, id_str: &str) -> Result<RevDetail> {
-    let commit = ws.evaluate_revision(id_str)?;
+pub fn query_revision(ws: &WorkspaceSession, rev_str: &str) -> Result<RevDetail> {
+    let commit = ws.evaluate_revision(rev_str)?;
 
     let parent_tree = merge_commit_trees(ws.repo(), &commit.parents())?;
     let tree = commit.tree()?;

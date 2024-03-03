@@ -398,9 +398,8 @@ mod mutation {
         let mut session = WorkerSession::default();
         let mut ws = session.load_directory(repo.path())?;
 
-        let page = queries::LogQuery::new(2, wc_str.clone()).get_page(&ws)?;
-        assert_eq!(1, page.rows.len());
-        assert_eq!("", page.rows[0].revision.description.lines[0]);
+        let rev = queries::query_revision(&ws, &wc_str)?;
+        assert_eq!("", rev.header.description.lines[0]);
 
         mutations::describe_revision(
             &mut ws,
@@ -410,9 +409,8 @@ mod mutation {
             },
         )?;
 
-        let page = queries::LogQuery::new(2, wc_str.clone()).get_page(&ws)?;
-        assert_eq!(1, page.rows.len());
-        assert_eq!("wip", page.rows[0].revision.description.lines[0]); // this passes if we recreate the WS from the directory
+        let rev = queries::query_revision(&ws, &wc_str)?;
+        assert_eq!("wip", rev.header.description.lines[0]);
 
         Ok(())
     }
@@ -426,11 +424,8 @@ mod mutation {
         let mut session = WorkerSession::default();
         let mut ws = session.load_directory(repo.path())?;
 
-        let page = queries::LogQuery::new(2, wc_str.clone()).get_page(&ws)?;
-        assert_eq!(1, page.rows.len());
-        assert_eq!("", &page.rows[0].revision.description.lines[0]);
-
-        let rev = queries::query_revision(&ws, &page.rows[0].revision.commit_id.hex)?;
+        let rev = queries::query_revision(&ws, &wc_str)?;
+        assert_eq!("", rev.header.description.lines[0]);
         assert_eq!(0, rev.diff.len());
 
         fs::write(repo.path().join("new.txt"), []).unwrap();
@@ -442,11 +437,8 @@ mod mutation {
             },
         )?;
 
-        let page = queries::LogQuery::new(2, wc_str.clone()).get_page(&ws)?;
-        assert_eq!(1, page.rows.len());
-        assert_eq!("wip", page.rows[0].revision.description.lines[0]);
-
-        let rev = queries::query_revision(&ws, &page.rows[0].revision.commit_id.hex)?;
+        let rev = queries::query_revision(&ws, &wc_str)?;
+        assert_eq!("wip", rev.header.description.lines[0]);
         assert_ne!(0, rev.diff.len());
 
         Ok(())

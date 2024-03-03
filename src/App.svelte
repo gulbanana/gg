@@ -59,8 +59,9 @@
         <Bound query={$queryRevisionCommand} let:data>
             <RevisionPane rev={data} />
             <Pane slot="wait" />
-            <Pane slot="error">
+            <Pane slot="error" let:message>
                 <h2 slot="header">Error</h2>
+                <p slot="body" class="error-text">{message}</p>
             </Pane>
         </Bound>
 

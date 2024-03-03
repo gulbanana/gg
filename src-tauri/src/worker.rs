@@ -11,6 +11,8 @@ use anyhow::{anyhow, Context, Result};
 use crate::gui_util::{WorkerSession, WorkspaceSession};
 use crate::messages;
 
+use self::queries::LogQueryState;
+
 pub mod mutations;
 pub mod queries;
 
@@ -94,40 +96,95 @@ impl Session for WorkspaceSession<'_> {
     type Transition = WorkspaceResult;
 
     fn handle_events(mut self, rx: &Receiver<SessionEvent>) -> Result<WorkspaceResult> {
-        let mut current_query: Option<queries::LogQuery> = None;
+        let mut unhandled_event: Option<SessionEvent> = None;
+        let mut unpaged_query: Option<LogQueryState> = None;
 
         loop {
-            match rx.recv() {
-                Ok(SessionEvent::EndSession) => return Ok(WorkspaceResult::SessionComplete),
-                Ok(SessionEvent::OpenWorkspace { tx, cwd }) => {
+            let next_event = if unhandled_event.is_some() {
+                unhandled_event.take().unwrap()
+            } else {
+                rx.recv()?
+            };
+
+            match next_event {
+                SessionEvent::EndSession => return Ok(WorkspaceResult::SessionComplete),
+                SessionEvent::OpenWorkspace { tx, cwd } => {
                     return Ok(WorkspaceResult::Reopen(tx, cwd));
                 }
-                Ok(SessionEvent::QueryLog {
+                SessionEvent::QueryLog {
                     tx,
                     query: revset_string,
-                }) => {
-                    let query = current_query.insert(queries::LogQuery::new(
-                        self.session.log_page_size,
-                        revset_string.clone(),
-                    ));
-                    let page = query.get_page(&self)?;
+                } => {
+                    self.session.latest_query = Some(revset_string.clone());
+
+                    let revset = self
+                        .evaluate_revset_str(&revset_string)
+                        .context("evaluate revset")?;
+
+                    let mut query = queries::LogQuery::new(
+                        &self,
+                        &*revset,
+                        LogQueryState::new(self.session.log_page_size),
+                    )?;
+
+                    let page = query.get_page()?;
+
                     tx.send(Ok(page))?;
 
-                    self.session.latest_query = Some(revset_string);
+                    let QueryResult(next_event, next_query) =
+                        query.handle_events(rx).context("LogQuery")?;
+                    unhandled_event = Some(next_event);
+                    unpaged_query = Some(next_query);
                 }
-                Ok(SessionEvent::QueryLogNextPage { tx }) => match current_query {
-                    None => tx.send(Err(anyhow!("No log query is in progress")))?,
-                    Some(ref mut query) => {
-                        let page = query.get_page(&self)?;
-                        tx.send(Ok(page))?;
-                    }
-                },
-                Ok(SessionEvent::QueryRevision { tx, change_id }) => {
+                SessionEvent::QueryLogNextPage { tx } => {
+                    let revset_string = self
+                        .session
+                        .latest_query
+                        .as_ref()
+                        .ok_or_else(|| anyhow!("NextPage called without query in progress"))?;
+
+                    let state = unpaged_query
+                        .take()
+                        .ok_or_else(|| anyhow!("NextPage called without query in progress"))?;
+
+                    let revset = self
+                        .evaluate_revset_str(&revset_string)
+                        .context("evaluate revset")?;
+
+                    let mut query = queries::LogQuery::new(&self, &*revset, state)?;
+
+                    let page = query.get_page();
+                    tx.send(page)?;
+
+                    let QueryResult(next_event, next_query) =
+                        query.handle_events(rx).context("LogQuery")?;
+                    unhandled_event = Some(next_event);
+                    unpaged_query = Some(next_query);
+                }
+                SessionEvent::QueryRevision { tx, change_id } => {
                     tx.send(queries::query_revision(&self, &change_id))?
                 }
-                Ok(SessionEvent::DescribeRevision { tx, mutation }) => {
+                SessionEvent::DescribeRevision { tx, mutation } => {
                     tx.send(mutations::describe_revision(&mut self, mutation)?)?
                 }
+            };
+        }
+    }
+}
+
+pub struct QueryResult(SessionEvent, LogQueryState);
+
+impl Session for queries::LogQuery<'_, '_> {
+    type Transition = QueryResult;
+
+    fn handle_events(mut self, rx: &Receiver<SessionEvent>) -> Result<Self::Transition> {
+        loop {
+            match rx.recv() {
+                Ok(SessionEvent::QueryLogNextPage { tx }) => {
+                    let page = self.get_page();
+                    tx.send(page)?;
+                }
+                Ok(unhandled) => return Ok(QueryResult(unhandled, self.state)),
                 Err(err) => return Err(anyhow!(err)),
             };
         }

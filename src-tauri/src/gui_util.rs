@@ -42,7 +42,7 @@ pub struct WorkerSession {
 impl Default for WorkerSession {
     fn default() -> Self {
         WorkerSession {
-            log_page_size: 1000,
+            log_page_size: 1000, // XXX make configurable?
             latest_query: None
         }
     }    
