@@ -33,6 +33,7 @@
         load_change($revisionSelectEvent.change_id);
 
     async function load_repo(config: RepoConfig) {
+        $revisionSelectEvent = undefined;
         queryRevisionCommand.reset();
         if (config.type == "Workspace") {
             $repoStatusEvent = config.status;
