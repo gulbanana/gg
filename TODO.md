@@ -14,6 +14,8 @@ dnd rebase
     - drag extra parents in to merge
 dnd move
     - drag files onto commits
+dnd branching
+    - drag tags onto commits - probably no -B required!
 universal macos builds in CI
 snapshot/op-head-merge on focus
 investigate interaction with other repo mutators
@@ -21,6 +23,7 @@ draw file conflict markers
 
 possibly not mvp
 ----------------
+bug: failed command during long load never dismisses mutation-wait overlay
 more settings (force dark theme on/off)
 optimise revdetail loads - we already have the header
 missing graph nodes

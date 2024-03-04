@@ -13,6 +13,10 @@
     }
 
     function onEdit() {
+        if (rev.is_immutable || rev.is_working_copy) {
+            return;
+        }
+
         mutate<CheckoutRevision>("checkout_revision", {
             change_id: rev.change_id,
         });
