@@ -47,7 +47,6 @@ pub struct WorkspaceSession<'a> {
     pub settings: UserSettings,
     workspace: Workspace,
     aliases_map: RevsetAliasesMap,    
-    prefix_context: IdPrefixContext,
 
     // operation-specific data, containing a repo view and derived extras
     operation: SessionOperation,
@@ -59,6 +58,7 @@ pub struct SessionOperation {
     pub repo: Arc<ReadonlyRepo>,
     pub wc_id: CommitId,
     branches_index: OnceCell<Rc<RefNamesIndex>>,
+    prefix_context: OnceCell<Rc<IdPrefixContext>>
 }
 
 impl WorkerSession {
@@ -79,8 +79,6 @@ impl WorkerSession {
 
         let aliases_map = build_aliases_map(&configs)?;
 
-        let prefix_context = build_prefix_context(&settings, &workspace, &aliases_map)?;
-
         let operation = WorkspaceSession::load_at_head(&settings, &workspace)?;
 
         let colocated = is_colocated_git_workspace(&workspace, &operation.repo);
@@ -90,7 +88,6 @@ impl WorkerSession {
             settings,
             workspace,
             aliases_map,
-            prefix_context,
             operation,
             colocated
         })
@@ -176,11 +173,20 @@ impl WorkspaceSession<'_> {
         build_parse_context(&self.settings, &self.workspace, &self.aliases_map)
     }
 
+    fn prefix_context(&self) -> &Rc<IdPrefixContext> {
+        self.operation.prefix_context.get_or_init(|| Rc::new(build_prefix_context(&self.settings, &self.workspace, &self.aliases_map).expect("init prefix context")))
+    }
+    
+    pub fn branches_index(&self) -> &Rc<RefNamesIndex> {
+        self.operation.branches_index
+            .get_or_init(|| Rc::new(build_branches_index(self.operation.repo.as_ref())))
+    }
+
     fn resolver(&self) -> DefaultSymbolResolver {
         let commit_id_resolver: revset::PrefixResolver<CommitId> =
-            Box::new(|repo, prefix| self.prefix_context.resolve_commit_prefix(repo, prefix));
+            Box::new(|repo, prefix| self.prefix_context().resolve_commit_prefix(repo, prefix));
         let change_id_resolver: revset::PrefixResolver<Vec<CommitId>> =
-            Box::new(|repo, prefix| self.prefix_context.resolve_change_prefix(repo, prefix));
+            Box::new(|repo, prefix| self.prefix_context().resolve_change_prefix(repo, prefix));
         DefaultSymbolResolver::new(self.operation.repo.as_ref())
             .with_commit_id_resolver(commit_id_resolver)
             .with_change_id_resolver(change_id_resolver)
@@ -223,7 +229,7 @@ impl WorkspaceSession<'_> {
 
     pub fn format_commit_id(&self, id: &CommitId) -> messages::RevId {
         let prefix_len = self
-            .prefix_context
+            .prefix_context()
             .shortest_commit_prefix_len(self.operation.repo.as_ref(), id);
 
         let hex = id.hex();
@@ -234,7 +240,7 @@ impl WorkspaceSession<'_> {
 
     fn format_change_id(&self, id: &ChangeId) -> messages::RevId {
         let prefix_len = self
-            .prefix_context
+            .prefix_context()
             .shortest_change_prefix_len(self.operation.repo.as_ref(), id);
 
         let hex = to_reverse_hex(&id.hex()).expect("format change id as reverse hex");
@@ -244,7 +250,7 @@ impl WorkspaceSession<'_> {
     }
 
     pub fn format_header(&self, commit: &Commit) -> Result<messages::RevHeader> {
-        let index = self.operation.branches_index();
+        let index = self.branches_index();
         let branches = index.get(commit.id()).iter().cloned().collect();
 
         Ok(messages::RevHeader {
@@ -329,8 +335,6 @@ impl WorkspaceSession<'_> {
             self.update_working_copy(maybe_old_wc_commit.as_ref(), new_commit)?;
         }
 
-        self.prefix_context = build_prefix_context(&self.settings, &self.workspace, &self.aliases_map)?;
-
         Ok(Some(self.format_status()))
     }
 
@@ -381,8 +385,6 @@ impl WorkspaceSession<'_> {
                 ));
             }
         };
-
-        // originally there was an unconditional reload here, which doesn't seem necessary
         
         let new_tree_id = locked_ws.locked_wc().snapshot(SnapshotOptions {
             base_ignores,
@@ -405,7 +407,7 @@ impl WorkspaceSession<'_> {
             if self.colocated {
                 git::export_refs(mut_repo)?;
             }
-
+    
             self.operation = SessionOperation::new(tx.commit("snapshot working copy"), &workspace_id);
         }
         
@@ -422,13 +424,11 @@ impl WorkspaceSession<'_> {
         let old_tree_id = maybe_old_commit.map(|commit| commit.tree_id().clone());
 
         Ok(if Some(new_commit.tree_id()) != old_tree_id.as_ref() {
-            let stats = self.workspace.check_out(
+            Some(self.workspace.check_out(
                 self.operation.repo.op_id().clone(),
                 old_tree_id.as_ref(),
                 new_commit,
-            )?;
-            self.operation.update(new_commit.id());
-            Some(stats)
+            )?)
         } else {
             let locked_ws = self.workspace.start_working_copy_mutation()?;
             locked_ws.finish(self.operation.repo.op_id().clone())?;
@@ -484,21 +484,26 @@ impl WorkspaceSession<'_> {
         let new_git_head = tx.mut_repo().view().git_head().clone();
         if let Some(new_git_head_id) = new_git_head.as_normal() {
             let workspace_id = self.workspace.workspace_id().to_owned();
+            
             if let Some(old_wc_commit_id) = self.operation.repo.view().get_wc_commit_id(&workspace_id) {
                 tx.mut_repo()
                     .record_abandoned_commit(old_wc_commit_id.clone());
             }
+
             let new_git_head_commit = tx.mut_repo().store().get_commit(new_git_head_id)?;
             tx.mut_repo()
                 .check_out(workspace_id.clone(), &self.settings, &new_git_head_commit)?;
+
             let mut locked_ws = self.workspace.start_working_copy_mutation()?;
 
             locked_ws.locked_wc().reset(&new_git_head_commit)?;
             tx.mut_repo().rebase_descendants(&self.settings)?;
+
             self.operation = SessionOperation::new(tx.commit("import git head"), &workspace_id);
+            
             locked_ws.finish(self.operation.repo.op_id().clone())?;
         } else {
-            self.finish_transaction( tx, "import git head")?;
+            self.finish_transaction(tx, "import git head")?;
         }
         Ok(())
     }
@@ -532,46 +537,9 @@ impl SessionOperation {
         SessionOperation {
             repo, 
             wc_id,
-            branches_index: OnceCell::default()
+            branches_index: OnceCell::default(),
+            prefix_context: OnceCell::default()
         }
-    }
-
-    pub fn update(&mut self, id: &CommitId) {
-        self.wc_id = id.clone();
-    }
-
-    pub fn branches_index(&self) -> &Rc<RefNamesIndex> {
-        self.branches_index
-            .get_or_init(|| Rc::new(self.build_branches_index()))
-    }
-
-    fn build_branches_index(&self) -> RefNamesIndex {
-        let mut index = RefNamesIndex::default();
-        for (branch_name, branch_target) in self.repo.view().branches() {
-            let local_target = branch_target.local_target;
-            let remote_refs = branch_target.remote_refs;
-            if local_target.is_present() {
-                let ref_name = messages::RefName {
-                    name: branch_name.to_owned(),
-                    remote: None,
-                    has_conflict: local_target.has_conflict(),
-                    is_synced: remote_refs.iter().all(|&(_, remote_ref)| {
-                        !remote_ref.is_tracking() || remote_ref.target == *local_target
-                    }),
-                };
-                index.insert(local_target.added_ids(), ref_name);
-            }
-            for &(remote_name, remote_ref) in &remote_refs {
-                let ref_name = messages::RefName {
-                    name: branch_name.to_owned(),
-                    remote: Some(remote_name.to_owned()),
-                    has_conflict: remote_ref.target.has_conflict(),
-                    is_synced: remote_ref.is_tracking() && remote_ref.target == *local_target,
-                };
-                index.insert(remote_ref.target.added_ids(), ref_name);
-            }
-        }
-        index
     }
 
     fn git_backend(&self) -> Option<&GitBackend> {
@@ -640,6 +608,35 @@ fn build_prefix_context(settings: &UserSettings, workspace: &Workspace, aliases_
     };
 
     Ok(prefix_context)
+}
+
+fn build_branches_index(repo: &ReadonlyRepo) -> RefNamesIndex {
+    let mut index = RefNamesIndex::default();
+    for (branch_name, branch_target) in repo.view().branches() {
+        let local_target = branch_target.local_target;
+        let remote_refs = branch_target.remote_refs;
+        if local_target.is_present() {
+            let ref_name = messages::RefName {
+                name: branch_name.to_owned(),
+                remote: None,
+                has_conflict: local_target.has_conflict(),
+                is_synced: remote_refs.iter().all(|&(_, remote_ref)| {
+                    !remote_ref.is_tracking() || remote_ref.target == *local_target
+                }),
+            };
+            index.insert(local_target.added_ids(), ref_name);
+        }
+        for &(remote_name, remote_ref) in &remote_refs {
+            let ref_name = messages::RefName {
+                name: branch_name.to_owned(),
+                remote: Some(remote_name.to_owned()),
+                has_conflict: remote_ref.target.has_conflict(),
+                is_synced: remote_ref.is_tracking() && remote_ref.target == *local_target,
+            };
+            index.insert(remote_ref.target.added_ids(), ref_name);
+        }
+    }
+    index
 }
 
 fn parse_revset(
