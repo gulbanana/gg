@@ -50,6 +50,7 @@
         <textarea
             class="desc"
             spellcheck="false"
+            disabled={rev.header.is_immutable}
             bind:value={fullDescription}
         />
 
@@ -61,7 +62,7 @@
                 ).toLocaleTimeString()}</span
             >
             <span></span>
-            <Action onClick={onDescribe}>
+            <Action onClick={onDescribe} disabled={rev.header.is_immutable}>
                 <Icon name="file-text" /> Describe
             </Action>
         </div>

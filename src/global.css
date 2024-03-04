@@ -110,6 +110,10 @@ input {
   background-color: var(--ctp-base);
   color: var(--ctp-text);
   scrollbar-color: var(--ctp-text) var(--ctp-base);
+
+  &:disabled {
+    background-color: transparent;
+  }
 }
 
 h1,

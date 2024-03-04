@@ -36,7 +36,7 @@ impl Mutation for CheckoutRevision {
 
             match ws.finish_transaction(tx, format!("edit commit {}", edited_commit.id().hex()))? {
                 Some(new_status) => {
-                    let new_selection = ws.format_header(&edited_commit, false)?;
+                    let new_selection = ws.format_header(&edited_commit, None)?;
                     Ok(MutationResult::UpdatedSelection {
                         new_status,
                         new_selection,
@@ -76,7 +76,7 @@ impl Mutation for CreateRevision {
 
         match ws.finish_transaction(tx, "new empty commit")? {
             Some(new_status) => {
-                let new_selection = ws.format_header(&new_commit, false)?;
+                let new_selection = ws.format_header(&new_commit, None)?;
                 Ok(MutationResult::UpdatedSelection {
                     new_status,
                     new_selection,

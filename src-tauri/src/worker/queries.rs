@@ -12,7 +12,10 @@ use jj_lib::{
 };
 use pollster::FutureExt;
 
-use crate::messages::{DiffPath, LogCoordinates, LogLine, LogPage, LogRow, RevDetail, RevHeader};
+use crate::{
+    messages::{DiffPath, LogCoordinates, LogLine, LogPage, LogRow, RevDetail, RevHeader},
+    settings::GGSettings,
+};
 
 use super::WorkspaceSession;
 
@@ -125,9 +128,17 @@ impl<'a, 'b> LogQuery<'a, 'b> {
                 }
             }
 
+            let known_immutable = if stem_known_immutable {
+                Some(true)
+            } else if !self.ws.settings.check_immutable() {
+                Some(false)
+            } else {
+                None
+            };
+
             let header = self
                 .ws
-                .format_header(&self.ws.get_commit(&commit_id)?, stem_known_immutable)?;
+                .format_header(&self.ws.get_commit(&commit_id)?, known_immutable)?;
 
             // remove empty stems on the right edge
             let empty_stems = self
@@ -228,12 +239,21 @@ pub fn query_revision(ws: &WorkspaceSession, rev_str: &str) -> Result<RevDetail>
     }
     .block_on();
 
-    let header = ws.format_header(&commit, false)?;
+    let header = ws.format_header(&commit, None)?;
 
     let parents: Result<Vec<RevHeader>> = commit
         .parents()
         .iter()
-        .map(|p| ws.format_header(p, header.is_immutable))
+        .map(|p| {
+            ws.format_header(
+                p,
+                if header.is_immutable {
+                    Some(true)
+                } else {
+                    None
+                },
+            )
+        })
         .collect();
     let parents = parents?;
 

@@ -32,7 +32,6 @@ use jj_lib::{
 };
 
 use crate::messages;
-use crate::settings::GGSettings;
 
 /// state that doesn't depend on jj-lib borrowings
 pub struct WorkerSession {
@@ -275,9 +274,13 @@ impl WorkspaceSession<'_> {
         messages::RevId { hex, prefix, rest }
     }
 
-    pub fn format_header(&self, commit: &Commit, known_immutable: bool) -> Result<messages::RevHeader> {
+    pub fn format_header(&self, commit: &Commit, known_immutable: Option<bool>) -> Result<messages::RevHeader> {
         let index = self.branches_index();
         let branches = index.get(commit.id()).iter().cloned().collect();
+
+        let is_immutable = known_immutable
+            .map(|x| Result::Ok(x))
+            .unwrap_or_else(|| self.check_immutable(commit.id().clone()))?;
 
         Ok(messages::RevHeader {
             change_id: self.format_change_id(commit.change_id()),
@@ -286,7 +289,7 @@ impl WorkspaceSession<'_> {
             author: commit.author().into(),
             has_conflict: commit.has_conflict()?,
             is_working_copy: *commit.id() == self.operation.wc_id,
-            is_immutable: known_immutable || self.check_immutable(commit.id().clone())?,
+            is_immutable,
             branches,
         })
     }
@@ -297,10 +300,6 @@ impl WorkspaceSession<'_> {
     }
 
     pub fn check_immutable(&self, id: CommitId) -> Result<bool> {
-        if !self.settings.check_immutable() {
-            return Ok(false);
-        }
-
         let check_revset = RevsetExpression::commit(id);
         // or: 
         // commits: impl IntoIterator<Item = &'a Commit
