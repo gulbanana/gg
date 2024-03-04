@@ -80,7 +80,18 @@ export function event<T>(name: string): EventStore<T> {
     return new EventStore(name);
 }
 
-function delay<T>(ms: number): Promise<Query<T>> {
+export async function call<T>(name: string, request?: InvokeArgs): Promise<Query<T>> {
+    // set a wait state then the data state, unless the data comes in hella fast
+    try {
+        let result = await invoke<T>(name, request);
+        return { type: "data", value: result };
+    } catch (error: any) {
+        console.log(error);
+        return { type: "error", message: error.toString() };
+    }
+}
+
+export function delay<T>(ms: number): Promise<Query<T>> {
     return new Promise(function (resolve) {
         setTimeout(() => resolve({ type: "wait" }), ms);
     });

@@ -60,6 +60,7 @@ fn main() -> Result<()> {
             notify_window_ready,
             forward_accelerator,
             query_log,
+            query_log_more,
             get_revision
         ])
         .menu(|handle| {
@@ -87,7 +88,7 @@ fn main() -> Result<()> {
             let window = app.get_webview_window("main").unwrap();
             let (sender, receiver) = channel();
             let window_worker = thread::spawn(move || {
-                if let Err(err) = worker::without_workspace(receiver) {
+                if let Err(err) = worker::state_main(receiver) {
                     panic!("{:?}", err);
                 }
             });
@@ -142,6 +143,23 @@ fn query_log(
             tx: call_tx,
             revset,
         })
+        .map_err(InvokeError::from_error)?;
+    call_rx
+        .recv()
+        .map_err(InvokeError::from_error)?
+        .map_err(InvokeError::from_anyhow)
+}
+
+#[tauri::command(async)]
+fn query_log_more(
+    window: Window,
+    app_state: State<AppState>,
+) -> Result<messages::LogPage, InvokeError> {
+    let session_tx: Sender<SessionEvent> = app_state.get_sender(&window);
+    let (call_tx, call_rx) = channel();
+
+    session_tx
+        .send(SessionEvent::QueryLogMore { tx: call_tx })
         .map_err(InvokeError::from_error)?;
     call_rx
         .recv()

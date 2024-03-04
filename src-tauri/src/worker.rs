@@ -1,6 +1,8 @@
 //! Worker per window, owning repo data (jj-lib is not thread-safe)
+//! The worker is organised as a matryoshka doll of state machines, each owning more session data than the one in which it is contained
 
 use std::{
+    iter::Peekable,
     path::PathBuf,
     sync::mpsc::{Receiver, Sender},
 };
@@ -12,7 +14,8 @@ use jj_lib::{
     file_util,
     matchers::EverythingMatcher,
     repo::Repo,
-    revset_graph::{RevsetGraphEdgeType, TopoGroupedRevsetGraphIterator},
+    revset::Revset,
+    revset_graph::{RevsetGraphEdge, RevsetGraphEdgeType, TopoGroupedRevsetGraphIterator},
     rewrite::merge_commit_trees,
 };
 use pollster::FutureExt;
@@ -32,25 +35,53 @@ pub enum SessionEvent {
         tx: Sender<Result<messages::LogPage>>,
         revset: String,
     },
+    QueryLogMore {
+        tx: Sender<Result<messages::LogPage>>,
+    },
     GetRevision {
         tx: Sender<Result<messages::RevDetail>>,
         rev: String,
     },
 }
 
-pub fn without_workspace(rx: Receiver<SessionEvent>) -> Result<()> {
+pub fn state_main(rx: Receiver<SessionEvent>) -> Result<()> {
     loop {
         match rx.recv() {
-            Ok(SessionEvent::OpenWorkspace { mut tx, mut cwd }) => loop {
-                if let Some((new_tx, new_cwd)) = with_workspace(
-                    &cwd.unwrap_or_else(|| std::env::current_dir().unwrap()),
-                    &rx,
-                    tx,
-                )? {
-                    (tx, cwd) = (new_tx, new_cwd); // open succeeded and a new open was subsequently requested
-                } else {
-                    break; // open failed, wait for another attempt
-                }
+            Ok(SessionEvent::OpenWorkspace {
+                mut tx,
+                cwd: mut wd,
+            }) => loop {
+                let cwd = &wd
+                    .clone()
+                    .unwrap_or_else(|| std::env::current_dir().unwrap());
+
+                let session = match WorkspaceSession::from_cwd(cwd) {
+                    Ok(session) => session,
+                    Err(err) => {
+                        tx.send(Ok(messages::RepoConfig::NoWorkspace {
+                            absolute_path: cwd.into(),
+                            error: format!("{err}"),
+                        }))?;
+                        continue;
+                    }
+                };
+
+                let op = match SessionOperation::from_head(&session) {
+                    Ok(op) => op,
+                    Err(err) => {
+                        tx.send(Ok(messages::RepoConfig::NoOperation {
+                            absolute_path: cwd.into(),
+                            error: format!("{err}"),
+                        }))?;
+                        continue;
+                    }
+                };
+
+                let eval = SessionEvaluator::from_operation(&op);
+
+                tx.send(Ok(op.format_config()))?;
+
+                (tx, wd) = state_workspace(&rx, &session, &op, &eval)?;
             },
             Ok(_) => {
                 return Err(anyhow::anyhow!(
@@ -62,50 +93,46 @@ pub fn without_workspace(rx: Receiver<SessionEvent>) -> Result<()> {
     }
 }
 
-fn with_workspace(
-    cwd: &PathBuf,
+type WorkspaceResult = (Sender<Result<messages::RepoConfig>>, Option<PathBuf>);
+
+fn state_workspace(
     rx: &Receiver<SessionEvent>,
-    tx: Sender<Result<messages::RepoConfig>>,
-) -> Result<Option<(Sender<Result<messages::RepoConfig>>, Option<PathBuf>)>> {
-    let session;
-    let op;
-    let eval;
-
-    match WorkspaceSession::from_cwd(cwd) {
-        Ok(ok) => session = ok,
-        Err(err) => {
-            tx.send(Ok(messages::RepoConfig::NoWorkspace {
-                absolute_path: cwd.into(),
-                error: format!("{err}"),
-            }))?;
-            return Ok(None);
-        }
-    };
-
-    match SessionOperation::from_head(&session) {
-        Ok(ok) => op = ok,
-        Err(err) => {
-            tx.send(Ok(messages::RepoConfig::NoOperation {
-                absolute_path: cwd.into(),
-                error: format!("{err}"),
-            }))?;
-            return Ok(None);
-        }
-    };
-
-    eval = SessionEvaluator::from_operation(&op);
-
-    tx.send(Ok(op.format_config()))?;
-
+    session: &WorkspaceSession,
+    op: &SessionOperation,
+    eval: &SessionEvaluator,
+) -> Result<WorkspaceResult> {
     loop {
         match rx.recv() {
             Ok(SessionEvent::OpenWorkspace { tx, cwd }) => {
-                return Ok(Some((tx, cwd)));
+                return Ok((tx, cwd));
             }
             Ok(SessionEvent::QueryLog {
-                tx,
-                revset: rev_set,
-            }) => tx.send(query_log(&op, &eval, &rev_set))?,
+                mut tx,
+                revset: mut revset_string,
+            }) => loop {
+                let revset = eval
+                    .evaluate_revset(&revset_string)
+                    .context("evaluate revset")?;
+                let mut query = LogQuery::new(&*revset);
+                let first_page = query.get(&op)?;
+                let incomplete = first_page.has_more;
+                tx.send(Ok(first_page))?;
+
+                if incomplete {
+                    match state_workspace_query(rx, session, &op, &eval, &mut query)? {
+                        WorkspaceAndQueryResult::Workspace(r) => return Ok(r),
+                        WorkspaceAndQueryResult::Requery(new_tx, new_revset_string) => {
+                            (tx, revset_string) = (new_tx, new_revset_string)
+                        }
+                        WorkspaceAndQueryResult::QueryComplete => break,
+                    };
+                } else {
+                    break;
+                }
+            },
+            Ok(SessionEvent::QueryLogMore { tx: _tx }) => {
+                return Err(anyhow::anyhow!("No log query is in progress"))
+            }
             Ok(SessionEvent::GetRevision { tx, rev: rev_id }) => {
                 tx.send(get_revision(&op, &rev_id))?
             }
@@ -114,133 +141,198 @@ fn with_workspace(
     }
 }
 
-struct GraphStem {
+enum WorkspaceAndQueryResult {
+    Workspace(WorkspaceResult),
+    Requery(Sender<Result<messages::LogPage>>, String),
+    QueryComplete,
+}
+
+fn state_workspace_query(
+    rx: &Receiver<SessionEvent>,
+    _session: &WorkspaceSession,
+    op: &SessionOperation,
+    _eval: &SessionEvaluator,
+    query: &mut LogQuery,
+) -> Result<WorkspaceAndQueryResult> {
+    loop {
+        match rx.recv() {
+            Ok(SessionEvent::OpenWorkspace { tx, cwd }) => {
+                return Ok(WorkspaceAndQueryResult::Workspace((tx, cwd)));
+            }
+            Ok(SessionEvent::QueryLog { tx, revset }) => {
+                return Ok(WorkspaceAndQueryResult::Requery(tx, revset));
+            }
+            Ok(SessionEvent::QueryLogMore { tx }) => {
+                let page = query.get(&op);
+                let mut complete = false;
+                tx.send(page.map(|p| {
+                    if !p.has_more {
+                        complete = true;
+                    }
+                    p
+                }))?;
+                if complete {
+                    return Ok(WorkspaceAndQueryResult::QueryComplete);
+                }
+            }
+            Ok(SessionEvent::GetRevision { tx, rev: rev_id }) => {
+                tx.send(get_revision(&op, &rev_id))?
+            }
+            Err(err) => return Err(anyhow!(err)),
+        };
+    }
+}
+
+const LOG_PAGE_SIZE: usize = 1000; // XXX configurable?
+
+struct LogStem {
     source: messages::LogCoordinates,
     target: CommitId,
     indirect: bool,
     was_inserted: bool,
 }
 
-fn query_log(
-    op: &SessionOperation,
-    eval: &SessionEvaluator,
-    revset_str: &str,
-) -> Result<messages::LogPage> {
-    let revset = eval
-        .evaluate_revset(revset_str)
-        .context("evaluate revset")?;
+struct LogQuery<'a> {
+    /// ongoing vertical lines; nodes will be placed on or around these
+    stems: Vec<Option<LogStem>>,
+    iter: Peekable<
+        TopoGroupedRevsetGraphIterator<
+            Box<dyn Iterator<Item = (CommitId, Vec<RevsetGraphEdge>)> + 'a>,
+        >,
+    >,
+    row: usize,
+}
 
-    // ongoing vertical lines; nodes will be placed on or around these
-    let mut stems: Vec<Option<GraphStem>> = Vec::new();
+impl LogQuery<'_> {
+    fn new(revset: &dyn Revset) -> LogQuery {
+        LogQuery {
+            stems: Vec::new(),
+            iter: TopoGroupedRevsetGraphIterator::new(revset.iter_graph()).peekable(),
+            row: 0,
+        }
+    }
 
-    // output rows to draw
-    let mut rows: Vec<LogRow> = Vec::new();
+    fn get(&mut self, op: &SessionOperation) -> Result<messages::LogPage> {
+        // output rows to draw
+        let mut rows: Vec<LogRow> = Vec::new();
 
-    // XXX investigate paging for perf
-    let iter = TopoGroupedRevsetGraphIterator::new(revset.iter_graph());
-    for (row, (commit_id, commit_edges)) in iter.enumerate() {
-        // output lines to draw for the current row
-        let mut lines: Vec<LogLine> = Vec::new();
+        let mut row = self.row;
+        let max = row + LOG_PAGE_SIZE;
+        while let Some((commit_id, commit_edges)) = self.iter.next() {
+            // output lines to draw for the current row
+            let mut lines: Vec<LogLine> = Vec::new();
 
-        // find an existing stem targeting the current node
-        let mut column = stems.len();
-        let mut padding = 0; // used to offset the commit summary past some edges
+            // find an existing stem targeting the current node
+            let mut column = self.stems.len();
+            let mut padding = 0; // used to offset the commit summary past some edges
 
-        for (slot, stem) in stems.iter().enumerate() {
-            if let Some(GraphStem { target, .. }) = stem {
-                if *target == commit_id {
-                    column = slot;
-                    padding = stems.len() - column - 1;
-                    break;
+            for (slot, stem) in self.stems.iter().enumerate() {
+                if let Some(LogStem { target, .. }) = stem {
+                    if *target == commit_id {
+                        column = slot;
+                        padding = self.stems.len() - column - 1;
+                        break;
+                    }
                 }
             }
-        }
 
-        // terminate any existing stem, removing it from the end or leaving a gap
-        if column < stems.len() {
-            if let Some(terminated_stem) = &stems[column] {
-                lines.push(if terminated_stem.was_inserted {
-                    LogLine::FromNode {
-                        indirect: terminated_stem.indirect,
-                        source: terminated_stem.source,
-                        target: LogCoordinates(column, row),
-                    }
-                } else {
-                    LogLine::ToNode {
-                        indirect: terminated_stem.indirect,
-                        source: terminated_stem.source,
-                        target: LogCoordinates(column, row),
-                    }
-                });
+            // terminate any existing stem, removing it from the end or leaving a gap
+            if column < self.stems.len() {
+                if let Some(terminated_stem) = &self.stems[column] {
+                    lines.push(if terminated_stem.was_inserted {
+                        LogLine::FromNode {
+                            indirect: terminated_stem.indirect,
+                            source: terminated_stem.source,
+                            target: LogCoordinates(column, row),
+                        }
+                    } else {
+                        LogLine::ToNode {
+                            indirect: terminated_stem.indirect,
+                            source: terminated_stem.source,
+                            target: LogCoordinates(column, row),
+                        }
+                    });
+                }
+                self.stems[column] = None;
             }
-            stems[column] = None;
-        }
-        // otherwise, slot into any gaps that might exist
-        else {
-            for (slot, stem) in stems.iter().enumerate() {
-                if stem.is_none() {
-                    column = slot;
-                    padding = stems.len() - slot - 1;
-                    break;
+            // otherwise, slot into any gaps that might exist
+            else {
+                for (slot, stem) in self.stems.iter().enumerate() {
+                    if stem.is_none() {
+                        column = slot;
+                        padding = self.stems.len() - slot - 1;
+                        break;
+                    }
                 }
             }
-        }
 
-        // remove empty stems on the right edge
-        let empty_stems = stems.iter().rev().take_while(|stem| stem.is_none()).count();
-        stems.truncate(stems.len() - empty_stems);
+            // remove empty stems on the right edge
+            let empty_stems = self
+                .stems
+                .iter()
+                .rev()
+                .take_while(|stem| stem.is_none())
+                .count();
+            self.stems.truncate(self.stems.len() - empty_stems);
 
-        // merge edges into existing stems or add new ones to the right
-        'edges: for edge in commit_edges.iter() {
-            if edge.edge_type == RevsetGraphEdgeType::Missing {
-                continue;
-            }
+            // merge edges into existing stems or add new ones to the right
+            'edges: for edge in commit_edges.iter() {
+                if edge.edge_type == RevsetGraphEdgeType::Missing {
+                    continue;
+                }
 
-            for (slot, stem) in stems.iter().enumerate() {
-                if let Some(stem) = stem {
-                    if stem.target == edge.target {
-                        lines.push(LogLine::ToIntersection {
-                            indirect: edge.edge_type == RevsetGraphEdgeType::Indirect,
+                for (slot, stem) in self.stems.iter().enumerate() {
+                    if let Some(stem) = stem {
+                        if stem.target == edge.target {
+                            lines.push(LogLine::ToIntersection {
+                                indirect: edge.edge_type == RevsetGraphEdgeType::Indirect,
+                                source: LogCoordinates(column, row),
+                                target: LogCoordinates(slot, row + 1),
+                            });
+                            continue 'edges;
+                        }
+                    }
+                }
+
+                for stem in self.stems.iter_mut() {
+                    if stem.is_none() {
+                        *stem = Some(LogStem {
                             source: LogCoordinates(column, row),
-                            target: LogCoordinates(slot, row + 1),
+                            target: edge.target.clone(),
+                            indirect: edge.edge_type == RevsetGraphEdgeType::Indirect,
+                            was_inserted: true,
                         });
                         continue 'edges;
                     }
                 }
+
+                self.stems.push(Some(LogStem {
+                    source: LogCoordinates(column, row),
+                    target: edge.target.clone(),
+                    indirect: edge.edge_type == RevsetGraphEdgeType::Indirect,
+                    was_inserted: false,
+                }));
             }
 
-            for stem in stems.iter_mut() {
-                if stem.is_none() {
-                    *stem = Some(GraphStem {
-                        source: LogCoordinates(column, row),
-                        target: edge.target.clone(),
-                        indirect: edge.edge_type == RevsetGraphEdgeType::Indirect,
-                        was_inserted: true,
-                    });
-                    continue 'edges;
-                }
-            }
+            rows.push(LogRow {
+                revision: op.format_header(&op.repo.store().get_commit(&commit_id)?)?,
+                location: LogCoordinates(column, row),
+                padding,
+                lines,
+            });
 
-            stems.push(Some(GraphStem {
-                source: LogCoordinates(column, row),
-                target: edge.target.clone(),
-                indirect: edge.edge_type == RevsetGraphEdgeType::Indirect,
-                was_inserted: false,
-            }));
+            row = row + 1;
+            if row == max {
+                break;
+            }
         }
 
-        rows.push(LogRow {
-            revision: op.format_header(&op.repo.store().get_commit(&commit_id)?)?,
-            location: LogCoordinates(column, row),
-            padding,
-            lines,
-        });
+        self.row = row;
+        Ok(messages::LogPage {
+            rows,
+            has_more: self.iter.peek().is_some(),
+        })
     }
-
-    Ok(messages::LogPage {
-        rows,
-        has_more: false,
-    })
 }
 
 fn get_revision(op: &SessionOperation, id_str: &str) -> Result<messages::RevDetail> {
