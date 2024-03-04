@@ -13,151 +13,154 @@
     const repo_status = event<RepoStatus>("gg://repo/status");
     const change_content = event<RevHeader>("gg://change/select");
 
-    let rows = checkNodes(nodes);
-    
-    interface GraphNode {
+    interface Coordinates {
         row: number;
         column: number;
+    }
+
+    interface GraphRow extends Coordinates {
         skip_columns: number;
-
         id: RevId;
-        ancestors: GraphEdge[];
-
         desc: string;
-        refs: RefName[],
+        refs: RefName[];
         has_conflict: boolean;
         is_working_copy: boolean;
         select: () => void;
     }
 
-    interface GraphEdge {
-        row: number;
-        column: number;
-
-        id: RevId;
-
-        hasElisions: boolean;
+    interface GraphLine {
+        source: Coordinates;
+        target: Coordinates;
+        is_merge: boolean;
+        has_elisions: boolean;
     }
+
+    interface GraphStem {
+        source: Coordinates;
+        target: string;
+        has_elisions: boolean;
+    }
+
+    // resolved primitives to draw
+    let rows = new Array<GraphRow>();
+    let lines = new Array<GraphLine>();
+
+    // ongoing vertical lines
+    let stems: (GraphStem | null)[] = [];
 
     // assign nodes to columnar stems
-    function checkNodes(nodes: LogNode[]): GraphNode[] {
-        let graph: GraphNode[] = [];
+    for (let row = 0; row < nodes.length; row++) {
+        let node = nodes[row];
 
-        let stems: { next: string, prev: string }[] = [];
-
-        for (let ixNode = 0; ixNode < nodes.length; ixNode++) {
-            let node = nodes[ixNode];
-            let key = node.revision.commit_id.prefix;
-
-            console.log(`${node.revision.change_id.prefix}/${node.revision.commit_id.prefix} stems, before: `, stems.map(s => {return { head: s.next }}));
-
-            // determine stems consumed by current node            
-            let nodeStems: number[] = [];
-            for (let ixStem = 0; ixStem < stems.length; ixStem++) {
-                if (stems[ixStem].next == node.revision.commit_id.prefix) {
-                    nodeStems.push(ixStem);
-                }
-            }            
-            let nodeStem = nodeStems.length > 0 ? nodeStems[0] : stems.length;
-
-            // each stem terminating in the current node should be removed *or*, in up to 1 case, replaced by an edge's target (see below)
-            for (let terminatedStem of nodeStems.slice(node.edges.filter(e => e.type != "Missing").length > 0 ? 1 : 0).reverse()) {
-                console.log("terminate " + terminatedStem + "@" + stems[terminatedStem].next);
-                if (terminatedStem == stems.length - 1) {                    
-                    stems.splice(terminatedStem, 1);
-                    console.log(`${node.revision.change_id.prefix}/${node.revision.commit_id.prefix} stems, terminated: `, stems.map(s => {return { head: s.next }}));
-                }
+        // find an existing stem targeting the current node
+        let column = stems.length;
+        let skip_columns = 0;
+        for (let ixStem = 0; ixStem < stems.length; ixStem++) {
+            let stem = stems[ixStem];
+            if (stem != null && stem.target == node.revision.commit_id.prefix) {
+                column = ixStem;
+                skip_columns = stems.length - ixStem - 1;
+                break;
             }
-                        
-            // XXX look back up the graph to update edge coordinates - this requires filtering later when children aren't actually present
-            let children = graph.filter(n2 => n2.ancestors.find(p => p.id.prefix == node.revision.commit_id.prefix));
-            for (let child of children) {                
-                let parent = child.ancestors.find(p => p.id.prefix == node.revision.commit_id.prefix);
-                if (parent) {
-                    parent.row = ixNode;
-                    parent.column = nodeStem;
-                }
-            }
-
-            // create row
-            graph.push({
-                row: ixNode,
-                column: nodeStem,
-                skip_columns: nodeStem >= stems.length ? 0 : stems.length - nodeStem - 1,
-                id: node.revision.change_id,
-                ancestors: node.edges.flatMap<GraphEdge>(e => {
-                    switch (e.type) {
-                        case "Direct":
-                            return [{ row: -1, column: -1, branchEarly: false, id: e, hasElisions: false}];
-                        case "Indirect":
-                            return [{ row: -1, column: -1, branchEarly: false, id: e, hasElisions: true}];
-                        case "Missing":
-                            return [];
-                    }
-                }),
-                desc: node.revision.description.lines[0],
-                refs: node.revision.branches.filter(r => !(r.remote != null && r.is_synced && node.revision.branches.find(r2 => r2.remote == null && r2.name == r.name))),
-                is_working_copy: $repo_status?.working_copy?.prefix == node.revision.commit_id.prefix,
-                has_conflict: node.revision.has_conflict,
-                select: () => ($change_content = node.revision),
-            });
-
-            // determine next set of stems by iterating parents
-            for (let ixNode = 0; ixNode < node.edges.length; ixNode++) {
-                let edge = node.edges[ixNode];
-                console.log("stem for edge", edge);
-                if (edge.type != "Missing") {
-                    let edgeAttached = false;
-                    for (let ixStem = 0; ixStem < stems.length; ixStem++) {
-                        if (stems[ixStem].next == node.revision.commit_id.prefix) {
-                            stems[ixStem].prev = stems[ixStem].next;
-                            stems[ixStem].next = edge.prefix; 
-                            edgeAttached = true; // continue current stem
-                            console.log("continue " + edge.prefix);
-                        } else if (stems[ixStem].next == edge.prefix && stems[ixStem].prev == node.revision.commit_id.prefix) {
-                            edgeAttached = true; // continue another stem
-                            console.log("attach " + edge.prefix);
-                        }
-                    }
-
-                    // create a new stem
-                    if (!edgeAttached) {
-                        stems.push({ next: edge.prefix, prev: node.revision.commit_id.prefix });
-                        console.log("push " + edge.prefix);
-                    }
-                }
-            }
-            
-            console.log(`${node.revision.change_id.prefix}/${node.revision.commit_id.prefix} stems, after: `, stems.map(s => {return { head: s.next }}));
         }
 
-        return graph;
-    }
-
-    function checkEdges(edges: GraphEdge[]) {
-        return edges.filter(e => {
-            if (e.row == -1) {
-                console.log("bad edge", e);
-                return false;
-            } else {
-                return true;
+        // terminate any existing stem, removing it from the end or leaving a gap
+        // if there was no such stem, slot into any gaps that might exist
+        if (column != -1) {
+            let terminated_stem = stems[column];
+            if (terminated_stem != null) {
+                lines.push({
+                    source: terminated_stem.source,
+                    target: { row, column },
+                    is_merge: false,
+                    has_elisions: terminated_stem.has_elisions,
+                });
             }
+            stems[column] = null;
+        } else {
+            for (let ixStem = 0; ixStem < stems.length; ixStem++) {
+                let stem = stems[ixStem];
+                if (stem == null) {
+                    column = ixStem;
+                    skip_columns = stems.length - ixStem - 1;
+                    break;
+                }
+            }
+        }
+
+        // remove empty stems on the right edge
+        while (stems[stems.length - 1] === null) {
+            stems.splice(stems.length - 1, 1);
+        }
+
+        // merge edges into existing stems or add new ones to the right
+        for (let edge of node.edges) {
+            if (edge.type != "Missing") {
+                let target = edge.prefix;
+                let ixExistingStem = stems.findIndex(
+                    (s) => s?.target == target,
+                );
+                if (ixExistingStem != -1) {
+                    lines.push({
+                        source: { row, column },
+                        target: { row: row + 1, column: ixExistingStem },
+                        is_merge: true,
+                        has_elisions: edge.type == "Indirect",
+                    });
+                } else {
+                    let inserted_stem: GraphStem | null = {
+                        source: { row, column },
+                        target,
+                        has_elisions: edge.type == "Indirect",
+                    };
+                    for (let ixStem = 0; ixStem < stems.length; ixStem++) {
+                        if (stems[ixStem] === null) {
+                            stems[ixStem] = inserted_stem;
+                            inserted_stem = null;
+                            break;
+                        }
+                    }
+                    if (inserted_stem) {
+                        stems.push(inserted_stem);
+                    }
+                }
+            }
+        }
+
+        // create row
+        rows.push({
+            row,
+            column,
+            skip_columns,
+            id: node.revision.change_id,
+            desc: node.revision.description.lines[0],
+            refs: node.revision.branches.filter(
+                (r) =>
+                    !(
+                        r.remote != null &&
+                        r.is_synced &&
+                        node.revision.branches.find(
+                            (r2) => r2.remote == null && r2.name == r.name,
+                        )
+                    ),
+            ),
+            is_working_copy:
+                $repo_status?.working_copy?.prefix ==
+                node.revision.commit_id.prefix,
+            has_conflict: node.revision.has_conflict,
+            select: () => ($change_content = node.revision),
         });
     }
 </script>
 
-<svg
-class="graph"
-style="width: 100%; height: {rows.length * 30}px;"
->
+<svg class="graph" style="width: 100%; height: {rows.length * 30}px;">
     {#each rows as node}
         <!-- svelte-ignore a11y-click-events-have-key-events -->
         <!-- svelte-ignore a11y-no-static-element-interactions -->
         <g
             class="row"
-            transform="translate({node.column * 18} {node.row *
-                30})"
-                on:click={node.select}
+            transform="translate({node.column * 18} {node.row * 30})"
+            on:click={node.select}
         >
             <rect
                 class="row-backdrop"
@@ -167,13 +170,21 @@ style="width: 100%; height: {rows.length * 30}px;"
                 height="30"
                 width="100%"
             />
-            
+
             <circle cx="9" cy="15" r="6" fill="none" />
             {#if node.is_working_copy}
                 <circle cx="9" cy="15" r="3" />
             {/if}
 
-            <foreignObject class="row-html" x={node.skip_columns * 18 + 18} y="0" height="30" style="width: calc(100% - {(node.column + node.skip_columns) * 18 + 3}px)">
+            <foreignObject
+                class="row-html"
+                x={node.skip_columns * 18 + 18}
+                y="0"
+                height="30"
+                style="width: calc(100% - {(node.column + node.skip_columns) *
+                    18 +
+                    3}px)"
+            >
                 <div class="row-text" class:conflict={node.has_conflict}>
                     <code>
                         <IdSpan type="change" id={node.id} />
@@ -183,21 +194,28 @@ style="width: 100%; height: {rows.length * 30}px;"
                     </span>
                     {#each node.refs as ref}
                         <code class="tag" class:conflict={ref.has_conflict}>
-                            {ref.remote == null ? ref.name : `${ref.name}@${ref.remote}`}
+                            {ref.remote == null
+                                ? ref.name
+                                : `${ref.name}@${ref.remote}`}
                         </code>
                     {/each}
                 </div>
             </foreignObject>
         </g>
     {/each}
-    {#each rows as node}
-        {#each checkEdges(node.ancestors) as parent}
-            <GraphLine has_elisions={parent.hasElisions} c1={node.column} c2={parent.column} r1={node.row} r2={parent.row} />
-        {/each}
+    {#each lines as line}
+        <GraphLine
+            hasElisions={line.has_elisions}
+            isMerge={line.is_merge}
+            c1={line.source.column}
+            c2={line.target.column}
+            r1={line.source.row}
+            r2={line.target.row}
+        />
     {/each}
 </svg>
 
-<style>    
+<style>
     svg {
         stroke: var(--ctp-text);
         fill: var(--ctp-text);
@@ -245,7 +263,7 @@ style="width: 100%; height: {rows.length * 30}px;"
         background: var(--ctp-crust);
     }
 
-    /* both nodes and refs can have this */ 
+    /* both nodes and refs can have this */
     .conflict {
         background: repeating-linear-gradient(
             120deg,
