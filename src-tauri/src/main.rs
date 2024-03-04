@@ -87,7 +87,7 @@ fn main() -> Result<()> {
             let window = app.get_webview_window("main").unwrap();
             let (sender, receiver) = channel();
             let window_worker = thread::spawn(move || {
-                if let Err(err) = worker::main(receiver) {
+                if let Err(err) = worker::without_workspace(receiver) {
                     panic!("{:?}", err);
                 }
             });
@@ -173,7 +173,7 @@ fn try_open_repository(window: Window, cwd: Option<PathBuf>) -> Result<()> {
     let session_tx: Sender<SessionEvent> = app_state.get_sender(&window);
     let (call_tx, call_rx) = channel();
 
-    session_tx.send(SessionEvent::OpenRepository { tx: call_tx, cwd })?;
+    session_tx.send(SessionEvent::OpenWorkspace { tx: call_tx, cwd })?;
     let config = call_rx.recv()??;
 
     window.emit("gg://repo/config", config).unwrap(); // XXX https://github.com/tauri-apps/tauri/pull/8777

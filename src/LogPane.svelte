@@ -20,8 +20,8 @@
             revset: entered_query == "" ? "all()" : entered_query,
         });
 
-        if (log.type == "data" && log.value.nodes.length > 0) {
-            $change_content = log.value.nodes[0].revision;
+        if (log.type == "data" && log.value.rows.length > 0) {
+            $change_content = log.value.rows[0].revision;
         }
     }
 </script>

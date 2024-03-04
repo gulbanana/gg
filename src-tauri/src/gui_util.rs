@@ -174,7 +174,7 @@ impl SessionOperation<'_> {
     }
 
     pub fn format_config(&self) -> messages::RepoConfig {
-        messages::RepoConfig {
+        messages::RepoConfig::Workspace {
             absolute_path: self.session.workspace.workspace_root().into(),
             default_revset: self.session.settings.default_revset(),
             status: self.format_status(),

@@ -22,7 +22,9 @@
 
     async function load_repo(config: RepoConfig) {
         change_content.reset();
-        $repo_status = config.status;
+        if (config.type == "Workspace") {
+            $repo_status = config.status;
+        }
     }
 
     async function load_change(id: RevId) {
@@ -42,25 +44,24 @@
 </script>
 
 <div id="shell">
-    {#if $repo_config}
+    {#if $repo_config?.type == "Workspace"}
         {#key $repo_config.absolute_path}
             <LogPane query={$repo_config.default_revset} />
         {/key}
+        <Bound query={$change_content} let:data>
+            <RevisionPane rev={data} />
+            <Pane slot="wait" />
+        </Bound>
+    
+        <div id="status-bar">
+            <span>{$repo_config?.absolute_path}</span>
+            <span />
+            <span>{$repo_status?.operation_description}</span>
+            <button><Icon name="rotate-ccw" /> Undo</button>
+        </div>    
     {:else}
-        <Pane />
+        <div>{$repo_config?.error}</div>
     {/if}
-
-    <Bound query={$change_content} let:data>
-        <RevisionPane rev={data} />
-        <Pane slot="wait" />
-    </Bound>
-
-    <div id="status-bar">
-        <span>{$repo_config?.absolute_path}</span>
-        <span />
-        <span>{$repo_status?.operation_description}</span>
-        <button><Icon name="rotate-ccw" /> Undo</button>
-    </div>
 </div>
 
 <style>

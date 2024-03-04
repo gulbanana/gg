@@ -24,7 +24,7 @@ use crate::{
 
 #[derive(Debug)]
 pub enum SessionEvent {
-    OpenRepository {
+    OpenWorkspace {
         tx: Sender<Result<messages::RepoConfig>>,
         cwd: Option<PathBuf>,
     },
@@ -38,24 +38,20 @@ pub enum SessionEvent {
     },
 }
 
-pub fn main(rx: Receiver<SessionEvent>) -> Result<()> {
-    let mut session;
-    let mut op;
-    let mut eval;
-
+pub fn without_workspace(rx: Receiver<SessionEvent>) -> Result<()> {
     loop {
         match rx.recv() {
-            Ok(SessionEvent::OpenRepository { tx, cwd }) => {
-                tx.send({
-                    session = WorkspaceSession::from_cwd(
-                        &cwd.unwrap_or_else(|| std::env::current_dir().unwrap()),
-                    )?;
-                    op = SessionOperation::from_head(&session)?;
-                    eval = SessionEvaluator::from_operation(&op);
-                    Ok(op.format_config())
-                })?;
-                break;
-            }
+            Ok(SessionEvent::OpenWorkspace { mut tx, mut cwd }) => loop {
+                if let Some((new_tx, new_cwd)) = with_workspace(
+                    &cwd.unwrap_or_else(|| std::env::current_dir().unwrap()),
+                    &rx,
+                    tx,
+                )? {
+                    (tx, cwd) = (new_tx, new_cwd); // open succeeded and a new open was subsequently requested
+                } else {
+                    break; // open failed, wait for another attempt
+                }
+            },
             Ok(_) => {
                 return Err(anyhow::anyhow!(
                     "A repo must be loaded before any other operations"
@@ -64,18 +60,48 @@ pub fn main(rx: Receiver<SessionEvent>) -> Result<()> {
             Err(err) => return Err(anyhow!(err)),
         };
     }
+}
+
+fn with_workspace(
+    cwd: &PathBuf,
+    rx: &Receiver<SessionEvent>,
+    tx: Sender<Result<messages::RepoConfig>>,
+) -> Result<Option<(Sender<Result<messages::RepoConfig>>, Option<PathBuf>)>> {
+    let session;
+    let op;
+    let eval;
+
+    match WorkspaceSession::from_cwd(cwd) {
+        Ok(ok) => session = ok,
+        Err(err) => {
+            tx.send(Ok(messages::RepoConfig::NoWorkspace {
+                absolute_path: cwd.into(),
+                error: format!("{err}"),
+            }))?;
+            return Ok(None);
+        }
+    };
+
+    match SessionOperation::from_head(&session) {
+        Ok(ok) => op = ok,
+        Err(err) => {
+            tx.send(Ok(messages::RepoConfig::NoOperation {
+                absolute_path: cwd.into(),
+                error: format!("{err}"),
+            }))?;
+            return Ok(None);
+        }
+    };
+
+    eval = SessionEvaluator::from_operation(&op);
+
+    tx.send(Ok(op.format_config()))?;
 
     loop {
         match rx.recv() {
-            Ok(SessionEvent::OpenRepository { tx, cwd }) => tx.send({
-                drop(eval);
-                session = WorkspaceSession::from_cwd(
-                    &cwd.unwrap_or_else(|| session.workspace.workspace_root().clone()),
-                )?;
-                op = SessionOperation::from_head(&session)?;
-                eval = SessionEvaluator::from_operation(&op);
-                Ok(op.format_config())
-            })?,
+            Ok(SessionEvent::OpenWorkspace { tx, cwd }) => {
+                return Ok(Some((tx, cwd)));
+            }
             Ok(SessionEvent::QueryLog {
                 tx,
                 revset: rev_set,
@@ -107,13 +133,15 @@ fn query_log(
     // ongoing vertical lines; nodes will be placed on or around these
     let mut stems: Vec<Option<GraphStem>> = Vec::new();
 
-    // output drawing primitives
-    let mut lines: Vec<LogLine> = Vec::new();
+    // output rows to draw
     let mut rows: Vec<LogRow> = Vec::new();
 
     // XXX investigate paging for perf
     let iter = TopoGroupedRevsetGraphIterator::new(revset.iter_graph());
     for (row, (commit_id, commit_edges)) in iter.enumerate() {
+        // output lines to draw for the current row
+        let mut lines: Vec<LogLine> = Vec::new();
+
         // find an existing stem targeting the current node
         let mut column = stems.len();
         let mut padding = 0; // used to offset the commit summary past some edges
@@ -202,15 +230,15 @@ fn query_log(
         }
 
         rows.push(LogRow {
+            revision: op.format_header(&op.repo.store().get_commit(&commit_id)?)?,
             location: LogCoordinates(column, row),
             padding,
-            revision: op.format_header(&op.repo.store().get_commit(&commit_id)?)?,
+            lines,
         });
     }
 
     Ok(messages::LogPage {
         rows,
-        lines,
         has_more: false,
     })
 }

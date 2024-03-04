@@ -64,18 +64,18 @@
                 </div>
             </foreignObject>
         </g>
-    {/each}
 
-    {#each page.lines as line}
-        <GraphLine
-            hasElisions={line.indirect}
-            isMerge={line.type == "ToIntersection"}
-            allowEarlyBreak={line.type == "FromNode"}
-            c1={line.source[0]}
-            c2={line.target[0]}
-            r1={line.source[1]}
-            r2={line.target[1]}
-        />
+        {#each row.lines as line}
+            <GraphLine
+                hasElisions={line.indirect}
+                isMerge={line.type == "ToIntersection"}
+                allowEarlyBreak={line.type == "FromNode"}
+                c1={line.source[0]}
+                c2={line.target[0]}
+                r1={line.source[1]}
+                r2={line.target[1]}
+            />
+        {/each}
     {/each}
 </svg>
 

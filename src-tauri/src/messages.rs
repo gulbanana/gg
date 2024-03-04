@@ -42,10 +42,21 @@ impl From<&PathBuf> for DisplayPath {
 
 #[derive(TS, Serialize, Clone)]
 #[ts(export, export_to = "../src/messages/")]
-pub struct RepoConfig {
-    pub absolute_path: DisplayPath,
-    pub default_revset: String,
-    pub status: RepoStatus,
+#[serde(tag = "type")]
+pub enum RepoConfig {
+    Workspace {
+        absolute_path: DisplayPath,
+        default_revset: String,
+        status: RepoStatus,
+    },
+    NoWorkspace {
+        absolute_path: DisplayPath,
+        error: String,
+    },
+    NoOperation {
+        absolute_path: DisplayPath,
+        error: String,
+    },
 }
 
 #[derive(TS, Serialize, Clone)]
@@ -55,9 +66,21 @@ pub struct RepoStatus {
     pub working_copy: RevId,
 }
 
-#[derive(TS, Serialize, Clone, Copy)]
+#[derive(TS, Serialize)]
 #[ts(export, export_to = "../src/messages/")]
-pub struct LogCoordinates(pub usize, pub usize);
+pub struct LogPage {
+    pub rows: Vec<LogRow>,
+    pub has_more: bool,
+}
+
+#[derive(TS, Serialize)]
+#[ts(export, export_to = "../src/messages/")]
+pub struct LogRow {
+    pub revision: RevHeader,
+    pub location: LogCoordinates,
+    pub padding: usize,
+    pub lines: Vec<LogLine>,
+}
 
 #[derive(TS, Serialize)]
 #[ts(export, export_to = "../src/messages/")]
@@ -80,21 +103,9 @@ pub enum LogLine {
     },
 }
 
-#[derive(TS, Serialize)]
+#[derive(TS, Serialize, Clone, Copy)]
 #[ts(export, export_to = "../src/messages/")]
-pub struct LogRow {
-    pub location: LogCoordinates,
-    pub padding: usize,
-    pub revision: RevHeader,
-}
-
-#[derive(TS, Serialize)]
-#[ts(export, export_to = "../src/messages/")]
-pub struct LogPage {
-    pub rows: Vec<LogRow>,
-    pub lines: Vec<LogLine>,
-    pub has_more: bool,
-}
+pub struct LogCoordinates(pub usize, pub usize);
 
 /// A change or commit id with a disambiguated prefix
 #[derive(TS, Serialize, Clone)]

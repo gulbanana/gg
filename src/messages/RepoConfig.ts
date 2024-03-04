@@ -2,4 +2,4 @@
 import type { DisplayPath } from "./DisplayPath";
 import type { RepoStatus } from "./RepoStatus";
 
-export interface RepoConfig { absolute_path: DisplayPath, default_revset: string, status: RepoStatus, }
+export type RepoConfig = { "type": "Workspace", absolute_path: DisplayPath, default_revset: string, status: RepoStatus, } | { "type": "NoWorkspace", absolute_path: DisplayPath, error: string, };
