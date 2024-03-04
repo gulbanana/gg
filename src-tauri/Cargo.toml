@@ -14,6 +14,10 @@ tauri-build = { version = "2.0.0-beta", features = [] }
 tauri = { version = "2.0.0-beta", features = [] }
 tauri-plugin-shell = "2.0.0-beta"
 serde_json = "1.0"
+jj-lib = "0.14.0"
+jj-cli = { version = "0.14.0", default-features = false }
+anyhow = "1.0.79"
+itertools = "0.12.1"
 
 [features]
 # this feature is used for production builds or when `devPath` points to the filesystem

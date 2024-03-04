@@ -1,5 +1,5 @@
 {
-  "productName": "GG - Gui for JJ",
+  "productName": "gg",
   "version": "0.14.1",
   "identifier": "au.gulbanana.gg",
   "build": {
@@ -19,7 +19,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'"
+      "csp": null
     }
   },
   "bundle": {

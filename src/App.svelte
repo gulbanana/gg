@@ -1,9 +1,9 @@
 <script lang="ts">
-  import Greet from './lib/Greet.svelte'
+  import LogView from './lib/LogView.svelte'
 </script>
 
 <div id="shell">
-  <Greet />
+  <LogView />
 </div>
 
 <style>
