@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 /// Utility type used to abstract crlf/<br>/etc
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Clone, Debug)]
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),

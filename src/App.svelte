@@ -149,7 +149,7 @@
 
         display: grid;
         grid-template-columns: 1fr 1fr;
-        grid-template-rows: 1fr 26px;
+        grid-template-rows: 1fr 30px;
         gap: 3px;
 
         background: var(--ctp-overlay0);
@@ -160,7 +160,7 @@
 
     #status-bar {
         grid-column: 1/3;
-        padding: 0 3px;
+        padding: 0 9px;
 
         display: grid;
         grid-template-columns: auto 1fr auto auto;

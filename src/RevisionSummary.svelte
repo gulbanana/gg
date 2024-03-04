@@ -1,6 +1,7 @@
 <script lang="ts">
     import type { RevHeader } from "./messages/RevHeader";
     import type { CheckoutRevision } from "./messages/CheckoutRevision";
+    import type { CreateRevision } from "./messages/CreateRevision";
     import { revisionSelectEvent } from "./stores.js";
     import { mutate } from "./ipc";
     import IdSpan from "./IdSpan.svelte";
@@ -13,13 +14,19 @@
     }
 
     function onEdit() {
-        if (rev.is_immutable || rev.is_working_copy) {
+        if (rev.is_working_copy) {
             return;
         }
 
-        mutate<CheckoutRevision>("checkout_revision", {
-            change_id: rev.change_id,
-        });
+        if (rev.is_immutable) {
+            mutate<CreateRevision>("create_revision", {
+                parent_change_ids: [rev.change_id],
+            });
+        } else {
+            mutate<CheckoutRevision>("checkout_revision", {
+                change_id: rev.change_id,
+            });
+        }
     }
 </script>
 

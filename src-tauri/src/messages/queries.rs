@@ -13,7 +13,7 @@ pub struct RevId {
     pub rest: String,
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Clone, Debug)]
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
@@ -37,7 +37,7 @@ impl From<&Signature> for RevAuthor {
     }
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Clone, Debug)]
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),

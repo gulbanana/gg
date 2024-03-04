@@ -205,7 +205,7 @@ impl<'a, 'b> LogQuery<'a, 'b> {
 
 // XXX this is reloading the header, which the client already has
 pub fn query_revision(ws: &WorkspaceSession, rev_str: &str) -> Result<RevDetail> {
-    let commit = ws.evaluate_revision(rev_str)?;
+    let commit = ws.evaluate_rev_str(rev_str)?;
 
     let parent_tree = merge_commit_trees(ws.repo(), &commit.parents())?;
     let tree = commit.tree()?;

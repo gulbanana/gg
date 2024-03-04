@@ -332,7 +332,7 @@ mod mutation {
 
     use crate::{
         gui_util::WorkerSession,
-        messages::{CheckoutRevision, DescribeRevision, MutationResult},
+        messages::{CheckoutRevision, CreateRevision, DescribeRevision, MutationResult},
         worker::{queries, Mutation},
     };
 
@@ -441,11 +441,69 @@ mod mutation {
             change_id: conflict_chid,
         }
         .execute_unboxed(&mut ws)?;
-        assert!(matches!(result, MutationResult::Updated { .. }));
+        assert!(matches!(result, MutationResult::UpdatedSelection { .. }));
 
         // former WC no longer exists!
         let conflict_rev = queries::query_revision(&ws, &conflict_str)?;
         assert!(conflict_rev.header.is_working_copy);
+
+        Ok(())
+    }
+
+    #[test]
+    fn new_single_parent() -> Result<()> {
+        let repo = mkrepo();
+        let parent_str = String::from("ntukvtlz");
+        let parent_chid = mkchid("ntukvtlz");
+
+        let mut session = WorkerSession::default();
+        let mut ws = session.load_directory(repo.path())?;
+
+        let parent_rev = queries::query_revision(&ws, &parent_str)?;
+        assert!(parent_rev.header.is_working_copy);
+
+        let result = CreateRevision {
+            parent_change_ids: vec![parent_chid],
+        }
+        .execute_unboxed(&mut ws)?;
+
+        match result {
+            MutationResult::UpdatedSelection { new_selection, .. } => {
+                let parent_rev = queries::query_revision(&ws, &parent_str)?;
+                let child_rev = queries::query_revision(&ws, &new_selection.change_id.hex)?;
+                assert!(!parent_rev.header.is_working_copy);
+                assert!(child_rev.header.is_working_copy);
+            }
+            _ => assert!(false, "CreateRevision failed"),
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn new_multi_parent() -> Result<()> {
+        let repo: tempfile::TempDir = mkrepo();
+        let wc_chid = mkchid("ntukvtlz");
+        let conflict_chid = mkchid("nwrnuwyp");
+
+        let mut session = WorkerSession::default();
+        let mut ws = session.load_directory(repo.path())?;
+
+        let parent_rev = queries::query_revision(&ws, &wc_chid.hex)?;
+        assert!(parent_rev.header.is_working_copy);
+
+        let result = CreateRevision {
+            parent_change_ids: vec![wc_chid, conflict_chid],
+        }
+        .execute_unboxed(&mut ws)?;
+
+        match result {
+            MutationResult::UpdatedSelection { new_selection, .. } => {
+                let child_rev = queries::query_revision(&ws, &new_selection.change_id.hex)?;
+                assert_eq!(2, child_rev.parents.len());
+            }
+            _ => assert!(false, "CreateRevision failed"),
+        }
 
         Ok(())
     }

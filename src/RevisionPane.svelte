@@ -1,6 +1,8 @@
 <script lang="ts">
     import type { RevDetail } from "./messages/RevDetail";
     import type { DescribeRevision } from "./messages/DescribeRevision";
+    import type { CheckoutRevision } from "./messages/CheckoutRevision";
+    import type { CreateRevision } from "./messages/CreateRevision";
     import { mutate } from "./ipc";
     import Action from "./Action.svelte";
     import Icon from "./Icon.svelte";
@@ -8,7 +10,6 @@
     import Pane from "./Pane.svelte";
     import PathSpan from "./PathSpan.svelte";
     import RevisionSummary from "./RevisionSummary.svelte";
-
     export let rev: RevDetail;
 
     let fullDescription = rev.header.description.lines.join("\n");
@@ -18,6 +19,18 @@
         mutate<DescribeRevision>("describe_revision", {
             change_id: rev.header.change_id,
             new_description: fullDescription,
+        });
+    }
+
+    function onEdit() {
+        mutate<CheckoutRevision>("checkout_revision", {
+            change_id: rev.header.change_id,
+        });
+    }
+
+    function onNew() {
+        mutate<CreateRevision>("create_revision", {
+            parent_change_ids: [rev.header.change_id],
         });
     }
 </script>
@@ -48,9 +61,9 @@
                 ).toLocaleTimeString()}</span
             >
             <span></span>
-            <Action onClick={onDescribe}
-                ><Icon name="file-text" /> Describe</Action
-            >
+            <Action onClick={onDescribe}>
+                <Icon name="file-text" /> Describe
+            </Action>
         </div>
 
         <main>
@@ -78,6 +91,18 @@
                 </section>
             {/if}
         </main>
+
+        <div class="commands">
+            <Action
+                onClick={onEdit}
+                disabled={rev.header.is_immutable || rev.header.is_working_copy}
+            >
+                <Icon name="edit-2" /> Edit
+            </Action>
+            <Action onClick={onNew}>
+                <Icon name="edit" /> New
+            </Action>
+        </div>
     </div>
 </Pane>
 
@@ -103,11 +128,14 @@
     }
 
     .author {
-        color: var(--ctp-subtext0);
+        height: 30px;
         width: 100%;
         display: grid;
         grid-template-columns: auto auto 1fr auto;
+        align-items: center;
         gap: 6px;
+        padding-right: 3px;
+        color: var(--ctp-subtext0);
     }
 
     main {
@@ -116,13 +144,23 @@
         scrollbar-color: var(--ctp-text) var(--ctp-mantle);
     }
 
+    .commands {
+        height: 30px;
+        padding: 0 3px;
+        display: flex;
+        align-items: center;
+        justify-content: end;
+        gap: 6px;
+    }
+
     section {
         background: var(--ctp-mantle);
         border-radius: 6px;
         padding: 3px;
         display: flex;
         flex-direction: column;
-        margin-top: 9px;
+        margin-top: 3px;
+        margin-bottom: 9px;
     }
 
     .path {

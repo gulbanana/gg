@@ -159,7 +159,7 @@ impl WorkspaceSession<'_> {
         Ok(revset)
     }
 
-    pub fn evaluate_revision(&self, revision_str: &str) -> Result<Commit> {
+    pub fn evaluate_rev_str(&self, revision_str: &str) -> Result<Commit> {
         let revset = self.evaluate_revset_str(revision_str)?;      
         let mut iter = revset.iter().commits(self.operation.repo.store()).fuse();
         match (iter.next(), iter.next()) {

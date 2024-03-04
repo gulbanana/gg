@@ -2,7 +2,7 @@ import { invoke, type InvokeArgs } from "@tauri-apps/api/core";
 import { emit, listen, type UnlistenFn } from "@tauri-apps/api/event"
 import type { Readable, Subscriber, Unsubscriber } from "svelte/store";
 import type { MutationResult } from "./messages/MutationResult";
-import { currentMutation, repoStatusEvent } from "./stores";
+import { currentMutation, repoStatusEvent, revisionSelectEvent } from "./stores";
 
 export type Query<T> = { type: "wait" } | { type: "data", value: T } | { type: "error", message: string };
 
@@ -121,8 +121,11 @@ export function mutate<T>(command: string, mutation: T) {
             currentMutation.set(result);
             let value = await fetch;
             if (value.type != "Failed") {
-                if (value.type == "Updated") {
+                if (value.type == "Updated" || value.type == "UpdatedSelection") {
                     repoStatusEvent.set(value.new_status);
+                    if (value.type == "UpdatedSelection") {
+                        revisionSelectEvent.set(value.new_selection);
+                    }
                 }
                 currentMutation.set(null);
             }

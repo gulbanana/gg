@@ -15,7 +15,7 @@ use std::thread::{self, JoinHandle};
 
 use anyhow::{Context, Result};
 use gui_util::WorkerSession;
-use messages::{CheckoutRevision, DescribeRevision, MutationResult};
+use messages::{CheckoutRevision, CreateRevision, DescribeRevision, MutationResult};
 use tauri::menu::{AboutMetadata, PredefinedMenuItem, HELP_SUBMENU_ID};
 use tauri::{
     ipc::InvokeError,
@@ -69,6 +69,7 @@ fn main() -> Result<()> {
             query_log_next_page,
             query_revision,
             checkout_revision,
+            create_revision,
             describe_revision
         ])
         .menu(build_menu)
@@ -192,6 +193,15 @@ fn checkout_revision(
     window: Window,
     app_state: State<AppState>,
     mutation: CheckoutRevision,
+) -> Result<MutationResult, InvokeError> {
+    try_mutate(window, app_state, mutation)
+}
+
+#[tauri::command(async)]
+fn create_revision(
+    window: Window,
+    app_state: State<AppState>,
+    mutation: CreateRevision,
 ) -> Result<MutationResult, InvokeError> {
     try_mutate(window, app_state, mutation)
 }
