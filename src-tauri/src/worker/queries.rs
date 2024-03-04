@@ -15,7 +15,7 @@ use jj_lib::{
 use pollster::FutureExt;
 
 use crate::{
-    gui_util::SessionOperation,
+    gui_util::{SessionOperation, WorkspaceSession},
     messages::{
         DiffPath, DisplayPath, LogCoordinates, LogLine, LogPage, LogRow, RevDetail, RevHeader,
     },
@@ -173,7 +173,11 @@ impl LogQuery<'_> {
     }
 }
 
-pub fn query_revision(op: &SessionOperation, id_str: &str) -> Result<RevDetail> {
+pub fn query_revision(
+    ws: &WorkspaceSession,
+    op: &SessionOperation,
+    id_str: &str,
+) -> Result<RevDetail> {
     let id = CommitId::try_from_hex(id_str)?;
     let commit = op.repo.store().get_commit(&id)?;
 
@@ -184,7 +188,7 @@ pub fn query_revision(op: &SessionOperation, id_str: &str) -> Result<RevDetail> 
     let mut paths = Vec::new();
     async {
         while let Some((repo_path, diff)) = tree_diff.next().await {
-            let base_path = op.session.workspace.workspace_root();
+            let base_path = ws.workspace.workspace_root();
             let relative_path: DisplayPath =
                 (&relative_path(base_path, &repo_path.to_fs_path(base_path))).into();
             let (before, after) = diff.unwrap();

@@ -91,7 +91,7 @@ impl Session {
                         }
                     };
 
-                    tx.send(Ok(op.format_config(self.latest_query.clone())))?;
+                    tx.send(Ok(op.format_config(&ws, self.latest_query.clone())))?;
 
                     match self
                         .with_workspace(rx, &ws, &op)
@@ -156,10 +156,10 @@ impl Session {
                     return Err(anyhow!("No log query is in progress"))
                 }
                 Ok(SessionEvent::QueryRevision { tx, rev: rev_id }) => {
-                    tx.send(queries::query_revision(&op, &rev_id))?
+                    tx.send(queries::query_revision(session, op, &rev_id))?
                 }
                 Ok(SessionEvent::DescribeRevision { tx, mutation }) => {
-                    tx.send(mutations::describe_revision(mutation))?
+                    tx.send(mutations::describe_revision(session, op, mutation)?)?
                 }
                 Err(err) => return Err(anyhow!(err)),
             };
@@ -168,7 +168,7 @@ impl Session {
 
     fn with_query(
         rx: &Receiver<SessionEvent>,
-        _session: &WorkspaceSession,
+        ws: &WorkspaceSession,
         op: &SessionOperation,
         query: &mut queries::LogQuery,
     ) -> Result<QueryResult> {
@@ -197,10 +197,10 @@ impl Session {
                     }
                 }
                 Ok(SessionEvent::QueryRevision { tx, rev: rev_id }) => {
-                    tx.send(queries::query_revision(&op, &rev_id))?
+                    tx.send(queries::query_revision(ws, &op, &rev_id))?
                 }
                 Ok(SessionEvent::DescribeRevision { tx, mutation }) => {
-                    tx.send(mutations::describe_revision(mutation))?
+                    tx.send(mutations::describe_revision(ws, &op, mutation)?)?
                 }
                 Err(err) => return Err(anyhow!(err)),
             };
