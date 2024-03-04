@@ -1,7 +1,5 @@
 probably mvp
 ------------
-use immutability for action vis
-    - partially done - new/edit buttons only
 contextless commit actions (good initial candidates: reset author, squash)
     - commit menu
     - context menu on a revsummary

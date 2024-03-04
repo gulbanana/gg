@@ -4,6 +4,7 @@
     import type { CheckoutRevision } from "./messages/CheckoutRevision";
     import type { CreateRevision } from "./messages/CreateRevision";
     import { mutate } from "./ipc";
+    import { menuCommitEvent } from "./stores";
     import Action from "./Action.svelte";
     import Icon from "./Icon.svelte";
     import IdSpan from "./IdSpan.svelte";
@@ -14,6 +15,15 @@
 
     let fullDescription = rev.header.description.lines.join("\n");
     let selectedPath = "";
+
+    $: switch ($menuCommitEvent) {
+        case "new":
+            onNew();
+            break;
+        case "edit":
+            onEdit();
+            break;
+    }
 
     function onDescribe() {
         mutate<DescribeRevision>("describe_revision", {

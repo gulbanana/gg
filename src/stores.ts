@@ -8,5 +8,6 @@ import { event, type Query } from "./ipc";
 export const repoConfigEvent = await event<RepoConfig>("gg://repo/config");
 export const repoStatusEvent = await event<RepoStatus>("gg://repo/status");
 export const revisionSelectEvent = await event<RevHeader>("gg://revision/select");
+export const menuCommitEvent = await event<string>("gg://menu/commit");
 
 export const currentMutation = writable<Query<MutationResult> | null>(null);

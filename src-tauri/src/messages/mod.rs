@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 /// Utility type used to abstract crlf/<br>/etc
-#[derive(Serialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
@@ -104,7 +104,7 @@ pub enum DiffPath {
 }
 
 /// Branch or tag name with metadata.
-#[derive(Serialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
