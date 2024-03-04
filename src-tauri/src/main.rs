@@ -13,6 +13,7 @@ use std::sync::Mutex;
 use std::thread::{self, JoinHandle};
 
 use anyhow::{Context, Result};
+use gui_util::WorkerSession;
 use messages::{DescribeRevision, MutationResult};
 use tauri::{
     ipc::InvokeError,
@@ -93,7 +94,10 @@ fn main() -> Result<()> {
             let (sender, receiver) = channel();
             let handle = window.clone();
             let window_worker = thread::spawn(move || {
-                while let Err(err) = Session::default().main(&receiver).context("worker") {
+                while let Err(err) = WorkerSession::default()
+                    .handle_events(&receiver)
+                    .context("worker")
+                {
                     handle
                         .emit(
                             "gg://repo/config",

@@ -1,6 +1,4 @@
-use std::iter::Peekable;
-
-use anyhow::Result;
+use anyhow::{Context, Result};
 use chrono::{DateTime, FixedOffset, Local, LocalResult, TimeZone, Utc};
 use futures_util::StreamExt;
 use jj_lib::{
@@ -8,18 +6,16 @@ use jj_lib::{
     file_util::relative_path,
     matchers::EverythingMatcher,
     repo::Repo,
-    revset::Revset,
-    revset_graph::{RevsetGraphEdge, RevsetGraphEdgeType, TopoGroupedRevsetGraphIterator},
+    revset_graph::{RevsetGraphEdgeType, TopoGroupedRevsetGraphIterator},
     rewrite::merge_commit_trees,
 };
 use pollster::FutureExt;
 
-use crate::{
-    gui_util::SessionOperation,
-    messages::{
-        DiffPath, DisplayPath, LogCoordinates, LogLine, LogPage, LogRow, RevDetail, RevHeader,
-    },
+use crate::messages::{
+    DiffPath, DisplayPath, LogCoordinates, LogLine, LogPage, LogRow, RevDetail, RevHeader,
 };
+
+use super::WorkspaceSession;
 
 const LOG_PAGE_SIZE: usize = 1000; // XXX configurable?
 
@@ -30,33 +26,35 @@ struct LogStem {
     was_inserted: bool,
 }
 
-pub struct LogQuery<'a> {
+pub struct LogQuery {
     /// ongoing vertical lines; nodes will be placed on or around these
     stems: Vec<Option<LogStem>>,
-    iter: Peekable<
-        TopoGroupedRevsetGraphIterator<
-            Box<dyn Iterator<Item = (CommitId, Vec<RevsetGraphEdge>)> + 'a>,
-        >,
-    >,
     row: usize,
+    expression: String,
 }
 
-impl LogQuery<'_> {
-    pub fn new(revset: &dyn Revset) -> LogQuery {
+impl LogQuery {
+    pub fn new(expression: String) -> LogQuery {
         LogQuery {
             stems: Vec::new(),
-            iter: TopoGroupedRevsetGraphIterator::new(revset.iter_graph()).peekable(),
             row: 0,
+            expression,
         }
     }
 
-    pub fn get(&mut self, op: &SessionOperation) -> Result<LogPage> {
-        // output rows to draw
-        let mut rows: Vec<LogRow> = Vec::new();
+    pub fn get_page(&mut self, ws: &WorkspaceSession) -> Result<LogPage> {
+        let revset = ws
+            .evaluate_revset(&self.expression)
+            .context("evaluate revset")?;
 
+        let mut rows: Vec<LogRow> = Vec::new(); // output rows to draw
         let mut row = self.row;
         let max = row + LOG_PAGE_SIZE;
-        while let Some((commit_id, commit_edges)) = self.iter.next() {
+
+        let mut iter = TopoGroupedRevsetGraphIterator::new(revset.iter_graph())
+            .skip(row)
+            .peekable();
+        while let Some((commit_id, commit_edges)) = iter.next() {
             // output lines to draw for the current row
             let mut lines: Vec<LogLine> = Vec::new();
 
@@ -153,7 +151,7 @@ impl LogQuery<'_> {
             }
 
             rows.push(LogRow {
-                revision: op.format_header(&op.repo.store().get_commit(&commit_id)?)?,
+                revision: ws.format_header(&ws.operation.repo.store().get_commit(&commit_id)?)?,
                 location: LogCoordinates(column, row),
                 padding,
                 lines,
@@ -168,23 +166,23 @@ impl LogQuery<'_> {
         self.row = row;
         Ok(LogPage {
             rows,
-            has_more: self.iter.peek().is_some(),
+            has_more: iter.peek().is_some(),
         })
     }
 }
 
-pub fn query_revision(op: &SessionOperation, id_str: &str) -> Result<RevDetail> {
+pub fn query_revision(ws: &WorkspaceSession, id_str: &str) -> Result<RevDetail> {
     let id = CommitId::try_from_hex(id_str)?;
-    let commit = op.repo.store().get_commit(&id)?;
+    let commit = ws.operation.repo.store().get_commit(&id)?;
 
-    let parent_tree = merge_commit_trees(op.repo.as_ref(), &commit.parents())?;
+    let parent_tree = merge_commit_trees(ws.operation.repo.as_ref(), &commit.parents())?;
     let tree = commit.tree()?;
     let mut tree_diff = parent_tree.diff_stream(&tree, &EverythingMatcher);
 
     let mut paths = Vec::new();
     async {
         while let Some((repo_path, diff)) = tree_diff.next().await {
-            let base_path = op.session.workspace.workspace_root();
+            let base_path = ws.workspace.workspace_root();
             let relative_path: DisplayPath =
                 (&relative_path(base_path, &repo_path.to_fs_path(base_path))).into();
             let (before, after) = diff.unwrap();
@@ -203,11 +201,11 @@ pub fn query_revision(op: &SessionOperation, id_str: &str) -> Result<RevDetail> 
     let parents: Result<Vec<RevHeader>> = commit
         .parents()
         .iter()
-        .map(|p| op.format_header(p))
+        .map(|p| ws.format_header(p))
         .collect();
 
     Ok(RevDetail {
-        header: op.format_header(&commit)?,
+        header: ws.format_header(&commit)?,
         author: commit.author().name.clone(),
         email: commit.author().email.clone(),
         timestamp: datetime_from_timestamp(&commit.author().timestamp)

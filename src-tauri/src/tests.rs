@@ -3,6 +3,7 @@ use std::{path::PathBuf, sync::mpsc::channel};
 use anyhow::Result;
 
 use crate::{
+    gui_util::WorkerSession,
     messages::{LogPage, RepoConfig},
     worker::{Session, SessionEvent},
 };
@@ -11,7 +12,7 @@ use crate::{
 fn start_and_stop() -> Result<()> {
     let (tx, rx) = channel::<SessionEvent>();
     tx.send(SessionEvent::EndSession)?;
-    Session::default().main(&rx)?;
+    WorkerSession::default().handle_events(&rx)?;
     Ok(())
 }
 
@@ -31,7 +32,7 @@ fn load_repo() -> Result<()> {
     })?;
     tx.send(SessionEvent::EndSession)?;
 
-    Session::default().main(&rx)?;
+    WorkerSession::default().handle_events(&rx)?;
 
     let config = rx_good_repo.recv()??;
     assert!(matches!(config, RepoConfig::Workspace { .. }));
@@ -58,7 +59,7 @@ fn reload_repo() -> Result<()> {
     })?;
     tx.send(SessionEvent::EndSession)?;
 
-    Session::default().main(&rx)?;
+    WorkerSession::default().handle_events(&rx)?;
 
     let config = rx_first_repo.recv()??;
     assert!(matches!(config, RepoConfig::Workspace { .. }));
@@ -90,7 +91,7 @@ fn reload_with_default_query() -> Result<()> {
     })?;
     tx.send(SessionEvent::EndSession)?;
 
-    Session::default().main(&rx)?;
+    WorkerSession::default().handle_events(&rx)?;
 
     _ = rx_load.recv()??;
     _ = rx_query.recv()??;
@@ -118,7 +119,7 @@ fn evaluate_query() -> Result<()> {
     })?;
     tx.send(SessionEvent::EndSession)?;
 
-    Session::default().main(&rx)?;
+    WorkerSession::default().handle_events(&rx)?;
 
     _ = rx_load.recv()??;
     let page = rx_query.recv()??;

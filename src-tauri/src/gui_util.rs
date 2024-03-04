@@ -1,11 +1,12 @@
 //! Analogous to cli_util from jj-cli
-//! We reuse a bit of jj-cli code, but most of its modules include TUI concerns or are not suitable for a long-running server
+//! We reuse a bit of jj-cli code, but many of its modules include TUI concerns or are not suitable for a long-running server
 
 use std::{cell::OnceCell, collections::HashMap, path::Path, rc::Rc, sync::Arc};
 
 use anyhow::{anyhow, Context, Result};
 use itertools::Itertools;
 use jj_cli::config::{default_config, LayeredConfigs};
+use jj_lib::repo::RepoLoaderError;
 use jj_lib::{
     backend::{ChangeId, CommitId},
     commit::Commit,
@@ -17,7 +18,7 @@ use jj_lib::{
     repo::{ReadonlyRepo, StoreFactories},
     revset::{
         self, DefaultSymbolResolver, Revset, RevsetAliasesMap, RevsetExpression,
-        RevsetParseContext, RevsetResolutionError, RevsetWorkspaceContext, SymbolResolver,
+        RevsetParseContext, RevsetWorkspaceContext,
     },
     settings::{ConfigResultExt, UserSettings},
     workspace::{self, Workspace, WorkspaceLoader},
@@ -25,23 +26,34 @@ use jj_lib::{
 
 use crate::messages;
 
-pub struct WorkspaceSession {
-    settings: UserSettings,
-    aliases_map: RevsetAliasesMap,
-    pub workspace: Workspace,
+/// state that doesn't depend on jj-lib borrowings
+#[derive(Default)]
+pub struct WorkerSession {
+    pub latest_query: Option<String>,
 }
 
-pub struct SessionOperation<'a> {
-    pub session: &'a WorkspaceSession,
+/// jj-dependent state, available when a workspace is open
+pub struct WorkspaceSession<'a> {
+    pub session: &'a mut WorkerSession,
+    // workspace-level data, initialised once
+    pub settings: UserSettings,
+    pub workspace: Workspace,
+    pub aliases_map: RevsetAliasesMap,
+    pub prefix_context: IdPrefixContext,
+    //pub parse_context: RevsetParseContext<'b>,
+    // operation-specific data, containing a repo view and derived extras
+    pub operation: SessionOperation,
+}
+
+/// state specific to an operation which may be swapped out
+pub struct SessionOperation {
     pub repo: Arc<ReadonlyRepo>,
-    parse_context: RevsetParseContext<'a>,
-    prefix_context: IdPrefixContext,
-    working_copy_id: CommitId,
+    pub wc_id: CommitId,
     branches_index: OnceCell<Rc<RefNamesIndex>>,
 }
 
-impl WorkspaceSession {
-    pub fn from_cwd(cwd: &Path) -> Result<WorkspaceSession> {
+impl WorkerSession {
+    pub fn load_directory(&mut self, cwd: &Path) -> Result<WorkspaceSession> {
         let loader = WorkspaceLoader::init(find_workspace_dir(cwd))?;
 
         let mut configs = LayeredConfigs::from_environment(default_config());
@@ -58,89 +70,176 @@ impl WorkspaceSession {
 
         let aliases_map = load_revset_aliases(&configs)?;
 
+        let mut prefix_context: IdPrefixContext = IdPrefixContext::default();
+        let revset_string: String = settings
+            .config()
+            .get_string("revsets.short-prefixes")
+            .unwrap_or_else(|_| settings.default_revset());
+        if !revset_string.is_empty() {
+            let disambiguation_revset: Rc<RevsetExpression> = parse_revset(
+                &parse_context(&settings, &workspace, &aliases_map),
+                &revset_string,
+            )?;
+            prefix_context = prefix_context.disambiguate_within(disambiguation_revset);
+        };
+
+        let operation = WorkspaceSession::load_at_head(&settings, &workspace)?;
+
         Ok(WorkspaceSession {
+            session: self,
             settings,
-            aliases_map,
             workspace,
+            aliases_map,
+            prefix_context,
+            operation,
         })
     }
+}
 
-    fn load_head(&self) -> Result<Operation> {
-        let loader = self.workspace.repo_loader();
+impl WorkspaceSession<'_> {
+    fn load_at_head(settings: &UserSettings, workspace: &Workspace) -> Result<SessionOperation> {
+        let loader = workspace.repo_loader();
 
-        op_heads_store::resolve_op_heads(
+        let op = op_heads_store::resolve_op_heads(
             loader.op_heads_store().as_ref(),
             loader.op_store(),
             |op_heads| {
                 let base_repo = loader.load_at(&op_heads[0])?;
                 // might want to set some tags
-                let mut tx = base_repo.start_transaction(&self.settings);
+                let mut tx = base_repo.start_transaction(settings);
                 for other_op_head in op_heads.into_iter().skip(1) {
                     tx.merge_operation(other_op_head)?;
-                    let _num_rebased = tx.mut_repo().rebase_descendants(&self.settings)?;
+                    let _num_rebased = tx.mut_repo().rebase_descendants(settings)?;
                 }
-                Ok(tx
-                    .write("resolve concurrent operations")
-                    .leave_unpublished()
-                    .operation()
-                    .clone())
+                Ok::<Operation, RepoLoaderError>(
+                    tx.write("resolve concurrent operations")
+                        .leave_unpublished()
+                        .operation()
+                        .clone(),
+                )
             },
-        )
-    }
-}
+        )?;
 
-impl<'ws> SessionOperation<'ws> {
-    pub fn from_head(session: &WorkspaceSession) -> Result<SessionOperation> {
-        let op_head = session.load_head()?;
-
-        let repo: Arc<ReadonlyRepo> = session
-            .workspace
+        let repo: Arc<ReadonlyRepo> = workspace
             .repo_loader()
-            .load_at(&op_head)
+            .load_at(&op)
             .context("load op head")?;
 
-        let parse_context: RevsetParseContext<'_> = {
-            let workspace_context = RevsetWorkspaceContext {
-                cwd: session.workspace.workspace_root(),
-                workspace_id: session.workspace.workspace_id(),
-                workspace_root: session.workspace.workspace_root(),
-            };
-            RevsetParseContext {
-                aliases_map: &session.aliases_map,
-                user_email: session.settings.user_email(),
-                workspace: Some(workspace_context),
-            }
-        };
-
-        let mut prefix_context: IdPrefixContext = IdPrefixContext::default();
-        let revset_string: String = session
-            .settings
-            .config()
-            .get_string("revsets.short-prefixes")
-            .unwrap_or_else(|_| session.settings.default_revset());
-        if !revset_string.is_empty() {
-            let disambiguation_revset: Rc<RevsetExpression> =
-                parse_revset(&parse_context, &revset_string)?;
-            prefix_context = prefix_context.disambiguate_within(disambiguation_revset);
-        };
-
-        let working_copy_id = repo
+        let wc_id = repo
             .view()
-            .get_wc_commit_id(session.workspace.workspace_id())
+            .get_wc_commit_id(workspace.workspace_id())
             .ok_or_else(|| anyhow!("No working copy found for workspace"))?
             .clone();
 
         Ok(SessionOperation {
-            session,
             repo,
-            parse_context,
-            prefix_context,
-            working_copy_id,
-            branches_index: OnceCell::new(),
+            wc_id,
+            branches_index: Default::default(),
         })
     }
 
-    fn branches_index(&self) -> &Rc<RefNamesIndex> {
+    /**********************
+     * Query/mutation API *
+     **********************/
+
+    // XXX creates a parse context and a symbol resolver every time - they need to borrow many things
+    pub fn evaluate_revset<'op>(&'op self, revset_str: &str) -> Result<Box<dyn Revset + 'op>> {
+        let expression = parse_revset(&self.parse_context(), revset_str)?;
+        let resolved_expression =
+            expression.resolve_user_expression(self.operation.repo.as_ref(), &self.resolver())?;
+        let revset = resolved_expression.evaluate(self.operation.repo.as_ref())?;
+
+        Ok(revset)
+    }
+
+    /*************************************************************
+     * Functions for creating temporary per-request derived data *
+     *************************************************************/
+
+    fn parse_context(&self) -> RevsetParseContext {
+        parse_context(&self.settings, &self.workspace, &self.aliases_map)
+    }
+
+    fn resolver(&self) -> DefaultSymbolResolver {
+        let commit_id_resolver: revset::PrefixResolver<CommitId> =
+            Box::new(|repo, prefix| self.prefix_context.resolve_commit_prefix(repo, prefix));
+        let change_id_resolver: revset::PrefixResolver<Vec<CommitId>> =
+            Box::new(|repo, prefix| self.prefix_context.resolve_change_prefix(repo, prefix));
+        DefaultSymbolResolver::new(self.operation.repo.as_ref())
+            .with_commit_id_resolver(commit_id_resolver)
+            .with_change_id_resolver(change_id_resolver)
+    }
+
+    /************************************
+     * IPC-message formatting functions *
+     ************************************/
+
+    pub fn format_config(&self) -> messages::RepoConfig {
+        let default_query = self.settings.default_revset();
+        let latest_query = self
+            .session
+            .latest_query
+            .as_ref()
+            .unwrap_or_else(|| &default_query)
+            .clone();
+
+        messages::RepoConfig::Workspace {
+            absolute_path: self.workspace.workspace_root().into(),
+            status: self.format_status(),
+            default_query,
+            latest_query,
+        }
+    }
+
+    pub fn format_status(&self) -> messages::RepoStatus {
+        messages::RepoStatus {
+            operation_description: self
+                .operation
+                .repo
+                .operation()
+                .store_operation()
+                .metadata
+                .description
+                .clone(),
+            working_copy: self.format_commit_id(&self.operation.wc_id),
+        }
+    }
+
+    pub fn format_commit_id(&self, id: &CommitId) -> messages::RevId {
+        let mut hex = id.hex();
+        let prefix_len = self
+            .prefix_context
+            .shortest_commit_prefix_len(self.operation.repo.as_ref(), id);
+        let rest = hex.split_off(prefix_len);
+        messages::RevId { prefix: hex, rest }
+    }
+
+    fn format_change_id(&self, id: &ChangeId) -> messages::RevId {
+        let mut hex = to_reverse_hex(&id.hex()).expect("format change id as reverse hex");
+        let prefix_len = self
+            .prefix_context
+            .shortest_change_prefix_len(self.operation.repo.as_ref(), id);
+        let rest = hex.split_off(prefix_len);
+        messages::RevId { prefix: hex, rest }
+    }
+
+    pub fn format_header(&self, commit: &Commit) -> Result<messages::RevHeader> {
+        let index = self.operation.branches_index();
+        let branches = index.get(commit.id()).iter().cloned().collect();
+
+        Ok(messages::RevHeader {
+            change_id: self.format_change_id(commit.change_id()),
+            commit_id: self.format_commit_id(commit.id()),
+            description: commit.description().into(),
+            has_conflict: commit.has_conflict()?,
+            is_working_copy: *commit.id() == self.operation.wc_id,
+            branches,
+        })
+    }
+}
+
+impl SessionOperation {
+    pub fn branches_index(&self) -> &Rc<RefNamesIndex> {
         self.branches_index
             .get_or_init(|| Rc::new(self.build_branches_index()))
     }
@@ -173,90 +272,6 @@ impl<'ws> SessionOperation<'ws> {
         }
         index
     }
-
-    fn resolver(&self) -> DefaultSymbolResolver {
-        let commit_id_resolver: revset::PrefixResolver<CommitId> =
-            Box::new(|repo, prefix| self.prefix_context.resolve_commit_prefix(repo, prefix));
-        let change_id_resolver: revset::PrefixResolver<Vec<CommitId>> =
-            Box::new(|repo, prefix| self.prefix_context.resolve_change_prefix(repo, prefix));
-        DefaultSymbolResolver::new(self.repo.as_ref())
-            .with_commit_id_resolver(commit_id_resolver)
-            .with_change_id_resolver(change_id_resolver)
-    }
-
-    pub fn evaluate_revset<'repo>(&'repo self, revset_str: &str) -> Result<Box<dyn Revset + 'repo>>
-    where
-        'ws: 'repo,
-    {
-        let expression = parse_revset(&self.parse_context, revset_str)?;
-        let resolved_expression =
-            expression.resolve_user_expression(self.repo.as_ref(), &self.resolver())?;
-        let revset = resolved_expression.evaluate(self.repo.as_ref())?;
-
-        Ok(revset)
-    }
-
-    pub fn format_config(&self, default_revset: Option<String>) -> messages::RepoConfig {
-        let default_query = self.session.settings.default_revset();
-
-        messages::RepoConfig::Workspace {
-            absolute_path: self.session.workspace.workspace_root().into(),
-            status: self.format_status(),
-            latest_query: default_revset.unwrap_or_else(|| default_query.clone()),
-            default_query,
-        }
-    }
-
-    pub fn format_status(&self) -> messages::RepoStatus {
-        messages::RepoStatus {
-            operation_description: self
-                .repo
-                .operation()
-                .store_operation()
-                .metadata
-                .description
-                .clone(),
-            working_copy: self.format_commit_id(&self.working_copy_id),
-        }
-    }
-
-    pub fn format_header(&self, commit: &Commit) -> Result<messages::RevHeader> {
-        let index = self.branches_index();
-        let branches = index.get(commit.id()).iter().cloned().collect();
-
-        Ok(messages::RevHeader {
-            change_id: self.format_change_id(commit.change_id()),
-            commit_id: self.format_commit_id(commit.id()),
-            description: commit.description().into(),
-            has_conflict: commit.has_conflict()?,
-            is_working_copy: *commit.id() == self.working_copy_id,
-            branches,
-        })
-    }
-
-    pub fn format_commit_id(&self, id: &CommitId) -> messages::RevId {
-        let mut hex = id.hex();
-        let prefix_len = self
-            .prefix_context
-            .shortest_commit_prefix_len(self.repo.as_ref(), id);
-        let rest = hex.split_off(prefix_len);
-        messages::RevId { prefix: hex, rest }
-    }
-
-    fn format_change_id(&self, id: &ChangeId) -> messages::RevId {
-        let mut hex = to_reverse_hex(&id.hex()).expect("format change id as reverse hex");
-        let prefix_len = self
-            .prefix_context
-            .shortest_change_prefix_len(self.repo.as_ref(), id);
-        let rest = hex.split_off(prefix_len);
-        messages::RevId { prefix: hex, rest }
-    }
-}
-
-impl<'a> SymbolResolver for SessionOperation<'a> {
-    fn resolve_symbol(&self, symbol: &str) -> Result<Vec<CommitId>, RevsetResolutionError> {
-        self.resolver().resolve_symbol(symbol)
-    }
 }
 
 fn find_workspace_dir(cwd: &Path) -> &Path {
@@ -284,6 +299,23 @@ fn load_revset_aliases(layered_configs: &LayeredConfigs) -> Result<RevsetAliases
         }
     }
     Ok(aliases_map)
+}
+
+fn parse_context<'a>(
+    settings: &UserSettings,
+    workspace: &'a Workspace,
+    aliases_map: &'a RevsetAliasesMap,
+) -> RevsetParseContext<'a> {
+    let workspace_context = RevsetWorkspaceContext {
+        cwd: workspace.workspace_root(),
+        workspace_id: workspace.workspace_id(),
+        workspace_root: workspace.workspace_root(),
+    };
+    RevsetParseContext {
+        aliases_map: &aliases_map,
+        user_email: settings.user_email(),
+        workspace: Some(workspace_context),
+    }
 }
 
 fn parse_revset(

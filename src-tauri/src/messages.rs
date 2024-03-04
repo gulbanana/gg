@@ -80,10 +80,6 @@ pub enum RepoConfig {
         absolute_path: DisplayPath,
         error: String,
     },
-    NoOperation {
-        absolute_path: DisplayPath,
-        error: String,
-    },
     DeadWorker {
         error: String,
     },
@@ -238,6 +234,6 @@ pub struct RefName {
     ts(export, export_to = "../src/messages/")
 )]
 pub struct DescribeRevision {
-    commit_id: RevId,
-    new_description: String,
+    pub commit_id: RevId,
+    pub new_description: String,
 }
