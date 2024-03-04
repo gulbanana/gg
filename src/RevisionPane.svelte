@@ -3,6 +3,7 @@
     import type { DescribeRevision } from "./messages/DescribeRevision";
     import type { CheckoutRevision } from "./messages/CheckoutRevision";
     import type { CreateRevision } from "./messages/CreateRevision";
+    import type { ResetRevisionAuthor } from "./messages/ResetRevisionAuthor";
     import { mutate } from "./ipc";
     import { menuCommitEvent } from "./stores";
     import Action from "./Action.svelte";
@@ -23,12 +24,14 @@
         case "edit":
             onEdit();
             break;
+        case "reset_author":
+            onResetAuthor();
+            break;
     }
 
-    function onDescribe() {
-        mutate<DescribeRevision>("describe_revision", {
-            change_id: rev.header.change_id,
-            new_description: fullDescription,
+    function onNew() {
+        mutate<CreateRevision>("create_revision", {
+            parent_change_ids: [rev.header.change_id],
         });
     }
 
@@ -38,9 +41,16 @@
         });
     }
 
-    function onNew() {
-        mutate<CreateRevision>("create_revision", {
-            parent_change_ids: [rev.header.change_id],
+    function onDescribe() {
+        mutate<DescribeRevision>("describe_revision", {
+            change_id: rev.header.change_id,
+            new_description: fullDescription,
+        });
+    }
+
+    function onResetAuthor() {
+        mutate<ResetRevisionAuthor>("reset_revision_author", {
+            change_id: rev.header.change_id,
         });
     }
 </script>

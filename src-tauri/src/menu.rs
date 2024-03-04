@@ -64,6 +64,14 @@ pub fn build(app_handle: &AppHandle) -> tauri::Result<Menu<Wry>> {
                 true,
                 None::<&str>,
             )?,
+            &PredefinedMenuItem::separator(app_handle)?,
+            &MenuItem::with_id(
+                app_handle,
+                "commit_reset_author",
+                "Reset author",
+                true,
+                None::<&str>,
+            )?,
         ],
     )?;
 
@@ -117,6 +125,7 @@ pub fn handle_event(window: &Window, event: MenuEvent) {
         "repo_reopen" => repo_reopen(window),
         "commit_new" => window.emit("gg://menu/commit", "new").unwrap(),
         "commit_edit" => window.emit("gg://menu/commit", "edit").unwrap(),
+        "commit_reset_author" => window.emit("gg://menu/commit", "reset_author").unwrap(),
         _ => (),
     }
 }

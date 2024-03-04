@@ -55,3 +55,14 @@ pub struct DescribeRevision {
     pub change_id: RevId,
     pub new_description: String,
 }
+
+/// Creates a new revision and makes it the working copy
+#[derive(Deserialize, Debug)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(TS),
+    ts(export, export_to = "../src/messages/")
+)]
+pub struct ResetRevisionAuthor {
+    pub change_id: RevId,
+}

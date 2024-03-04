@@ -20,7 +20,9 @@ use tauri::{State, Window};
 use tauri_plugin_window_state::StateFlags;
 
 use gui_util::WorkerSession;
-use messages::{CheckoutRevision, CreateRevision, DescribeRevision, MutationResult};
+use messages::{
+    CheckoutRevision, CreateRevision, DescribeRevision, MutationResult, ResetRevisionAuthor,
+};
 use worker::{Mutation, Session, SessionEvent};
 
 #[derive(Default)]
@@ -65,7 +67,8 @@ fn main() -> Result<()> {
             query_revision,
             checkout_revision,
             create_revision,
-            describe_revision
+            describe_revision,
+            reset_revision_author
         ])
         .menu(menu::build)
         .setup(|app| {
@@ -203,6 +206,15 @@ fn describe_revision(
     window: Window,
     app_state: State<AppState>,
     mutation: DescribeRevision,
+) -> Result<MutationResult, InvokeError> {
+    try_mutate(window, app_state, mutation)
+}
+
+#[tauri::command(async)]
+fn reset_revision_author(
+    window: Window,
+    app_state: State<AppState>,
+    mutation: ResetRevisionAuthor,
 ) -> Result<MutationResult, InvokeError> {
     try_mutate(window, app_state, mutation)
 }

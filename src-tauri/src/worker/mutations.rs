@@ -1,17 +1,15 @@
 use anyhow::Result;
 use itertools::Itertools;
 use jj_lib::{
-    backend::{BackendError, CommitId},
-    commit::Commit,
-    object_id::ObjectId,
-    repo::Repo,
-    revset::RevsetIteratorExt,
-    rewrite::merge_commit_trees,
+    backend::BackendError, commit::Commit, object_id::ObjectId, repo::Repo,
+    revset::RevsetIteratorExt, rewrite::merge_commit_trees,
 };
 
 use crate::{
     gui_util::WorkspaceSession,
-    messages::{CheckoutRevision, CreateRevision, DescribeRevision, MutationResult},
+    messages::{
+        CheckoutRevision, CreateRevision, DescribeRevision, MutationResult, ResetRevisionAuthor,
+    },
 };
 
 use super::Mutation;
@@ -25,8 +23,8 @@ impl Mutation for CheckoutRevision {
         if ws.check_immutable(edited_commit.id().clone())? {
             Ok(MutationResult::Failed {
                 message: format!(
-                    "Commit {} is immutable",
-                    short_commit_hash(edited_commit.id())
+                    "Change {}{} is immutable",
+                    self.change_id.prefix, self.change_id.rest
                 ),
             })
         } else if edited_commit.id() == ws.wc_id() {
@@ -95,7 +93,10 @@ impl Mutation for DescribeRevision {
 
         if ws.check_immutable(commit.id().clone())? {
             Ok(MutationResult::Failed {
-                message: format!("Commit {} is immutable", short_commit_hash(commit.id())),
+                message: format!(
+                    "Change {}{} is immutable",
+                    self.change_id.prefix, self.change_id.rest
+                ),
             })
         } else if self.new_description == commit.description() {
             Ok(MutationResult::Unchanged)
@@ -115,6 +116,31 @@ impl Mutation for DescribeRevision {
     }
 }
 
-pub fn short_commit_hash(commit_id: &CommitId) -> String {
-    commit_id.hex()[0..12].to_string()
+impl Mutation for ResetRevisionAuthor {
+    fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
+        let mut tx = ws.start_transaction()?;
+
+        let commit = ws.evaluate_rev_str(&self.change_id.hex)?;
+
+        let commit_builder = tx.mut_repo().rewrite_commit(&ws.settings, &commit);
+        let new_author = commit_builder.committer().clone();
+
+        if ws.check_immutable(commit.id().clone())? {
+            Ok(MutationResult::Failed {
+                message: format!(
+                    "Change {}{} is immutable",
+                    self.change_id.prefix, self.change_id.rest
+                ),
+            })
+        } else if *commit.author() == new_author {
+            Ok(MutationResult::Unchanged)
+        } else {
+            commit_builder.set_author(new_author).write()?;
+
+            match ws.finish_transaction(tx, format!("describe commit {}", commit.id().hex()))? {
+                Some(new_status) => Ok(MutationResult::Updated { new_status }),
+                None => Ok(MutationResult::Unchanged),
+            }
+        }
+    }
 }

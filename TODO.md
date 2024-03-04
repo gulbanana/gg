@@ -1,7 +1,6 @@
 probably mvp
 ------------
-contextless commit actions (good initial candidates: reset author, squash)
-    - commit menu
+contextless commit actions
     - context menu on a revsummary
 contextless file actions
     - restore
@@ -32,6 +31,9 @@ redo/undo stack
 operation menu - restores or views
 file menu, file actions
 fill out more commit actions (incl. multiselect)
+    - squash
+    - duplicate
+    - restore
 fill out more dnd actions (incl. multiselect)
 diffs and/or difftool
 resolve (other than rebasing)
