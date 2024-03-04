@@ -19,7 +19,7 @@
     } else {
         let childX = c1 * 18 + 9;
         let parentX = c2 * 18 + 9;
-        let midY = parentY - 9;
+        let midY = c2 > c1 ? childY + 9 : parentY - 9;
         let radius = c2 > c1 ? 6 : -6;
         let sweep = c2 > c1 ? 0 : 1;
         path = `M${childX},${childY} 

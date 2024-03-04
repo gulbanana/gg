@@ -13,9 +13,9 @@
 <Pane>
     <h2 slot="header" class="header">
         <span>
-            <IdSpan id={rev.header.change_id} type="change" />
+            <IdSpan type="change" id={rev.header.change_id} />
             /
-            <IdSpan id={rev.header.commit_id} type="commit" />
+            <IdSpan type="commit" id={rev.header.commit_id} />
         </span>
         <button><Icon name="map-pin" /> Pin</button>
     </h2>
@@ -33,6 +33,7 @@
         </div>
 
         <div class="diff">
+            <h3>File changes</h3>
             {#each rev.diff as path}
                 <!-- svelte-ignore a11y-click-events-have-key-events -->
                 <!-- svelte-ignore a11y-no-static-element-interactions -->
@@ -46,13 +47,22 @@
             {/each}
         </div>
 
-        <div class="commands">
-            <button>Abandon</button>
-            <button>Squash</button>
-            <button>Restore</button>
+        <div class="diff">
+            <h3>Parents</h3>
+            {#each rev.parents as parent}
+                <div class="parent">
+                    <code>
+                        <IdSpan type="change" id={parent.change_id} />
+                    </code>
+                    <span>{parent.description.lines[0]}</span>
+                    <code>
+                        <IdSpan type="commit" id={parent.commit_id} />
+                    </code>
+                </div>
+            {/each}
         </div>
-    </div></Pane
->
+    </div>
+</Pane>
 
 <style>
     .header {
@@ -94,6 +104,7 @@
         padding: 3px;
         display: flex;
         flex-direction: column;
+        margin-top: 9px;
     }
     .path {
         height: 24px;
@@ -104,13 +115,12 @@
     .selected {
         background: var(--ctp-base);
     }
-
-    .commands {
-        display: flex;
-        justify-content: end;
+    .parent {
+        display: grid;
+        grid-template-columns: auto 1fr auto;
         gap: 6px;
     }
-    .commands > button {
-        background: var(--ctp-maroon);
+    h3 {
+        font-size: 1rem;
     }
 </style>

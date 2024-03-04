@@ -99,12 +99,11 @@ fn query_log(
     let iter = TopoGroupedRevsetGraphIterator::new(revset.iter_graph());
 
     // XXX if building the graph in JS is slow, we could do transformations here
-    // the 1000 limit is temporary - we can load them at an ok speed, but that is too many dom nodes
-    // to draw without virtualisation
-    for (commit_id, commit_edges) in iter.take(1000) {
+    for (commit_id, mut commit_edges) in iter {
         let commit = op.repo.store().get_commit(&commit_id)?;
         let mut edges = Vec::new();
 
+        commit_edges.sort_by_key(|e| -op.repo.store().get_commit(&e.target).unwrap().author().timestamp.timestamp.0);
         for edge in commit_edges {
             match edge.edge_type {
                 RevsetGraphEdgeType::Missing => {
@@ -160,8 +159,11 @@ fn get_revision(op: &SessionOperation, id_str: &str) -> Result<messages::RevDeta
     }
     .block_on();
 
+    let parents: Result<Vec<messages::RevHeader>> = commit.parents().iter().map(|p| op.format_header(p)).collect();
+
     Ok(messages::RevDetail {
         header: op.format_header(&commit)?,
         diff: paths,
+        parents: parents?
     })
 }

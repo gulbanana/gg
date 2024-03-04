@@ -103,6 +103,7 @@ pub struct RevHeader {
 #[ts(export, export_to = "../src/messages/")]
 pub struct RevDetail {
     pub header: RevHeader,
+    pub parents: Vec<RevHeader>,
     pub diff: Vec<DiffPath>,
 }
 

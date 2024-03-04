@@ -13,7 +13,7 @@
     const repo_status = event<RepoStatus>("gg://repo/status");
     const change_content = event<RevHeader>("gg://change/select");
 
-    let rows = formatNodes(nodes);
+    let rows = checkNodes(nodes);
     
     interface GraphNode {
         row: number;
@@ -21,7 +21,7 @@
         skip_columns: number;
 
         id: RevId;
-        parents: GraphEdge[];
+        ancestors: GraphEdge[];
 
         desc: string;
         refs: RefName[],
@@ -36,83 +36,113 @@
 
         id: RevId;
 
-        has_elisions: boolean;
+        hasElisions: boolean;
     }
 
-    function formatNodes(nodes: LogNode[]): GraphNode[] {
+    // assign nodes to columnar stems
+    function checkNodes(nodes: LogNode[]): GraphNode[] {
         let graph: GraphNode[] = [];
 
-        let row = 0;
-        for (let n of nodes) {
-            let children = graph.filter(n2 => n2.parents.find(p => p.id.prefix == n.revision.commit_id.prefix));
+        let stems: { next: string, prev: string }[] = [];
 
-            let column = 0;
-            if (row != 0) {
-                if (children.length == 0) {
-                    column = graph[row-1].column + 1;
-                } else {
-                    let leftmost_child = children.sort((a, b) => a.column - b.column)[0];
-                    let child_index = 0;
-                    let skip_index = 0;
-                    for (let p of leftmost_child.parents) {
-                        if (nodes.findIndex(g => g.revision.commit_id.prefix == p.id.prefix) > row) {
-                            child_index++;
-                        } else {
-                            skip_index++;
-                        }
-                    }
-                    column = leftmost_child.column + child_index;
+        for (let ixNode = 0; ixNode < nodes.length; ixNode++) {
+            let node = nodes[ixNode];
+            let key = node.revision.commit_id.prefix;
+
+            console.log(`${node.revision.change_id.prefix}/${node.revision.commit_id.prefix} stems, before: `, stems.map(s => {return { head: s.next }}));
+
+            // determine stems consumed by current node            
+            let nodeStems: number[] = [];
+            for (let ixStem = 0; ixStem < stems.length; ixStem++) {
+                if (stems[ixStem].next == node.revision.commit_id.prefix) {
+                    nodeStems.push(ixStem);
                 }
-            }       
-            
+            }            
+            let nodeStem = nodeStems.length > 0 ? nodeStems[0] : stems.length;
+
+            // each stem terminating in the current node should be removed *or*, in up to 1 case, replaced by an edge's target (see below)
+            for (let terminatedStem of nodeStems.slice(node.edges.filter(e => e.type != "Missing").length > 0 ? 1 : 0).reverse()) {
+                console.log("terminate " + terminatedStem + "@" + stems[terminatedStem].next);
+                if (terminatedStem == stems.length - 1) {                    
+                    stems.splice(terminatedStem, 1);
+                    console.log(`${node.revision.change_id.prefix}/${node.revision.commit_id.prefix} stems, terminated: `, stems.map(s => {return { head: s.next }}));
+                }
+            }
+                        
+            // XXX look back up the graph to update edge coordinates - this requires filtering later when children aren't actually present
+            let children = graph.filter(n2 => n2.ancestors.find(p => p.id.prefix == node.revision.commit_id.prefix));
             for (let child of children) {                
-                let parent = child.parents.find(p => p.id.prefix == n.revision.commit_id.prefix);
+                let parent = child.ancestors.find(p => p.id.prefix == node.revision.commit_id.prefix);
                 if (parent) {
-                    parent.row = row;
-                    parent.column = column;
+                    parent.row = ixNode;
+                    parent.column = nodeStem;
                 }
             }
 
-            let node = {
-                row: row++,
-                column,
-                skip_columns: 0,
-                id: n.revision.change_id,
-                parents: n.edges.flatMap<GraphEdge>(e => {
+            // create row
+            graph.push({
+                row: ixNode,
+                column: nodeStem,
+                skip_columns: nodeStem >= stems.length ? 0 : stems.length - nodeStem - 1,
+                id: node.revision.change_id,
+                ancestors: node.edges.flatMap<GraphEdge>(e => {
                     switch (e.type) {
                         case "Direct":
-                            return [{ row: -1, column: -1, id: e, has_elisions: false}];
+                            return [{ row: -1, column: -1, branchEarly: false, id: e, hasElisions: false}];
                         case "Indirect":
-                            return [{ row: -1, column: -1, id: e, has_elisions: true}];
+                            return [{ row: -1, column: -1, branchEarly: false, id: e, hasElisions: true}];
                         case "Missing":
                             return [];
                     }
                 }),
-                desc: n.revision.description.lines[0],
-                refs: n.revision.branches.filter(r => !(r.remote != null && r.is_synced && n.revision.branches.find(r2 => r2.remote == null && r2.name == r.name))),
-                is_working_copy: $repo_status?.working_copy?.prefix == n.revision.commit_id.prefix,
-                has_conflict: n.revision.has_conflict,
-                select: () => ($change_content = n.revision),
-            };
+                desc: node.revision.description.lines[0],
+                refs: node.revision.branches.filter(r => !(r.remote != null && r.is_synced && node.revision.branches.find(r2 => r2.remote == null && r2.name == r.name))),
+                is_working_copy: $repo_status?.working_copy?.prefix == node.revision.commit_id.prefix,
+                has_conflict: node.revision.has_conflict,
+                select: () => ($change_content = node.revision),
+            });
 
-            graph.push(node);
-        }
+            // determine next set of stems by iterating parents
+            for (let ixNode = 0; ixNode < node.edges.length; ixNode++) {
+                let edge = node.edges[ixNode];
+                console.log("stem for edge", edge);
+                if (edge.type != "Missing") {
+                    let edgeAttached = false;
+                    for (let ixStem = 0; ixStem < stems.length; ixStem++) {
+                        if (stems[ixStem].next == node.revision.commit_id.prefix) {
+                            stems[ixStem].prev = stems[ixStem].next;
+                            stems[ixStem].next = edge.prefix; 
+                            edgeAttached = true; // continue current stem
+                            console.log("continue " + edge.prefix);
+                        } else if (stems[ixStem].next == edge.prefix && stems[ixStem].prev == node.revision.commit_id.prefix) {
+                            edgeAttached = true; // continue another stem
+                            console.log("attach " + edge.prefix);
+                        }
+                    }
 
-        let active_branches = new Map<number, number>();
-        for (let n of graph) {
-            active_branches.delete(n.row);
-            let max_branch = Math.max(0, ...active_branches.values());
-            if (max_branch > n.column) {
-                n.skip_columns = max_branch - n.column;
-                console.log(`${n.id.prefix} skip ${n.skip_columns} due to ${active_branches.size} branches`);
-                console.log(Array.from(active_branches.values()));
-            }            
-            for (let p of n.parents) {
-                active_branches.set(p.row, Math.max(active_branches.get(p.row) || 0, n.column));
+                    // create a new stem
+                    if (!edgeAttached) {
+                        stems.push({ next: edge.prefix, prev: node.revision.commit_id.prefix });
+                        console.log("push " + edge.prefix);
+                    }
+                }
             }
+            
+            console.log(`${node.revision.change_id.prefix}/${node.revision.commit_id.prefix} stems, after: `, stems.map(s => {return { head: s.next }}));
         }
 
         return graph;
+    }
+
+    function checkEdges(edges: GraphEdge[]) {
+        return edges.filter(e => {
+            if (e.row == -1) {
+                console.log("bad edge", e);
+                return false;
+            } else {
+                return true;
+            }
+        });
     }
 </script>
 
@@ -143,7 +173,7 @@ style="width: 100%; height: {rows.length * 30}px;"
                 <circle cx="9" cy="15" r="3" />
             {/if}
 
-            <foreignObject class="row-html" x={node.skip_columns * 18 + 18} y="0" height="30">
+            <foreignObject class="row-html" x={node.skip_columns * 18 + 18} y="0" height="30" style="width: calc(100% - {(node.column + node.skip_columns) * 18 + 3}px)">
                 <div class="row-text" class:conflict={node.has_conflict}>
                     <code>
                         <IdSpan type="change" id={node.id} />
@@ -161,8 +191,8 @@ style="width: 100%; height: {rows.length * 30}px;"
         </g>
     {/each}
     {#each rows as node}
-        {#each node.parents as parent}
-            <GraphLine has_elisions={parent.has_elisions} c1={node.column} c2={parent.column} r1={node.row} r2={parent.row} />
+        {#each checkEdges(node.ancestors) as parent}
+            <GraphLine has_elisions={parent.hasElisions} c1={node.column} c2={parent.column} r1={node.row} r2={parent.row} />
         {/each}
     {/each}
 </svg>
@@ -188,7 +218,6 @@ style="width: 100%; height: {rows.length * 30}px;"
 
     .row-html {
         overflow: hidden;
-        width: calc(100% - 18px);
     }
 
     .row-text {

@@ -17,7 +17,7 @@
 
     async function load_log() {
         let log = await log_content.call({
-            revset: entered_query == "" ? "none()" : entered_query,
+            revset: entered_query == "" ? "all()" : entered_query,
         });
 
         if (log.type == "data" && log.value.nodes.length > 0) {
@@ -58,7 +58,7 @@
 
     .log-commits {
         overflow-x: hidden;
-        overflow-y: auto;
+        overflow-y: scroll;
         scrollbar-color: var(--ctp-text) var(--ctp-crust);
         display: grid;
         user-select: none;

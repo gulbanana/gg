@@ -128,7 +128,7 @@ fn forward_accelerator(window: Window, key: char) {
     }
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn query_log(
     window: Window,
     app_state: State<AppState>,
@@ -149,7 +149,7 @@ fn query_log(
         .map_err(InvokeError::from_anyhow)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 fn get_revision(
     window: Window,
     app_state: State<AppState>,
