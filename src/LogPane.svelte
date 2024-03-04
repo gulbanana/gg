@@ -111,23 +111,29 @@
     }
   }
 
-  // we want to augment rows with *all* lines that involve them
-  // ToIntersection lines begin at their owning row; others end at it
+  // augment rows with all lines that pass through them
   let lineKey = 0;
+  let passNextRow: EnhancedLine[] = [];
   function addPageToGraph(graph: EnhancedRow[], page: LogRow[]): EnhancedRow[] {
     for (let row of page) {
       let enhancedRow = row as EnhancedRow;
-      enhancedRow.linesTo = [];
-      enhancedRow.linesFrom = [];
+      enhancedRow.passingLines = passNextRow;
+      passNextRow = [];
 
       for (let line of enhancedRow.lines) {
         let enhancedLine = line as EnhancedLine;
         enhancedLine.key = lineKey++;
+
         if (line.type == "ToIntersection") {
-          enhancedRow.linesFrom.push(enhancedLine);
+          // ToIntersection lines begin at their owning row, so they run from this row to the next one that we read (which may not be on the same page)
+          enhancedRow.passingLines.push(enhancedLine);
+          passNextRow.push(enhancedLine);
         } else {
-          enhancedRow.linesTo.push(enhancedLine);
-          graph[line.source[1]].linesFrom.push(enhancedLine);
+          // other lines end at their owning row, so we need to add them to all previous rows and then this one
+          for (let i = line.source[1]; i < line.target[1]; i++) {
+            graph[i].passingLines.push(enhancedLine);
+          }
+          enhancedRow.passingLines.push(enhancedLine);
         }
       }
 

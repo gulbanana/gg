@@ -19,7 +19,6 @@ snapshot/op-head-merge on focus
 investigate interaction with other repo mutators
 draw file conflict markers 
 double-click to edit (possibly: to update)
-virt: draw lines that neither start nor end on the screen
 
 possibly not mvp
 ----------------

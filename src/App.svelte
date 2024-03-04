@@ -112,7 +112,7 @@
         <div id="fatal-error">
             <div id="error-content">
                 <p class="error-text">
-                    Error communicating with backend. You'll need to restart GG
+                    Error communicating with backend. You may need to restart GG
                     to continue.
                 </p>
             </div>

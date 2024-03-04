@@ -6,8 +6,7 @@
   export type EnhancedLine = LogLine & { key: number };
 
   export interface EnhancedRow extends LogRow {
-    linesTo: Array<EnhancedLine>;
-    linesFrom: Array<EnhancedLine>;
+    passingLines: Array<EnhancedLine>;
   }
 </script>
 
@@ -53,7 +52,7 @@
       return [];
     }
 
-    return row.linesFrom.concat(row.linesTo).filter((l) => {
+    return row.passingLines.filter((l) => {
       if (keys.has(l.key)) {
         return false;
       } else {
