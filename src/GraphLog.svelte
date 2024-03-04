@@ -94,7 +94,11 @@
           <GraphNode revision={row.revision} />
         {/if}
       </g>
+    {/key}
+  {/each}
 
+  {#each visibleSlice.rows as row}
+    {#key row}
       {#each distinctLines(visibleSlice.keys, row) as line}
         <GraphLine {line} />
       {/each}
