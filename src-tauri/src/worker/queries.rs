@@ -3,17 +3,13 @@ use chrono::{DateTime, FixedOffset, Local, LocalResult, TimeZone, Utc};
 use futures_util::StreamExt;
 use jj_lib::{
     backend::{CommitId, Timestamp},
-    file_util::relative_path,
     matchers::EverythingMatcher,
-    repo::Repo,
     revset_graph::{RevsetGraphEdgeType, TopoGroupedRevsetGraphIterator},
     rewrite::merge_commit_trees,
 };
 use pollster::FutureExt;
 
-use crate::messages::{
-    DiffPath, DisplayPath, LogCoordinates, LogLine, LogPage, LogRow, RevDetail, RevHeader,
-};
+use crate::messages::{DiffPath, LogCoordinates, LogLine, LogPage, LogRow, RevDetail, RevHeader};
 
 use super::WorkspaceSession;
 
@@ -151,7 +147,7 @@ impl LogQuery {
             }
 
             rows.push(LogRow {
-                revision: ws.format_header(&ws.operation.repo.store().get_commit(&commit_id)?)?,
+                revision: ws.format_header(&ws.get_commit(&commit_id)?)?,
                 location: LogCoordinates(column, row),
                 padding,
                 lines,
@@ -173,18 +169,16 @@ impl LogQuery {
 
 pub fn query_revision(ws: &WorkspaceSession, id_str: &str) -> Result<RevDetail> {
     let id = CommitId::try_from_hex(id_str)?;
-    let commit = ws.operation.repo.store().get_commit(&id)?;
+    let commit = ws.get_commit(&id)?;
 
-    let parent_tree = merge_commit_trees(ws.operation.repo.as_ref(), &commit.parents())?;
+    let parent_tree = merge_commit_trees(ws.repo(), &commit.parents())?;
     let tree = commit.tree()?;
     let mut tree_diff = parent_tree.diff_stream(&tree, &EverythingMatcher);
 
     let mut paths = Vec::new();
     async {
         while let Some((repo_path, diff)) = tree_diff.next().await {
-            let base_path = ws.workspace.workspace_root();
-            let relative_path: DisplayPath =
-                (&relative_path(base_path, &repo_path.to_fs_path(base_path))).into();
+            let relative_path = ws.format_path(&repo_path);
             let (before, after) = diff.unwrap();
 
             if before.is_present() && after.is_present() {

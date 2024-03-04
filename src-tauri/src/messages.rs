@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 /// Utility type used to abstract crlf/<br>/etc
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
@@ -108,7 +108,7 @@ pub struct LogPage {
     pub has_more: bool,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
@@ -121,7 +121,7 @@ pub struct LogRow {
     pub lines: Vec<LogLine>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 #[serde(tag = "type")]
 #[cfg_attr(
     feature = "ts-rs",
@@ -146,7 +146,7 @@ pub enum LogLine {
     },
 }
 
-#[derive(Serialize, Clone, Copy)]
+#[derive(Serialize, Clone, Copy, Debug)]
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
@@ -167,7 +167,7 @@ pub struct RevId {
     pub rest: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
@@ -211,7 +211,7 @@ pub enum DiffPath {
 }
 
 /// Branch or tag name with metadata.
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Clone, Debug)]
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),

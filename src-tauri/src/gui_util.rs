@@ -10,7 +10,7 @@ use jj_cli::{
     config::{default_config, LayeredConfigs},
     git_util::is_colocated_git_workspace,
 };
-use jj_lib::{gitignore::GitIgnoreFile, op_store::WorkspaceId, repo::RepoLoaderError, revset::RevsetIteratorExt, working_copy::SnapshotOptions};
+use jj_lib::{file_util::relative_path, gitignore::GitIgnoreFile, op_store::WorkspaceId, repo::RepoLoaderError, repo_path::RepoPath, revset::RevsetIteratorExt, working_copy::{CheckoutStats, SnapshotOptions}};
 use jj_lib::{
     backend::{ChangeId, CommitId},
     commit::Commit,
@@ -41,18 +41,20 @@ pub struct WorkerSession {
 
 /// jj-dependent state, available when a workspace is open
 pub struct WorkspaceSession<'a> {
-    pub session: &'a mut WorkerSession,
+    pub(crate) session: &'a mut WorkerSession,
+
     // workspace-level data, initialised once
     pub settings: UserSettings,
-    pub workspace: Workspace,
-    pub aliases_map: RevsetAliasesMap,
-    pub prefix_context: IdPrefixContext,
+    workspace: Workspace,
+    aliases_map: RevsetAliasesMap,    
+    prefix_context: IdPrefixContext,
+
     // operation-specific data, containing a repo view and derived extras
-    pub operation: SessionOperation,
-    pub colocated: bool
+    operation: SessionOperation,
+    colocated: bool
 }
 
-/// state specific to an operation which may be swapped out
+/// state specific to an operation which may be swapped out as a whole
 pub struct SessionOperation {
     pub repo: Arc<ReadonlyRepo>,
     pub wc_id: CommitId,
@@ -75,20 +77,9 @@ impl WorkerSession {
             &workspace::default_working_copy_factories(),
         )?;
 
-        let aliases_map = load_revset_aliases(&configs)?;
+        let aliases_map = build_aliases_map(&configs)?;
 
-        let mut prefix_context: IdPrefixContext = IdPrefixContext::default();
-        let revset_string: String = settings
-            .config()
-            .get_string("revsets.short-prefixes")
-            .unwrap_or_else(|_| settings.default_revset());
-        if !revset_string.is_empty() {
-            let disambiguation_revset: Rc<RevsetExpression> = parse_revset(
-                &parse_context(&settings, &workspace, &aliases_map),
-                &revset_string,
-            )?;
-            prefix_context = prefix_context.disambiguate_within(disambiguation_revset);
-        };
+        let prefix_context = build_prefix_context(&settings, &workspace, &aliases_map)?;
 
         let operation = WorkspaceSession::load_at_head(&settings, &workspace)?;
 
@@ -107,7 +98,8 @@ impl WorkerSession {
 }
 
 impl WorkspaceSession<'_> {
-    pub fn load_at_head(
+    // XXX not sure where this should go
+    fn load_at_head(
         settings: &UserSettings,
         workspace: &Workspace,
     ) -> Result<SessionOperation> {
@@ -163,12 +155,25 @@ impl WorkspaceSession<'_> {
         }
     }
 
+    #[allow(dead_code)]
+    pub fn wc_id(&self) -> &CommitId {
+        &self.operation.wc_id
+    }
+
+    pub fn get_commit(&self, id: &CommitId) -> Result<Commit> {
+        Ok(self.operation.repo.store().get_commit(&id)?)
+    } 
+
+    pub fn repo(&self) -> &dyn Repo {
+        self.operation.repo.as_ref()
+    }
+
     /*************************************************************
      * Functions for creating temporary per-request derived data *
      *************************************************************/
 
     fn parse_context(&self) -> RevsetParseContext {
-        parse_context(&self.settings, &self.workspace, &self.aliases_map)
+        build_parse_context(&self.settings, &self.workspace, &self.aliases_map)
     }
 
     fn resolver(&self) -> DefaultSymbolResolver {
@@ -251,6 +256,11 @@ impl WorkspaceSession<'_> {
             branches,
         })
     }
+    
+    pub fn format_path(&self, repo_path: &RepoPath) -> messages::DisplayPath {
+        let base_path = self.workspace.workspace_root();
+        (&relative_path(base_path, &repo_path.to_fs_path(base_path))).into()
+    }
 
     /*********************************************************************
      * Transaction functions - these are very similar to cli_util        *
@@ -315,9 +325,11 @@ impl WorkspaceSession<'_> {
         self.operation = SessionOperation::new(tx.commit(description), self.workspace.workspace_id());
 
         // XXX do this only if loaded at head, which is currently always true, but won't be once we have undo-redo
-        if let Some(new_commit) = &maybe_new_wc_commit {
+        if let Some(new_commit) = &maybe_new_wc_commit {            
             self.update_working_copy(maybe_old_wc_commit.as_ref(), new_commit)?;
         }
+
+        self.prefix_context = build_prefix_context(&self.settings, &self.workspace, &self.aliases_map)?;
 
         Ok(Some(self.format_status()))
     }
@@ -406,22 +418,22 @@ impl WorkspaceSession<'_> {
         &mut self,
         maybe_old_commit: Option<&Commit>,
         new_commit: &Commit,
-    ) -> Result<()> {
+    ) -> Result<Option<CheckoutStats>> {
         let old_tree_id = maybe_old_commit.map(|commit| commit.tree_id().clone());
 
-        let _stats = if Some(new_commit.tree_id()) != old_tree_id.as_ref() {
-            Some(self.workspace.check_out(
+        Ok(if Some(new_commit.tree_id()) != old_tree_id.as_ref() {
+            let stats = self.workspace.check_out(
                 self.operation.repo.op_id().clone(),
                 old_tree_id.as_ref(),
                 new_commit,
-            )?)
+            )?;
+            self.operation.update(new_commit.id());
+            Some(stats)
         } else {
             let locked_ws = self.workspace.start_working_copy_mutation()?;
             locked_ws.finish(self.operation.repo.op_id().clone())?;
             None
-        };
-
-        Ok(())
+        })
     }
 
     fn base_ignores(&self) -> Arc<GitIgnoreFile> {
@@ -506,7 +518,7 @@ impl WorkspaceSession<'_> {
             
         self.finish_transaction(tx, "import git refs")?;
         Ok(())
-    } 
+    }
 }
 
 impl SessionOperation {
@@ -522,6 +534,10 @@ impl SessionOperation {
             wc_id,
             branches_index: OnceCell::default()
         }
+    }
+
+    pub fn update(&mut self, id: &CommitId) {
+        self.wc_id = id.clone();
     }
 
     pub fn branches_index(&self) -> &Rc<RefNamesIndex> {
@@ -569,7 +585,7 @@ fn find_workspace_dir(cwd: &Path) -> &Path {
         .unwrap_or(cwd)
 }
 
-fn load_revset_aliases(layered_configs: &LayeredConfigs) -> Result<RevsetAliasesMap> {
+fn build_aliases_map(layered_configs: &LayeredConfigs) -> Result<RevsetAliasesMap> {
     const TABLE_KEY: &str = "revset-aliases";
     let mut aliases_map = RevsetAliasesMap::new();
     // Load from all config layers in order. 'f(x)' in default layer should be
@@ -590,7 +606,7 @@ fn load_revset_aliases(layered_configs: &LayeredConfigs) -> Result<RevsetAliases
     Ok(aliases_map)
 }
 
-fn parse_context<'a>(
+fn build_parse_context<'a>(
     settings: &UserSettings,
     workspace: &'a Workspace,
     aliases_map: &'a RevsetAliasesMap,
@@ -605,6 +621,25 @@ fn parse_context<'a>(
         user_email: settings.user_email(),
         workspace: Some(workspace_context),
     }
+}
+
+fn build_prefix_context(settings: &UserSettings, workspace: &Workspace, aliases_map: &RevsetAliasesMap) -> Result<IdPrefixContext> {
+    let mut prefix_context = IdPrefixContext::default();
+    
+    let revset_string: String = settings
+        .config()
+        .get_string("revsets.short-prefixes")
+        .unwrap_or_else(|_| settings.default_revset());
+    
+    if !revset_string.is_empty() {
+        let disambiguation_revset: Rc<RevsetExpression> = parse_revset(
+            &build_parse_context(&settings, &workspace, &aliases_map),
+            &revset_string,
+        )?;
+        prefix_context = prefix_context.disambiguate_within(disambiguation_revset);
+    };
+
+    Ok(prefix_context)
 }
 
 fn parse_revset(
