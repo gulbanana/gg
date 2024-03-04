@@ -14,7 +14,12 @@ Some useful commands:
 * `npm run tauri build -- --target universal-apple-darwin` - create a fat binary for MacOS.
 
 ## Features
-Currently, GG can query the commit history, view commit details and edit change descriptions.
+- Left pane: query and browse the change log. Click to select commits, double-click to edit (if mutable) or create a new child (if immutable).
+- Right pane: view commit details, set description and authors. 
+- Use command buttons and menus to execute an equivalent of `jj new`, `edit`, `duplicate` and `abandon`.
+
+### Roadmap
+GG doesn't do any of these things yet, but they may be added eventually:
 
 ### Known Issues
 Log queries will be slower if your repo contains many commits outside the set determined by `immutable_heads()`. Immutability checking in the log view can be disabled by setting `gg.check-immutable = false`.
