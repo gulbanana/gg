@@ -18,7 +18,6 @@ universal macos builds in CI
 snapshot/op-head-merge on focus
 investigate interaction with other repo mutators
 draw file conflict markers 
-double-click to edit (possibly: to update)
 
 possibly not mvp
 ----------------

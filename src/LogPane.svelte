@@ -184,7 +184,7 @@
       >
         {#if row}
           <RevisionSummary
-            revision={row.revision}
+            rev={row.revision}
             selected={$revisionSelectEvent?.change_id.prefix ==
               row.revision.change_id.prefix}
           />

@@ -15,7 +15,7 @@ use std::thread::{self, JoinHandle};
 
 use anyhow::{Context, Result};
 use gui_util::WorkerSession;
-use messages::{DescribeRevision, MutationResult};
+use messages::{CheckoutRevision, DescribeRevision, MutationResult};
 use tauri::menu::{AboutMetadata, PredefinedMenuItem, HELP_SUBMENU_ID};
 use tauri::{
     ipc::InvokeError,
@@ -26,7 +26,7 @@ use tauri::{AppHandle, State, Window, Wry};
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_window_state::StateFlags;
 
-use worker::{Session, SessionEvent};
+use worker::{Mutation, Session, SessionEvent};
 
 #[derive(Default)]
 struct AppState(Mutex<HashMap<String, WindowState>>);
@@ -68,6 +68,7 @@ fn main() -> Result<()> {
             query_log,
             query_log_next_page,
             query_revision,
+            checkout_revision,
             describe_revision
         ])
         .menu(build_menu)
@@ -187,21 +188,21 @@ fn query_revision(
 }
 
 #[tauri::command(async)]
+fn checkout_revision(
+    window: Window,
+    app_state: State<AppState>,
+    mutation: CheckoutRevision,
+) -> Result<MutationResult, InvokeError> {
+    try_mutate(window, app_state, mutation)
+}
+
+#[tauri::command(async)]
 fn describe_revision(
     window: Window,
     app_state: State<AppState>,
     mutation: DescribeRevision,
 ) -> Result<MutationResult, InvokeError> {
-    let session_tx: Sender<SessionEvent> = app_state.get_sender(&window);
-    let (call_tx, call_rx) = channel();
-
-    session_tx
-        .send(SessionEvent::DescribeRevision {
-            tx: call_tx,
-            mutation,
-        })
-        .map_err(InvokeError::from_error)?;
-    call_rx.recv().map_err(InvokeError::from_error)
+    try_mutate(window, app_state, mutation)
 }
 
 fn try_open_repository(window: Window, cwd: Option<PathBuf>) -> Result<()> {
@@ -216,6 +217,23 @@ fn try_open_repository(window: Window, cwd: Option<PathBuf>) -> Result<()> {
     window.emit("gg://repo/config", config).unwrap(); // XXX https://github.com/tauri-apps/tauri/pull/8777
 
     Ok(())
+}
+
+fn try_mutate<T: Mutation + Send + Sync + 'static>(
+    window: Window,
+    app_state: State<AppState>,
+    mutation: T,
+) -> Result<MutationResult, InvokeError> {
+    let session_tx: Sender<SessionEvent> = app_state.get_sender(&window);
+    let (call_tx, call_rx) = channel();
+
+    session_tx
+        .send(SessionEvent::ExecuteMutation {
+            tx: call_tx,
+            mutation: Box::new(mutation),
+        })
+        .map_err(InvokeError::from_error)?;
+    call_rx.recv().map_err(InvokeError::from_error)
 }
 
 fn build_menu(app_handle: &AppHandle) -> tauri::Result<Menu<Wry>> {

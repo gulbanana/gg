@@ -2,6 +2,7 @@
 //! The worker thread is a state machine, running different handle functions based on loaded data
 
 use std::{
+    fmt::Debug,
     path::PathBuf,
     sync::mpsc::{Receiver, Sender},
 };
@@ -38,10 +39,21 @@ pub enum SessionEvent {
         tx: Sender<Result<messages::RevDetail>>,
         change_id: String,
     },
-    DescribeRevision {
+    ExecuteMutation {
         tx: Sender<messages::MutationResult>,
-        mutation: messages::DescribeRevision,
+        mutation: Box<dyn Mutation + Send + Sync>,
     },
+}
+
+pub trait Mutation: Debug {
+    fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<messages::MutationResult>;
+
+    fn execute_unboxed(self, ws: &mut WorkspaceSession) -> Result<messages::MutationResult>
+    where
+        Self: Sized,
+    {
+        Box::new(self).execute(ws)
+    }
 }
 
 pub trait Session {
@@ -202,8 +214,8 @@ impl Session for WorkspaceSession<'_> {
 
                     state.handle_query(&self, tx, rx, revset_string, None)?;
                 }
-                SessionEvent::DescribeRevision { tx, mutation } => {
-                    tx.send(mutations::describe_revision(&mut self, mutation)?)?
+                SessionEvent::ExecuteMutation { tx, mutation } => {
+                    tx.send(mutation.execute(&mut self)?)?
                 }
             };
         }

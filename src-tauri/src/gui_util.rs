@@ -171,7 +171,10 @@ impl WorkspaceSession<'_> {
         }
     }
 
-    #[allow(dead_code)]
+    pub fn id(&self) -> &WorkspaceId {
+        &self.workspace.workspace_id()
+    }
+
     pub fn wc_id(&self) -> &CommitId {
         &self.operation.wc_id
     }

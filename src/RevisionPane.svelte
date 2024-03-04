@@ -73,7 +73,7 @@
                 <section>
                     <h3>Parents</h3>
                     {#each rev.parents as parent}
-                        <RevisionSummary revision={parent} selected={false} />
+                        <RevisionSummary rev={parent} selected={false} />
                     {/each}
                 </section>
             {/if}

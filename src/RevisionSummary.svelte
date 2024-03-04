@@ -1,33 +1,46 @@
 <script lang="ts">
     import type { RevHeader } from "./messages/RevHeader";
+    import type { CheckoutRevision } from "./messages/CheckoutRevision";
     import { revisionSelectEvent } from "./stores.js";
+    import { mutate } from "./ipc";
     import IdSpan from "./IdSpan.svelte";
 
-    export let revision: RevHeader;
+    export let rev: RevHeader;
     export let selected: boolean; // same as the imported event, but parent may want to force a value
+
+    function onSelect() {
+        revisionSelectEvent.set(rev);
+    }
+
+    function onEdit() {
+        mutate<CheckoutRevision>("checkout_revision", {
+            change_id: rev.change_id,
+        });
+    }
 </script>
 
 <button
     class="unbutton layout"
     class:selected
-    class:conflict={revision.has_conflict}
-    on:click={() => revisionSelectEvent.set(revision)}
+    class:conflict={rev.has_conflict}
+    on:click={onSelect}
+    on:dblclick={onEdit}
 >
-    <IdSpan type="change" id={revision.change_id} />
+    <IdSpan type="change" id={rev.change_id} />
 
     <span
         class="desc truncate"
-        class:indescribable={revision.description.lines[0] == ""}
+        class:indescribable={rev.description.lines[0] == ""}
     >
-        {revision.description.lines[0] == ""
+        {rev.description.lines[0] == ""
             ? "(no description set)"
-            : revision.description.lines[0]}
+            : rev.description.lines[0]}
     </span>
 
-    <span class="email truncate">{revision.author.email}</span>
+    <span class="email truncate">{rev.author.email}</span>
 
     <span class="tags">
-        {#each revision.branches.filter((b) => b.remote == null || !b.is_synced) as ref}
+        {#each rev.branches.filter((b) => b.remote == null || !b.is_synced) as ref}
             <code class="tag" class:conflict={ref.has_conflict}>
                 {ref.remote == null ? ref.name : `${ref.name}@${ref.remote}`}
             </code>

@@ -332,8 +332,8 @@ mod mutation {
 
     use crate::{
         gui_util::WorkerSession,
-        messages::DescribeRevision,
-        worker::{mutations, queries},
+        messages::{CheckoutRevision, DescribeRevision, MutationResult},
+        worker::{queries, Mutation},
     };
 
     use super::{mkchid, mkrepo};
@@ -423,6 +423,34 @@ mod mutation {
     }
 
     #[test]
+    fn edit() -> Result<()> {
+        let repo = mkrepo();
+        let head_str = String::from("ntukvtlz");
+        let conflict_str = String::from("nwrnuwyp");
+        let conflict_chid = mkchid("nwrnuwyp");
+
+        let mut session = WorkerSession::default();
+        let mut ws = session.load_directory(repo.path())?;
+
+        let head_rev = queries::query_revision(&ws, &head_str)?;
+        let conflict_rev = queries::query_revision(&ws, &conflict_str)?;
+        assert!(head_rev.header.is_working_copy);
+        assert!(!conflict_rev.header.is_working_copy);
+
+        let result = CheckoutRevision {
+            change_id: conflict_chid,
+        }
+        .execute_unboxed(&mut ws)?;
+        assert!(matches!(result, MutationResult::Updated { .. }));
+
+        // former WC no longer exists!
+        let conflict_rev = queries::query_revision(&ws, &conflict_str)?;
+        assert!(conflict_rev.header.is_working_copy);
+
+        Ok(())
+    }
+
+    #[test]
     fn describe() -> Result<()> {
         let repo = mkrepo();
         let wc_str = String::from("ntukvtlz");
@@ -434,13 +462,12 @@ mod mutation {
         let rev = queries::query_revision(&ws, &wc_str)?;
         assert_eq!("", rev.header.description.lines[0]);
 
-        mutations::describe_revision(
-            &mut ws,
-            DescribeRevision {
-                change_id: wc_chid,
-                new_description: "wip".to_owned(),
-            },
-        )?;
+        let result = DescribeRevision {
+            change_id: wc_chid,
+            new_description: "wip".to_owned(),
+        }
+        .execute_unboxed(&mut ws)?;
+        assert!(matches!(result, MutationResult::Updated { .. }));
 
         let rev = queries::query_revision(&ws, &wc_str)?;
         assert_eq!("wip", rev.header.description.lines[0]);
@@ -462,13 +489,11 @@ mod mutation {
         assert_eq!(0, rev.diff.len());
 
         fs::write(repo.path().join("new.txt"), []).unwrap();
-        mutations::describe_revision(
-            &mut ws,
-            DescribeRevision {
-                change_id: wc_chid,
-                new_description: "wip".to_owned(),
-            },
-        )?;
+        DescribeRevision {
+            change_id: wc_chid,
+            new_description: "wip".to_owned(),
+        }
+        .execute_unboxed(&mut ws)?;
 
         let rev = queries::query_revision(&ws, &wc_str)?;
         assert_eq!("wip", rev.header.description.lines[0]);
