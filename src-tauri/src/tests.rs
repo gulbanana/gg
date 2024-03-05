@@ -303,7 +303,7 @@ mod session {
         })?;
         tx.send(SessionEvent::QueryLog {
             tx: tx_page,
-            query: "root()|root()+".to_owned(),
+            query: "@|@-".to_owned(),
         })?;
         tx.send(SessionEvent::EndSession)?;
 
