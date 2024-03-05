@@ -1,13 +1,5 @@
 <script lang="ts">
     import type { RevDetail } from "./messages/RevDetail";
-    import type { DescribeRevision } from "./messages/DescribeRevision";
-    import type { CheckoutRevision } from "./messages/CheckoutRevision";
-    import type { CreateRevision } from "./messages/CreateRevision";
-    import type { DuplicateRevision } from "./messages/DuplicateRevision";
-    import type { AbandonRevision } from "./messages/AbandonRevision";
-    import type { MoveChanges } from "./messages/MoveChanges";
-    import type { CopyChanges } from "./messages/CopyChanges";
-    import { mutate } from "./ipc";
     import { menuCommitEvent } from "./stores";
     import ActionWidget from "./ActionWidget.svelte";
     import Icon from "./Icon.svelte";
@@ -16,87 +8,16 @@
     import PathSpan from "./PathSpan.svelte";
     import RevisionSummary from "./RevisionSummary.svelte";
     import CheckWidget from "./CheckWidget.svelte";
+    import Mutator from "./Mutator";
 
     export let rev: RevDetail;
 
+    let mutator = new Mutator(rev.header);
     let fullDescription = rev.header.description.lines.join("\n");
     let resetAuthor = false;
     let selectedPath = "";
 
-    $: switch ($menuCommitEvent) {
-        case "new":
-            onNew();
-            break;
-        case "edit":
-            if (!rev.header.is_immutable) {
-                onEdit();
-            }
-            break;
-        case "duplicate":
-            onDuplicate();
-            break;
-        case "abandon":
-            if (!rev.header.is_immutable) {
-                onAbandon();
-            }
-            break;
-        case "squash":
-            if (!rev.header.is_immutable && rev.header.parents == 1) {
-                onSquash();
-            }
-            break;
-        case "restore":
-            if (!rev.header.is_immutable && rev.header.parents == 1) {
-                onRestore();
-            }
-            break;
-    }
-
-    function onNew() {
-        mutate<CreateRevision>("create_revision", {
-            parent_change_ids: [rev.header.change_id],
-        });
-    }
-
-    function onEdit() {
-        mutate<CheckoutRevision>("checkout_revision", {
-            change_id: rev.header.change_id,
-        });
-    }
-
-    function onDuplicate() {
-        mutate<DuplicateRevision>("duplicate_revision", {
-            change_id: rev.header.change_id,
-        });
-    }
-
-    function onAbandon() {
-        mutate<AbandonRevision>("abandon_revision", {
-            change_id: rev.header.change_id,
-        });
-    }
-
-    function onDescribe() {
-        mutate<DescribeRevision>("describe_revision", {
-            change_id: rev.header.change_id,
-            new_description: fullDescription,
-            reset_author: resetAuthor,
-        });
-    }
-
-    function onSquash() {
-        mutate<MoveChanges>("move_changes", {
-            from_change_id: rev.header.change_id,
-            to_change_id: rev.parents[0].change_id,
-        });
-    }
-
-    function onRestore() {
-        mutate<CopyChanges>("copy_changes", {
-            from_change_id: rev.parents[0].change_id,
-            to_change_id: rev.header.change_id,
-        });
-    }
+    $: mutator.handle($menuCommitEvent);
 </script>
 
 <Pane>
@@ -110,20 +31,20 @@
         </span>
 
         <div class="primary-commands">
-            <ActionWidget onClick={onNew}>
+            <ActionWidget onClick={mutator.onNew}>
                 <Icon name="edit" /> New
             </ActionWidget>
             <ActionWidget
-                onClick={onEdit}
+                onClick={mutator.onEdit}
                 disabled={rev.header.is_immutable ||
                     rev.header.is_working_copy}>
                 <Icon name="edit-2" /> Edit
             </ActionWidget>
-            <ActionWidget onClick={onDuplicate}>
+            <ActionWidget onClick={mutator.onDuplicate}>
                 <Icon name="copy" /> Duplicate
             </ActionWidget>
             <ActionWidget
-                onClick={onAbandon}
+                onClick={mutator.onAbandon}
                 disabled={rev.header.is_immutable}>
                 <Icon name="trash-2" /> Abandon
             </ActionWidget>
@@ -145,7 +66,7 @@
             <CheckWidget bind:checked={resetAuthor}>Reset</CheckWidget>
             <span></span>
             <ActionWidget
-                onClick={onDescribe}
+                onClick={() => mutator.onDescribe(fullDescription, resetAuthor)}
                 disabled={rev.header.is_immutable}>
                 <Icon name="file-text" /> Describe
             </ActionWidget>
@@ -168,15 +89,15 @@
 
                 <div class="move-commands">
                     <ActionWidget
-                        onClick={onSquash}
+                        onClick={mutator.onSquash}
                         disabled={rev.header.is_immutable ||
-                            rev.header.parents != 1}>
+                            rev.header.parent_ids.length != 1}>
                         <Icon name="download" /> Squash
                     </ActionWidget>
                     <ActionWidget
-                        onClick={onRestore}
+                        onClick={mutator.onRestore}
                         disabled={rev.header.is_immutable ||
-                            rev.header.parents != 1}>
+                            rev.header.parent_ids.length != 1}>
                         <Icon name="upload" /> Restore
                     </ActionWidget>
                 </div>

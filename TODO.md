@@ -1,7 +1,5 @@
 probably mvp
 ------------
-contextless commit actions
-- context menu on a revsummary
 more actions:
 - duplicate
 - abandon
@@ -23,11 +21,12 @@ investigate interaction with other repo mutators
 draw file conflict markers 
 disable all commands while a mutation is in progress
 decide whether to remove edit menu
+bug: selection of first row fails when log is very short - that is, when placeholders are in use
 
 possibly not mvp
 ----------------
+app icon
 bug: failed command during long load never dismisses mutation-wait overlay
-bug: selection of first row fails
 more settings
 - force dark theme on/off
 - log revsets
@@ -50,3 +49,4 @@ design updates
 - mutability indications
 better solution to slow immutability check
 tags
+context menu event store is dubious. it only works because the top-level handler clears events after reading them

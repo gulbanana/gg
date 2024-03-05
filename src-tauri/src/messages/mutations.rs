@@ -86,7 +86,7 @@ pub struct AbandonRevision {
 )]
 pub struct MoveChanges {
     pub from_change_id: RevId,
-    pub to_change_id: RevId,
+    pub to_id: RevId,
 }
 
 #[derive(Deserialize, Debug)]
@@ -97,5 +97,5 @@ pub struct MoveChanges {
 )]
 pub struct CopyChanges {
     pub from_change_id: RevId,
-    pub to_change_id: RevId,
+    pub to_id: RevId,
 }

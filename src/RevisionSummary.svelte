@@ -2,7 +2,8 @@
     import type { RevHeader } from "./messages/RevHeader";
     import type { CheckoutRevision } from "./messages/CheckoutRevision";
     import type { CreateRevision } from "./messages/CreateRevision";
-    import { revisionSelectEvent } from "./stores.js";
+    import { invoke } from "@tauri-apps/api/core";
+    import { revisionSelectEvent, currentContext } from "./stores.js";
     import { mutate } from "./ipc";
     import IdSpan from "./IdSpan.svelte";
 
@@ -11,6 +12,17 @@
 
     function onSelect() {
         revisionSelectEvent.set(rev);
+    }
+
+    function onMenu(event: Event) {
+        event.preventDefault();
+
+        currentContext.set(rev);
+
+        // XXX no error handling
+        invoke("forward_context_menu", {
+            context: rev,
+        });
     }
 
     function onEdit() {
@@ -35,6 +47,7 @@
     class:selected
     class:conflict={rev.has_conflict}
     on:click={onSelect}
+    on:contextmenu={onMenu}
     on:dblclick={onEdit}>
     <IdSpan type="change" id={rev.change_id} />
 

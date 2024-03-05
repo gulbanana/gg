@@ -4,4 +4,4 @@ import type { RefName } from "./RefName";
 import type { RevAuthor } from "./RevAuthor";
 import type { RevId } from "./RevId";
 
-export interface RevHeader { change_id: RevId, commit_id: RevId, description: MultilineString, author: RevAuthor, has_conflict: boolean, is_working_copy: boolean, is_immutable: boolean, branches: Array<RefName>, parents: number, }
+export interface RevHeader { change_id: RevId, commit_id: RevId, description: MultilineString, author: RevAuthor, has_conflict: boolean, is_working_copy: boolean, is_immutable: boolean, branches: Array<RefName>, parent_ids: Array<RevId>, }

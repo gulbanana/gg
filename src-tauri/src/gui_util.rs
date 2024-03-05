@@ -291,7 +291,7 @@ impl WorkspaceSession<'_> {
             is_working_copy: *commit.id() == self.operation.wc_id,
             is_immutable,
             branches,
-            parents: commit.parent_ids().len()
+            parent_ids: commit.parent_ids().iter().map(|commit_id| self.format_commit_id(commit_id)).collect()
         })
     }
     

@@ -15,8 +15,9 @@ use std::sync::Mutex;
 use std::thread::{self, JoinHandle};
 
 use anyhow::{Context, Result};
+use tauri::menu::Menu;
 use tauri::{ipc::InvokeError, Manager};
-use tauri::{State, Window};
+use tauri::{State, Window, Wry};
 use tauri_plugin_window_state::StateFlags;
 
 use gui_util::WorkerSession;
@@ -32,6 +33,7 @@ struct AppState(Mutex<HashMap<String, WindowState>>);
 struct WindowState {
     _worker: JoinHandle<()>,
     channel: Sender<SessionEvent>,
+    context_menu: Menu<Wry>,
 }
 
 impl AppState {
@@ -63,6 +65,7 @@ fn main() -> Result<()> {
         .invoke_handler(tauri::generate_handler![
             notify_window_ready,
             forward_accelerator,
+            forward_context_menu,
             query_log,
             query_log_next_page,
             query_revision,
@@ -74,7 +77,7 @@ fn main() -> Result<()> {
             move_changes,
             copy_changes,
         ])
-        .menu(menu::build)
+        .menu(menu::build_main)
         .setup(|app| {
             let window = app.get_webview_window("main").unwrap();
             let (sender, receiver) = channel();
@@ -114,6 +117,7 @@ fn main() -> Result<()> {
                 WindowState {
                     _worker: window_worker,
                     channel: sender,
+                    context_menu: menu::build_context(app.handle()).unwrap(),
                 },
             );
 
@@ -137,6 +141,12 @@ fn forward_accelerator(window: Window, key: char) {
     if key == 'o' {
         menu::repo_open(&window);
     }
+}
+
+#[tauri::command]
+fn forward_context_menu(window: Window, context: messages::RevHeader) -> Result<(), InvokeError> {
+    menu::handle_context(window, context).map_err(InvokeError::from_error)?;
+    Ok(())
 }
 
 #[tauri::command(async)]

@@ -1,13 +1,15 @@
 <script lang="ts">
-    import { invoke } from "@tauri-apps/api/core";
     import type { RevId } from "./messages/RevId.js";
     import type { RevDetail } from "./messages/RevDetail.js";
     import type { RepoConfig } from "./messages/RepoConfig.js";
+    import { invoke } from "@tauri-apps/api/core";
     import { command } from "./ipc.js";
     import {
         currentMutation,
+        currentContext,
         repoConfigEvent,
         repoStatusEvent,
+        contextRevisionEvent,
     } from "./stores.js";
     import { revisionSelectEvent } from "./stores.js";
     import Bound from "./Bound.svelte";
@@ -16,6 +18,7 @@
     import LogPane from "./LogPane.svelte";
     import RevisionPane from "./RevisionPane.svelte";
     import ActionWidget from "./ActionWidget.svelte";
+    import Mutator from "./Mutator.js";
 
     const queryRevisionCommand = command<RevDetail>("query_revision");
 
@@ -31,6 +34,10 @@
     $: if ($repoConfigEvent) load_repo($repoConfigEvent);
     $: if ($repoStatusEvent && $revisionSelectEvent)
         load_change($revisionSelectEvent.change_id);
+    $: if ($contextRevisionEvent) {
+        new Mutator($currentContext).handle($contextRevisionEvent);
+        $contextRevisionEvent = undefined;
+    }
 
     async function load_repo(config: RepoConfig) {
         $revisionSelectEvent = undefined;
@@ -54,8 +61,7 @@
         {#key $repoConfigEvent.absolute_path}
             <LogPane
                 default_query={$repoConfigEvent.default_query}
-                latest_query={$repoConfigEvent.latest_query}
-            />
+                latest_query={$repoConfigEvent.latest_query} />
         {/key}
         <Bound query={$queryRevisionCommand} let:data>
             <RevisionPane rev={data} />
@@ -71,8 +77,7 @@
             <span />
             <span>{$repoStatusEvent?.operation_description}</span>
             <ActionWidget onClick={onUndo}
-                ><Icon name="rotate-ccw" /> Undo</ActionWidget
-            >
+                ><Icon name="rotate-ccw" /> Undo</ActionWidget>
         </div>
 
         {#if $currentMutation}
@@ -89,8 +94,7 @@
 
                             <ActionWidget
                                 safe
-                                onClick={() => ($currentMutation = null)}
-                            >
+                                onClick={() => ($currentMutation = null)}>
                                 <Icon name="x" />
                             </ActionWidget>
                         </div>
@@ -106,8 +110,7 @@
 
                         <ActionWidget
                             safe
-                            onClick={() => ($currentMutation = null)}
-                        >
+                            onClick={() => ($currentMutation = null)}>
                             <Icon name="x" />
                         </ActionWidget>
                     </div>

@@ -1,3 +1,4 @@
+use anyhow::Result;
 #[cfg(target_os = "macos")]
 use tauri::menu::AboutMetadata;
 use tauri::{
@@ -6,9 +7,9 @@ use tauri::{
 };
 use tauri_plugin_dialog::DialogExt;
 
-use crate::messages::RevHeader;
+use crate::{messages::RevHeader, AppState};
 
-pub fn build(app_handle: &AppHandle) -> tauri::Result<Menu<Wry>> {
+pub fn build_main(app_handle: &AppHandle) -> tauri::Result<Menu<Wry>> {
     #[cfg(target_os = "macos")]
     let pkg_info = app_handle.package_info();
     #[cfg(target_os = "macos")]
@@ -128,21 +129,54 @@ pub fn build(app_handle: &AppHandle) -> tauri::Result<Menu<Wry>> {
     Ok(menu)
 }
 
-pub fn handle_event(window: &Window, event: MenuEvent) {
-    match event.id.0.as_str() {
-        "repo_open" => repo_open(window),
-        "repo_reopen" => repo_reopen(window),
-        "commit_new" => window.emit("gg://menu/commit", "new").unwrap(),
-        "commit_edit" => window.emit("gg://menu/commit", "edit").unwrap(),
-        "commit_duplicate" => window.emit("gg://menu/commit", "duplicate").unwrap(),
-        "commit_abandon" => window.emit("gg://menu/commit", "abandon").unwrap(),
-        "commit_squash" => window.emit("gg://menu/commit", "squash").unwrap(),
-        "commit_restore" => window.emit("gg://menu/commit", "restore").unwrap(),
-        _ => (),
-    }
+// XXX make anyhow when possible
+pub fn build_context(app_handle: &AppHandle<Wry>) -> Result<Menu<Wry>, tauri::Error> {
+    Menu::with_items(
+        app_handle,
+        &[
+            &MenuItem::with_id(app_handle, "revision_new", "New child", true, None::<&str>)?,
+            &MenuItem::with_id(
+                app_handle,
+                "revision_edit",
+                "Edit as working copy",
+                true,
+                None::<&str>,
+            )?,
+            &MenuItem::with_id(
+                app_handle,
+                "revision_duplicate",
+                "Duplicate",
+                true,
+                None::<&str>,
+            )?,
+            &MenuItem::with_id(
+                app_handle,
+                "revision_abandon",
+                "Abandon",
+                true,
+                None::<&str>,
+            )?,
+            &PredefinedMenuItem::separator(app_handle)?,
+            &MenuItem::with_id(
+                app_handle,
+                "revision_squash",
+                "Squash into parent",
+                true,
+                None::<&str>,
+            )?,
+            &MenuItem::with_id(
+                app_handle,
+                "revision_restore",
+                "Restore from parent",
+                true,
+                None::<&str>,
+            )?,
+        ],
+    )
 }
 
 // XXX unwrap(): see https://github.com/tauri-apps/tauri/pull/8777
+// enables global menu items based on currently selected revision
 pub fn handle_selection(menu: Menu<Wry>, selection: Option<RevHeader>) {
     let commit_submenu = menu.get("commit").unwrap();
     let commit_submenu = commit_submenu.as_submenu_unchecked();
@@ -171,9 +205,75 @@ pub fn handle_selection(menu: Menu<Wry>, selection: Option<RevHeader>) {
             set_enabled("commit_edit", !rev.is_immutable && !rev.is_working_copy);
             set_enabled("commit_duplicate", true);
             set_enabled("commit_abandon", !rev.is_immutable);
-            set_enabled("commit_squash", !rev.is_immutable && rev.parents == 1);
-            set_enabled("commit_restore", !rev.is_immutable && rev.parents == 1);
+            set_enabled(
+                "commit_squash",
+                !rev.is_immutable && rev.parent_ids.len() == 1,
+            );
+            set_enabled(
+                "commit_restore",
+                !rev.is_immutable && rev.parent_ids.len() == 1,
+            );
         }
+    }
+}
+
+// XXX make anyhow when possible
+// enables context menu items for a revision and shows the menu
+pub fn handle_context(window: Window, rev: RevHeader) -> Result<(), tauri::Error> {
+    let state = window.state::<AppState>();
+    let guard = state.0.lock().expect("state mutex poisoned");
+    let context_menu = &guard
+        .get(window.label())
+        .expect("session not found")
+        .context_menu;
+
+    let set_enabled = |id: &str, value: bool| {
+        if let Some(item) = context_menu
+            .get(id)
+            .as_ref()
+            .and_then(|item| item.as_menuitem())
+        {
+            item.set_enabled(value).unwrap();
+        }
+    };
+
+    set_enabled("revision_new", true);
+    set_enabled("revision_edit", !rev.is_immutable && !rev.is_working_copy);
+    set_enabled("revision_duplicate", true);
+    set_enabled("revision_abandon", !rev.is_immutable);
+    set_enabled(
+        "revision_squash",
+        !rev.is_immutable && rev.parent_ids.len() == 1,
+    );
+    set_enabled(
+        "revision_restore",
+        !rev.is_immutable && rev.parent_ids.len() == 1,
+    );
+
+    window.popup_menu(context_menu)?;
+
+    Ok(())
+}
+
+// XXX unwrap(): see https://github.com/tauri-apps/tauri/pull/8777
+// events from fixed menus
+pub fn handle_event(window: &Window, event: MenuEvent) {
+    match event.id.0.as_str() {
+        "repo_open" => repo_open(window),
+        "repo_reopen" => repo_reopen(window),
+        "commit_new" => window.emit("gg://menu/commit", "new").unwrap(),
+        "commit_edit" => window.emit("gg://menu/commit", "edit").unwrap(),
+        "commit_duplicate" => window.emit("gg://menu/commit", "duplicate").unwrap(),
+        "commit_abandon" => window.emit("gg://menu/commit", "abandon").unwrap(),
+        "commit_squash" => window.emit("gg://menu/commit", "squash").unwrap(),
+        "commit_restore" => window.emit("gg://menu/commit", "restore").unwrap(),
+        "revision_new" => window.emit("gg://context/revision", "new").unwrap(),
+        "revision_edit" => window.emit("gg://context/revision", "edit").unwrap(),
+        "revision_duplicate" => window.emit("gg://context/revision", "duplicate").unwrap(),
+        "revision_abandon" => window.emit("gg://context/revision", "abandon").unwrap(),
+        "revision_squash" => window.emit("gg://context/revision", "squash").unwrap(),
+        "revision_restore" => window.emit("gg://context/revision", "restore").unwrap(),
+        _ => (),
     }
 }
 
