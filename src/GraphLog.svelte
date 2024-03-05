@@ -22,6 +22,7 @@
   const columnWidth = 18;
   const rowHeight = 30;
   export let containerHeight: number;
+  export let containerWidth: number;
   export let scrollTop: number;
   export let rows: (EnhancedRow | null)[];
 
@@ -82,8 +83,8 @@
       >
         <foreignObject
           height={rowHeight}
-          style="width: calc(100% - {(row?.location[0] ?? 0) *
-            columnWidth}px); --leftpad: {(row?.padding ?? 0) * columnWidth +
+          width={containerWidth - (row?.location[0] ?? 0) * columnWidth}
+          style="--leftpad: {(row?.padding ?? 0) * columnWidth +
             columnWidth +
             6}px;"
         >

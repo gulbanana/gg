@@ -28,6 +28,7 @@
 
   let log: HTMLElement;
   let logHeight = 0;
+  let logWidth = 0;
   let logScrollTop = 0;
   let pollFrame;
 
@@ -174,10 +175,12 @@
     class="log-commits"
     bind:this={log}
     bind:clientHeight={logHeight}
+    bind:clientWidth={logWidth}
   >
     {#if graphRows}
       <GraphLog
         containerHeight={logHeight}
+        containerWidth={logWidth}
         scrollTop={logScrollTop}
         rows={graphRows}
         let:row
@@ -215,5 +218,18 @@
     scrollbar-color: var(--ctp-text) var(--ctp-crust);
     display: grid;
     user-select: none;
+  }
+
+  .log-commits::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .log-commits::-webkit-scrollbar-thumb {
+    background-color: var(--ctp-text);
+    border-radius: 6px;
+  }
+
+  .log-commits::-webkit-scrollbar-track {
+    background-color: var(--ctp-crust);
   }
 </style>
