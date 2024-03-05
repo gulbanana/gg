@@ -523,6 +523,7 @@ mod mutation {
         let result = DescribeRevision {
             change_id: wc_chid,
             new_description: "wip".to_owned(),
+            reset_author: false,
         }
         .execute_unboxed(&mut ws)?;
         assert!(matches!(result, MutationResult::Updated { .. }));
@@ -550,6 +551,7 @@ mod mutation {
         DescribeRevision {
             change_id: wc_chid,
             new_description: "wip".to_owned(),
+            reset_author: false,
         }
         .execute_unboxed(&mut ws)?;
 

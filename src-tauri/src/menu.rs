@@ -68,30 +68,22 @@ pub fn build(app_handle: &AppHandle) -> tauri::Result<Menu<Wry>> {
                 app_handle,
                 "commit_duplicate",
                 "Duplicate",
-                false,
+                true,
                 None::<&str>,
             )?,
-            &MenuItem::with_id(app_handle, "commit_abandon", "Abandon", false, None::<&str>)?,
+            &MenuItem::with_id(app_handle, "commit_abandon", "Abandon", true, None::<&str>)?,
             &PredefinedMenuItem::separator(app_handle)?,
             &MenuItem::with_id(
                 app_handle,
                 "commit_squash",
                 "Squash into parent",
-                false,
+                true,
                 None::<&str>,
             )?,
             &MenuItem::with_id(
                 app_handle,
                 "commit_restore",
                 "Restore from parent",
-                false,
-                None::<&str>,
-            )?,
-            &PredefinedMenuItem::separator(app_handle)?,
-            &MenuItem::with_id(
-                app_handle,
-                "commit_reset_author",
-                "Reset author",
                 true,
                 None::<&str>,
             )?,
@@ -152,7 +144,6 @@ pub fn handle_event(window: &Window, event: MenuEvent) {
         "commit_abandon" => window.emit("gg://menu/commit", "abandon").unwrap(),
         "commit_squash" => window.emit("gg://menu/commit", "squash").unwrap(),
         "commit_restore" => window.emit("gg://menu/commit", "restore").unwrap(),
-        "commit_reset_author" => window.emit("gg://menu/commit", "reset_author").unwrap(),
         _ => (),
     }
 }
@@ -161,11 +152,11 @@ pub fn repo_open(window: &Window) {
     let window = window.clone();
     window.dialog().file().pick_folder(move |picked| {
         if let Some(cwd) = picked {
-            crate::try_open_repository(&window, Some(cwd)).expect("open try_open_repository");
+            crate::try_open_repository(&window, Some(cwd)).expect("try_open_repository");
         }
     });
 }
 
 fn repo_reopen(window: &Window) {
-    crate::try_open_repository(window, None).expect("open try_open_repository");
+    crate::try_open_repository(window, None).expect("try_open_repository");
 }

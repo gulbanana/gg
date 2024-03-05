@@ -3,6 +3,7 @@
 
 use std::{
     fmt::Debug,
+    panic::{catch_unwind, AssertUnwindSafe},
     path::PathBuf,
     sync::mpsc::{Receiver, Sender},
 };
@@ -215,7 +216,19 @@ impl Session for WorkspaceSession<'_> {
                     state.handle_query(&self, tx, rx, revset_string, None)?;
                 }
                 SessionEvent::ExecuteMutation { tx, mutation } => {
-                    tx.send(mutation.execute(&mut self)?)?
+                    match catch_unwind(AssertUnwindSafe(|| mutation.execute(&mut self))) {
+                        Ok(result) => {
+                            tx.send(result?)?;
+                        }
+                        Err(panic) => {
+                            let message = match panic.downcast::<&str>() {
+                                Ok(v) => *v,
+                                _ => "panic!()",
+                            }
+                            .to_owned();
+                            tx.send(messages::MutationResult::Failed { message })?;
+                        }
+                    }
                 }
             };
         }

@@ -21,7 +21,8 @@ use tauri_plugin_window_state::StateFlags;
 
 use gui_util::WorkerSession;
 use messages::{
-    CheckoutRevision, CreateRevision, DescribeRevision, MutationResult, ResetRevisionAuthor,
+    AbandonRevision, CheckoutRevision, CopyChanges, CreateRevision, DescribeRevision,
+    DuplicateRevision, MoveChanges, MutationResult,
 };
 use worker::{Mutation, Session, SessionEvent};
 
@@ -68,7 +69,10 @@ fn main() -> Result<()> {
             checkout_revision,
             create_revision,
             describe_revision,
-            reset_revision_author
+            duplicate_revision,
+            abandon_revision,
+            move_changes,
+            copy_changes,
         ])
         .menu(menu::build)
         .setup(|app| {
@@ -211,10 +215,37 @@ fn describe_revision(
 }
 
 #[tauri::command(async)]
-fn reset_revision_author(
+fn duplicate_revision(
     window: Window,
     app_state: State<AppState>,
-    mutation: ResetRevisionAuthor,
+    mutation: DuplicateRevision,
+) -> Result<MutationResult, InvokeError> {
+    try_mutate(window, app_state, mutation)
+}
+
+#[tauri::command(async)]
+fn abandon_revision(
+    window: Window,
+    app_state: State<AppState>,
+    mutation: AbandonRevision,
+) -> Result<MutationResult, InvokeError> {
+    try_mutate(window, app_state, mutation)
+}
+
+#[tauri::command(async)]
+fn move_changes(
+    window: Window,
+    app_state: State<AppState>,
+    mutation: MoveChanges,
+) -> Result<MutationResult, InvokeError> {
+    try_mutate(window, app_state, mutation)
+}
+
+#[tauri::command(async)]
+fn copy_changes(
+    window: Window,
+    app_state: State<AppState>,
+    mutation: CopyChanges,
 ) -> Result<MutationResult, InvokeError> {
     try_mutate(window, app_state, mutation)
 }

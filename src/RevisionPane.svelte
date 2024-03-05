@@ -3,7 +3,10 @@
     import type { DescribeRevision } from "./messages/DescribeRevision";
     import type { CheckoutRevision } from "./messages/CheckoutRevision";
     import type { CreateRevision } from "./messages/CreateRevision";
-    import type { ResetRevisionAuthor } from "./messages/ResetRevisionAuthor";
+    import type { DuplicateRevision } from "./messages/DuplicateRevision";
+    import type { AbandonRevision } from "./messages/AbandonRevision";
+    import type { MoveChanges } from "./messages/MoveChanges";
+    import type { CopyChanges } from "./messages/CopyChanges";
     import { mutate } from "./ipc";
     import { menuCommitEvent } from "./stores";
     import ActionWidget from "./ActionWidget.svelte";
@@ -13,6 +16,7 @@
     import PathSpan from "./PathSpan.svelte";
     import RevisionSummary from "./RevisionSummary.svelte";
     import CheckWidget from "./CheckWidget.svelte";
+
     export let rev: RevDetail;
 
     let fullDescription = rev.header.description.lines.join("\n");
@@ -24,10 +28,27 @@
             onNew();
             break;
         case "edit":
-            onEdit();
+            if (!rev.header.is_immutable) {
+                onEdit();
+            }
             break;
-        case "reset_author":
-            onResetAuthor();
+        case "duplicate":
+            onDuplicate();
+            break;
+        case "abandon":
+            if (!rev.header.is_immutable) {
+                onAbandon();
+            }
+            break;
+        case "squash":
+            if (!rev.header.is_immutable && rev.parents.length == 1) {
+                onSquash();
+            }
+            break;
+        case "restore":
+            if (!rev.header.is_immutable && rev.parents.length == 1) {
+                onRestore();
+            }
             break;
     }
 
@@ -43,27 +64,39 @@
         });
     }
 
-    function onDuplicate() {}
+    function onDuplicate() {
+        mutate<DuplicateRevision>("duplicate_revision", {
+            change_id: rev.header.change_id,
+        });
+    }
 
-    function onAbandon() {}
+    function onAbandon() {
+        mutate<AbandonRevision>("abandon_revision", {
+            change_id: rev.header.change_id,
+        });
+    }
 
     function onDescribe() {
         mutate<DescribeRevision>("describe_revision", {
             change_id: rev.header.change_id,
             new_description: fullDescription,
-        });
-        resetAuthor = false;
-    }
-
-    function onResetAuthor() {
-        mutate<ResetRevisionAuthor>("reset_revision_author", {
-            change_id: rev.header.change_id,
+            reset_author: resetAuthor,
         });
     }
 
-    function onSquash() {}
+    function onSquash() {
+        mutate<MoveChanges>("move_changes", {
+            from_change_id: rev.header.change_id,
+            to_change_id: rev.parents[0].change_id,
+        });
+    }
 
-    function onRestore() {}
+    function onRestore() {
+        mutate<CopyChanges>("copy_changes", {
+            from_change_id: rev.parents[0].change_id,
+            to_change_id: rev.header.change_id,
+        });
+    }
 </script>
 
 <Pane>
@@ -136,12 +169,14 @@
                 <div class="move-commands">
                     <ActionWidget
                         onClick={onSquash}
-                        disabled={rev.header.is_immutable}>
+                        disabled={rev.header.is_immutable &&
+                            rev.parents.length == 1}>
                         <Icon name="download" /> Squash
                     </ActionWidget>
                     <ActionWidget
                         onClick={onRestore}
-                        disabled={rev.header.is_immutable}>
+                        disabled={rev.header.is_immutable &&
+                            rev.parents.length == 1}>
                         <Icon name="upload" /> Restore
                     </ActionWidget>
                 </div>

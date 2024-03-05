@@ -8,7 +8,8 @@ use jj_lib::{
 use crate::{
     gui_util::WorkspaceSession,
     messages::{
-        CheckoutRevision, CreateRevision, DescribeRevision, MutationResult, ResetRevisionAuthor,
+        AbandonRevision, CheckoutRevision, CopyChanges, CreateRevision, DescribeRevision,
+        DuplicateRevision, MoveChanges, MutationResult,
     },
 };
 
@@ -98,13 +99,18 @@ impl Mutation for DescribeRevision {
                     self.change_id.prefix, self.change_id.rest
                 ),
             })
-        } else if self.new_description == commit.description() {
+        } else if self.new_description == commit.description() && !self.reset_author {
             Ok(MutationResult::Unchanged)
         } else {
-            let commit_builder = tx
+            let mut commit_builder = tx
                 .mut_repo()
                 .rewrite_commit(&ws.settings, &commit)
                 .set_description(self.new_description);
+
+            if self.reset_author {
+                let new_author = commit_builder.committer().clone();
+                commit_builder = commit_builder.set_author(new_author);
+            }
 
             commit_builder.write()?;
 
@@ -116,31 +122,26 @@ impl Mutation for DescribeRevision {
     }
 }
 
-impl Mutation for ResetRevisionAuthor {
+impl Mutation for DuplicateRevision {
     fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
-        let mut tx = ws.start_transaction()?;
+        todo!("DuplicateRevision")
+    }
+}
 
-        let commit = ws.evaluate_rev_str(&self.change_id.hex)?;
+impl Mutation for AbandonRevision {
+    fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
+        todo!("AbandonRevision")
+    }
+}
 
-        let commit_builder = tx.mut_repo().rewrite_commit(&ws.settings, &commit);
-        let new_author = commit_builder.committer().clone();
+impl Mutation for MoveChanges {
+    fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
+        todo!("MoveChanges")
+    }
+}
 
-        if ws.check_immutable(commit.id().clone())? {
-            Ok(MutationResult::Failed {
-                message: format!(
-                    "Change {}{} is immutable",
-                    self.change_id.prefix, self.change_id.rest
-                ),
-            })
-        } else if *commit.author() == new_author {
-            Ok(MutationResult::Unchanged)
-        } else {
-            commit_builder.set_author(new_author).write()?;
-
-            match ws.finish_transaction(tx, format!("describe commit {}", commit.id().hex()))? {
-                Some(new_status) => Ok(MutationResult::Updated { new_status }),
-                None => Ok(MutationResult::Unchanged),
-            }
-        }
+impl Mutation for CopyChanges {
+    fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
+        todo!("CopyChanges")
     }
 }
