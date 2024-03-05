@@ -35,14 +35,12 @@
     class:selected
     class:conflict={rev.has_conflict}
     on:click={onSelect}
-    on:dblclick={onEdit}
->
+    on:dblclick={onEdit}>
     <IdSpan type="change" id={rev.change_id} />
 
     <span
         class="desc truncate"
-        class:indescribable={rev.description.lines[0] == ""}
-    >
+        class:indescribable={rev.description.lines[0] == ""}>
         {rev.description.lines[0] == ""
             ? "(no description set)"
             : rev.description.lines[0]}
@@ -99,6 +97,7 @@
 
     .tags {
         grid-area: tags;
+        display: flex;
     }
 
     .tag {
@@ -143,7 +142,7 @@
     @media (width >= 1920px) {
         .layout {
             grid-template-areas: ". desc tags email";
-            grid-template-columns: auto 1fr auto 300px;
+            grid-template-columns: auto auto 1fr auto;
             gap: 9px;
         }
 
