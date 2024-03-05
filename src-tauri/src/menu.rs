@@ -1,7 +1,7 @@
+#[cfg(target_os = "macos")]
+use tauri::menu::AboutMetadata;
 use tauri::{
-    menu::{
-        AboutMetadata, Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu, HELP_SUBMENU_ID,
-    },
+    menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu},
     AppHandle, Manager, Window, Wry,
 };
 use tauri_plugin_dialog::DialogExt;
@@ -9,8 +9,11 @@ use tauri_plugin_dialog::DialogExt;
 use crate::messages::RevHeader;
 
 pub fn build(app_handle: &AppHandle) -> tauri::Result<Menu<Wry>> {
+    #[cfg(target_os = "macos")]
     let pkg_info = app_handle.package_info();
+    #[cfg(target_os = "macos")]
     let config = app_handle.config();
+    #[cfg(target_os = "macos")]
     let about_metadata = AboutMetadata {
         name: Some("GG".into()),
         version: Some(pkg_info.version.to_string()),
@@ -18,17 +21,6 @@ pub fn build(app_handle: &AppHandle) -> tauri::Result<Menu<Wry>> {
         authors: config.bundle.publisher.clone().map(|p| vec![p]),
         ..Default::default()
     };
-
-    let help_menu = Submenu::with_id_and_items(
-        app_handle,
-        HELP_SUBMENU_ID,
-        "Help",
-        true,
-        &[
-            #[cfg(not(target_os = "macos"))]
-            &PredefinedMenuItem::about(app_handle, None, Some(about_metadata))?,
-        ],
-    )?;
 
     let repo_menu = Submenu::with_items(
         app_handle,
@@ -130,7 +122,6 @@ pub fn build(app_handle: &AppHandle) -> tauri::Result<Menu<Wry>> {
             &repo_menu,
             &commit_menu,
             &edit_menu,
-            &help_menu,
         ],
     )?;
 

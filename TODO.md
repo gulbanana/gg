@@ -22,7 +22,7 @@ snapshot/op-head-merge on focus
 investigate interaction with other repo mutators
 draw file conflict markers 
 disable all commands while a mutation is in progress
-decide whether to remove edit/help
+decide whether to remove edit menu
 
 possibly not mvp
 ----------------
