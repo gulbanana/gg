@@ -163,8 +163,7 @@
     <select bind:value={entered_query} on:change={reloadLog}>
       {#each choices as choice}
         <option selected={choice.selected} value={choice.query}
-          >{choice.label}</option
-        >
+          >{choice.label}</option>
       {/each}
     </select>
     <input type="text" bind:value={entered_query} on:change={reloadLog} />
@@ -175,22 +174,19 @@
     class="log-commits"
     bind:this={log}
     bind:clientHeight={logHeight}
-    bind:clientWidth={logWidth}
-  >
+    bind:clientWidth={logWidth}>
     {#if graphRows}
       <GraphLog
         containerHeight={logHeight}
         containerWidth={logWidth}
         scrollTop={logScrollTop}
         rows={graphRows}
-        let:row
-      >
+        let:row>
         {#if row}
           <RevisionSummary
             rev={row.revision}
             selected={$revisionSelectEvent?.change_id.prefix ==
-              row.revision.change_id.prefix}
-          />
+              row.revision.change_id.prefix} />
         {/if}
       </GraphLog>
     {:else}

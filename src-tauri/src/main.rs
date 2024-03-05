@@ -97,6 +97,17 @@ fn main() -> Result<()> {
 
             window.on_menu_event(menu::handle_event);
 
+            let handle = window.clone();
+            window.listen("gg://revision/select", move |event| {
+                let payload: Result<Option<messages::RevHeader>, serde_json::Error> =
+                    serde_json::from_str(event.payload());
+                if let Some(menu) = handle.menu() {
+                    if let Ok(selection) = payload {
+                        menu::handle_selection(menu, selection);
+                    }
+                }
+            });
+
             let app_state = app.state::<AppState>();
             app_state.0.lock().unwrap().insert(
                 window.label().to_owned(),

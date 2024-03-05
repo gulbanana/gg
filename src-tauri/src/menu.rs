@@ -6,6 +6,8 @@ use tauri::{
 };
 use tauri_plugin_dialog::DialogExt;
 
+use crate::messages::RevHeader;
+
 pub fn build(app_handle: &AppHandle) -> tauri::Result<Menu<Wry>> {
     let pkg_info = app_handle.package_info();
     let config = app_handle.config();
@@ -45,8 +47,9 @@ pub fn build(app_handle: &AppHandle) -> tauri::Result<Menu<Wry>> {
         ],
     )?;
 
-    let commit_menu = Submenu::with_items(
+    let commit_menu = Submenu::with_id_and_items(
         app_handle,
+        "commit",
         "Commit",
         true,
         &[
@@ -145,6 +148,41 @@ pub fn handle_event(window: &Window, event: MenuEvent) {
         "commit_squash" => window.emit("gg://menu/commit", "squash").unwrap(),
         "commit_restore" => window.emit("gg://menu/commit", "restore").unwrap(),
         _ => (),
+    }
+}
+
+// XXX unwrap(): see https://github.com/tauri-apps/tauri/pull/8777
+pub fn handle_selection(menu: Menu<Wry>, selection: Option<RevHeader>) {
+    let commit_submenu = menu.get("commit").unwrap();
+    let commit_submenu = commit_submenu.as_submenu_unchecked();
+
+    let set_enabled = |id: &str, value: bool| {
+        if let Some(item) = commit_submenu
+            .get(id)
+            .as_ref()
+            .and_then(|item| item.as_menuitem())
+        {
+            item.set_enabled(value).unwrap();
+        }
+    };
+
+    match selection {
+        None => {
+            set_enabled("commit_new", false);
+            set_enabled("commit_edit", false);
+            set_enabled("commit_duplicate", false);
+            set_enabled("commit_abandon", false);
+            set_enabled("commit_squash", false);
+            set_enabled("commit_restore", false);
+        }
+        Some(rev) => {
+            set_enabled("commit_new", true);
+            set_enabled("commit_edit", !rev.is_immutable && !rev.is_working_copy);
+            set_enabled("commit_duplicate", true);
+            set_enabled("commit_abandon", !rev.is_immutable);
+            set_enabled("commit_squash", !rev.is_immutable && rev.parents == 1);
+            set_enabled("commit_restore", !rev.is_immutable && rev.parents == 1);
+        }
     }
 }
 

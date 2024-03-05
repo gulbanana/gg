@@ -41,12 +41,12 @@
             }
             break;
         case "squash":
-            if (!rev.header.is_immutable && rev.parents.length == 1) {
+            if (!rev.header.is_immutable && rev.header.parents == 1) {
                 onSquash();
             }
             break;
         case "restore":
-            if (!rev.header.is_immutable && rev.parents.length == 1) {
+            if (!rev.header.is_immutable && rev.header.parents == 1) {
                 onRestore();
             }
             break;
@@ -115,8 +115,8 @@
             </ActionWidget>
             <ActionWidget
                 onClick={onEdit}
-                disabled={rev.header.is_immutable || rev.header.is_working_copy}
-            >
+                disabled={rev.header.is_immutable ||
+                    rev.header.is_working_copy}>
                 <Icon name="edit-2" /> Edit
             </ActionWidget>
             <ActionWidget onClick={onDuplicate}>
@@ -124,8 +124,7 @@
             </ActionWidget>
             <ActionWidget
                 onClick={onAbandon}
-                disabled={rev.header.is_immutable}
-            >
+                disabled={rev.header.is_immutable}>
                 <Icon name="trash-2" /> Abandon
             </ActionWidget>
         </div>
@@ -136,8 +135,7 @@
             class="desc"
             spellcheck="false"
             disabled={rev.header.is_immutable}
-            bind:value={fullDescription}
-        />
+            bind:value={fullDescription} />
 
         <div class="signature-commands">
             <span>
@@ -148,8 +146,7 @@
             <span></span>
             <ActionWidget
                 onClick={onDescribe}
-                disabled={rev.header.is_immutable}
-            >
+                disabled={rev.header.is_immutable}>
                 <Icon name="file-text" /> Describe
             </ActionWidget>
         </div>
@@ -162,8 +159,8 @@
                         <button
                             class="unbutton path"
                             class:selected={selectedPath == path.relative_path}
-                            on:click={() => (selectedPath = path.relative_path)}
-                        >
+                            on:click={() =>
+                                (selectedPath = path.relative_path)}>
                             <PathSpan {path} />
                         </button>
                     {/each}
@@ -172,16 +169,14 @@
                 <div class="move-commands">
                     <ActionWidget
                         onClick={onSquash}
-                        disabled={rev.header.is_immutable &&
-                            rev.parents.length == 1}
-                    >
+                        disabled={rev.header.is_immutable ||
+                            rev.header.parents != 1}>
                         <Icon name="download" /> Squash
                     </ActionWidget>
                     <ActionWidget
                         onClick={onRestore}
-                        disabled={rev.header.is_immutable &&
-                            rev.parents.length == 1}
-                    >
+                        disabled={rev.header.is_immutable ||
+                            rev.header.parents != 1}>
                         <Icon name="upload" /> Restore
                     </ActionWidget>
                 </div>

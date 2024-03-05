@@ -22,13 +22,12 @@ snapshot/op-head-merge on focus
 investigate interaction with other repo mutators
 draw file conflict markers 
 disable all commands while a mutation is in progress
-fold reset-author into describe with a checkbox
-commit menu enablement based on selection
 decide whether to remove edit/help
 
 possibly not mvp
 ----------------
 bug: failed command during long load never dismisses mutation-wait overlay
+bug: selection of first row fails
 more settings
 - force dark theme on/off
 - log revsets

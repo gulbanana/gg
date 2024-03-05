@@ -52,6 +52,7 @@ pub struct RevHeader {
     pub is_working_copy: bool,
     pub is_immutable: bool,
     pub branches: Vec<RefName>,
+    pub parents: usize,
 }
 
 #[derive(Serialize)]
