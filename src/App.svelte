@@ -2,8 +2,9 @@
     import type { RevId } from "./messages/RevId.js";
     import type { RevDetail } from "./messages/RevDetail.js";
     import type { RepoConfig } from "./messages/RepoConfig.js";
+    import type { UndoOperation } from "./messages/UndoOperation.js";
     import { invoke } from "@tauri-apps/api/core";
-    import { command } from "./ipc.js";
+    import { command, mutate } from "./ipc.js";
     import {
         currentMutation,
         currentContext,
@@ -53,7 +54,9 @@
         });
     }
 
-    function onUndo() {}
+    function onUndo() {
+        mutate<UndoOperation>("undo_operation", null);
+    }
 </script>
 
 <div id="shell">
@@ -74,8 +77,8 @@
 
         <div id="status-bar">
             <span>{$repoConfigEvent?.absolute_path}</span>
-            <span />
-            <span>{$repoStatusEvent?.operation_description}</span>
+            <span id="status-operation"
+                >{$repoStatusEvent?.operation_description}</span>
             <ActionWidget onClick={onUndo}
                 ><Icon name="rotate-ccw" /> Undo</ActionWidget>
         </div>
@@ -172,11 +175,18 @@
         padding: 0 9px;
 
         display: grid;
-        grid-template-columns: auto 1fr auto auto;
+        grid-template-columns: auto 1fr auto;
         gap: 6px;
         align-items: center;
 
         background: var(--ctp-crust);
+    }
+
+    #status-operation {
+        display: flex;
+        justify-content: end;
+        white-space: nowrap;
+        overflow: hidden;
     }
 
     #overlay {

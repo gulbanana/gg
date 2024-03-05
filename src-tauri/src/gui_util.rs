@@ -182,7 +182,7 @@ impl WorkspaceSession<'_> {
         Ok(self.operation.repo.store().get_commit(&id)?)
     } 
 
-    pub fn repo(&self) -> &dyn Repo {
+    pub fn repo(&self) -> &ReadonlyRepo {
         self.operation.repo.as_ref()
     }
 

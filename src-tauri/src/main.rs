@@ -23,7 +23,7 @@ use tauri_plugin_window_state::StateFlags;
 use gui_util::WorkerSession;
 use messages::{
     AbandonRevision, CheckoutRevision, CopyChanges, CreateRevision, DescribeRevision,
-    DuplicateRevision, MoveChanges, MutationResult,
+    DuplicateRevision, MoveChanges, MutationResult, UndoOperation,
 };
 use worker::{Mutation, Session, SessionEvent};
 
@@ -76,6 +76,7 @@ fn main() -> Result<()> {
             abandon_revision,
             move_changes,
             copy_changes,
+            undo_operation
         ])
         .menu(menu::build_main)
         .setup(|app| {
@@ -269,6 +270,14 @@ fn copy_changes(
     mutation: CopyChanges,
 ) -> Result<MutationResult, InvokeError> {
     try_mutate(window, app_state, mutation)
+}
+
+#[tauri::command(async)]
+fn undo_operation(
+    window: Window,
+    app_state: State<AppState>,
+) -> Result<MutationResult, InvokeError> {
+    try_mutate(window, app_state, UndoOperation)
 }
 
 fn try_open_repository(window: &Window, cwd: Option<PathBuf>) -> Result<()> {

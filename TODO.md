@@ -5,7 +5,6 @@ more actions:
 - abandon
 - squash
 - restore
-undo (maybe in repo menu)
 dnd rebase 
 - drop on node to reparent
 - drop on edge to insert

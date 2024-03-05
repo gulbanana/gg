@@ -1,15 +1,15 @@
 use anyhow::Result;
 use itertools::Itertools;
 use jj_lib::{
-    backend::BackendError, commit::Commit, object_id::ObjectId, repo::Repo,
-    revset::RevsetIteratorExt, rewrite::merge_commit_trees,
+    backend::BackendError, commit::Commit, object_id::ObjectId, op_walk, protos::working_copy,
+    repo::Repo, revset::RevsetIteratorExt, rewrite::merge_commit_trees,
 };
 
 use crate::{
     gui_util::WorkspaceSession,
     messages::{
         AbandonRevision, CheckoutRevision, CopyChanges, CreateRevision, DescribeRevision,
-        DuplicateRevision, MoveChanges, MutationResult,
+        DuplicateRevision, MoveChanges, MutationResult, UndoOperation,
     },
 };
 
@@ -22,12 +22,11 @@ impl Mutation for CheckoutRevision {
         let edited_commit = ws.evaluate_rev_str(&self.change_id.hex)?;
 
         if ws.check_immutable(edited_commit.id().clone())? {
-            Ok(MutationResult::Failed {
-                message: format!(
-                    "Change {}{} is immutable",
-                    self.change_id.prefix, self.change_id.rest
-                ),
-            })
+            Ok(format!(
+                "Change {}{} is immutable",
+                self.change_id.prefix, self.change_id.rest
+            )
+            .into())
         } else if edited_commit.id() == ws.wc_id() {
             Ok(MutationResult::Unchanged)
         } else {
@@ -93,12 +92,11 @@ impl Mutation for DescribeRevision {
         let commit = ws.evaluate_rev_str(&self.change_id.hex)?;
 
         if ws.check_immutable(commit.id().clone())? {
-            Ok(MutationResult::Failed {
-                message: format!(
-                    "Change {}{} is immutable",
-                    self.change_id.prefix, self.change_id.rest
-                ),
-            })
+            Ok(format!(
+                "Change {}{} is immutable",
+                self.change_id.prefix, self.change_id.rest
+            )
+            .into())
         } else if self.new_description == commit.description() && !self.reset_author {
             Ok(MutationResult::Unchanged)
         } else {
@@ -143,5 +141,41 @@ impl Mutation for MoveChanges {
 impl Mutation for CopyChanges {
     fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         todo!("CopyChanges")
+    }
+}
+
+// this is another case where it would be nice if we could reuse jj-cli's error messages
+impl Mutation for UndoOperation {
+    fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
+        let head_op = op_walk::resolve_op_with_repo(ws.repo(), "@")?;
+        let mut parent_ops = head_op.parents();
+
+        let Some(parent_op) = parent_ops.next().transpose()? else {
+            return Ok("Cannot undo repo initialization".into());
+        };
+
+        if parent_ops.next().is_some() {
+            return Ok("Cannot undo a merge operation".into());
+        };
+
+        let mut tx = ws.start_transaction()?;
+        let repo_loader = tx.base_repo().loader();
+        let head_repo = repo_loader.load_at(&head_op)?;
+        let parent_repo = repo_loader.load_at(&parent_op)?;
+        tx.mut_repo().merge(&head_repo, &parent_repo);
+        let restored_view = tx.repo().view().store_view().clone();
+        tx.mut_repo().set_view(restored_view);
+
+        match ws.finish_transaction(tx, format!("undo operation {}", head_op.id().hex()))? {
+            Some(new_status) => {
+                let working_copy = ws.get_commit(ws.wc_id())?;
+                let new_selection = ws.format_header(&working_copy, None)?;
+                Ok(MutationResult::UpdatedSelection {
+                    new_status,
+                    new_selection,
+                })
+            }
+            None => Ok(MutationResult::Unchanged),
+        }
     }
 }
