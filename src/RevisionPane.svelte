@@ -6,15 +6,17 @@
     import type { ResetRevisionAuthor } from "./messages/ResetRevisionAuthor";
     import { mutate } from "./ipc";
     import { menuCommitEvent } from "./stores";
-    import Action from "./Action.svelte";
+    import ActionWidget from "./ActionWidget.svelte";
     import Icon from "./Icon.svelte";
     import IdSpan from "./IdSpan.svelte";
     import Pane from "./Pane.svelte";
     import PathSpan from "./PathSpan.svelte";
     import RevisionSummary from "./RevisionSummary.svelte";
+    import CheckWidget from "./CheckWidget.svelte";
     export let rev: RevDetail;
 
     let fullDescription = rev.header.description.lines.join("\n");
+    let resetAuthor = false;
     let selectedPath = "";
 
     $: switch ($menuCommitEvent) {
@@ -41,11 +43,16 @@
         });
     }
 
+    function onDuplicate() {}
+
+    function onAbandon() {}
+
     function onDescribe() {
         mutate<DescribeRevision>("describe_revision", {
             change_id: rev.header.change_id,
             new_description: fullDescription,
         });
+        resetAuthor = false;
     }
 
     function onResetAuthor() {
@@ -53,17 +60,41 @@
             change_id: rev.header.change_id,
         });
     }
+
+    function onSquash() {}
+
+    function onRestore() {}
 </script>
 
 <Pane>
     <h2 slot="header" class="header">
-        <span>
+        <span class="title">
             <IdSpan type="change" id={rev.header.change_id} />
             | <IdSpan type="commit" id={rev.header.commit_id} />
             {#if rev.header.is_working_copy}
                 | Working copy
             {/if}
         </span>
+
+        <div class="primary-commands">
+            <ActionWidget onClick={onNew}>
+                <Icon name="edit" /> New
+            </ActionWidget>
+            <ActionWidget
+                onClick={onEdit}
+                disabled={rev.header.is_immutable ||
+                    rev.header.is_working_copy}>
+                <Icon name="edit-2" /> Edit
+            </ActionWidget>
+            <ActionWidget onClick={onDuplicate}>
+                <Icon name="copy" /> Duplicate
+            </ActionWidget>
+            <ActionWidget
+                onClick={onAbandon}
+                disabled={rev.header.is_immutable}>
+                <Icon name="trash-2" /> Abandon
+            </ActionWidget>
+        </div>
     </h2>
 
     <div slot="body" class="body">
@@ -71,20 +102,20 @@
             class="desc"
             spellcheck="false"
             disabled={rev.header.is_immutable}
-            bind:value={fullDescription}
-        />
+            bind:value={fullDescription} />
 
-        <div class="author">
-            <span>{rev.header.author.name}</span>
-            <span
-                >{new Date(
-                    rev.header.author.timestamp,
-                ).toLocaleTimeString()}</span
-            >
+        <div class="signature-commands">
+            <span>
+                {rev.header.author.name},
+                {new Date(rev.header.author.timestamp).toLocaleTimeString()}
+            </span>
+            <CheckWidget bind:checked={resetAuthor}>Reset</CheckWidget>
             <span></span>
-            <Action onClick={onDescribe} disabled={rev.header.is_immutable}>
+            <ActionWidget
+                onClick={onDescribe}
+                disabled={rev.header.is_immutable}>
                 <Icon name="file-text" /> Describe
-            </Action>
+            </ActionWidget>
         </div>
 
         <main>
@@ -95,12 +126,25 @@
                         <button
                             class="unbutton path"
                             class:selected={selectedPath == path.relative_path}
-                            on:click={() => (selectedPath = path.relative_path)}
-                        >
+                            on:click={() =>
+                                (selectedPath = path.relative_path)}>
                             <PathSpan {path} />
                         </button>
                     {/each}
                 </section>
+
+                <div class="move-commands">
+                    <ActionWidget
+                        onClick={onSquash}
+                        disabled={rev.header.is_immutable}>
+                        <Icon name="download" /> Squash
+                    </ActionWidget>
+                    <ActionWidget
+                        onClick={onRestore}
+                        disabled={rev.header.is_immutable}>
+                        <Icon name="upload" /> Restore
+                    </ActionWidget>
+                </div>
             {/if}
 
             {#if rev.parents.length > 0}
@@ -112,26 +156,29 @@
                 </section>
             {/if}
         </main>
-
-        <div class="commands">
-            <Action
-                onClick={onEdit}
-                disabled={rev.header.is_immutable || rev.header.is_working_copy}
-            >
-                <Icon name="edit-2" /> Edit
-            </Action>
-            <Action onClick={onNew}>
-                <Icon name="edit" /> New
-            </Action>
-        </div>
     </div>
 </Pane>
 
 <style>
     .header {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        text-wrap: nowrap;
+    }
+
+    .title {
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .primary-commands {
+        height: 30px;
+        padding: 0 3px;
         display: flex;
         align-items: center;
-        justify-content: space-between;
+        justify-content: end;
+        gap: 6px;
     }
 
     .body {
@@ -148,7 +195,7 @@
         height: 5em;
     }
 
-    .author {
+    .signature-commands {
         height: 30px;
         width: 100%;
         display: grid;
@@ -165,23 +212,21 @@
         scrollbar-color: var(--ctp-text) var(--ctp-mantle);
     }
 
-    .commands {
-        height: 30px;
-        padding: 0 3px;
-        display: flex;
-        align-items: center;
-        justify-content: end;
-        gap: 6px;
-    }
-
     section {
         background: var(--ctp-mantle);
         border-radius: 6px;
         padding: 3px;
         display: flex;
         flex-direction: column;
-        margin-top: 3px;
-        margin-bottom: 9px;
+        margin: 3px 0;
+    }
+
+    .move-commands {
+        height: 30px;
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
     }
 
     .path {

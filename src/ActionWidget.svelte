@@ -19,7 +19,7 @@
         height: 24px;
         font-size: 16px;
 
-        background: var(--ctp-peach);
+        background: var(--ctp-flamingo);
         border-width: 1px;
         border-radius: 3px;
         border-color: var(--ctp-overlay0);

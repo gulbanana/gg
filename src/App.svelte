@@ -15,7 +15,7 @@
     import Pane from "./Pane.svelte";
     import LogPane from "./LogPane.svelte";
     import RevisionPane from "./RevisionPane.svelte";
-    import Action from "./Action.svelte";
+    import ActionWidget from "./ActionWidget.svelte";
 
     const queryRevisionCommand = command<RevDetail>("query_revision");
 
@@ -70,7 +70,9 @@
             <span>{$repoConfigEvent?.absolute_path}</span>
             <span />
             <span>{$repoStatusEvent?.operation_description}</span>
-            <Action onClick={onUndo}><Icon name="rotate-ccw" /> Undo</Action>
+            <ActionWidget onClick={onUndo}
+                ><Icon name="rotate-ccw" /> Undo</ActionWidget
+            >
         </div>
 
         {#if $currentMutation}
@@ -85,11 +87,12 @@
                                 </p>
                             </div>
 
-                            <Action
+                            <ActionWidget
                                 safe
                                 onClick={() => ($currentMutation = null)}
-                                ><Icon name="x" /></Action
                             >
+                                <Icon name="x" />
+                            </ActionWidget>
                         </div>
                     {/if}
                 {:else if $currentMutation.type == "error"}
@@ -101,9 +104,12 @@
                             </p>
                         </div>
 
-                        <Action safe onClick={() => ($currentMutation = null)}
-                            ><Icon name="x" /></Action
+                        <ActionWidget
+                            safe
+                            onClick={() => ($currentMutation = null)}
                         >
+                            <Icon name="x" />
+                        </ActionWidget>
                     </div>
                 {/if}
             </div>

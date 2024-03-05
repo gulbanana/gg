@@ -24,6 +24,7 @@ draw file conflict markers
 disable all commands while a mutation is in progress
 fold reset-author into describe with a checkbox
 commit menu enablement based on selection
+decide whether to remove edit/help
 
 possibly not mvp
 ----------------
