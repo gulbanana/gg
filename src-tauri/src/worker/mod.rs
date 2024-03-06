@@ -41,6 +41,9 @@ pub enum SessionEvent {
         tx: Sender<Result<messages::RevDetail>>,
         change_id: String,
     },
+    ExecuteSnapshot {
+        tx: Sender<Option<messages::RepoStatus>>,
+    },
     ExecuteMutation {
         tx: Sender<messages::MutationResult>,
         mutation: Box<dyn Mutation + Send + Sync>,
@@ -215,6 +218,9 @@ impl Session for WorkspaceSession<'_> {
                     let revset_string = self.session.latest_query.as_ref().map(|x| x.as_str());
 
                     state.handle_query(&self, tx, rx, revset_string, None)?;
+                }
+                SessionEvent::ExecuteSnapshot { tx } => {
+                    tx.send(None)?; // XXX implement or remove
                 }
                 SessionEvent::ExecuteMutation { tx, mutation } => {
                     let name = type_name_of_val(mutation.as_ref());

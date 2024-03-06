@@ -31,13 +31,21 @@
     });
 
     invoke("notify_window_ready");
+    document.body.addEventListener(
+        "click",
+        () => currentContext.set(null),
+        true,
+    );
 
     $: if ($repoConfigEvent) load_repo($repoConfigEvent);
     $: if ($repoStatusEvent && $revisionSelectEvent)
         load_change($revisionSelectEvent.change_id);
     $: if ($contextRevisionEvent) {
-        new Mutator($currentContext).handle($contextRevisionEvent);
-        $contextRevisionEvent = undefined;
+        if ($currentContext) {
+            new Mutator($currentContext).handle($contextRevisionEvent);
+            $contextRevisionEvent = undefined;
+            $currentContext = null;
+        }
     }
 
     async function load_repo(config: RepoConfig) {

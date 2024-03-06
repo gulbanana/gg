@@ -2,11 +2,14 @@
     import type { RevId } from "./messages/RevId";
     export let id: RevId;
     export let type: "change" | "commit";
+    export let context: boolean = false;
 
     let suffix = id.rest.substring(0, 8 - id.prefix.length);
 </script>
 
-<span class="id"><span class={type}>{id.prefix}</span>{suffix}</span>
+<span class="id" class:context>
+    <span class={type}>{id.prefix}</span>{suffix}
+</span>
 
 <style>
     .id {
@@ -21,5 +24,9 @@
 
     .commit {
         color: var(--ctp-mauve);
+    }
+
+    .context {
+        color: var(--ctp-rosewater);
     }
 </style>

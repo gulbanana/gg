@@ -46,10 +46,11 @@
     class="unbutton layout"
     class:selected
     class:conflict={rev.has_conflict}
+    class:context={rev == $currentContext}
     on:click={onSelect}
     on:contextmenu={onMenu}
     on:dblclick={onEdit}>
-    <IdSpan type="change" id={rev.change_id} />
+    <IdSpan type="change" id={rev.change_id} context={rev == $currentContext} />
 
     <span
         class="desc truncate"
@@ -91,6 +92,10 @@
 
     .layout.selected {
         background: var(--ctp-base);
+    }
+
+    .layout.context {
+        color: var(--ctp-rosewater);
     }
 
     .desc {

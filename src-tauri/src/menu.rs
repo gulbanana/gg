@@ -256,7 +256,6 @@ pub fn handle_context(window: Window, rev: RevHeader) -> Result<(), tauri::Error
 }
 
 // XXX unwrap(): see https://github.com/tauri-apps/tauri/pull/8777
-// events from fixed menus
 pub fn handle_event(window: &Window, event: MenuEvent) {
     match event.id.0.as_str() {
         "repo_open" => repo_open(window),

@@ -17,7 +17,7 @@ use std::thread::{self, JoinHandle};
 use anyhow::{Context, Result};
 use tauri::menu::Menu;
 use tauri::{ipc::InvokeError, Manager};
-use tauri::{State, Window, Wry};
+use tauri::{State, WebviewWindow, Window, WindowEvent, Wry};
 use tauri_plugin_window_state::StateFlags;
 
 use gui_util::WorkerSession;
@@ -37,11 +37,11 @@ struct WindowState {
 }
 
 impl AppState {
-    fn get_sender(&self, window: &Window) -> Sender<SessionEvent> {
+    fn get_sender(&self, window_label: &str) -> Sender<SessionEvent> {
         self.0
             .lock()
             .expect("state mutex poisoned")
-            .get(window.label())
+            .get(window_label)
             .expect("session not found")
             .channel
             .clone()
@@ -82,6 +82,7 @@ fn main() -> Result<()> {
         .setup(|app| {
             let window = app.get_webview_window("main").unwrap();
             let (sender, receiver) = channel();
+
             let handle = window.clone();
             let window_worker = thread::spawn(move || {
                 while let Err(err) = WorkerSession::default()
@@ -100,6 +101,9 @@ fn main() -> Result<()> {
             });
 
             window.on_menu_event(menu::handle_event);
+
+            let handle = window.clone();
+            window.on_window_event(move |event| handle_window_event(&handle, event));
 
             let handle = window.clone();
             window.listen("gg://revision/select", move |event| {
@@ -156,7 +160,7 @@ fn query_log(
     app_state: State<AppState>,
     revset: String,
 ) -> Result<messages::LogPage, InvokeError> {
-    let session_tx: Sender<SessionEvent> = app_state.get_sender(&window);
+    let session_tx: Sender<SessionEvent> = app_state.get_sender(window.label());
     let (call_tx, call_rx) = channel();
 
     session_tx
@@ -176,7 +180,7 @@ fn query_log_next_page(
     window: Window,
     app_state: State<AppState>,
 ) -> Result<messages::LogPage, InvokeError> {
-    let session_tx: Sender<SessionEvent> = app_state.get_sender(&window);
+    let session_tx: Sender<SessionEvent> = app_state.get_sender(window.label());
     let (call_tx, call_rx) = channel();
 
     session_tx
@@ -194,7 +198,7 @@ fn query_revision(
     app_state: State<AppState>,
     rev: String,
 ) -> Result<messages::RevDetail, InvokeError> {
-    let session_tx: Sender<SessionEvent> = app_state.get_sender(&window);
+    let session_tx: Sender<SessionEvent> = app_state.get_sender(window.label());
     let (call_tx, call_rx) = channel();
 
     session_tx
@@ -283,7 +287,7 @@ fn undo_operation(
 fn try_open_repository(window: &Window, cwd: Option<PathBuf>) -> Result<()> {
     let app_state = window.state::<AppState>();
 
-    let session_tx: Sender<SessionEvent> = app_state.get_sender(&window);
+    let session_tx: Sender<SessionEvent> = app_state.get_sender(window.label());
     let (call_tx, call_rx) = channel();
 
     session_tx.send(SessionEvent::OpenWorkspace { tx: call_tx, cwd })?;
@@ -299,7 +303,7 @@ fn try_mutate<T: Mutation + Send + Sync + 'static>(
     app_state: State<AppState>,
     mutation: T,
 ) -> Result<MutationResult, InvokeError> {
-    let session_tx: Sender<SessionEvent> = app_state.get_sender(&window);
+    let session_tx: Sender<SessionEvent> = app_state.get_sender(window.label());
     let (call_tx, call_rx) = channel();
 
     session_tx
@@ -309,4 +313,24 @@ fn try_mutate<T: Mutation + Send + Sync + 'static>(
         })
         .map_err(InvokeError::from_error)?;
     call_rx.recv().map_err(InvokeError::from_error)
+}
+
+fn handle_window_event(window: &WebviewWindow, event: &WindowEvent) {
+    match *event {
+        WindowEvent::Focused(true) => {
+            let app_state = window.state::<AppState>();
+
+            let session_tx: Sender<SessionEvent> = app_state.get_sender(window.label());
+            let (call_tx, call_rx) = channel();
+
+            session_tx
+                .send(SessionEvent::ExecuteSnapshot { tx: call_tx })
+                .unwrap();
+
+            if let Some(status) = call_rx.recv().unwrap() {
+                window.emit("gg://repo/status", status).unwrap();
+            }
+        }
+        _ => (),
+    }
 }
