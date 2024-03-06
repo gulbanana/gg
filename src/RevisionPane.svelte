@@ -1,5 +1,5 @@
 <script lang="ts">
-    import type { RevDetail } from "./messages/RevDetail";
+    import type { RevResult } from "./messages/RevResult";
     import { menuCommitEvent } from "./stores";
     import ActionWidget from "./ActionWidget.svelte";
     import Icon from "./Icon.svelte";
@@ -10,7 +10,7 @@
     import CheckWidget from "./CheckWidget.svelte";
     import Mutator from "./Mutator";
 
-    export let rev: RevDetail;
+    export let rev: Extract<RevResult, { type: "Detail" }>;
 
     let mutator = new Mutator(rev.header);
     let fullDescription = rev.header.description.lines.join("\n");

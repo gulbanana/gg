@@ -79,15 +79,14 @@
     {#key row}
       <g
         transform="translate({(row?.location[0] ?? 0) * columnWidth} {(row
-          ?.location[1] ?? 0) * rowHeight})"
-      >
+          ?.location[1] ?? 0) * rowHeight})">
         <foreignObject
+          class:placeholder={row === null}
           height={rowHeight}
           width={containerWidth - (row?.location[0] ?? 0) * columnWidth}
           style="--leftpad: {(row?.padding ?? 0) * columnWidth +
             columnWidth +
-            6}px;"
-        >
+            6}px;">
           <slot {row} />
         </foreignObject>
 
@@ -116,5 +115,9 @@
 
   foreignObject {
     overflow: hidden;
+  }
+
+  .placeholder {
+    pointer-events: none;
   }
 </style>

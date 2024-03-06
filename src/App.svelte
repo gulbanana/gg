@@ -1,10 +1,10 @@
 <script lang="ts">
     import type { RevId } from "./messages/RevId.js";
-    import type { RevDetail } from "./messages/RevDetail.js";
+    import type { RevResult } from "./messages/RevResult.js";
     import type { RepoConfig } from "./messages/RepoConfig.js";
     import type { UndoOperation } from "./messages/UndoOperation.js";
     import { invoke } from "@tauri-apps/api/core";
-    import { command, mutate } from "./ipc.js";
+    import { query, mutate, type Query, delay } from "./ipc.js";
     import {
         currentMutation,
         currentContext,
@@ -21,7 +21,9 @@
     import ActionWidget from "./ActionWidget.svelte";
     import Mutator from "./Mutator.js";
 
-    const queryRevisionCommand = command<RevDetail>("query_revision");
+    let selection: Query<RevResult> = {
+        type: "wait",
+    };
 
     document.addEventListener("keydown", (event) => {
         if (event.key === "o" && event.ctrlKey) {
@@ -30,28 +32,53 @@
         }
     });
 
+    document.body.addEventListener(
+        "click",
+        () => currentContext.set(null),
+        true,
+    );
+
     invoke("notify_window_ready");
 
     $: if ($repoConfigEvent) load_repo($repoConfigEvent);
     $: if ($repoStatusEvent && $revisionSelectEvent)
         load_change($revisionSelectEvent.change_id);
     $: if ($contextRevisionEvent) {
-        new Mutator($currentContext).handle($contextRevisionEvent);
-        $contextRevisionEvent = undefined;
+        if ($currentContext) {
+            new Mutator($currentContext).handle($contextRevisionEvent);
+            $contextRevisionEvent = undefined;
+            $currentContext = null;
+        }
     }
 
     async function load_repo(config: RepoConfig) {
         $revisionSelectEvent = undefined;
-        queryRevisionCommand.reset();
         if (config.type == "Workspace") {
             $repoStatusEvent = config.status;
         }
     }
 
     async function load_change(id: RevId) {
-        queryRevisionCommand.query({
-            rev: id.prefix + id.rest,
+        let fetch = await query<RevResult>("query_revision", {
+            query: id.hex,
         });
+
+        let rev = await Promise.race([fetch, delay<RevResult>()]);
+
+        if (rev.type == "wait") {
+            selection = rev;
+            rev = await fetch;
+        }
+
+        if (
+            rev.type == "data" &&
+            rev.value.type == "NotFound" &&
+            id.hex != $repoStatusEvent?.working_copy.hex
+        ) {
+            return load_change($repoStatusEvent?.working_copy!);
+        }
+
+        selection = rev;
     }
 
     function onUndo() {
@@ -66,12 +93,21 @@
                 default_query={$repoConfigEvent.default_query}
                 latest_query={$repoConfigEvent.latest_query} />
         {/key}
-        <Bound query={$queryRevisionCommand} let:data>
-            <RevisionPane rev={data} />
-            <Pane slot="wait" />
+        <Bound query={selection} let:data>
+            {#if data.type == "Detail"}
+                <RevisionPane rev={data} />
+            {:else}
+                <Pane>
+                    <h2 slot="header">Not Found</h2>
+                    <p slot="body">Revset '{data.query}' is empty.</p>
+                </Pane>
+            {/if}
             <Pane slot="error" let:message>
                 <h2 slot="header">Error</h2>
                 <p slot="body" class="error-text">{message}</p>
+            </Pane>
+            <Pane slot="wait">
+                <h2 slot="header">Loading...</h2>
             </Pane>
         </Bound>
 
@@ -86,7 +122,7 @@
         {#if $currentMutation}
             <div id="overlay">
                 {#if $currentMutation.type == "data"}
-                    {#if $currentMutation.value.type == "Failed"}
+                    {#if $currentMutation.value.type == "InternalError" || $currentMutation.value.type == "PreconditionError"}
                         <div id="overlay-chrome">
                             <div id="overlay-content">
                                 <h3 class="error-text">Command Error</h3>

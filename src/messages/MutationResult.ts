@@ -2,4 +2,4 @@
 import type { RepoStatus } from "./RepoStatus";
 import type { RevHeader } from "./RevHeader";
 
-export type MutationResult = { "type": "Unchanged" } | { "type": "Updated", new_status: RepoStatus, } | { "type": "UpdatedSelection", new_status: RepoStatus, new_selection: RevHeader, } | { "type": "Failed", message: string, };
+export type MutationResult = { "type": "Unchanged" } | { "type": "Updated", new_status: RepoStatus, } | { "type": "UpdatedSelection", new_status: RepoStatus, new_selection: RevHeader, } | { "type": "PreconditionError", message: string, } | { "type": "InternalError", message: string, };

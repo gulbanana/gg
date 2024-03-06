@@ -32,7 +32,7 @@ mod session {
 
     use crate::{
         gui_util::WorkerSession,
-        messages::{LogPage, RepoConfig, RevDetail},
+        messages::{LogPage, RepoConfig, RevResult},
         worker::{Session, SessionEvent},
     };
 
@@ -179,7 +179,7 @@ mod session {
         tx.send(SessionEvent::EndSession)?;
 
         WorkerSession {
-            log_page_size: 5,
+            log_page_size: 6,
             ..Default::default()
         }
         .handle_events(&rx)?;
@@ -187,11 +187,11 @@ mod session {
         rx_load.recv()??;
 
         let page1 = rx_page1.recv()??;
-        assert_eq!(5, page1.rows.len());
+        assert_eq!(6, page1.rows.len());
         assert_eq!(true, page1.has_more);
 
         let page2 = rx_page2.recv()??;
-        assert_eq!(4, page2.rows.len());
+        assert_eq!(5, page2.rows.len());
         assert_eq!(false, page2.has_more);
 
         Ok(())
@@ -222,7 +222,7 @@ mod session {
         tx.send(SessionEvent::EndSession)?;
 
         WorkerSession {
-            log_page_size: 5,
+            log_page_size: 6,
             ..Default::default()
         }
         .handle_events(&rx)?;
@@ -230,15 +230,15 @@ mod session {
         rx_load.recv()??;
 
         let page1 = rx_page1.recv()??;
-        assert_eq!(5, page1.rows.len());
+        assert_eq!(6, page1.rows.len());
         assert_eq!(true, page1.has_more);
 
         let page1b = rx_page1b.recv()??;
-        assert_eq!(5, page1b.rows.len());
+        assert_eq!(6, page1b.rows.len());
         assert_eq!(true, page1b.has_more);
 
         let page2 = rx_page2.recv()??;
-        assert_eq!(4, page2.rows.len());
+        assert_eq!(5, page2.rows.len());
         assert_eq!(false, page2.has_more);
 
         Ok(())
@@ -250,7 +250,7 @@ mod session {
         let (tx, rx) = channel::<SessionEvent>();
         let (tx_load, rx_load) = channel::<Result<RepoConfig>>();
         let (tx_page1, rx_page1) = channel::<Result<LogPage>>();
-        let (tx_rev, rx_rev) = channel::<Result<RevDetail>>();
+        let (tx_rev, rx_rev) = channel::<Result<RevResult>>();
         let (tx_page2, rx_page2) = channel::<Result<LogPage>>();
 
         tx.send(SessionEvent::OpenWorkspace {
@@ -263,13 +263,13 @@ mod session {
         })?;
         tx.send(SessionEvent::QueryRevision {
             tx: tx_rev,
-            change_id: "@".to_owned(),
+            query: "@".to_owned(),
         })?;
         tx.send(SessionEvent::QueryLogNextPage { tx: tx_page2 })?;
         tx.send(SessionEvent::EndSession)?;
 
         WorkerSession {
-            log_page_size: 5,
+            log_page_size: 6,
             ..Default::default()
         }
         .handle_events(&rx)?;
@@ -277,14 +277,14 @@ mod session {
         rx_load.recv()??;
 
         let page1 = rx_page1.recv()??;
-        assert_eq!(5, page1.rows.len());
+        assert_eq!(6, page1.rows.len());
         assert_eq!(true, page1.has_more);
 
         let rev = rx_rev.recv()??;
-        assert!(rev.header.is_working_copy);
+        assert!(matches!(rev, RevResult::Detail { header, .. } if header.is_working_copy));
 
         let page2 = rx_page2.recv()??;
-        assert_eq!(4, page2.rows.len());
+        assert_eq!(5, page2.rows.len());
         assert_eq!(false, page2.has_more);
 
         Ok(())
@@ -303,7 +303,7 @@ mod session {
         })?;
         tx.send(SessionEvent::QueryLog {
             tx: tx_page,
-            query: "@|@-".to_owned(),
+            query: "@|main".to_owned(),
         })?;
         tx.send(SessionEvent::EndSession)?;
 
@@ -322,6 +322,34 @@ mod session {
 
         Ok(())
     }
+
+    #[test]
+    fn query_rev_not_found() -> Result<()> {
+        let (tx, rx) = channel::<SessionEvent>();
+        let (tx_load, rx_load) = channel::<Result<RepoConfig>>();
+        let (tx_query, rx_query) = channel::<Result<RevResult>>();
+
+        tx.send(SessionEvent::OpenWorkspace {
+            tx: tx_load,
+            cwd: None,
+        })?;
+        tx.send(SessionEvent::QueryRevision {
+            tx: tx_query,
+            query: "abcdefghijklmnopqrstuvwxyz".to_owned(),
+        })?;
+        tx.send(SessionEvent::EndSession)?;
+
+        WorkerSession::default().handle_events(&rx)?;
+
+        _ = rx_load.recv()??;
+        let result = rx_query.recv()??;
+
+        assert!(
+            matches!(result, RevResult::NotFound { query } if query == "abcdefghijklmnopqrstuvwxyz")
+        );
+
+        Ok(())
+    }
 }
 
 mod mutation {
@@ -332,7 +360,10 @@ mod mutation {
 
     use crate::{
         gui_util::WorkerSession,
-        messages::{CheckoutRevision, CreateRevision, DescribeRevision, MutationResult},
+        messages::{
+            CheckoutRevision, CreateRevision, DescribeRevision, MoveChanges, MutationResult,
+            RevResult,
+        },
         worker::{queries, Mutation},
     };
 
@@ -425,27 +456,29 @@ mod mutation {
     #[test]
     fn edit() -> Result<()> {
         let repo = mkrepo();
-        let head_str = String::from("ntukvtlz");
-        let conflict_str = String::from("nwrnuwyp");
-        let conflict_chid = mkchid("nwrnuwyp");
+        let wc = String::from("wtorwkxr"); // will be abandoned
+        let conflicted = String::from("conflicted-merge");
 
         let mut session = WorkerSession::default();
         let mut ws = session.load_directory(repo.path())?;
 
-        let head_rev = queries::query_revision(&ws, &head_str)?;
-        let conflict_rev = queries::query_revision(&ws, &conflict_str)?;
-        assert!(head_rev.header.is_working_copy);
-        assert!(!conflict_rev.header.is_working_copy);
+        let head_rev = queries::query_revision(&ws, &wc)?;
+        let conflict_rev = queries::query_revision(&ws, &conflicted)?;
+        assert!(matches!(head_rev, RevResult::Detail { header, .. } if header.is_working_copy));
+        assert!(
+            matches!(conflict_rev, RevResult::Detail { header, .. } if !header.is_working_copy)
+        );
 
         let result = CheckoutRevision {
-            change_id: conflict_chid,
+            change_id: mkchid(&conflicted),
         }
         .execute_unboxed(&mut ws)?;
         assert!(matches!(result, MutationResult::UpdatedSelection { .. }));
 
-        // former WC no longer exists!
-        let conflict_rev = queries::query_revision(&ws, &conflict_str)?;
-        assert!(conflict_rev.header.is_working_copy);
+        let head_rev = queries::query_revision(&ws, &wc)?;
+        let conflict_rev = queries::query_revision(&ws, &conflicted)?;
+        assert!(matches!(head_rev, RevResult::NotFound { .. }));
+        assert!(matches!(conflict_rev, RevResult::Detail { header, .. } if header.is_working_copy));
 
         Ok(())
     }
@@ -453,26 +486,29 @@ mod mutation {
     #[test]
     fn new_single_parent() -> Result<()> {
         let repo = mkrepo();
-        let parent_str = String::from("ntukvtlz");
-        let parent_chid = mkchid("ntukvtlz");
+        let parent = String::from("wtorwkxr"); // will no longer be the WC
 
         let mut session = WorkerSession::default();
         let mut ws = session.load_directory(repo.path())?;
 
-        let parent_rev = queries::query_revision(&ws, &parent_str)?;
-        assert!(parent_rev.header.is_working_copy);
+        let parent_rev = queries::query_revision(&ws, &parent)?;
+        assert!(matches!(parent_rev, RevResult::Detail { header, .. } if header.is_working_copy));
 
         let result = CreateRevision {
-            parent_change_ids: vec![parent_chid],
+            parent_change_ids: vec![mkchid(&parent)],
         }
         .execute_unboxed(&mut ws)?;
 
         match result {
             MutationResult::UpdatedSelection { new_selection, .. } => {
-                let parent_rev = queries::query_revision(&ws, &parent_str)?;
+                let parent_rev = queries::query_revision(&ws, &parent)?;
                 let child_rev = queries::query_revision(&ws, &new_selection.change_id.hex)?;
-                assert!(!parent_rev.header.is_working_copy);
-                assert!(child_rev.header.is_working_copy);
+                assert!(
+                    matches!(parent_rev, RevResult::Detail { header, .. } if !header.is_working_copy)
+                );
+                assert!(
+                    matches!(child_rev, RevResult::Detail { header, .. } if header.is_working_copy)
+                );
             }
             _ => assert!(false, "CreateRevision failed"),
         }
@@ -483,14 +519,14 @@ mod mutation {
     #[test]
     fn new_multi_parent() -> Result<()> {
         let repo: tempfile::TempDir = mkrepo();
-        let wc_chid = mkchid("ntukvtlz");
+        let wc_chid = mkchid("@");
         let conflict_chid = mkchid("nwrnuwyp");
 
         let mut session = WorkerSession::default();
         let mut ws = session.load_directory(repo.path())?;
 
         let parent_rev = queries::query_revision(&ws, &wc_chid.hex)?;
-        assert!(parent_rev.header.is_working_copy);
+        assert!(matches!(parent_rev, RevResult::Detail { header, .. } if header.is_working_copy));
 
         let result = CreateRevision {
             parent_change_ids: vec![wc_chid, conflict_chid],
@@ -500,7 +536,9 @@ mod mutation {
         match result {
             MutationResult::UpdatedSelection { new_selection, .. } => {
                 let child_rev = queries::query_revision(&ws, &new_selection.change_id.hex)?;
-                assert_eq!(2, child_rev.parents.len());
+                assert!(
+                    matches!(child_rev, RevResult::Detail { parents, .. } if parents.len() == 2)
+                );
             }
             _ => assert!(false, "CreateRevision failed"),
         }
@@ -511,25 +549,28 @@ mod mutation {
     #[test]
     fn describe() -> Result<()> {
         let repo = mkrepo();
-        let wc_str = String::from("ntukvtlz");
-        let wc_chid = mkchid("ntukvtlz");
+        let wc = String::from("@");
 
         let mut session = WorkerSession::default();
         let mut ws = session.load_directory(repo.path())?;
 
-        let rev = queries::query_revision(&ws, &wc_str)?;
-        assert_eq!("", rev.header.description.lines[0]);
+        let rev = queries::query_revision(&ws, &wc)?;
+        assert!(
+            matches!(rev, RevResult::Detail { header, .. } if header.description.lines[0] == "")
+        );
 
         let result = DescribeRevision {
-            change_id: wc_chid,
+            change_id: mkchid(&wc),
             new_description: "wip".to_owned(),
             reset_author: false,
         }
         .execute_unboxed(&mut ws)?;
         assert!(matches!(result, MutationResult::Updated { .. }));
 
-        let rev = queries::query_revision(&ws, &wc_str)?;
-        assert_eq!("wip", rev.header.description.lines[0]);
+        let rev = queries::query_revision(&ws, &wc)?;
+        assert!(
+            matches!(rev, RevResult::Detail { header, .. } if header.description.lines[0] == "wip")
+        );
 
         Ok(())
     }
@@ -537,27 +578,53 @@ mod mutation {
     #[test]
     fn describe_with_snapshot() -> Result<()> {
         let repo = mkrepo();
-        let wc_str = String::from("ntukvtlz");
-        let wc_chid = mkchid("ntukvtlz");
+        let wc = String::from("@");
 
         let mut session = WorkerSession::default();
         let mut ws = session.load_directory(repo.path())?;
 
-        let rev = queries::query_revision(&ws, &wc_str)?;
-        assert_eq!("", rev.header.description.lines[0]);
-        assert_eq!(0, rev.diff.len());
+        let rev = queries::query_revision(&ws, &wc)?;
+        assert!(
+            matches!(rev, RevResult::Detail { header, diff, .. } if header.description.lines[0] == "" && diff.len() == 0)
+        );
 
         fs::write(repo.path().join("new.txt"), []).unwrap();
         DescribeRevision {
-            change_id: wc_chid,
+            change_id: mkchid(&wc),
             new_description: "wip".to_owned(),
             reset_author: false,
         }
         .execute_unboxed(&mut ws)?;
 
-        let rev = queries::query_revision(&ws, &wc_str)?;
-        assert_eq!("wip", rev.header.description.lines[0]);
-        assert_ne!(0, rev.diff.len());
+        let rev = queries::query_revision(&ws, &wc)?;
+        assert!(
+            matches!(rev, RevResult::Detail { header, diff, .. } if header.description.lines[0] == "wip" && diff.len() != 0)
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn move_changes() -> Result<()> {
+        let repo = mkrepo();
+        let parent = String::from("nwrnuwyp");
+        let child = String::from("rrxroxys");
+
+        let mut session = WorkerSession::default();
+        let mut ws = session.load_directory(repo.path())?;
+
+        let parent_rev = queries::query_revision(&ws, &parent)?;
+        assert!(matches!(parent_rev, RevResult::Detail { header, .. } if header.has_conflict));
+
+        let result = MoveChanges {
+            from_change_id: mkchid(&child),
+            to_id: mkchid(&parent),
+        }
+        .execute_unboxed(&mut ws)?;
+        assert!(matches!(result, MutationResult::Updated { .. }));
+
+        let parent_rev = queries::query_revision(&ws, &parent)?;
+        assert!(matches!(parent_rev, RevResult::Detail { header, .. } if !header.has_conflict));
 
         Ok(())
     }

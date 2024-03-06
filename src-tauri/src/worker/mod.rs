@@ -2,6 +2,7 @@
 //! The worker thread is a state machine, running different handle functions based on loaded data
 
 use std::{
+    any::type_name_of_val,
     fmt::Debug,
     panic::{catch_unwind, AssertUnwindSafe},
     path::PathBuf,
@@ -37,8 +38,11 @@ pub enum SessionEvent {
         tx: Sender<Result<messages::LogPage>>,
     },
     QueryRevision {
-        tx: Sender<Result<messages::RevDetail>>,
-        change_id: String,
+        tx: Sender<Result<messages::RevResult>>,
+        query: String,
+    },
+    ExecuteSnapshot {
+        tx: Sender<Option<messages::RepoStatus>>,
     },
     ExecuteMutation {
         tx: Sender<messages::MutationResult>,
@@ -193,8 +197,8 @@ impl Session for WorkspaceSession<'_> {
                 SessionEvent::OpenWorkspace { tx, cwd } => {
                     return Ok(WorkspaceResult::Reopen(tx, cwd));
                 }
-                SessionEvent::QueryRevision { tx, change_id } => {
-                    tx.send(queries::query_revision(&self, &change_id))?
+                SessionEvent::QueryRevision { tx, query } => {
+                    tx.send(queries::query_revision(&self, &query))?
                 }
                 SessionEvent::QueryLog {
                     tx,
@@ -215,18 +219,31 @@ impl Session for WorkspaceSession<'_> {
 
                     state.handle_query(&self, tx, rx, revset_string, None)?;
                 }
+                SessionEvent::ExecuteSnapshot { tx } => {
+                    tx.send(None)?; // XXX implement or remove
+                }
                 SessionEvent::ExecuteMutation { tx, mutation } => {
-                    match catch_unwind(AssertUnwindSafe(|| mutation.execute(&mut self))) {
+                    let name = type_name_of_val(mutation.as_ref());
+                    match catch_unwind(AssertUnwindSafe(|| {
+                        mutation.execute(&mut self).context(name)
+                    })) {
                         Ok(result) => {
-                            tx.send(result?)?;
+                            tx.send(match result {
+                                Ok(result) => result,
+                                Err(err) => messages::MutationResult::InternalError {
+                                    message: err.to_string(),
+                                },
+                            })?;
                         }
                         Err(panic) => {
-                            let message = match panic.downcast::<&str>() {
+                            let mut message = match panic.downcast::<&str>() {
                                 Ok(v) => *v,
                                 _ => "panic!()",
                             }
                             .to_owned();
-                            tx.send(messages::MutationResult::Failed { message })?;
+                            message.insert_str(0, ": ");
+                            message.insert_str(0, name);
+                            tx.send(messages::MutationResult::InternalError { message })?;
                         }
                     }
                 }
@@ -243,8 +260,8 @@ impl Session for queries::LogQuery<'_, '_> {
     fn handle_events(mut self, rx: &Receiver<SessionEvent>) -> Result<Self::Transition> {
         loop {
             match rx.recv() {
-                Ok(SessionEvent::QueryRevision { tx, change_id }) => {
-                    tx.send(queries::query_revision(&self.ws, &change_id))?
+                Ok(SessionEvent::QueryRevision { tx, query }) => {
+                    tx.send(queries::query_revision(&self.ws, &query))?
                 }
                 Ok(SessionEvent::QueryLogNextPage { tx }) => tx.send(self.get_page())?,
                 Ok(unhandled) => return Ok(QueryResult(unhandled, self.state)),

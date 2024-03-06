@@ -41,61 +41,6 @@ export async function event<T>(name: string): Promise<Settable<T | undefined>> {
     }
 }
 
-class CommandStore<T> implements Readable<Query<T>> {
-    #name: string;
-    #response: Query<T>;
-    #subscribers = new Set<Subscriber<Query<T>>>();
-
-    constructor(name: string, initialData?: T) {
-        this.#name = name;
-        this.reset(initialData);
-    }
-
-    subscribe(run: Subscriber<Query<T>>): Unsubscriber {
-        // send current value to stream
-        run(this.#response);
-
-        // listen for new values
-        this.#subscribers.add(run);
-
-        return () => this.#subscribers.delete(run);
-    }
-
-    reset(initialData?: T) {
-        if (typeof (initialData) == "undefined") {
-            this.#response = { type: "wait" };
-        } else {
-            this.#response = { type: "data", value: initialData };
-        }
-    }
-
-    async query(request: InvokeArgs): Promise<Query<T>> {
-        // set a wait state then the data state, unless the data comes in hella fast
-        try {
-            let fetch = invoke<T>(this.#name, request).then<Query<T>>(result => { return { type: "data", value: result }; });
-            this.#response = await Promise.race([fetch, delay<T>(200)]);
-            if (this.#response.type == "wait") {
-                this.#response = await fetch;
-            }
-        } catch (error: any) {
-            console.log(error);
-            this.#response = { type: "error", message: error.toString() };
-        }
-
-        // notify all listeners
-        for (let subscriber of this.#subscribers) {
-            subscriber(this.#response);
-        }
-
-        // return to caller for immediate use
-        return this.#response;
-    }
-}
-
-export function command<T>(name: string, initialData?: T): CommandStore<T> {
-    return new CommandStore(name, initialData);
-}
-
 /**
  * call an IPC which provides readonly information about the repo
  */
@@ -117,10 +62,10 @@ export function mutate<T>(command: string, mutation: T) {
     (async () => {
         try {
             let fetch = invoke<MutationResult>(command, { mutation });
-            let result = await Promise.race([fetch.then(r => Promise.resolve<Query<MutationResult>>({ type: "data", value: r })), delay<MutationResult>(200)]);
+            let result = await Promise.race([fetch.then(r => Promise.resolve<Query<MutationResult>>({ type: "data", value: r })), delay<MutationResult>()]);
             currentMutation.set(result);
             let value = await fetch;
-            if (value.type != "Failed") {
+            if (value.type != "InternalError" && value.type != "PreconditionError") {
                 if (value.type == "Updated" || value.type == "UpdatedSelection") {
                     repoStatusEvent.set(value.new_status);
                     if (value.type == "UpdatedSelection") {
@@ -139,8 +84,8 @@ export function mutate<T>(command: string, mutation: T) {
 /**
  * utility function for composing IPCs with delayed loading states
  */
-export function delay<T>(ms: number): Promise<Query<T>> {
+export function delay<T>(): Promise<Query<T>> {
     return new Promise(function (resolve) {
-        setTimeout(() => resolve({ type: "wait" }), ms);
+        setTimeout(() => resolve({ type: "wait" }), 250);
     });
 }

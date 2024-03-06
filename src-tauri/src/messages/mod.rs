@@ -97,7 +97,7 @@ pub struct RepoStatus {
     derive(TS),
     ts(export, export_to = "../src/messages/")
 )]
-pub enum DiffPath {
+pub enum TreePath {
     Added { relative_path: DisplayPath },
     Deleted { relative_path: DisplayPath },
     Modified { relative_path: DisplayPath },

@@ -10,7 +10,7 @@ use jj_cli::{
     config::{default_config, LayeredConfigs},
     git_util::is_colocated_git_workspace,
 };
-use jj_lib::{backend::BackendError, file_util::relative_path, gitignore::GitIgnoreFile, op_store::WorkspaceId, repo::RepoLoaderError, repo_path::RepoPath, revset::RevsetIteratorExt, working_copy::{CheckoutStats, SnapshotOptions}};
+use jj_lib::{backend::BackendError, file_util::relative_path, gitignore::GitIgnoreFile, op_store::WorkspaceId, repo::RepoLoaderError, repo_path::RepoPath, revset::{RevsetEvaluationError, RevsetIteratorExt, RevsetResolutionError}, working_copy::{CheckoutStats, SnapshotOptions}};
 use jj_lib::{
     backend::{ChangeId, CommitId},
     commit::Commit,
@@ -30,6 +30,7 @@ use jj_lib::{
     transaction::Transaction,
     workspace::{self, Workspace, WorkspaceLoader},
 };
+use thiserror::Error;
 
 use crate::messages::{self, RevId};
 
@@ -69,6 +70,22 @@ pub struct SessionOperation {
     branches_index: OnceCell<Rc<RefNamesIndex>>,
     prefix_context: OnceCell<Rc<IdPrefixContext>>,
     immutable_revisions: OnceCell<Rc<RevsetExpression>>
+}
+
+#[derive(Debug, Error)]
+pub enum RevsetError {
+    #[error(transparent)]
+    Resolution(#[from] RevsetResolutionError),
+    #[error(transparent)]
+    Evaluation(#[from] RevsetEvaluationError),
+    #[error(transparent)]
+    Other(#[from] anyhow::Error),
+}
+
+impl From<BackendError> for RevsetError {
+    fn from(value: BackendError) -> Self {
+        RevsetError::Other(anyhow!(value))
+    }
 }
 
 impl WorkerSession {
@@ -152,6 +169,7 @@ impl WorkspaceSession<'_> {
         Ok(self.operation.repo.store().get_commit(&id)?)
     } 
 
+    // XXX maybe: hunt down uses and make nonpub
     pub fn repo(&self) -> &ReadonlyRepo {
         self.operation.repo.as_ref()
     }
@@ -161,21 +179,19 @@ impl WorkspaceSession<'_> {
     /* unfortunately parse_context and resolver are not cached */
     /***********************************************************/
 
-    pub fn evaluate_revset_expr<'op>(&'op self, revset_expr: Rc<RevsetExpression>) -> Result<Box<dyn Revset + 'op>> {
+    pub fn evaluate_revset_expr<'op>(&'op self, revset_expr: Rc<RevsetExpression>) -> Result<Box<dyn Revset + 'op>, RevsetError> {
         let resolved_expression =
-            revset_expr.resolve_user_expression(self.operation.repo.as_ref(), &self.resolver())?;
+            revset_expr.resolve_user_expression(self.operation.repo.as_ref(), &self.resolver())?;            
         let revset = resolved_expression.evaluate(self.operation.repo.as_ref())?;
-
         Ok(revset)
     }
 
-    pub fn evaluate_revset_str<'op>(&'op self, revset_str: &str) -> Result<Box<dyn Revset + 'op>> {
+    pub fn evaluate_revset_str<'op>(&'op self, revset_str: &str) -> Result<Box<dyn Revset + 'op>, RevsetError> {
         let revset_expr = parse_revset(&self.parse_context(), revset_str)?;
         self.evaluate_revset_expr(revset_expr)
     }
 
-
-    pub fn evaluate_revset_ids<'op>(&'op self, ids: &[RevId]) -> Result<Box<dyn Revset + 'op>> {
+    pub fn evaluate_revset_ids<'op>(&'op self, ids: &[RevId]) -> Result<Box<dyn Revset + 'op>, RevsetError> {
         let mut revs_str = ids[0].hex.clone();
 
         for id in ids.iter().skip(1) {
@@ -186,32 +202,40 @@ impl WorkspaceSession<'_> {
         self.evaluate_revset_str(&revs_str)
     }
 
-    pub fn resolve_single<'op, 'set: 'op, T: AsRef<dyn Revset + 'set>>(&'op self, revset: T) -> Result<Commit>  {
+    pub fn resolve_single<'op, 'set: 'op, T: AsRef<dyn Revset + 'set>>(&'op self, revset: T) -> Result<Commit, RevsetError> {
         let mut iter = revset.as_ref().iter().commits(self.operation.repo.store()).fuse();
         match (iter.next(), iter.next()) {
             (Some(commit), None) => Ok(commit?),
-            (None, _) => Err(anyhow!(r#"Revset "{:?}" didn't resolve to any revisions"#, revset.as_ref())),
+            (None, _) => Err(RevsetError::Other(anyhow!(r#"Revset "{:?}" didn't resolve to any revisions"#, revset.as_ref()))),
             (Some(_), Some(_)) => {
-                Err(anyhow!(r#"Revset "{:?}" resolved to more than one revision"#, revset.as_ref()))
+                Err(RevsetError::Other(anyhow!(r#"Revset "{:?}" resolved to more than one revision"#, revset.as_ref())))
             }
         }
     }
 
-    pub fn resolve_single_str(&self, revision_str: &str) -> Result<Commit> {
+    pub fn resolve_single_str(&self, revision_str: &str) -> Result<Commit, RevsetError> {
         let revset = self.evaluate_revset_str(revision_str)?;
         self.resolve_single(revset)
     }
 
-    pub fn resolve_single_id(&self, id: &RevId) -> Result<Commit> {
+    pub fn resolve_single_id(&self, id: &RevId) -> Result<Commit, RevsetError> {
         self.resolve_single_str(&id.hex)
     }
 
-    pub fn resolve_multiple<'op, 'set: 'op, T: AsRef<dyn Revset + 'set>>(&'op self, revset: T) -> Result<Vec<Commit>> {
+    pub fn resolve_optional_str(&self, revision_str: &str) -> Result<Option<Commit>, RevsetError> {
+        match self.resolve_single_str(revision_str) {
+            Ok(commit) => Ok(Some(commit)),
+            Err(RevsetError::Resolution(RevsetResolutionError::NoSuchRevision { .. })) => Ok(None),            
+            Err(err) => Err(err)
+        }
+    }
+
+    pub fn resolve_multiple<'op, 'set: 'op, T: AsRef<dyn Revset + 'set>>(&'op self, revset: T) -> Result<Vec<Commit>, RevsetError> {
         let commits = revset.as_ref().iter().commits(self.operation.repo.store()).collect::<Result<Vec<Commit>, BackendError>>()?;
         Ok(commits)
     }
 
-    pub fn resolve_multiple_ids(&self, ids: &[RevId]) -> Result<Vec<Commit>> {
+    pub fn resolve_multiple_ids(&self, ids: &[RevId]) -> Result<Vec<Commit>, RevsetError> {
         let revset = self.evaluate_revset_ids(ids)?;
         let commits = self.resolve_multiple(revset)?;
         Ok(commits)
@@ -311,7 +335,7 @@ impl WorkspaceSession<'_> {
 
         let is_immutable = known_immutable
             .map(|x| Result::Ok(x))
-            .unwrap_or_else(|| self.check_immutable(commit.id().clone()))?;
+            .unwrap_or_else(|| self.check_immutable(vec![commit.id().clone()]))?;
 
         Ok(messages::RevHeader {
             change_id: self.format_change_id(commit.change_id()),
@@ -331,16 +355,12 @@ impl WorkspaceSession<'_> {
         (&relative_path(base_path, &repo_path.to_fs_path(base_path))).into()
     }
 
-    pub fn check_immutable(&self, id: CommitId) -> Result<bool> {
-        let check_revset = RevsetExpression::commit(id);
-        // or: 
-        // commits: impl IntoIterator<Item = &'a Commit
-        // let check_revset = RevsetExpression::commits(
-        //     commits
-        //         .into_iter()
-        //         .map(|commit| commit.id().clone())
-        //         .collect(),
-        // );
+    pub fn check_immutable(&self, ids: impl IntoIterator<Item = CommitId>) -> Result<bool> {
+        let check_revset = RevsetExpression::commits(
+            ids
+                .into_iter()
+                .collect(),
+        );
 
         let immutable_revset = self.immutable_revisions();
         let intersection_revset = check_revset.intersection(&immutable_revset);
@@ -349,13 +369,9 @@ impl WorkspaceSession<'_> {
         // to materialise the immutable revset statefully and use it here; for now, avoid calling
         // this function unnecessarily
         let immutable_revs = self.evaluate_revset_expr(intersection_revset)?; 
+        let first = immutable_revs.iter().next();
 
-        let mut iter = immutable_revs.iter();
-        if let Some(_) = iter.next() {
-            Ok(true)
-        } else {
-            Ok(false)
-        }
+        Ok(first.is_some())
     }
 
     /*********************************************************************
@@ -746,7 +762,7 @@ fn build_immutable_revisions(repo: &ReadonlyRepo, aliases_map: &RevsetAliasesMap
 fn parse_revset(
     parse_context: &RevsetParseContext,
     revision: &str,
-) -> Result<Rc<RevsetExpression>> {
+) -> Result<Rc<RevsetExpression>, RevsetError> {
     let expression = revset::parse(revision, parse_context).context("parse revset")?;
     let expression = revset::optimize(expression);
     Ok(expression)

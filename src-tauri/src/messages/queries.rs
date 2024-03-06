@@ -56,15 +56,21 @@ pub struct RevHeader {
 }
 
 #[derive(Serialize)]
+#[serde(tag = "type")]
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
     ts(export, export_to = "../src/messages/")
 )]
-pub struct RevDetail {
-    pub header: RevHeader,
-    pub parents: Vec<RevHeader>,
-    pub diff: Vec<DiffPath>,
+pub enum RevResult {
+    NotFound {
+        query: String,
+    },
+    Detail {
+        header: RevHeader,
+        parents: Vec<RevHeader>,
+        diff: Vec<TreePath>,
+    },
 }
 
 #[derive(Serialize, Clone, Copy, Debug)]

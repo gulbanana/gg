@@ -8,12 +8,12 @@ use jj_lib::{
     matchers::EverythingMatcher,
     revset::Revset,
     revset_graph::{RevsetGraphEdge, RevsetGraphEdgeType, TopoGroupedRevsetGraphIterator},
-    rewrite::merge_commit_trees,
+    rewrite,
 };
 use pollster::FutureExt;
 
 use crate::{
-    messages::{DiffPath, LogCoordinates, LogLine, LogPage, LogRow, RevDetail, RevHeader},
+    messages::{LogCoordinates, LogLine, LogPage, LogRow, RevHeader, RevResult, TreePath},
     settings::GGSettings,
 };
 
@@ -215,10 +215,17 @@ impl<'a, 'b> LogQuery<'a, 'b> {
 }
 
 // XXX this is reloading the header, which the client already has
-pub fn query_revision(ws: &WorkspaceSession, rev_str: &str) -> Result<RevDetail> {
-    let commit = ws.resolve_single_str(rev_str)?;
+pub fn query_revision(ws: &WorkspaceSession, rev_str: &str) -> Result<RevResult> {
+    let commit = match ws.resolve_optional_str(rev_str)? {
+        Some(commit) => commit,
+        None => {
+            return Ok(RevResult::NotFound {
+                query: rev_str.to_owned(),
+            })
+        }
+    };
 
-    let parent_tree = merge_commit_trees(ws.repo(), &commit.parents())?;
+    let parent_tree = rewrite::merge_commit_trees(ws.repo(), &commit.parents())?;
     let tree = commit.tree()?;
     let mut tree_diff = parent_tree.diff_stream(&tree, &EverythingMatcher);
 
@@ -229,11 +236,11 @@ pub fn query_revision(ws: &WorkspaceSession, rev_str: &str) -> Result<RevDetail>
             let (before, after) = diff.unwrap();
 
             if before.is_present() && after.is_present() {
-                paths.push(DiffPath::Modified { relative_path });
+                paths.push(TreePath::Modified { relative_path });
             } else if before.is_absent() {
-                paths.push(DiffPath::Added { relative_path });
+                paths.push(TreePath::Added { relative_path });
             } else {
-                paths.push(DiffPath::Deleted { relative_path });
+                paths.push(TreePath::Deleted { relative_path });
             }
         }
     }
@@ -257,7 +264,7 @@ pub fn query_revision(ws: &WorkspaceSession, rev_str: &str) -> Result<RevDetail>
         .collect();
     let parents = parents?;
 
-    Ok(RevDetail {
+    Ok(RevResult::Detail {
         header,
         parents,
         diff: paths,
