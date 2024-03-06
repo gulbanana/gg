@@ -14,7 +14,6 @@ dnd move
 branching
 - drag chips onto commits - probably no -B required!
 - menu?
-universal macos builds in CI
 snapshot/op-head-merge on focus
 investigate interaction with other repo mutators
 draw file conflict markers 

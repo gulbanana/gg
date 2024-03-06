@@ -26,11 +26,16 @@ jobs:
       - name: install Rust stable
         uses: dtolnay/rust-toolchain@stable
 
-      - name: install dependencies (ubuntu only)
+      - name: install dependencies (ubuntu)
         if: matrix.platform == 'ubuntu-22.04'
         run: |
           sudo apt-get update
           sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: install dependencies (macos)
+        if: matrix.platform == 'macos-latest'
+        run: |
+          rustup target add aarch64-apple-darwin
 
       - name: install frontend dependencies
         run: npm install
@@ -39,6 +44,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
+          args: ${{ matrix.platform == 'macos-latest' && '--target universal-apple-darwin' || ''}}
           tagName: v__VERSION__
           releaseName: 'GG __VERSION__'
           releaseBody: 'See the assets to download this version and install.'
