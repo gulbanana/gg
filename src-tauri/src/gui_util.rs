@@ -311,7 +311,7 @@ impl WorkspaceSession<'_> {
 
         let is_immutable = known_immutable
             .map(|x| Result::Ok(x))
-            .unwrap_or_else(|| self.check_immutable(commit.id().clone()))?;
+            .unwrap_or_else(|| self.check_immutable(vec![commit.id().clone()]))?;
 
         Ok(messages::RevHeader {
             change_id: self.format_change_id(commit.change_id()),
@@ -331,16 +331,12 @@ impl WorkspaceSession<'_> {
         (&relative_path(base_path, &repo_path.to_fs_path(base_path))).into()
     }
 
-    pub fn check_immutable(&self, id: CommitId) -> Result<bool> {
-        let check_revset = RevsetExpression::commit(id);
-        // or: 
-        // commits: impl IntoIterator<Item = &'a Commit
-        // let check_revset = RevsetExpression::commits(
-        //     commits
-        //         .into_iter()
-        //         .map(|commit| commit.id().clone())
-        //         .collect(),
-        // );
+    pub fn check_immutable(&self, ids: impl IntoIterator<Item = CommitId>) -> Result<bool> {
+        let check_revset = RevsetExpression::commits(
+            ids
+                .into_iter()
+                .collect(),
+        );
 
         let immutable_revset = self.immutable_revisions();
         let intersection_revset = check_revset.intersection(&immutable_revset);
@@ -349,13 +345,9 @@ impl WorkspaceSession<'_> {
         // to materialise the immutable revset statefully and use it here; for now, avoid calling
         // this function unnecessarily
         let immutable_revs = self.evaluate_revset_expr(intersection_revset)?; 
+        let first = immutable_revs.iter().next();
 
-        let mut iter = immutable_revs.iter();
-        if let Some(_) = iter.next() {
-            Ok(true)
-        } else {
-            Ok(false)
-        }
+        Ok(first.is_some())
     }
 
     /*********************************************************************

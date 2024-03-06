@@ -1,5 +1,5 @@
 import type { RevHeader } from "./messages/RevHeader";
-import type { AbandonRevision } from "./messages/AbandonRevision";
+import type { AbandonRevisions } from "./messages/AbandonRevisions";
 import type { CheckoutRevision } from "./messages/CheckoutRevision";
 import type { CopyChanges } from "./messages/CopyChanges";
 import type { CreateRevision } from "./messages/CreateRevision";
@@ -72,8 +72,8 @@ export default class Mutator {
     }
 
     onAbandon = () => {
-        mutate<AbandonRevision>("abandon_revision", {
-            change_id: this.#revision.change_id,
+        mutate<AbandonRevisions>("abandon_revisions", {
+            change_ids: [this.#revision.change_id],
         });
     }
 

@@ -1,8 +1,6 @@
 probably mvp
 ------------
 more actions:
-- duplicate
-- abandon
 - squash
 - restore
 dnd rebase 

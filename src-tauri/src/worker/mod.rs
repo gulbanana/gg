@@ -2,6 +2,7 @@
 //! The worker thread is a state machine, running different handle functions based on loaded data
 
 use std::{
+    any::type_name_of_val,
     fmt::Debug,
     panic::{catch_unwind, AssertUnwindSafe},
     path::PathBuf,
@@ -216,17 +217,27 @@ impl Session for WorkspaceSession<'_> {
                     state.handle_query(&self, tx, rx, revset_string, None)?;
                 }
                 SessionEvent::ExecuteMutation { tx, mutation } => {
-                    match catch_unwind(AssertUnwindSafe(|| mutation.execute(&mut self))) {
+                    let name = type_name_of_val(mutation.as_ref());
+                    match catch_unwind(AssertUnwindSafe(|| {
+                        mutation.execute(&mut self).context(name)
+                    })) {
                         Ok(result) => {
-                            tx.send(result?)?;
+                            tx.send(match result {
+                                Ok(result) => result,
+                                Err(err) => messages::MutationResult::InternalError {
+                                    message: err.to_string(),
+                                },
+                            })?;
                         }
                         Err(panic) => {
-                            let message = match panic.downcast::<&str>() {
+                            let mut message = match panic.downcast::<&str>() {
                                 Ok(v) => *v,
                                 _ => "panic!()",
                             }
                             .to_owned();
-                            tx.send(messages::MutationResult::Failed { message })?;
+                            message.insert_str(0, ": ");
+                            message.insert_str(0, name);
+                            tx.send(messages::MutationResult::InternalError { message })?;
                         }
                     }
                 }

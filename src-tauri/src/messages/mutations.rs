@@ -17,20 +17,23 @@ pub enum MutationResult {
         new_status: RepoStatus,
         new_selection: RevHeader,
     },
-    Failed {
+    PreconditionError {
+        message: String,
+    },
+    InternalError {
         message: String,
     },
 }
 
 impl From<String> for MutationResult {
     fn from(value: String) -> Self {
-        MutationResult::Failed { message: value }
+        MutationResult::PreconditionError { message: value }
     }
 }
 
 impl From<&str> for MutationResult {
     fn from(value: &str) -> Self {
-        MutationResult::Failed {
+        MutationResult::PreconditionError {
             message: value.to_owned(),
         }
     }
@@ -88,8 +91,8 @@ pub struct DuplicateRevisions {
     derive(TS),
     ts(export, export_to = "../src/messages/")
 )]
-pub struct AbandonRevision {
-    pub change_id: RevId,
+pub struct AbandonRevisions {
+    pub change_ids: Vec<RevId>,
 }
 
 #[derive(Deserialize, Debug)]
