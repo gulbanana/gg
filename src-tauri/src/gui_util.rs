@@ -452,7 +452,7 @@ impl WorkspaceSession<'_> {
             return Ok(()); // The workspace has been deleted
         };
 
-        let base_ignores = self.base_ignores();
+        let base_ignores = self.operation.base_ignores()?;
 
         // Compare working-copy tree and operation with repo's, and reload as needed.
         let mut locked_ws = self.workspace.start_working_copy_mutation()?;
@@ -537,44 +537,6 @@ impl WorkspaceSession<'_> {
         })
     }
 
-    fn base_ignores(&self) -> Arc<GitIgnoreFile> {
-        fn get_excludes_file_path(config: &gix::config::File) -> Option<PathBuf> {
-            // TODO: maybe use path_by_key() and interpolate(), which can process non-utf-8
-            // path on Unix.
-            if let Some(value) = config.string_by_key("core.excludesFile") {
-                std::str::from_utf8(&value)
-                    .ok()
-                    .map(jj_cli::git_util::expand_git_path)
-            } else {
-                xdg_config_home().ok().map(|x| x.join("git").join("ignore"))
-            }
-        }
-
-        fn xdg_config_home() -> Result<PathBuf, VarError> {
-            if let Ok(x) = std::env::var("XDG_CONFIG_HOME") {
-                if !x.is_empty() {
-                    return Ok(PathBuf::from(x));
-                }
-            }
-            std::env::var("HOME").map(|x| Path::new(&x).join(".config"))
-        }
-
-        let mut git_ignores = GitIgnoreFile::empty();
-        if let Some(git_backend) = self.operation.git_backend() {
-            let git_repo = git_backend.git_repo();
-            if let Some(excludes_file_path) = get_excludes_file_path(&git_repo.config_snapshot()) {
-                git_ignores = git_ignores.chain_with_file("", excludes_file_path);
-            }
-            git_ignores = git_ignores
-                .chain_with_file("", git_backend.git_repo_path().join("info").join("exclude"));
-        } else if let Ok(git_config) = gix::config::File::from_globals() {
-            if let Some(excludes_file_path) = get_excludes_file_path(&git_config) {
-                git_ignores = git_ignores.chain_with_file("", excludes_file_path);
-            }
-        }
-        git_ignores
-    }
-
     fn import_git_head(&mut self) -> Result<()> {
         let mut tx = self.operation.repo.start_transaction(&self.settings);
         git::import_head(tx.mut_repo())?;
@@ -646,6 +608,44 @@ impl SessionOperation {
 
     fn git_backend(&self) -> Option<&GitBackend> {
         self.repo.store().backend_impl().downcast_ref()
+    }
+
+    pub fn base_ignores(&self) -> Result<Arc<GitIgnoreFile>> {
+        fn get_excludes_file_path(config: &gix::config::File) -> Option<PathBuf> {
+            // TODO: maybe use path_by_key() and interpolate(), which can process non-utf-8
+            // path on Unix.
+            if let Some(value) = config.string_by_key("core.excludesFile") {
+                std::str::from_utf8(&value)
+                    .ok()
+                    .map(jj_cli::git_util::expand_git_path)
+            } else {
+                xdg_config_home().ok().map(|x| x.join("git").join("ignore"))
+            }
+        }
+
+        fn xdg_config_home() -> Result<PathBuf, VarError> {
+            if let Ok(x) = std::env::var("XDG_CONFIG_HOME") {
+                if !x.is_empty() {
+                    return Ok(PathBuf::from(x));
+                }
+            }
+            std::env::var("HOME").map(|x| Path::new(&x).join(".config"))
+        }
+
+        let mut git_ignores = GitIgnoreFile::empty();
+        if let Some(git_backend) = self.git_backend() {
+            let git_repo = git_backend.git_repo();
+            if let Some(excludes_file_path) = get_excludes_file_path(&git_repo.config_snapshot()) {
+                git_ignores = git_ignores.chain_with_file("", excludes_file_path)?;
+            }
+            git_ignores = git_ignores
+                .chain_with_file("", git_backend.git_repo_path().join("info").join("exclude"))?;
+        } else if let Ok(git_config) = gix::config::File::from_globals() {
+            if let Some(excludes_file_path) = get_excludes_file_path(&git_config) {
+                git_ignores = git_ignores.chain_with_file("", excludes_file_path)?;
+            }
+        }
+        Ok(git_ignores)
     }
 }
 
