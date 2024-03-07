@@ -5,17 +5,26 @@
     import Icon from "./Icon.svelte";
     import IdSpan from "./IdSpan.svelte";
     import Pane from "./Pane.svelte";
-    import PathSpan from "./PathSpan.svelte";
     import RevisionSummary from "./RevisionSummary.svelte";
     import CheckWidget from "./CheckWidget.svelte";
     import Mutator from "./Mutator";
+    import ChangeSummary from "./ChangeSummary.svelte";
+    import GraphNode from "./GraphNode.svelte";
 
     export let rev: Extract<RevResult, { type: "Detail" }>;
 
     let mutator = new Mutator(rev.header);
     let fullDescription = rev.header.description.lines.join("\n");
     let resetAuthor = false;
-    let selectedPath = "";
+
+    let unresolvedConflicts = rev.conflicts.filter(
+        (conflict) =>
+            rev.changes.findIndex(
+                (change) =>
+                    !change.has_conflict &&
+                    change.path.repo_path == conflict.repo_path,
+            ) == -1,
+    );
 
     $: mutator.handle($menuCommitEvent);
 </script>
@@ -73,17 +82,11 @@
         </div>
 
         <main>
-            {#if rev.diff.length > 0}
+            {#if rev.changes.length > 0}
                 <section>
                     <h3>File changes</h3>
-                    {#each rev.diff as path}
-                        <button
-                            class="unbutton path"
-                            class:selected={selectedPath == path.relative_path}
-                            on:click={() =>
-                                (selectedPath = path.relative_path)}>
-                            <PathSpan {path} />
-                        </button>
+                    {#each rev.changes as change}
+                        <ChangeSummary {change} />
                     {/each}
                 </section>
 
@@ -105,9 +108,20 @@
 
             {#if rev.parents.length > 0}
                 <section>
-                    <h3>Parents</h3>
+                    <h3>Parent revisions</h3>
                     {#each rev.parents as parent}
                         <RevisionSummary rev={parent} selected={false} />
+                    {/each}
+                </section>
+            {/if}
+
+            {#if unresolvedConflicts.length > 0}
+                <section class="conflict">
+                    <h3>Unresolved conflicts</h3>
+                    {#each unresolvedConflicts as conflict}
+                        <div class="row">
+                            {conflict.relative_path}
+                        </div>
                     {/each}
                 </section>
             {/if}
@@ -178,6 +192,20 @@
         margin: 3px 0;
     }
 
+    section.conflict {
+        background: repeating-linear-gradient(
+            120deg,
+            var(--ctp-mantle) 0px,
+            var(--ctp-mantle) 12px,
+            var(--ctp-surface0) 12px,
+            var(--ctp-surface0) 15px
+        );
+    }
+
+    section > :global(*):not(:first-child) {
+        height: 27px;
+    }
+
     .move-commands {
         height: 30px;
         width: 100%;
@@ -186,18 +214,12 @@
         justify-content: space-between;
     }
 
-    .path {
-        height: 24px;
-        display: flex;
-        align-items: center;
-        cursor: pointer;
-    }
-
-    .selected {
-        background: var(--ctp-base);
-    }
-
     h3 {
         font-size: 1rem;
+    }
+
+    .row {
+        display: flex;
+        align-items: center;
     }
 </style>

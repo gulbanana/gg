@@ -122,7 +122,7 @@ h3 {
   margin: 0;
 }
 
-button.unbutton {
+.unbutton {
   background: transparent;
   border: none;
   margin: 0;

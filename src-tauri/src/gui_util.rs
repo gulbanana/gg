@@ -350,9 +350,13 @@ impl WorkspaceSession<'_> {
         })
     }
     
-    pub fn format_path(&self, repo_path: &RepoPath) -> messages::DisplayPath {
+    pub fn format_path<T: AsRef<RepoPath>>(&self, repo_path: T) -> messages::TreePath {
         let base_path = self.workspace.workspace_root();
-        (&relative_path(base_path, &repo_path.to_fs_path(base_path))).into()
+        let relative_path = relative_path(base_path, &repo_path.as_ref().to_fs_path(base_path));
+        messages::TreePath {
+            repo_path: repo_path.as_ref().as_internal_file_string().to_owned(),
+            relative_path: relative_path.into(),
+        }
     }
 
     pub fn check_immutable(&self, ids: impl IntoIterator<Item = CommitId>) -> Result<bool> {

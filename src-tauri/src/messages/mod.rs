@@ -6,7 +6,7 @@ mod queries;
 pub use mutations::*;
 pub use queries::*;
 
-use std::path::PathBuf;
+use std::path::Path;
 
 use chrono::{DateTime, FixedOffset, Local, LocalResult, TimeZone, Utc};
 use jj_lib::backend::{Signature, Timestamp};
@@ -37,7 +37,7 @@ where
 }
 
 /// Utility type used for platform-specific display
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Deserialize, Clone)]
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
@@ -45,15 +45,28 @@ where
 )]
 pub struct DisplayPath(String);
 
-impl From<&PathBuf> for DisplayPath {
-    fn from(value: &PathBuf) -> Self {
+impl<T: AsRef<Path>> From<T> for DisplayPath {
+    fn from(value: T) -> Self {
         DisplayPath(
             value
+                .as_ref()
                 .to_string_lossy()
                 .trim_start_matches("\\\\?\\")
                 .to_owned(),
         )
     }
+}
+
+/// Utility type used for round-tripping
+#[derive(Serialize, Deserialize, Clone)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(TS),
+    ts(export, export_to = "../src/messages/")
+)]
+pub struct TreePath {
+    pub repo_path: String,
+    pub relative_path: DisplayPath,
 }
 
 #[derive(Serialize, Clone)]
@@ -88,19 +101,6 @@ pub enum RepoConfig {
 pub struct RepoStatus {
     pub operation_description: String,
     pub working_copy: RevId,
-}
-
-#[derive(Serialize)]
-#[serde(tag = "type")]
-#[cfg_attr(
-    feature = "ts-rs",
-    derive(TS),
-    ts(export, export_to = "../src/messages/")
-)]
-pub enum TreePath {
-    Added { relative_path: DisplayPath },
-    Deleted { relative_path: DisplayPath },
-    Modified { relative_path: DisplayPath },
 }
 
 /// Branch or tag name with metadata.

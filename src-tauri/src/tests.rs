@@ -585,7 +585,7 @@ mod mutation {
 
         let rev = queries::query_revision(&ws, &wc)?;
         assert!(
-            matches!(rev, RevResult::Detail { header, diff, .. } if header.description.lines[0] == "" && diff.len() == 0)
+            matches!(rev, RevResult::Detail { header, changes, .. } if header.description.lines[0] == "" && changes.len() == 0)
         );
 
         fs::write(repo.path().join("new.txt"), []).unwrap();
@@ -598,7 +598,7 @@ mod mutation {
 
         let rev = queries::query_revision(&ws, &wc)?;
         assert!(
-            matches!(rev, RevResult::Detail { header, diff, .. } if header.description.lines[0] == "wip" && diff.len() != 0)
+            matches!(rev, RevResult::Detail { header, changes, .. } if header.description.lines[0] == "wip" && changes.len() != 0)
         );
 
         Ok(())

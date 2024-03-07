@@ -19,6 +19,24 @@ pub struct RevId {
     derive(TS),
     ts(export, export_to = "../src/messages/")
 )]
+pub struct RevHeader {
+    pub change_id: RevId,
+    pub commit_id: RevId,
+    pub description: MultilineString,
+    pub author: RevAuthor,
+    pub has_conflict: bool,
+    pub is_working_copy: bool,
+    pub is_immutable: bool,
+    pub branches: Vec<RefName>,
+    pub parent_ids: Vec<RevId>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(TS),
+    ts(export, export_to = "../src/messages/")
+)]
 pub struct RevAuthor {
     pub email: String,
     pub name: String,
@@ -37,22 +55,28 @@ impl From<&Signature> for RevAuthor {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize)]
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
     ts(export, export_to = "../src/messages/")
 )]
-pub struct RevHeader {
-    pub change_id: RevId,
-    pub commit_id: RevId,
-    pub description: MultilineString,
-    pub author: RevAuthor,
+pub struct RevChange {
+    pub kind: ChangeKind,
+    pub path: TreePath,
     pub has_conflict: bool,
-    pub is_working_copy: bool,
-    pub is_immutable: bool,
-    pub branches: Vec<RefName>,
-    pub parent_ids: Vec<RevId>,
+}
+
+#[derive(Serialize, Deserialize)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(TS),
+    ts(export, export_to = "../src/messages/")
+)]
+pub enum ChangeKind {
+    Added,
+    Deleted,
+    Modified,
 }
 
 #[derive(Serialize)]
@@ -69,7 +93,8 @@ pub enum RevResult {
     Detail {
         header: RevHeader,
         parents: Vec<RevHeader>,
-        diff: Vec<TreePath>,
+        changes: Vec<RevChange>,
+        conflicts: Vec<TreePath>,
     },
 }
 

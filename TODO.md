@@ -6,9 +6,6 @@ dnd rebase
 - drag extra parents in to merge
 dnd move
 - drag files onto commits
-branching
-- drag chips onto commits - probably no -B required!
-- menu?
 snapshot/op-head-merge on focus
 investigate interaction with other repo mutators
 draw file conflict markers 
@@ -17,7 +14,10 @@ fix reload reloading original cwd
 
 possibly not mvp
 ----------------
-sort out  edge cases of selection, for example "nothing selected yet" or a new query that doesn't include the selection
+sort out edge cases of selection, for example "nothing selected yet" or a new query that doesn't include the selection
+branch management
+- dnd (drag chips onto commits, probably no -B required)
+- menu
 bug: failed command during long load never dismisses mutation-wait overlay
 bug: open menu command sometimes opens multiple dialogues
 decide whether to remove edit menu

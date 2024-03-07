@@ -13,7 +13,10 @@ use jj_lib::{
 use pollster::FutureExt;
 
 use crate::{
-    messages::{LogCoordinates, LogLine, LogPage, LogRow, RevHeader, RevResult, TreePath},
+    messages::{
+        ChangeKind, LogCoordinates, LogLine, LogPage, LogRow, RevChange, RevHeader, RevResult,
+        TreePath,
+    },
     settings::GGSettings,
 };
 
@@ -229,19 +232,28 @@ pub fn query_revision(ws: &WorkspaceSession, rev_str: &str) -> Result<RevResult>
     let tree = commit.tree()?;
     let mut tree_diff = parent_tree.diff_stream(&tree, &EverythingMatcher);
 
-    let mut paths = Vec::new();
-    async {
-        while let Some((repo_path, diff)) = tree_diff.next().await {
-            let relative_path = ws.format_path(&repo_path);
-            let (before, after) = diff.unwrap();
+    let mut conflicts: Vec<TreePath> = Vec::new();
+    for (repo_path, entry) in parent_tree.entries() {
+        if !entry.is_resolved() {
+            conflicts.push(ws.format_path(repo_path));
+        }
+    }
 
-            if before.is_present() && after.is_present() {
-                paths.push(TreePath::Modified { relative_path });
-            } else if before.is_absent() {
-                paths.push(TreePath::Added { relative_path });
-            } else {
-                paths.push(TreePath::Deleted { relative_path });
-            }
+    let mut changes = Vec::new();
+    async {
+        while let Some((repo_path, entry)) = tree_diff.next().await {
+            let (before, after) = entry.unwrap();
+            changes.push(RevChange {
+                path: ws.format_path(repo_path),
+                kind: if before.is_present() && after.is_present() {
+                    ChangeKind::Modified
+                } else if before.is_absent() {
+                    ChangeKind::Added
+                } else {
+                    ChangeKind::Deleted
+                },
+                has_conflict: !after.is_resolved(),
+            });
         }
     }
     .block_on();
@@ -267,6 +279,7 @@ pub fn query_revision(ws: &WorkspaceSession, rev_str: &str) -> Result<RevResult>
     Ok(RevResult::Detail {
         header,
         parents,
-        diff: paths,
+        changes,
+        conflicts,
     })
 }

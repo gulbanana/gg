@@ -73,6 +73,8 @@
 
 <style>
     .layout {
+        cursor: pointer;
+
         /* layout summary components along a text line */
         height: 100%;
         width: 100%;
@@ -90,12 +92,32 @@
         line-height: 27px;
     }
 
+    .layout.context {
+        color: var(--ctp-rosewater);
+    }
+
+    .layout.conflict {
+        background: repeating-linear-gradient(
+            120deg,
+            transparent 0px,
+            transparent 12px,
+            var(--ctp-surface0) 12px,
+            var(--ctp-surface0) 15px
+        );
+    }
+
     .layout.selected {
         background: var(--ctp-base);
     }
 
-    .layout.context {
-        color: var(--ctp-rosewater);
+    .layout.selected.conflict {
+        background: repeating-linear-gradient(
+            120deg,
+            var(--ctp-surface0) 0px,
+            var(--ctp-surface0) 12px,
+            var(--ctp-base) 12px,
+            var(--ctp-base) 15px
+        );
     }
 
     .desc {
@@ -134,27 +156,6 @@
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
-    }
-
-    /* both nodes and refs can have this */
-    .conflict {
-        background: repeating-linear-gradient(
-            120deg,
-            transparent 0px,
-            transparent 12px,
-            var(--ctp-surface0) 12px,
-            var(--ctp-surface0) 15px
-        );
-    }
-
-    .selected.conflict {
-        background: repeating-linear-gradient(
-            120deg,
-            var(--ctp-surface0) 0px,
-            var(--ctp-surface0) 12px,
-            var(--ctp-base) 12px,
-            var(--ctp-base) 15px
-        );
     }
 
     @media (width >= 1920px) {

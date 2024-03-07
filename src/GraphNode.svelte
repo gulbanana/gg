@@ -1,14 +1,14 @@
 <script lang="ts">
     import type { RevHeader } from "./messages/RevHeader";
 
-    export let revision: RevHeader;
+    export let rev: RevHeader;
 </script>
 
-{#if revision.is_immutable}
+{#if rev.is_immutable}
     <circle cx="9" cy="15" r="6" />
 {:else}
     <circle cx="9" cy="15" r="6" class="mutable" />
-    {#if revision.is_working_copy}
+    {#if rev.is_working_copy}
         <circle cx="9" cy="15" r="3" />
     {/if}
 {/if}
