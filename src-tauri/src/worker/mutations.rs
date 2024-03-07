@@ -1,7 +1,9 @@
 use anyhow::Result;
 use indexmap::IndexMap;
 use itertools::Itertools;
-use jj_lib::{commit::Commit, object_id::ObjectId, op_walk, repo::Repo, rewrite};
+use jj_lib::{
+    commit::Commit, matchers::EverythingMatcher, object_id::ObjectId, op_walk, repo::Repo, rewrite,
+};
 
 use crate::{
     gui_util::WorkspaceSession,
@@ -210,7 +212,7 @@ impl Mutation for MoveChanges {
             return Ok("Revisions are immutable".into());
         }
 
-        // construct the remainder tree - the source's parents + some of its changes
+        // construct a remainder tree - the source's parents + some of its changes
         let from_tree = from.tree()?;
         let parent_tree = rewrite::merge_commit_trees(tx.repo(), &from.parents())?;
         // once we have sub-revision changes, do something like this:
@@ -261,7 +263,37 @@ impl Mutation for MoveChanges {
 
 impl Mutation for CopyChanges {
     fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
-        todo!("CopyChanges")
+        let mut tx = ws.start_transaction()?;
+
+        let from_tree = ws.resolve_single_id(&self.from_change_id)?.tree()?;
+        let to = ws.resolve_single_id(&self.to_id)?;
+
+        if ws.check_immutable(vec![to.id().clone()])? {
+            return Ok("Revisions are immutable".into());
+        }
+
+        // construct a restore tree - the destination with some portions overwritten by the source
+        let to_tree = to.tree()?;
+        // once we have sub-revision changes, do something like this:
+        //let matcher = FilesMatcher::new(repo_paths);
+        let matcher = EverythingMatcher;
+
+        let new_to_tree_id = rewrite::restore_tree(&from_tree, &to_tree, &matcher)?;
+        if &new_to_tree_id == to.tree_id() {
+            Ok(MutationResult::Unchanged)
+        } else {
+            tx.mut_repo()
+                .rewrite_commit(&ws.settings, &to)
+                .set_tree_id(new_to_tree_id)
+                .write()?;
+
+            tx.mut_repo().rebase_descendants(&ws.settings)?;
+
+            match ws.finish_transaction(tx, format!("restore into commit {}", to.id().hex()))? {
+                Some(new_status) => Ok(MutationResult::Updated { new_status }),
+                None => Ok(MutationResult::Unchanged),
+            }
+        }
     }
 }
 

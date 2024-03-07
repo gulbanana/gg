@@ -1,7 +1,5 @@
 probably mvp
 ------------
-more actions:
-- restore
 dnd rebase 
 - drop on node to reparent
 - drop on edge to insert
