@@ -70,17 +70,22 @@ impl Session for WorkerSession {
     type Transition = ();
 
     fn handle_events(mut self, rx: &Receiver<SessionEvent>) -> Result<()> {
+        let mut latest_cwd: Option<PathBuf> = None;
+
         loop {
             match rx.recv() {
                 Ok(SessionEvent::EndSession) => return Ok(()),
+                Ok(SessionEvent::ExecuteSnapshot { .. }) => (),
                 Ok(SessionEvent::OpenWorkspace { mut tx, mut cwd }) => loop {
-                    let resolved_cwd = &cwd
+                    let resolved_cwd = cwd
                         .clone()
+                        .or(latest_cwd)
                         .unwrap_or_else(|| std::env::current_dir().unwrap());
 
-                    let mut ws = match self.load_directory(resolved_cwd) {
+                    let mut ws = match self.load_directory(&resolved_cwd) {
                         Ok(ws) => ws,
                         Err(err) => {
+                            latest_cwd = None;
                             tx.send(Ok(messages::RepoConfig::NoWorkspace {
                                 absolute_path: resolved_cwd.into(),
                                 error: format!("{err:#}"),
@@ -88,6 +93,8 @@ impl Session for WorkerSession {
                             break;
                         }
                     };
+
+                    latest_cwd = Some(resolved_cwd);
 
                     ws.import_and_snapshot()?;
 
