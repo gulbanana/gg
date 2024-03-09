@@ -1,7 +1,6 @@
 MVP requirements
 ----------------
 implement or disable branch context commands
-disable all commands while a mutation is in progress
 dnd rebase 
 - drop on node to reparent
 - drop on edge to insert
@@ -10,6 +9,7 @@ dnd move
 - drag files onto commits
 dnd branch
 - drag chips onto commits
+gecko-dev is too slow again, perhaps due to auto-snapshots
 
 Ideas and plans
 ---------------

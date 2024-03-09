@@ -1,10 +1,12 @@
 <script lang="ts">
+    import { currentMutation } from "./stores";
+
     export let safe: boolean = false;
     export let disabled: boolean = false;
     export let onClick: (event: MouseEvent) => void;
 </script>
 
-{#if disabled}
+{#if disabled || $currentMutation}
     <button disabled class:safe>
         <slot />
     </button>
