@@ -384,16 +384,7 @@ impl WorkspaceSession<'_> {
      *********************************************************************/
 
     pub fn start_transaction(&mut self) -> Result<Transaction> {
-        if self.colocated {
-            self.import_git_head()?;
-        }
-
-        self.snapshot_working_copy()?;
-
-        if self.colocated {
-            self.import_git_refs()?;
-        }
-
+        self.import_and_snapshot()?;
         Ok(self.operation.repo.start_transaction(&self.settings))
     }
 
@@ -443,7 +434,22 @@ impl WorkspaceSession<'_> {
         Ok(Some(self.format_status()))
     }
 
-    pub fn snapshot_working_copy(&mut self) -> Result<()> {
+    // XXX does this need to do any operation merging in case of other writers?
+    pub fn import_and_snapshot(&mut self) -> Result<bool> {
+        if self.colocated {
+            self.import_git_head()?;
+        }
+
+        let updated_working_copy = self.snapshot_working_copy()?;
+
+        if self.colocated {
+            self.import_git_refs()?;
+        }
+
+        Ok(updated_working_copy)
+    }
+
+    fn snapshot_working_copy(&mut self) -> Result<bool> {
         let workspace_id = self.workspace.workspace_id().to_owned();
         let get_wc_commit = |repo: &ReadonlyRepo| -> Result<Option<_>, _> {
             repo.view()
@@ -453,7 +459,7 @@ impl WorkspaceSession<'_> {
         };
         let repo = self.operation.repo.clone();
         let Some(wc_commit) = get_wc_commit(&repo)? else {
-            return Ok(()); // The workspace has been deleted
+            return Ok(false); // The workspace has been deleted
         };
 
         let base_ignores = self.operation.base_ignores()?;
@@ -472,7 +478,7 @@ impl WorkspaceSession<'_> {
                 let wc_commit = if let Some(wc_commit) = get_wc_commit(&repo)? {
                     wc_commit
                 } else {
-                    return Ok(()); // The workspace has been deleted
+                    return Ok(false); 
                 };
                 (repo, wc_commit)
             }
@@ -497,7 +503,10 @@ impl WorkspaceSession<'_> {
             progress: None,
             max_new_file_size: self.settings.max_new_file_size()?,
         })?;
-        if new_tree_id != *wc_commit.tree_id() {
+
+        let did_anything = new_tree_id != *wc_commit.tree_id();
+
+        if did_anything {
             let mut tx =
                 repo.start_transaction(&self.settings);
             let mut_repo = tx.mut_repo();
@@ -518,7 +527,7 @@ impl WorkspaceSession<'_> {
         
         locked_ws.finish(self.operation.repo.op_id().clone())?;
 
-        Ok(())
+        Ok(did_anything)
     }
 
     fn update_working_copy(
@@ -575,7 +584,7 @@ impl WorkspaceSession<'_> {
         Ok(())
     }
 
-    pub fn import_git_refs(&mut self) -> Result<()> {
+    fn import_git_refs(&mut self) -> Result<()> {
         let git_settings = self.settings.git_settings();
         let mut tx = self.operation.repo.start_transaction(&self.settings);
         // Automated import shouldn't fail because of reserved remote name.

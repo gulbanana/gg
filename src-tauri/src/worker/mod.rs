@@ -78,7 +78,7 @@ impl Session for WorkerSession {
                         .clone()
                         .unwrap_or_else(|| std::env::current_dir().unwrap());
 
-                    let ws = match self.load_directory(resolved_cwd) {
+                    let mut ws = match self.load_directory(resolved_cwd) {
                         Ok(ws) => ws,
                         Err(err) => {
                             tx.send(Ok(messages::RepoConfig::NoWorkspace {
@@ -88,6 +88,8 @@ impl Session for WorkerSession {
                             break;
                         }
                     };
+
+                    ws.import_and_snapshot()?;
 
                     tx.send(Ok(ws.format_config()))?;
 
@@ -220,7 +222,11 @@ impl Session for WorkspaceSession<'_> {
                     state.handle_query(&self, tx, rx, revset_string, None)?;
                 }
                 SessionEvent::ExecuteSnapshot { tx } => {
-                    tx.send(None)?; // XXX implement or remove
+                    if self.import_and_snapshot().is_ok_and(|updated| updated) {
+                        tx.send(Some(self.format_status()))?;
+                    } else {
+                        tx.send(None)?;
+                    }
                 }
                 SessionEvent::ExecuteMutation { tx, mutation } => {
                     let name = type_name_of_val(mutation.as_ref());

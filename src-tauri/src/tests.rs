@@ -398,12 +398,12 @@ mod mutation {
         let mut ws = session.load_directory(repo.path())?;
         let old_wc = ws.wc_id().clone();
 
-        ws.snapshot_working_copy()?;
+        assert!(!ws.import_and_snapshot()?);
         assert_eq!(&old_wc, ws.wc_id());
 
         fs::write(repo.path().join("new.txt"), []).unwrap();
 
-        ws.snapshot_working_copy()?;
+        assert!(ws.import_and_snapshot()?);
         assert_ne!(&old_wc, ws.wc_id());
 
         Ok(())

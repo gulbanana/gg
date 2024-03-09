@@ -9,8 +9,6 @@ dnd move
 implement or disable branch context commands
 dnd branch
 - drag chips onto commits
-snapshot/op-head-merge on focus
-investigate interaction with other repo mutators
 disable all commands while a mutation is in progress
 fix reload reloading original cwd
 (minimal) docs 
@@ -22,6 +20,7 @@ bug: failed command during long load never dismisses mutation-wait overlay
 bug: open menu command sometimes opens multiple dialogues
 edge case: change ids that refer to more than one rev
 edge case: selection issues like "nothing selected yet" or a new query that doesn't include the selection. this might be fine as-is
+edge case: what happens when we snapshot after the CLI does?
 perf: optimise revdetail loads - we already have the header
 perf: better solution to slow immutability check
 feat: log keyboard support
