@@ -1,26 +1,26 @@
-probably mvp
-------------
+MVP requirements
+----------------
+implement or disable branch context commands
+disable all commands while a mutation is in progress
 dnd rebase 
 - drop on node to reparent
 - drop on edge to insert
 - drag extra parents in to merge
 dnd move
 - drag files onto commits
-implement or disable branch context commands
 dnd branch
 - drag chips onto commits
-disable all commands while a mutation is in progress
-fix reload reloading original cwd
-(minimal) docs 
 
-possibly not mvp
-----------------
+Ideas and plans
+---------------
+These changes may or may not be implemented in the future.
+
 bug: proper fix for https://github.com/tauri-apps/tauri/issues/9127 (currently worked-around via fork)
 bug: failed command during long load never dismisses mutation-wait overlay
 bug: open menu command sometimes opens multiple dialogues
 edge case: change ids that refer to more than one rev
 edge case: selection issues like "nothing selected yet" or a new query that doesn't include the selection. this might be fine as-is
-edge case: what happens when we snapshot after the CLI does?
+edge case: what happens when we snapshot after the CLI does? when there's nothing *to* snapshot, we don't refresh the ui...
 perf: optimise revdetail loads - we already have the header
 perf: better solution to slow immutability check
 feat: log keyboard support
@@ -39,3 +39,4 @@ feat: more settings (and fix how settings work, with a base template)
 design: decide whether to remove edit menu
 design: app icon
 design: draw missing (edge-to-nowhere) graph nodes?
+epic: categorical expansion - trays, modals, pinned commits etc
