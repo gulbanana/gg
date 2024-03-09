@@ -8,7 +8,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "check": "svelte-check --tsconfig ./tsconfig.json",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "gen": "cd src-tauri && cargo test"
   },
   "dependencies": {
     "@catppuccin/palette": "^1.0.3",
