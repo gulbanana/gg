@@ -716,35 +716,6 @@ fn build_prefix_context(settings: &UserSettings, workspace: &Workspace, aliases_
     Ok(prefix_context)
 }
 
-fn build_branches_index(repo: &ReadonlyRepo) -> RefNamesIndex {
-    let mut index = RefNamesIndex::default();
-    for (branch_name, branch_target) in repo.view().branches() {
-        let local_target = branch_target.local_target;
-        let remote_refs = branch_target.remote_refs;
-        if local_target.is_present() {
-            let ref_name = messages::RefName {
-                name: branch_name.to_owned(),
-                remote: None,
-                has_conflict: local_target.has_conflict(),
-                is_synced: remote_refs.iter().all(|&(_, remote_ref)| {
-                    !remote_ref.is_tracking() || remote_ref.target == *local_target
-                }),
-            };
-            index.insert(local_target.added_ids(), ref_name);
-        }
-        for &(remote_name, remote_ref) in &remote_refs {
-            let ref_name = messages::RefName {
-                name: branch_name.to_owned(),
-                remote: Some(remote_name.to_owned()),
-                has_conflict: remote_ref.target.has_conflict(),
-                is_synced: remote_ref.is_tracking() && remote_ref.target == *local_target,
-            };
-            index.insert(remote_ref.target.added_ids(), ref_name);
-        }
-    }
-    index
-}
-
 fn build_immutable_revisions(repo: &ReadonlyRepo, aliases_map: &RevsetAliasesMap, parse_context: &RevsetParseContext) -> Result<Rc<RevsetExpression>> {
     let (params, immutable_heads_str) = aliases_map
         .get_function("immutable_heads")
@@ -796,4 +767,33 @@ impl RefNamesIndex {
             &[]
         }
     }
+}
+
+fn build_branches_index(repo: &ReadonlyRepo) -> RefNamesIndex {
+    let mut index = RefNamesIndex::default();
+    for (branch_name, branch_target) in repo.view().branches() {
+        let local_target = branch_target.local_target;
+        let remote_refs = branch_target.remote_refs;
+        if local_target.is_present() {
+            let ref_name = messages::RefName {
+                name: branch_name.to_owned(),
+                remote: None,
+                has_conflict: local_target.has_conflict(),
+                is_synced: remote_refs.iter().all(|&(_, remote_ref)| {
+                    !remote_ref.is_tracking() || remote_ref.target == *local_target
+                }),
+            };
+            index.insert(local_target.added_ids(), ref_name);
+        }
+        for &(remote_name, remote_ref) in &remote_refs {
+            let ref_name = messages::RefName {
+                name: branch_name.to_owned(),
+                remote: Some(remote_name.to_owned()),
+                has_conflict: remote_ref.target.has_conflict(),
+                is_synced: remote_ref.is_tracking() && remote_ref.target == *local_target,
+            };
+            index.insert(remote_ref.target.added_ids(), ref_name);
+        }
+    }
+    index
 }

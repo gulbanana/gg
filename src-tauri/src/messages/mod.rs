@@ -37,7 +37,7 @@ where
 }
 
 /// Utility type used for platform-specific display
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
@@ -58,7 +58,7 @@ impl<T: AsRef<Path>> From<T> for DisplayPath {
 }
 
 /// Utility type used for round-tripping
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
@@ -120,4 +120,25 @@ pub struct RefName {
     /// Local ref is synchronized with all tracking remotes, or tracking remote
     /// ref is synchronized with the local.
     pub is_synced: bool,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(tag = "type")]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(TS),
+    ts(export, export_to = "../src/messages/")
+)]
+pub enum MenuContext {
+    Revision {
+        rev: RevHeader,
+    },
+    Tree {
+        rev: RevHeader,
+        path: TreePath, // someday: paths
+    },
+    Branch {
+        rev: RevHeader,
+        name: RefName,
+    },
 }

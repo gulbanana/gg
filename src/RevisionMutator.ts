@@ -8,7 +8,7 @@ import type { DuplicateRevisions } from "./messages/DuplicateRevisions";
 import type { MoveChanges } from "./messages/MoveChanges";
 import { mutate } from "./ipc";
 
-export default class Mutator {
+export default class RevisionMutator {
     #revision: RevHeader;
 
     constructor(rev: RevHeader) {
@@ -20,8 +20,6 @@ export default class Mutator {
         if (!event) {
             return;
         }
-
-        console.log(`${this.#revision.change_id.hex} handle ${event}`);
 
         switch (event) {
             case "new":
@@ -50,6 +48,8 @@ export default class Mutator {
                     this.onRestore();
                 }
                 break;
+            default:
+                console.log(`unimplemented mutation '${event}'`, this);
         }
     }
 
@@ -89,6 +89,7 @@ export default class Mutator {
         mutate<MoveChanges>("move_changes", {
             from_change_id: this.#revision.change_id,
             to_id: this.#revision.parent_ids[0],
+            paths: []
         });
     }
 
@@ -96,6 +97,7 @@ export default class Mutator {
         mutate<CopyChanges>("copy_changes", {
             from_change_id: this.#revision.parent_ids[0],
             to_id: this.#revision.change_id,
+            paths: []
         });
     }
 }

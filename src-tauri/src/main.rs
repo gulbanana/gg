@@ -23,7 +23,7 @@ use tauri_plugin_window_state::StateFlags;
 use gui_util::WorkerSession;
 use messages::{
     AbandonRevisions, CheckoutRevision, CopyChanges, CreateRevision, DescribeRevision,
-    DuplicateRevisions, MoveChanges, MutationResult, UndoOperation,
+    DuplicateRevisions, MoveChanges, MutationResult, TrackBranch, UndoOperation, UntrackBranch,
 };
 use worker::{Mutation, Session, SessionEvent};
 
@@ -33,7 +33,9 @@ struct AppState(Mutex<HashMap<String, WindowState>>);
 struct WindowState {
     _worker: JoinHandle<()>,
     channel: Sender<SessionEvent>,
-    context_menu: Menu<Wry>,
+    revision_menu: Menu<Wry>,
+    tree_menu: Menu<Wry>,
+    ref_menu: Menu<Wry>,
 }
 
 impl AppState {
@@ -51,6 +53,7 @@ impl AppState {
 fn main() -> Result<()> {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(
             tauri_plugin_window_state::Builder::default()
                 .with_state_flags(
@@ -61,7 +64,6 @@ fn main() -> Result<()> {
                 )
                 .build(),
         )
-        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             notify_window_ready,
             forward_accelerator,
@@ -76,6 +78,8 @@ fn main() -> Result<()> {
             abandon_revisions,
             move_changes,
             copy_changes,
+            track_branch,
+            untrack_branch,
             undo_operation
         ])
         .menu(menu::build_main)
@@ -116,13 +120,17 @@ fn main() -> Result<()> {
                 }
             });
 
+            let (revision_menu, tree_menu, ref_menu) = menu::build_context(app.handle()).unwrap();
+
             let app_state = app.state::<AppState>();
             app_state.0.lock().unwrap().insert(
                 window.label().to_owned(),
                 WindowState {
                     _worker: window_worker,
                     channel: sender,
-                    context_menu: menu::build_context(app.handle()).unwrap(),
+                    revision_menu,
+                    tree_menu,
+                    ref_menu,
                 },
             );
 
@@ -149,7 +157,7 @@ fn forward_accelerator(window: Window, key: char) {
 }
 
 #[tauri::command]
-fn forward_context_menu(window: Window, context: messages::RevHeader) -> Result<(), InvokeError> {
+fn forward_context_menu(window: Window, context: messages::MenuContext) -> Result<(), InvokeError> {
     menu::handle_context(window, context).map_err(InvokeError::from_error)?;
     Ok(())
 }
@@ -269,6 +277,24 @@ fn copy_changes(
     window: Window,
     app_state: State<AppState>,
     mutation: CopyChanges,
+) -> Result<MutationResult, InvokeError> {
+    try_mutate(window, app_state, mutation)
+}
+
+#[tauri::command(async)]
+fn track_branch(
+    window: Window,
+    app_state: State<AppState>,
+    mutation: TrackBranch,
+) -> Result<MutationResult, InvokeError> {
+    try_mutate(window, app_state, mutation)
+}
+
+#[tauri::command(async)]
+fn untrack_branch(
+    window: Window,
+    app_state: State<AppState>,
+    mutation: UntrackBranch,
 ) -> Result<MutationResult, InvokeError> {
     try_mutate(window, app_state, mutation)
 }

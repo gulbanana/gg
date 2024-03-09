@@ -3,23 +3,31 @@
     import type { RevResult } from "./messages/RevResult.js";
     import type { RepoConfig } from "./messages/RepoConfig.js";
     import type { UndoOperation } from "./messages/UndoOperation.js";
-    import { invoke } from "@tauri-apps/api/core";
-    import { query, mutate, type Query, delay } from "./ipc.js";
+    import type { Event } from "@tauri-apps/api/event";
+    import {
+        type Query,
+        query,
+        command,
+        mutate,
+        delay,
+        onEvent,
+    } from "./ipc.js";
     import {
         currentMutation,
         currentContext,
         repoConfigEvent,
         repoStatusEvent,
-        contextRevisionEvent,
+        revisionSelectEvent,
     } from "./stores.js";
-    import { revisionSelectEvent } from "./stores.js";
+    import RevisionMutator from "./RevisionMutator.js";
+    import TreeMutator from "./TreeMutator.js";
     import Bound from "./Bound.svelte";
     import Icon from "./Icon.svelte";
     import Pane from "./Pane.svelte";
     import LogPane from "./LogPane.svelte";
     import RevisionPane from "./RevisionPane.svelte";
     import ActionWidget from "./ActionWidget.svelte";
-    import Mutator from "./Mutator.js";
+    import BranchMutator from "./BranchMutator.js";
 
     let selection: Query<RevResult> = {
         type: "wait",
@@ -28,7 +36,9 @@
     document.addEventListener("keydown", (event) => {
         if (event.key === "o" && event.ctrlKey) {
             event.preventDefault();
-            invoke("forward_accelerator", { key: "o" });
+            command("forward_accelerator", { key: "o" });
+        } else if (event.key == "escape") {
+            currentMutation.set(null);
         }
     });
 
@@ -38,27 +48,24 @@
         true,
     );
 
-    invoke("notify_window_ready");
+    command("notify_window_ready");
 
-    $: if ($repoConfigEvent) load_repo($repoConfigEvent);
+    onEvent("gg://context/revision", mutateRevision);
+    onEvent("gg://context/tree", mutateTree);
+    onEvent("gg://context/branch", mutateBranch);
+
+    $: if ($repoConfigEvent) loadRepo($repoConfigEvent);
     $: if ($repoStatusEvent && $revisionSelectEvent)
-        load_change($revisionSelectEvent.change_id);
-    $: if ($contextRevisionEvent) {
-        if ($currentContext) {
-            new Mutator($currentContext).handle($contextRevisionEvent);
-            $contextRevisionEvent = undefined;
-            $currentContext = null;
-        }
-    }
+        loadChange($revisionSelectEvent.change_id);
 
-    async function load_repo(config: RepoConfig) {
+    async function loadRepo(config: RepoConfig) {
         $revisionSelectEvent = undefined;
         if (config.type == "Workspace") {
             $repoStatusEvent = config.status;
         }
     }
 
-    async function load_change(id: RevId) {
+    async function loadChange(id: RevId) {
         let fetch = await query<RevResult>("query_revision", {
             query: id.hex,
         });
@@ -75,10 +82,38 @@
             rev.value.type == "NotFound" &&
             id.hex != $repoStatusEvent?.working_copy.hex
         ) {
-            return load_change($repoStatusEvent?.working_copy!);
+            return loadChange($repoStatusEvent?.working_copy!);
         }
 
         selection = rev;
+    }
+
+    function mutateRevision(event: Event<string>) {
+        console.log(`mutateRevision(${event.payload})`, $currentContext);
+        if ($currentContext?.type == "Revision") {
+            new RevisionMutator($currentContext.rev).handle(event.payload);
+        }
+        $currentContext = null;
+    }
+
+    function mutateTree(event: Event<string>) {
+        console.log(`mutateTree(${event.payload})`, $currentContext);
+        if ($currentContext?.type == "Tree") {
+            new TreeMutator($currentContext.rev, $currentContext.path).handle(
+                event.payload,
+            );
+        }
+        $currentContext = null;
+    }
+
+    function mutateBranch(event: Event<string>) {
+        console.log(`mutateBranch(${event.payload})`, $currentContext);
+        if ($currentContext?.type == "Branch") {
+            new BranchMutator($currentContext.rev, $currentContext.name).handle(
+                event.payload,
+            );
+        }
+        $currentContext = null;
     }
 
     function onUndo() {

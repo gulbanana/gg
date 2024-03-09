@@ -619,6 +619,7 @@ mod mutation {
         let result = MoveChanges {
             from_change_id: mkchid(&child),
             to_id: mkchid(&parent),
+            paths: vec![],
         }
         .execute_unboxed(&mut ws)?;
         assert!(matches!(result, MutationResult::Updated { .. }));

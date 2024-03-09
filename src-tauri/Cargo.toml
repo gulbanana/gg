@@ -37,6 +37,3 @@ serde = { version = "1.0.196", features = ["derive"] }
 serde_json = "1.0"
 thiserror = "1.0.57"
 ts-rs = { version = "7.1.1", features = ["chrono-impl"], optional = true }
-
-[features]
-custom-protocol = ["tauri/custom-protocol"] # required for tauri build/dev

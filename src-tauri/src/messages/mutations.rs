@@ -104,6 +104,7 @@ pub struct AbandonRevisions {
 pub struct MoveChanges {
     pub from_change_id: RevId,
     pub to_id: RevId,
+    pub paths: Vec<TreePath>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -115,6 +116,27 @@ pub struct MoveChanges {
 pub struct CopyChanges {
     pub from_change_id: RevId,
     pub to_id: RevId,
+    pub paths: Vec<TreePath>,
+}
+
+#[derive(Deserialize, Debug)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(TS),
+    ts(export, export_to = "../src/messages/")
+)]
+pub struct TrackBranch {
+    pub name: RefName,
+}
+
+#[derive(Deserialize, Debug)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(TS),
+    ts(export, export_to = "../src/messages/")
+)]
+pub struct UntrackBranch {
+    pub name: RefName,
 }
 
 #[derive(Deserialize, Debug)]

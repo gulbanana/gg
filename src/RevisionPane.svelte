@@ -7,7 +7,7 @@
     import Pane from "./Pane.svelte";
     import RevisionSummary from "./RevisionSummary.svelte";
     import CheckWidget from "./CheckWidget.svelte";
-    import Mutator from "./Mutator";
+    import Mutator from "./RevisionMutator";
     import ChangeSummary from "./ChangeSummary.svelte";
     import GraphNode from "./GraphNode.svelte";
 
@@ -86,7 +86,7 @@
                 <section>
                     <h3>File changes</h3>
                     {#each rev.changes as change}
-                        <ChangeSummary {change} />
+                        <ChangeSummary rev={rev.header} {change} />
                     {/each}
                 </section>
 

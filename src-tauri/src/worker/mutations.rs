@@ -9,7 +9,7 @@ use crate::{
     gui_util::WorkspaceSession,
     messages::{
         AbandonRevisions, CheckoutRevision, CopyChanges, CreateRevision, DescribeRevision,
-        DuplicateRevisions, MoveChanges, MutationResult, UndoOperation,
+        DuplicateRevisions, MoveChanges, MutationResult, TrackBranch, UndoOperation, UntrackBranch,
     },
 };
 
@@ -203,6 +203,10 @@ impl Mutation for AbandonRevisions {
 
 impl Mutation for MoveChanges {
     fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
+        if !self.paths.is_empty() {
+            return Ok("Not yet implemented: partial moves".into());
+        }
+
         let mut tx = ws.start_transaction()?;
 
         let from = ws.resolve_single_id(&self.from_change_id)?;
@@ -263,6 +267,10 @@ impl Mutation for MoveChanges {
 
 impl Mutation for CopyChanges {
     fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
+        if !self.paths.is_empty() {
+            return Ok("Not yet implemented: partial copies".into());
+        }
+
         let mut tx = ws.start_transaction()?;
 
         let from_tree = ws.resolve_single_id(&self.from_change_id)?.tree()?;
@@ -294,6 +302,24 @@ impl Mutation for CopyChanges {
                 None => Ok(MutationResult::Unchanged),
             }
         }
+    }
+}
+
+impl Mutation for TrackBranch {
+    fn execute(
+        self: Box<Self>,
+        _ws: &mut WorkspaceSession,
+    ) -> Result<crate::messages::MutationResult> {
+        Ok("TrackBranch unimplemented".into())
+    }
+}
+
+impl Mutation for UntrackBranch {
+    fn execute(
+        self: Box<Self>,
+        _ws: &mut WorkspaceSession,
+    ) -> Result<crate::messages::MutationResult> {
+        Ok("UntrackBranch unimplemented".into())
     }
 }
 

@@ -2,14 +2,18 @@
     import type { RevHeader } from "./messages/RevHeader";
     import type { CheckoutRevision } from "./messages/CheckoutRevision";
     import type { CreateRevision } from "./messages/CreateRevision";
-    import { invoke } from "@tauri-apps/api/core";
     import { revisionSelectEvent, currentContext } from "./stores.js";
-    import { mutate } from "./ipc";
+    import { command, mutate } from "./ipc";
     import IdSpan from "./IdSpan.svelte";
-    import Icon from "./Icon.svelte";
+    import type { MenuContext } from "./messages/MenuContext";
+    import RefSummary from "./BranchSummary.svelte";
 
     export let rev: RevHeader;
     export let selected: boolean; // same as the imported event, but parent may want to force a value
+
+    let is_context = false;
+    $: is_context =
+        $currentContext?.type == "Revision" && rev == $currentContext.rev;
 
     function onSelect() {
         revisionSelectEvent.set(rev);
@@ -17,13 +21,12 @@
 
     function onMenu(event: Event) {
         event.preventDefault();
+        event.stopPropagation();
 
-        currentContext.set(rev);
+        let context: MenuContext = { type: "Revision", rev };
+        currentContext.set(context);
 
-        // XXX no error handling
-        invoke("forward_context_menu", {
-            context: rev,
-        });
+        command("forward_context_menu", { context });
     }
 
     function onEdit() {
@@ -47,11 +50,11 @@
     class="unbutton layout"
     class:selected
     class:conflict={rev.has_conflict}
-    class:context={rev == $currentContext}
+    class:context={is_context}
     on:click={onSelect}
     on:contextmenu={onMenu}
     on:dblclick={onEdit}>
-    <IdSpan type="change" id={rev.change_id} context={rev == $currentContext} />
+    <IdSpan type="change" id={rev.change_id} context={is_context} />
 
     <span
         class="desc truncate"
@@ -65,14 +68,7 @@
 
     <span class="refs">
         {#each rev.branches.filter((b) => b.remote == null || !b.is_synced) as ref}
-            <code class="ref" class:conflict={ref.has_conflict}>
-                <Icon name="git-branch" />
-                <span class="ref-name">
-                    {ref.remote == null
-                        ? ref.name
-                        : `${ref.name}@${ref.remote}`}
-                </span>
-            </code>
+            <RefSummary {rev} {ref} />
         {/each}
     </span>
 </button>
@@ -134,6 +130,10 @@
         color: var(--ctp-subtext0);
     }
 
+    .layout.context > .desc.indescribable {
+        color: var(--ctp-rosewater);
+    }
+
     .email {
         display: none;
         grid-area: email;
@@ -147,24 +147,6 @@
         display: flex;
     }
 
-    .ref {
-        font-family: var(--stack-code);
-        font-size: smaller;
-        color: var(--ctp-text);
-
-        height: 24px;
-        line-height: 16px;
-
-        display: flex;
-        align-items: center;
-        border: 1px solid var(--ctp-overlay1);
-        border-radius: 12px;
-        padding: 0 6px;
-        background: var(--ctp-crust);
-        white-space: nowrap;
-        gap: 3px;
-    }
-
     /* multiple elements can have this */
     .truncate {
         white-space: nowrap;
@@ -172,7 +154,7 @@
         text-overflow: ellipsis;
     }
 
-    @media (width >= 1920px) {
+    @media (width >= 1680px) {
         .layout {
             grid-template-areas: ". desc refs email";
             grid-template-columns: auto auto 1fr auto;

@@ -1,8 +1,9 @@
 import { invoke, type InvokeArgs } from "@tauri-apps/api/core";
-import { emit, listen, type UnlistenFn } from "@tauri-apps/api/event"
+import { emit, listen, type EventCallback } from "@tauri-apps/api/event"
 import type { Readable, Subscriber, Unsubscriber } from "svelte/store";
 import type { MutationResult } from "./messages/MutationResult";
 import { currentMutation, repoStatusEvent, revisionSelectEvent } from "./stores";
+import { onMount } from "svelte";
 
 export type Query<T> = { type: "wait" } | { type: "data", value: T } | { type: "error", message: string };
 
@@ -10,7 +11,9 @@ export interface Settable<T> extends Readable<T> {
     set: (value: T) => void;
 }
 
-// multiplexes tauri events into a svelte store; never actually unsubscribes because the store protocol isn't async
+/**
+ * multiplexes tauri events into a svelte store; never actually unsubscribes because the store protocol isn't async
+ */
 export async function event<T>(name: string): Promise<Settable<T | undefined>> {
     const subscribers = new Set<Subscriber<T>>();
     let lastValue: T | undefined;
@@ -42,6 +45,24 @@ export async function event<T>(name: string): Promise<Settable<T | undefined>> {
 }
 
 /**
+ * subscribes to tauri events for a component's lifetime
+ */
+export function onEvent<T>(name: string, callback: EventCallback<T>) {
+    console.log("request mount " + name);
+    onMount(() => {
+        console.log("do mount " + name);
+        let promise = listen<T>(name, callback);
+        return () => {
+            console.log("request unmount " + name);
+            promise.then((unlisten) => {
+                console.log("do unmount " + name);
+                unlisten();
+            });
+        };
+    });
+}
+
+/**
  * call an IPC which provides readonly information about the repo
  */
 export async function query<T>(command: string, request?: InvokeArgs): Promise<Query<T>> {
@@ -53,6 +74,21 @@ export async function query<T>(command: string, request?: InvokeArgs): Promise<Q
         console.log(error);
         return { type: "error", message: error.toString() };
     }
+}
+
+/**
+ * call an IPC which, if successful, has backend side-effects
+ */
+export function command(command: string, request?: InvokeArgs) {
+    (async () => {
+        try {
+            await invoke(command, request);
+        }
+        catch (error: any) {
+            console.log(error);
+            currentMutation.set({ type: "error", message: error.toString() });
+        }
+    })();
 }
 
 /**

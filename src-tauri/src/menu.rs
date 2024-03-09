@@ -7,7 +7,10 @@ use tauri::{
 };
 use tauri_plugin_dialog::DialogExt;
 
-use crate::{messages::RevHeader, AppState};
+use crate::{
+    messages::{MenuContext, RevHeader},
+    AppState,
+};
 
 pub fn build_main(app_handle: &AppHandle) -> tauri::Result<Menu<Wry>> {
     #[cfg(target_os = "macos")]
@@ -130,8 +133,10 @@ pub fn build_main(app_handle: &AppHandle) -> tauri::Result<Menu<Wry>> {
 }
 
 // XXX make anyhow when possible
-pub fn build_context(app_handle: &AppHandle<Wry>) -> Result<Menu<Wry>, tauri::Error> {
-    Menu::with_items(
+pub fn build_context(
+    app_handle: &AppHandle<Wry>,
+) -> Result<(Menu<Wry>, Menu<Wry>, Menu<Wry>), tauri::Error> {
+    let revision_menu = Menu::with_items(
         app_handle,
         &[
             &MenuItem::with_id(app_handle, "revision_new", "New child", true, None::<&str>)?,
@@ -172,7 +177,37 @@ pub fn build_context(app_handle: &AppHandle<Wry>) -> Result<Menu<Wry>, tauri::Er
                 None::<&str>,
             )?,
         ],
-    )
+    )?;
+
+    let tree_menu = Menu::with_items(
+        app_handle,
+        &[
+            &MenuItem::with_id(
+                app_handle,
+                "tree_squash",
+                "Squash into parent",
+                true,
+                None::<&str>,
+            )?,
+            &MenuItem::with_id(
+                app_handle,
+                "tree_restore",
+                "Restore from parent",
+                true,
+                None::<&str>,
+            )?,
+        ],
+    )?;
+
+    let ref_menu = Menu::with_items(
+        app_handle,
+        &[
+            &MenuItem::with_id(app_handle, "branch_track", "Track", true, None::<&str>)?,
+            &MenuItem::with_id(app_handle, "branch_untrack", "Untrack", true, None::<&str>)?,
+        ],
+    )?;
+
+    Ok((revision_menu, tree_menu, ref_menu))
 }
 
 // XXX unwrap(): see https://github.com/tauri-apps/tauri/pull/8777
@@ -219,38 +254,91 @@ pub fn handle_selection(menu: Menu<Wry>, selection: Option<RevHeader>) {
 
 // XXX make anyhow when possible
 // enables context menu items for a revision and shows the menu
-pub fn handle_context(window: Window, rev: RevHeader) -> Result<(), tauri::Error> {
+pub fn handle_context(window: Window, ctx: MenuContext) -> Result<(), tauri::Error> {
     let state = window.state::<AppState>();
     let guard = state.0.lock().expect("state mutex poisoned");
-    let context_menu = &guard
-        .get(window.label())
-        .expect("session not found")
-        .context_menu;
 
-    let set_enabled = |id: &str, value: bool| {
-        if let Some(item) = context_menu
-            .get(id)
-            .as_ref()
-            .and_then(|item| item.as_menuitem())
-        {
-            item.set_enabled(value).unwrap();
+    match ctx {
+        MenuContext::Revision { rev } => {
+            let context_menu = &guard
+                .get(window.label())
+                .expect("session not found")
+                .revision_menu;
+
+            let set_enabled = |id: &str, value: bool| {
+                if let Some(item) = context_menu
+                    .get(id)
+                    .as_ref()
+                    .and_then(|item| item.as_menuitem())
+                {
+                    item.set_enabled(value).unwrap();
+                }
+            };
+
+            set_enabled("revision_new", true);
+            set_enabled("revision_edit", !rev.is_immutable && !rev.is_working_copy);
+            set_enabled("revision_duplicate", true);
+            set_enabled("revision_abandon", !rev.is_immutable);
+            set_enabled(
+                "revision_squash",
+                !rev.is_immutable && rev.parent_ids.len() == 1,
+            );
+            set_enabled(
+                "revision_restore",
+                !rev.is_immutable && rev.parent_ids.len() == 1,
+            );
+
+            window.popup_menu(context_menu)?;
+        }
+        MenuContext::Tree { rev, path: _path } => {
+            let context_menu = &guard
+                .get(window.label())
+                .expect("session not found")
+                .tree_menu;
+
+            let set_enabled = |id: &str, value: bool| {
+                if let Some(item) = context_menu
+                    .get(id)
+                    .as_ref()
+                    .and_then(|item| item.as_menuitem())
+                {
+                    item.set_enabled(value).unwrap();
+                }
+            };
+
+            set_enabled(
+                "tree_squash",
+                !rev.is_immutable && rev.parent_ids.len() == 1,
+            );
+            set_enabled(
+                "tree_restore",
+                !rev.is_immutable && rev.parent_ids.len() == 1,
+            );
+
+            window.popup_menu(context_menu)?;
+        }
+        MenuContext::Branch { rev: _rev, name } => {
+            let context_menu = &guard
+                .get(window.label())
+                .expect("session not found")
+                .ref_menu;
+
+            let set_enabled = |id: &str, value: bool| {
+                if let Some(item) = context_menu
+                    .get(id)
+                    .as_ref()
+                    .and_then(|item| item.as_menuitem())
+                {
+                    item.set_enabled(value).unwrap();
+                }
+            };
+
+            set_enabled("branch_track", name.remote.is_none());
+            set_enabled("branch_untrack", name.remote.is_some());
+
+            window.popup_menu(context_menu)?;
         }
     };
-
-    set_enabled("revision_new", true);
-    set_enabled("revision_edit", !rev.is_immutable && !rev.is_working_copy);
-    set_enabled("revision_duplicate", true);
-    set_enabled("revision_abandon", !rev.is_immutable);
-    set_enabled(
-        "revision_squash",
-        !rev.is_immutable && rev.parent_ids.len() == 1,
-    );
-    set_enabled(
-        "revision_restore",
-        !rev.is_immutable && rev.parent_ids.len() == 1,
-    );
-
-    window.popup_menu(context_menu)?;
 
     Ok(())
 }
@@ -272,6 +360,10 @@ pub fn handle_event(window: &Window, event: MenuEvent) {
         "revision_abandon" => window.emit("gg://context/revision", "abandon").unwrap(),
         "revision_squash" => window.emit("gg://context/revision", "squash").unwrap(),
         "revision_restore" => window.emit("gg://context/revision", "restore").unwrap(),
+        "tree_squash" => window.emit("gg://context/tree", "squash").unwrap(),
+        "tree_restore" => window.emit("gg://context/tree", "restore").unwrap(),
+        "branch_track" => window.emit("gg://context/branch", "track").unwrap(),
+        "branch_untrack" => window.emit("gg://context/branch", "untrack").unwrap(),
         _ => (),
     }
 }

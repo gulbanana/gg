@@ -3,19 +3,18 @@
     import { currentContext } from "./stores.js";
 
     export let rev: RevHeader;
+
+    let context = false;
+    $: context =
+        $currentContext?.type == "Revision" && rev == $currentContext.rev;
 </script>
 
 {#if rev.is_immutable}
-    <circle class:context={rev == $currentContext} cx="9" cy="15" r="6" />
+    <circle class:context cx="9" cy="15" r="6" />
 {:else}
-    <circle
-        class:context={rev == $currentContext}
-        cx="9"
-        cy="15"
-        r="6"
-        class="mutable" />
+    <circle class:context cx="9" cy="15" r="6" class="mutable" />
     {#if rev.is_working_copy}
-        <circle class:context={rev == $currentContext} cx="9" cy="15" r="3" />
+        <circle class:context cx="9" cy="15" r="3" />
     {/if}
 {/if}
 
