@@ -122,7 +122,7 @@ fn query_log(
         }
 
         nodes.push(messages::LogNode {
-            revision: op.format_header(&commit),
+            revision: op.format_header(&commit)?,
             edges,
         });
     }
@@ -161,7 +161,7 @@ fn get_revision(op: &SessionOperation, id_str: &str) -> Result<messages::RevDeta
     .block_on();
 
     Ok(messages::RevDetail {
-        header: op.format_header(&commit),
+        header: op.format_header(&commit)?,
         diff: paths,
     })
 }

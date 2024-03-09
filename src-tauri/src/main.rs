@@ -117,7 +117,7 @@ fn main() -> Result<()> {
 
 #[tauri::command(async)]
 fn notify_window_ready(window: Window) {
-    try_open_repository(window.clone(), std::env::current_dir().unwrap()).unwrap();
+    try_open_repository(window.clone(), None).unwrap();
     window.show().unwrap();
 }
 
@@ -167,7 +167,7 @@ fn get_revision(
         .map_err(InvokeError::from_anyhow)
 }
 
-fn try_open_repository(window: Window, cwd: PathBuf) -> Result<()> {
+fn try_open_repository(window: Window, cwd: Option<PathBuf>) -> Result<()> {
     let app_state = window.state::<AppState>();
 
     let session_tx: Sender<SessionEvent> = app_state.get_sender(&window);
@@ -184,7 +184,7 @@ fn try_open_repository(window: Window, cwd: PathBuf) -> Result<()> {
 fn menu_open_repository(window: Window) {
     window.dialog().file().pick_folder(move |picked| {
         if let Some(cwd) = picked {
-            try_open_repository(window, cwd).expect("open repository");
+            try_open_repository(window, Some(cwd)).expect("open repository");
         }
     });
 }
