@@ -42,11 +42,11 @@
 </script>
 
 <button
-    class="unbutton layout {className}"
+    class="unbutton layout"
     class:conflict={change.has_conflict}
     class:context={is_context}
     on:contextmenu={onMenu}>
-    <Icon name={icon} />
+    <span class={className}><Icon name={icon} /></span>
     <span>{change.path.relative_path}</span>
 </button>
 
