@@ -362,7 +362,7 @@ mod mutation {
         gui_util::WorkerSession,
         messages::{
             CheckoutRevision, CreateRevision, DescribeRevision, MoveChanges, MutationResult,
-            RevResult,
+            RevResult, TreePath,
         },
         worker::{queries, Mutation},
     };
@@ -626,6 +626,39 @@ mod mutation {
 
         let parent_rev = queries::query_revision(&ws, &parent)?;
         assert!(matches!(parent_rev, RevResult::Detail { header, .. } if !header.has_conflict));
+
+        Ok(())
+    }
+
+    #[test]
+    fn move_changes_single_path() -> Result<()> {
+        let repo = mkrepo();
+        let from = String::from("mnkoropy");
+        let to = String::from("wtorwkxr");
+
+        let mut session = WorkerSession::default();
+        let mut ws = session.load_directory(repo.path())?;
+
+        let from_rev = queries::query_revision(&ws, &from)?;
+        let to_rev = queries::query_revision(&ws, &to)?;
+        assert!(matches!(from_rev, RevResult::Detail { changes, .. } if changes.len() == 2));
+        assert!(matches!(to_rev, RevResult::Detail { changes, .. } if changes.len() == 0));
+
+        let result = MoveChanges {
+            from_change_id: mkchid(&from),
+            to_id: mkchid(&to),
+            paths: vec![TreePath {
+                repo_path: "c.txt".to_owned(),
+                relative_path: "".into(),
+            }],
+        }
+        .execute_unboxed(&mut ws)?;
+        assert!(matches!(result, MutationResult::Updated { .. }));
+
+        let from_rev = queries::query_revision(&ws, &from)?;
+        let to_rev = queries::query_revision(&ws, &to)?;
+        assert!(matches!(from_rev, RevResult::Detail { changes, .. } if changes.len() == 1));
+        assert!(matches!(to_rev, RevResult::Detail { changes, .. } if changes.len() == 1));
 
         Ok(())
     }

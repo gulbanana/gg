@@ -2,14 +2,21 @@ use anyhow::Result;
 use indexmap::IndexMap;
 use itertools::Itertools;
 use jj_lib::{
-    commit::Commit, matchers::EverythingMatcher, object_id::ObjectId, op_walk, repo::Repo, rewrite,
+    commit::Commit,
+    matchers::{EverythingMatcher, FilesMatcher, Matcher},
+    object_id::ObjectId,
+    op_walk,
+    repo::Repo,
+    repo_path::RepoPath,
+    rewrite,
 };
 
 use crate::{
     gui_util::WorkspaceSession,
     messages::{
         AbandonRevisions, CheckoutRevision, CopyChanges, CreateRevision, DescribeRevision,
-        DuplicateRevisions, MoveChanges, MutationResult, TrackBranch, UndoOperation, UntrackBranch,
+        DuplicateRevisions, MoveChanges, MutationResult, TrackBranch, TreePath, UndoOperation,
+        UntrackBranch,
     },
 };
 
@@ -203,38 +210,32 @@ impl Mutation for AbandonRevisions {
 
 impl Mutation for MoveChanges {
     fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
-        if !self.paths.is_empty() {
-            return Ok("Not yet implemented: partial moves".into());
-        }
-
         let mut tx = ws.start_transaction()?;
 
         let from = ws.resolve_single_id(&self.from_change_id)?;
         let mut to = ws.resolve_single_id(&self.to_id)?;
+        let matcher = build_matcher(&self.paths);
 
         if ws.check_immutable(vec![from.id().clone(), to.id().clone()])? {
             return Ok("Revisions are immutable".into());
         }
 
-        // construct a remainder tree - the source's parents + some of its changes
+        // construct a split tree and a remainder tree by copying changes from child to parent and from parent to child
         let from_tree = from.tree()?;
         let parent_tree = rewrite::merge_commit_trees(tx.repo(), &from.parents())?;
-        // once we have sub-revision changes, do something like this:
-        // let new_parent_tree_id: MergedTreeId = todo!("construct a tree by copying files or hunks to a temp location");
-        // let new_parent_tree = tx.repo().store().get_root_tree(&new_parent_tree_id)?;
-        // let new_from_tree = from_tree.merge(&new_parent_tree, &parent_tree);
-        // let abandon_source = new_source_tree.id() == parent_tree.id();
-        let new_parent_tree = from_tree.clone();
-        let new_from_tree = parent_tree.clone();
-        let abandon_source = true;
+        let split_tree_id = rewrite::restore_tree(&from_tree, &parent_tree, matcher.as_ref())?;
+        let split_tree = tx.repo().store().get_root_tree(&split_tree_id)?;
+        let remainder_tree_id = rewrite::restore_tree(&parent_tree, &from_tree, matcher.as_ref())?;
+        let remainder_tree = tx.repo().store().get_root_tree(&remainder_tree_id)?;
 
         // abandon or rewrite source
+        let abandon_source = remainder_tree.id() == parent_tree.id();
         if abandon_source {
             tx.mut_repo().record_abandoned_commit(from.id().clone());
         } else {
             tx.mut_repo()
                 .rewrite_commit(&ws.settings, &from)
-                .set_tree_id(new_from_tree.id().clone())
+                .set_tree_id(remainder_tree.id().clone())
                 .write()?;
         }
 
@@ -247,7 +248,7 @@ impl Mutation for MoveChanges {
 
         // apply changes to destination
         let to_tree = to.tree()?;
-        let new_to_tree = to_tree.merge(&parent_tree, &new_parent_tree)?;
+        let new_to_tree = to_tree.merge(&parent_tree, &split_tree)?;
         let description = combine_messages(&from, &to, abandon_source);
         tx.mut_repo()
             .rewrite_commit(&ws.settings, &to)
@@ -267,14 +268,11 @@ impl Mutation for MoveChanges {
 
 impl Mutation for CopyChanges {
     fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
-        if !self.paths.is_empty() {
-            return Ok("Not yet implemented: partial copies".into());
-        }
-
         let mut tx = ws.start_transaction()?;
 
         let from_tree = ws.resolve_single_id(&self.from_change_id)?.tree()?;
         let to = ws.resolve_single_id(&self.to_id)?;
+        let matcher = build_matcher(&self.paths);
 
         if ws.check_immutable(vec![to.id().clone()])? {
             return Ok("Revisions are immutable".into());
@@ -282,11 +280,7 @@ impl Mutation for CopyChanges {
 
         // construct a restore tree - the destination with some portions overwritten by the source
         let to_tree = to.tree()?;
-        // once we have sub-revision changes, do something like this:
-        //let matcher = FilesMatcher::new(repo_paths);
-        let matcher = EverythingMatcher;
-
-        let new_to_tree_id = rewrite::restore_tree(&from_tree, &to_tree, &matcher)?;
+        let new_to_tree_id = rewrite::restore_tree(&from_tree, &to_tree, matcher.as_ref())?;
         if &new_to_tree_id == to.tree_id() {
             Ok(MutationResult::Unchanged)
         } else {
@@ -370,5 +364,17 @@ fn combine_messages(source: &Commit, destination: &Commit, abandon_source: bool)
         }
     } else {
         destination.description().to_owned()
+    }
+}
+
+fn build_matcher(paths: &Vec<TreePath>) -> Box<dyn Matcher> {
+    if paths.is_empty() {
+        Box::new(EverythingMatcher)
+    } else {
+        Box::new(FilesMatcher::new(
+            paths
+                .iter()
+                .map(|p| RepoPath::from_internal_string(&p.repo_path)),
+        ))
     }
 }
