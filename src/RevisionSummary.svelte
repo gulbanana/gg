@@ -6,6 +6,7 @@
     import { revisionSelectEvent, currentContext } from "./stores.js";
     import { mutate } from "./ipc";
     import IdSpan from "./IdSpan.svelte";
+    import Icon from "./Icon.svelte";
 
     export let rev: RevHeader;
     export let selected: boolean; // same as the imported event, but parent may want to force a value
@@ -62,10 +63,15 @@
 
     <span class="email truncate">{rev.author.email}</span>
 
-    <span class="tags">
+    <span class="refs">
         {#each rev.branches.filter((b) => b.remote == null || !b.is_synced) as ref}
-            <code class="tag" class:conflict={ref.has_conflict}>
-                {ref.remote == null ? ref.name : `${ref.name}@${ref.remote}`}
+            <code class="ref" class:conflict={ref.has_conflict}>
+                <Icon name="git-branch" />
+                <span class="ref-name">
+                    {ref.remote == null
+                        ? ref.name
+                        : `${ref.name}@${ref.remote}`}
+                </span>
             </code>
         {/each}
     </span>
@@ -79,7 +85,7 @@
         height: 100%;
         width: 100%;
         display: grid;
-        grid-template-areas: ". desc tags";
+        grid-template-areas: ". desc refs";
         grid-template-columns: auto 1fr auto;
         align-items: baseline;
         gap: 6px;
@@ -135,13 +141,20 @@
         text-align: right;
     }
 
-    .tags {
-        grid-area: tags;
+    .refs {
+        grid-area: refs;
+        align-self: center;
         display: flex;
     }
 
-    .tag {
+    .ref {
+        font-family: var(--stack-code);
+        font-size: smaller;
+        color: var(--ctp-text);
+
         height: 24px;
+        line-height: 16px;
+
         display: flex;
         align-items: center;
         border: 1px solid var(--ctp-overlay1);
@@ -149,6 +162,7 @@
         padding: 0 6px;
         background: var(--ctp-crust);
         white-space: nowrap;
+        gap: 3px;
     }
 
     /* multiple elements can have this */
@@ -160,7 +174,7 @@
 
     @media (width >= 1920px) {
         .layout {
-            grid-template-areas: ". desc tags email";
+            grid-template-areas: ". desc refs email";
             grid-template-columns: auto auto 1fr auto;
             gap: 9px;
         }

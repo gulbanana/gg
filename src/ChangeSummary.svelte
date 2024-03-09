@@ -34,7 +34,8 @@
         display: flex;
         align-items: center;
         cursor: pointer;
-        gap: 3px;
+        gap: 6px;
+        padding-left: 3px;
     }
 
     .layout.conflict {
@@ -52,7 +53,7 @@
     }
 
     .modified {
-        color: var(--ctp-yellow);
+        color: var(--ctp-blue);
     }
 
     .deleted {

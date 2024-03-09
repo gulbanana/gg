@@ -110,7 +110,16 @@
                 <section>
                     <h3>Parent revisions</h3>
                     {#each rev.parents as parent}
-                        <RevisionSummary rev={parent} selected={false} />
+                        <div class="row">
+                            <svg>
+                                <foreignObject>
+                                    <RevisionSummary
+                                        rev={parent}
+                                        selected={false} />
+                                </foreignObject>
+                                <GraphNode rev={parent} />
+                            </svg>
+                        </div>
                     {/each}
                 </section>
             {/if}
@@ -192,6 +201,10 @@
         margin: 3px 0;
     }
 
+    section > :global(*):not(:first-child) {
+        height: 27px;
+    }
+
     section.conflict {
         background: repeating-linear-gradient(
             120deg,
@@ -202,8 +215,8 @@
         );
     }
 
-    section > :global(*):not(:first-child) {
-        height: 27px;
+    section.conflict > :global(*):not(:first-child) {
+        margin-left: 24px;
     }
 
     .move-commands {
@@ -221,5 +234,16 @@
     .row {
         display: flex;
         align-items: center;
+        --leftpad: 24px;
+    }
+
+    svg {
+        width: 100%;
+        height: 27px;
+    }
+
+    foreignObject {
+        width: calc(100% - 3px);
+        height: 27px;
     }
 </style>
