@@ -3,7 +3,7 @@
     export let id: RevId;
     export let type: "change" | "commit";
 
-    let suffix = id.rest.substring(0, 7 - id.prefix.length);
+    let suffix = id.rest.substring(0, 8 - id.prefix.length);
 </script>
 
 <span class="idd"><span class={type}>{id.prefix}</span>{suffix}</span>

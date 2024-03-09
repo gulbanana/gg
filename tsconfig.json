@@ -13,7 +13,8 @@
      */
     "allowJs": true,
     "checkJs": true,
-    "isolatedModules": true
+    "isolatedModules": true,
+    "strictPropertyInitialization": false
   },
   "include": [
     "src/**/*.d.ts",

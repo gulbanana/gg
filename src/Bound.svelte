@@ -1,23 +1,23 @@
 <script lang="ts" generics="T">
-    import type { IPC } from "./ipc";
+    import type { Query as Query } from "./ipc";
 
-    export let ipc: IPC<T>;
+    export let query: Query<T>;
 
     interface $$Slots {
         wait: {};
         error: { message: string };
-        default: { value: T };
+        default: { data: T };
     }
 </script>
 
-{#if ipc.type == "wait"}
+{#if query.type == "wait"}
     <slot name="wait" />
-{:else if ipc.type == "error"}
-    <slot name="error" message={ipc.message}>
-        <span class="red">{ipc.message}</span>
+{:else if query.type == "error"}
+    <slot name="error" message={query.message}>
+        <span class="red">{query.message}</span>
     </slot>
 {:else}
-    <slot value={ipc.value} />
+    <slot data={query.value} />
 {/if}
 
 <style>
