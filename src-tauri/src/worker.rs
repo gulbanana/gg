@@ -7,9 +7,10 @@ use std::{
 };
 
 use anyhow::{anyhow, Context, Result};
+use jj_lib::revset::Revset;
 
 use crate::{
-    gui_util::{SessionEvaluator, SessionOperation, WorkspaceSession},
+    gui_util::{SessionOperation, WorkspaceSession},
     messages,
 };
 
@@ -68,7 +69,7 @@ impl Session {
                         .clone()
                         .unwrap_or_else(|| std::env::current_dir().unwrap());
 
-                    let session = match WorkspaceSession::from_cwd(wd) {
+                    let ws = match WorkspaceSession::from_cwd(wd) {
                         Ok(session) => session,
                         Err(err) => {
                             tx.send(Ok(messages::RepoConfig::NoWorkspace {
@@ -79,7 +80,7 @@ impl Session {
                         }
                     };
 
-                    let op = match SessionOperation::from_head(&session) {
+                    let op: SessionOperation = match SessionOperation::from_head(&ws) {
                         Ok(op) => op,
                         Err(err) => {
                             tx.send(Ok(messages::RepoConfig::NoOperation {
@@ -90,17 +91,17 @@ impl Session {
                         }
                     };
 
-                    let eval = SessionEvaluator::from_operation(&op);
-
                     tx.send(Ok(op.format_config(self.latest_query.clone())))?;
 
                     match self
-                        .with_workspace(rx, &session, &op, &eval)
+                        .with_workspace(rx, &ws, &op)
                         .context("with_workspace")?
                     {
                         WorkspaceResult::Reopen(new_tx, new_cwd) => (tx, cwd) = (new_tx, new_cwd),
                         WorkspaceResult::SessionComplete => return Ok(()),
-                    };
+                    }
+                    drop(op);
+                    drop(ws);
                 },
                 Ok(_) => {
                     return Err(anyhow::anyhow!(
@@ -117,7 +118,6 @@ impl Session {
         rx: &Receiver<SessionEvent>,
         session: &WorkspaceSession,
         op: &SessionOperation,
-        eval: &SessionEvaluator,
     ) -> Result<WorkspaceResult> {
         loop {
             match rx.recv() {
@@ -129,7 +129,7 @@ impl Session {
                     mut tx,
                     query: mut revset_string,
                 }) => loop {
-                    let revset = eval
+                    let revset: Box<dyn Revset> = op
                         .evaluate_revset(&revset_string)
                         .context("evaluate revset")?;
                     self.latest_query = Some(revset_string);
@@ -139,7 +139,7 @@ impl Session {
                     tx.send(Ok(first_page))?;
 
                     if incomplete {
-                        match Self::with_query(rx, session, &op, &eval, &mut query)
+                        match Self::with_query(rx, session, &op, &mut query)
                             .context("state_query")?
                         {
                             QueryResult::Workspace(r) => return Ok(r),
@@ -170,7 +170,6 @@ impl Session {
         rx: &Receiver<SessionEvent>,
         _session: &WorkspaceSession,
         op: &SessionOperation,
-        _eval: &SessionEvaluator,
         query: &mut queries::LogQuery,
     ) -> Result<QueryResult> {
         loop {

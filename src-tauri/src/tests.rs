@@ -101,3 +101,28 @@ fn reload_with_default_query() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn evaluate_query() -> Result<()> {
+    let (tx, rx) = channel::<SessionEvent>();
+    let (tx_load, rx_load) = channel::<Result<RepoConfig>>();
+    let (tx_query, rx_query) = channel::<Result<LogPage>>();
+
+    tx.send(SessionEvent::OpenWorkspace {
+        tx: tx_load,
+        cwd: None,
+    })?;
+    tx.send(SessionEvent::QueryLog {
+        tx: tx_query,
+        query: "@".to_owned(),
+    })?;
+    tx.send(SessionEvent::EndSession)?;
+
+    Session::default().main(&rx)?;
+
+    _ = rx_load.recv()??;
+    let page = rx_query.recv()??;
+    assert_eq!(1, page.rows.len());
+
+    Ok(())
+}

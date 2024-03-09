@@ -1,5 +1,5 @@
 //! Analogous to cli_util from jj-cli
-//! We reuse a bit of jj-cli code, but most of its types include TUI concerns or are not suitable for a long-running server
+//! We reuse a bit of jj-cli code, but most of its modules include TUI concerns or are not suitable for a long-running server
 
 use std::{cell::OnceCell, collections::HashMap, path::Path, rc::Rc, sync::Arc};
 
@@ -17,7 +17,7 @@ use jj_lib::{
     repo::{ReadonlyRepo, StoreFactories},
     revset::{
         self, DefaultSymbolResolver, Revset, RevsetAliasesMap, RevsetExpression,
-        RevsetParseContext, RevsetWorkspaceContext,
+        RevsetParseContext, RevsetResolutionError, RevsetWorkspaceContext, SymbolResolver,
     },
     settings::{ConfigResultExt, UserSettings},
     workspace::{self, Workspace, WorkspaceLoader},
@@ -38,12 +38,6 @@ pub struct SessionOperation<'a> {
     prefix_context: IdPrefixContext,
     working_copy_id: CommitId,
     branches_index: OnceCell<Rc<RefNamesIndex>>,
-}
-
-pub struct SessionEvaluator<'a> {
-    repo: &'a ReadonlyRepo,
-    parse_context: &'a RevsetParseContext<'a>,
-    resolver: DefaultSymbolResolver<'a>,
 }
 
 impl WorkspaceSession {
@@ -95,7 +89,7 @@ impl WorkspaceSession {
     }
 }
 
-impl SessionOperation<'_> {
+impl<'ws> SessionOperation<'ws> {
     pub fn from_head(session: &WorkspaceSession) -> Result<SessionOperation> {
         let op_head = session.load_head()?;
 
@@ -146,7 +140,7 @@ impl SessionOperation<'_> {
         })
     }
 
-    pub fn branches_index(&self) -> &Rc<RefNamesIndex> {
+    fn branches_index(&self) -> &Rc<RefNamesIndex> {
         self.branches_index
             .get_or_init(|| Rc::new(self.build_branches_index()))
     }
@@ -178,6 +172,28 @@ impl SessionOperation<'_> {
             }
         }
         index
+    }
+
+    fn resolver(&self) -> DefaultSymbolResolver {
+        let commit_id_resolver: revset::PrefixResolver<CommitId> =
+            Box::new(|repo, prefix| self.prefix_context.resolve_commit_prefix(repo, prefix));
+        let change_id_resolver: revset::PrefixResolver<Vec<CommitId>> =
+            Box::new(|repo, prefix| self.prefix_context.resolve_change_prefix(repo, prefix));
+        DefaultSymbolResolver::new(self.repo.as_ref())
+            .with_commit_id_resolver(commit_id_resolver)
+            .with_change_id_resolver(change_id_resolver)
+    }
+
+    pub fn evaluate_revset<'repo>(&'repo self, revset_str: &str) -> Result<Box<dyn Revset + 'repo>>
+    where
+        'ws: 'repo,
+    {
+        let expression = parse_revset(&self.parse_context, revset_str)?;
+        let resolved_expression =
+            expression.resolve_user_expression(self.repo.as_ref(), &self.resolver())?;
+        let revset = resolved_expression.evaluate(self.repo.as_ref())?;
+
+        Ok(revset)
     }
 
     pub fn format_config(&self, default_revset: Option<String>) -> messages::RepoConfig {
@@ -237,29 +253,9 @@ impl SessionOperation<'_> {
     }
 }
 
-impl SessionEvaluator<'_> {
-    pub fn from_operation<'a>(operation: &'a SessionOperation) -> SessionEvaluator<'a> {
-        let commit_id_resolver: revset::PrefixResolver<CommitId> =
-            Box::new(|repo, prefix| operation.prefix_context.resolve_commit_prefix(repo, prefix));
-        let change_id_resolver: revset::PrefixResolver<Vec<CommitId>> =
-            Box::new(|repo, prefix| operation.prefix_context.resolve_change_prefix(repo, prefix));
-        let symbol_resolver = DefaultSymbolResolver::new(operation.repo.as_ref())
-            .with_commit_id_resolver(commit_id_resolver)
-            .with_change_id_resolver(change_id_resolver);
-
-        SessionEvaluator {
-            repo: &operation.repo.as_ref(),
-            parse_context: &operation.parse_context,
-            resolver: symbol_resolver,
-        }
-    }
-
-    pub fn evaluate_revset(&self, revset_str: &str) -> Result<Box<dyn Revset + '_>> {
-        let expression = parse_revset(self.parse_context, revset_str)?;
-        let resolved_expression = expression.resolve_user_expression(self.repo, &self.resolver)?;
-        let revset = resolved_expression.evaluate(self.repo)?;
-
-        Ok(revset)
+impl<'a> SymbolResolver for SessionOperation<'a> {
+    fn resolve_symbol(&self, symbol: &str) -> Result<Vec<CommitId>, RevsetResolutionError> {
+        self.resolver().resolve_symbol(symbol)
     }
 }
 
