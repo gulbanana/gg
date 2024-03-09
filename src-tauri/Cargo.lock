@@ -1808,6 +1808,7 @@ version = "0.15.0"
 dependencies = [
  "anyhow",
  "chrono",
+ "dunce",
  "futures-util",
  "gix",
  "indexmap 2.2.5",

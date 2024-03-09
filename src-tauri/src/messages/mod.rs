@@ -48,11 +48,9 @@ pub struct DisplayPath(String);
 impl<T: AsRef<Path>> From<T> for DisplayPath {
     fn from(value: T) -> Self {
         DisplayPath(
-            value
-                .as_ref()
+            dunce::simplified(value.as_ref())
                 .to_string_lossy()
-                .trim_start_matches("\\\\?\\")
-                .to_owned(),
+                .to_string(),
         )
     }
 }
