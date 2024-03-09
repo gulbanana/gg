@@ -15,6 +15,7 @@ use std::sync::Mutex;
 use std::thread::{self, JoinHandle};
 
 use anyhow::{Context, Result};
+use log::LevelFilter;
 use tauri::menu::Menu;
 use tauri::{ipc::InvokeError, Manager};
 use tauri::{State, WebviewWindow, Window, WindowEvent, Wry};
@@ -51,6 +52,10 @@ impl AppState {
 }
 
 fn main() -> Result<()> {
+    let debug = std::env::args()
+        .find(|arg| arg.as_str() == "--debug")
+        .is_some();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
@@ -61,6 +66,19 @@ fn main() -> Result<()> {
                         | StateFlags::POSITION
                         | StateFlags::SIZE
                         | StateFlags::FULLSCREEN,
+                )
+                .build(),
+        )
+        .plugin(
+            tauri_plugin_log::Builder::default()
+                .level(LevelFilter::Warn)
+                .level_for(
+                    "gg",
+                    if debug {
+                        LevelFilter::Debug
+                    } else {
+                        LevelFilter::Info
+                    },
                 )
                 .build(),
         )
@@ -120,7 +138,8 @@ fn main() -> Result<()> {
                 }
             });
 
-            let (revision_menu, tree_menu, ref_menu) = menu::build_context(app.handle()).unwrap();
+            let (revision_menu, tree_menu, ref_menu) =
+                menu::build_context(app.handle()).expect("menu::build_context");
 
             let app_state = app.state::<AppState>();
             app_state.0.lock().unwrap().insert(
@@ -137,16 +156,16 @@ fn main() -> Result<()> {
             Ok(())
         })
         .manage(AppState::default())
-        .run(tauri::generate_context!())
-        .unwrap(); // XXX https://github.com/tauri-apps/tauri/pull/8777
+        .run(tauri::generate_context!())?;
 
     Ok(())
 }
 
 #[tauri::command(async)]
 fn notify_window_ready(window: Window) {
-    try_open_repository(&window, None).unwrap();
-    window.show().unwrap();
+    log::debug!("window opened; loading cwd");
+    try_open_repository(&window, None).expect("try_open_repository");
+    window.show().expect("window.show()");
 }
 
 #[tauri::command]
@@ -308,15 +327,34 @@ fn undo_operation(
 }
 
 fn try_open_repository(window: &Window, cwd: Option<PathBuf>) -> Result<()> {
+    log::info!("load workspace {cwd:#?}");
+
     let app_state = window.state::<AppState>();
 
     let session_tx: Sender<SessionEvent> = app_state.get_sender(window.label());
     let (call_tx, call_rx) = channel();
 
-    session_tx.send(SessionEvent::OpenWorkspace { tx: call_tx, cwd })?;
-    let config = call_rx.recv()??;
+    session_tx.send(SessionEvent::OpenWorkspace {
+        tx: call_tx,
+        cwd: cwd.clone(),
+    })?;
 
-    window.emit("gg://repo/config", config).unwrap(); // XXX https://github.com/tauri-apps/tauri/pull/8777
+    match call_rx.recv()? {
+        Ok(config) => {
+            log::debug!("load workspace succeeded");
+            window.emit("gg://repo/config", config)?;
+        }
+        Err(err) => {
+            log::warn!("load workspace failed: {err}");
+            window.emit(
+                "gg://repo/config",
+                messages::RepoConfig::NoWorkspace {
+                    absolute_path: cwd.unwrap_or(PathBuf::new()).into(),
+                    error: format!("{:#?}", err),
+                },
+            )?;
+        }
+    }
 
     Ok(())
 }
@@ -341,6 +379,8 @@ fn try_mutate<T: Mutation + Send + Sync + 'static>(
 fn handle_window_event(window: &WebviewWindow, event: &WindowEvent) {
     match *event {
         WindowEvent::Focused(true) => {
+            log::debug!("window focused; requesting snapshot");
+
             let app_state = window.state::<AppState>();
 
             let session_tx: Sender<SessionEvent> = app_state.get_sender(window.label());
@@ -348,10 +388,10 @@ fn handle_window_event(window: &WebviewWindow, event: &WindowEvent) {
 
             session_tx
                 .send(SessionEvent::ExecuteSnapshot { tx: call_tx })
-                .unwrap();
+                .expect("session_tx");
 
-            if let Some(status) = call_rx.recv().unwrap() {
-                window.emit("gg://repo/status", status).unwrap();
+            if let Ok(Some(status)) = call_rx.recv() {
+                window.emit("gg://repo/status", status).expect("emit");
             }
         }
         _ => (),

@@ -73,7 +73,9 @@ impl Session for WorkerSession {
         let mut latest_cwd: Option<PathBuf> = None;
 
         loop {
-            match rx.recv() {
+            let evt = rx.recv();
+            log::debug!("WorkerSession handling {evt:?}");
+            match evt {
                 Ok(SessionEvent::EndSession) => return Ok(()),
                 Ok(SessionEvent::ExecuteSnapshot { .. }) => (),
                 Ok(SessionEvent::OpenWorkspace { mut tx, mut cwd }) => loop {
@@ -105,12 +107,18 @@ impl Session for WorkerSession {
                         WorkspaceResult::SessionComplete => return Ok(()),
                     }
                 },
-                Ok(_) => {
+                Ok(evt) => {
+                    log::error!(
+                        "WorkerSession::handle_events(): repo not loaded when receiving {evt:?}"
+                    );
                     return Err(anyhow::anyhow!(
                         "A repo must be loaded before any other operations"
-                    ))
+                    ));
                 }
-                Err(err) => return Err(anyhow!(err)),
+                Err(err) => {
+                    log::error!("WorkerSession::handle_events(): {err}");
+                    return Err(anyhow!(err));
+                }
             };
         }
     }
@@ -198,7 +206,9 @@ impl Session for WorkspaceSession<'_> {
             let next_event = if state.unhandled_event.is_some() {
                 state.unhandled_event.take().unwrap()
             } else {
-                rx.recv()?
+                let evt = rx.recv();
+                log::debug!("WorkspaceSession handling {evt:?}");
+                evt?
             };
 
             match next_event {
@@ -272,7 +282,9 @@ impl Session for queries::LogQuery<'_, '_> {
 
     fn handle_events(mut self, rx: &Receiver<SessionEvent>) -> Result<Self::Transition> {
         loop {
-            match rx.recv() {
+            let evt = rx.recv();
+            log::debug!("LogQuery handling {evt:?}");
+            match evt {
                 Ok(SessionEvent::QueryRevision { tx, query }) => {
                     tx.send(queries::query_revision(&self.ws, &query))?
                 }

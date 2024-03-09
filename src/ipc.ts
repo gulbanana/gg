@@ -1,5 +1,5 @@
 import { invoke, type InvokeArgs } from "@tauri-apps/api/core";
-import { emit, listen, type EventCallback } from "@tauri-apps/api/event"
+import { emit, listen, type EventCallback } from "@tauri-apps/api/event";
 import type { Readable, Subscriber, Unsubscriber } from "svelte/store";
 import type { MutationResult } from "./messages/MutationResult";
 import { currentMutation, repoStatusEvent, revisionSelectEvent } from "./stores";
@@ -51,7 +51,7 @@ export function onEvent<T>(name: string, callback: EventCallback<T>) {
     console.log("request mount " + name);
     onMount(() => {
         console.log("do mount " + name);
-        let promise = listen<T>(name, callback);
+        let promise = listen<T>(name, e => { console.log("do receive " + name); callback(e); });
         return () => {
             console.log("request unmount " + name);
             promise.then((unlisten) => {
