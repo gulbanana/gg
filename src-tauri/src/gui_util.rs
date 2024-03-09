@@ -1,7 +1,7 @@
 //! Analogous to cli_util from jj-cli
 //! We reuse a bit of jj-cli code, but most of its types include TUI concerns or are not suitable for a long-running server
 
-use std::{path::Path, rc::Rc, sync::Arc};
+use std::{cell::OnceCell, collections::HashMap, path::Path, rc::Rc, sync::Arc};
 
 use anyhow::{anyhow, Context, Result};
 use chrono::{DateTime, FixedOffset, Local, LocalResult, TimeZone, Utc};
@@ -37,6 +37,7 @@ pub struct SessionOperation<'a> {
     pub repo: Arc<ReadonlyRepo>,
     parse_context: RevsetParseContext<'a>,
     prefix_context: IdPrefixContext,
+    branches_index: OnceCell<Rc<RefNamesIndex>>,
 }
 
 pub struct SessionEvaluator<'a> {
@@ -134,7 +135,42 @@ impl SessionOperation<'_> {
             repo,
             parse_context,
             prefix_context,
+            branches_index: OnceCell::new()
         })
+    }
+
+    pub fn branches_index(&self) -> &Rc<RefNamesIndex> {
+        self.branches_index
+            .get_or_init(|| Rc::new(self.build_branches_index()))
+    }
+
+    fn build_branches_index(&self) -> RefNamesIndex {
+        let mut index = RefNamesIndex::default();
+        for (branch_name, branch_target) in self.repo.view().branches() {
+            let local_target = branch_target.local_target;
+            let remote_refs = branch_target.remote_refs;
+            if local_target.is_present() {
+                let ref_name = messages::RefName {
+                    name: branch_name.to_owned(),
+                    remote: None,
+                    has_conflict: local_target.has_conflict(),
+                    is_synced: remote_refs.iter().all(|&(_, remote_ref)| {
+                        !remote_ref.is_tracking() || remote_ref.target == *local_target
+                    }),
+                };
+                index.insert(local_target.added_ids(), ref_name);
+            }
+            for &(remote_name, remote_ref) in &remote_refs {
+                let ref_name = messages::RefName {
+                    name: branch_name.to_owned(),
+                    remote: Some(remote_name.to_owned()),
+                    has_conflict: remote_ref.target.has_conflict(),
+                    is_synced: remote_ref.is_tracking() && remote_ref.target == *local_target,
+                };
+                index.insert(remote_ref.target.added_ids(), ref_name);
+            }
+        }
+        index
     }
 
     pub fn format_config(&self) -> messages::RepoConfig {
@@ -168,14 +204,18 @@ impl SessionOperation<'_> {
             .unwrap()
             .with_timezone(&Local);
 
+        let index = self.branches_index();
+        let branches = index.get(commit.id()).iter().cloned().collect();
+
         Ok(messages::RevHeader {
             change_id: self.format_change_id(commit.change_id()),
             commit_id: self.format_commit_id(commit.id()),
             description: commit.description().into(),
             author: commit.author().name.clone(),
             email: commit.author().email.clone(),
+            has_conflict: commit.has_conflict()?,
             timestamp,
-            has_conflict: commit.has_conflict()?
+            branches 
         })
     }
 
@@ -279,4 +319,30 @@ fn datetime_from_timestamp(context: &Timestamp) -> Option<DateTime<FixedOffset>>
                 .unwrap_or_else(|| FixedOffset::east_opt(0).unwrap()),
         ),
     )
+}
+
+/*************************/
+/* from commit_templater */
+/*************************/
+
+#[derive(Default)]
+pub struct RefNamesIndex {
+    index: HashMap<CommitId, Vec<messages::RefName>>,
+}
+
+impl RefNamesIndex {
+    fn insert<'a>(&mut self, ids: impl IntoIterator<Item = &'a CommitId>, name: messages::RefName) {
+        for id in ids {
+            let ref_names = self.index.entry(id.clone()).or_default();
+            ref_names.push(name.clone());
+        }
+    }
+
+    fn get(&self, id: &CommitId) -> &[messages::RefName] {
+        if let Some(names) = self.index.get(id) {
+            names
+        } else {
+            &[]
+        }
+    }
 }

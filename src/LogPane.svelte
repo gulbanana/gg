@@ -4,6 +4,7 @@
     import type { LogNode } from "./messages/LogNode.js";
     import type { RevId } from "./messages/RevId.js";
     import type { RevHeader } from "./messages/RevHeader.js";
+    import type { RefName } from "./messages/RefName.js";
     import { command, event } from "./ipc.js";
     import Bound from "./Bound.svelte";
     import IdSpan from "./IdSpan.svelte";
@@ -42,7 +43,8 @@
         parents: GraphNode[];
 
         desc: string;
-        is_conflict: boolean;
+        refs: RefName[],
+        has_conflict: boolean;
         is_working_copy: boolean;
         select: () => void;
     }
@@ -71,8 +73,9 @@
                 id: n.revision.change_id,
                 parents: [],
                 desc: n.revision.description.lines[0],
+                refs: n.revision.branches.filter(r => !(r.remote != null && r.is_synced && n.revision.branches.find(r2 => r2.remote == null && r2.name == r.name))),
                 is_working_copy: $repo_status.working_copy.prefix == n.revision.commit_id.prefix,
-                is_conflict: n.revision.has_conflict,
+                has_conflict: n.revision.has_conflict,
                 select: () => ($change_content = n.revision),
             };
 
@@ -142,13 +145,18 @@
                         {/if}
 
                         <foreignObject class="row-html" x="18" y="0" height="30">
-                            <div class="row-text" class:conflict={node.is_conflict}>
+                            <div class="row-text" class:conflict={node.has_conflict}>
                                 <code>
                                     <IdSpan type="change" id={node.id} />
                                 </code>
                                 <span class="row-desc">
                                     {node.desc}
                                 </span>
+                                {#each node.refs as ref}
+                                    <code class="tag" class:conflict={ref.has_conflict}>
+                                        {ref.remote == null ? ref.name : `${ref.name}@${ref.remote}`}
+                                    </code>
+                                {/each}
                             </div>
                         </foreignObject>
                     </g>
@@ -217,9 +225,28 @@
         display: flex;
         align-items: center;
         gap: 6px;
+        margin-right: 15px;
     }
 
-    .row-text.conflict {
+    .row-desc {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        flex: 1;
+    }
+
+    .tag {
+        height: 24px;
+        display: flex;
+        align-items: center;
+        border: 1px solid var(--ctp-overlay1);
+        border-radius: 12px;
+        padding: 0 6px;
+        background: var(--ctp-crust);
+    }
+
+    /* both nodes and refs can have this */ 
+    .conflict {
         background: repeating-linear-gradient(
             120deg,
             transparent 0px,
@@ -227,11 +254,5 @@
             var(--ctp-surface0) 12px,
             var(--ctp-surface0) 15px
         );
-    }
-
-    .row-desc {
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
     }
 </style>

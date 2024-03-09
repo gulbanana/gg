@@ -95,7 +95,8 @@ pub struct RevHeader {
     pub author: String,
     pub email: String,
     pub timestamp: chrono::DateTime<Local>,
-    pub has_conflict: bool
+    pub has_conflict: bool,
+    pub branches: Vec<RefName>
 }
 
 #[derive(TS, Serialize)]
@@ -112,4 +113,19 @@ pub enum DiffPath {
     Added { relative_path: DisplayPath },
     Deleted { relative_path: DisplayPath },
     Modified { relative_path: DisplayPath },
+}
+
+/// Branch or tag name with metadata.
+#[derive(TS, Serialize, Clone)]
+#[ts(export, export_to = "../src/messages/")]
+pub struct RefName {
+    /// Local name.
+    pub name: String,
+    /// Remote name if this is a remote or Git-tracking ref.
+    pub remote: Option<String>,
+    /// Ref target has conflicts.
+    pub has_conflict: bool,
+    /// Local ref is synchronized with all tracking remotes, or tracking remote
+    /// ref is synchronized with the local.
+    pub is_synced: bool,
 }
