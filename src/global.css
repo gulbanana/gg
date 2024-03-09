@@ -55,7 +55,7 @@
   --ctp-rosewater: var(--ctp-latte-rosewater);
 }
 
-@media (prefers-color-scheme: dark) {
+/* @media (prefers-color-scheme: dark) {
   :root {
     --ctp-crust: var(--ctp-macchiato-crust);
     --ctp-mantle: var(--ctp-macchiato-mantle);
@@ -87,7 +87,7 @@
     --ctp-flamingo: var(--ctp-macchiato-flamingo);
     --ctp-rosewater: var(--ctp-macchiato-rosewater);
   }
-}
+} */
 
 ::selection {
   background-color: transparent;
