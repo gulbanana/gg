@@ -163,19 +163,20 @@ impl SessionOperation<'_> {
         }
     }
 
-    pub fn format_header(&self, commit: &Commit) -> messages::RevHeader {
+    pub fn format_header(&self, commit: &Commit) -> Result<messages::RevHeader> {
         let timestamp = datetime_from_timestamp(&commit.author().timestamp)
             .unwrap()
             .with_timezone(&Local);
 
-        messages::RevHeader {
+        Ok(messages::RevHeader {
             change_id: self.format_change_id(commit.change_id()),
             commit_id: self.format_commit_id(commit.id()),
             description: commit.description().into(),
             author: commit.author().name.clone(),
             email: commit.author().email.clone(),
             timestamp,
-        }
+            has_conflict: commit.has_conflict()?
+        })
     }
 
     pub fn format_commit_id(&self, id: &CommitId) -> messages::RevId {

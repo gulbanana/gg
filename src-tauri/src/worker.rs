@@ -26,7 +26,7 @@ use crate::{
 pub enum SessionEvent {
     OpenRepository {
         tx: Sender<Result<messages::RepoConfig>>,
-        cwd: PathBuf,
+        cwd: Option<PathBuf>,
     },
     QueryLog {
         tx: Sender<Result<messages::LogPage>>,
@@ -47,7 +47,7 @@ pub fn main(rx: Receiver<SessionEvent>) -> Result<()> {
         match rx.recv() {
             Ok(SessionEvent::OpenRepository { tx, cwd }) => {
                 tx.send({
-                    session = WorkspaceSession::from_cwd(&cwd)?;
+                    session = WorkspaceSession::from_cwd(&cwd.unwrap_or_else(|| std::env::current_dir().unwrap()))?;
                     op = SessionOperation::from_head(&session)?;
                     eval = SessionEvaluator::from_operation(&op);
                     Ok(op.format_config())
@@ -67,7 +67,7 @@ pub fn main(rx: Receiver<SessionEvent>) -> Result<()> {
         match rx.recv() {
             Ok(SessionEvent::OpenRepository { tx, cwd }) => tx.send({
                 drop(eval);
-                session = WorkspaceSession::from_cwd(&cwd)?;
+                session = WorkspaceSession::from_cwd(&cwd.unwrap_or_else(|| session.workspace.workspace_root().clone()))?;
                 op = SessionOperation::from_head(&session)?;
                 eval = SessionEvaluator::from_operation(&op);
                 Ok(op.format_config())

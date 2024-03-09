@@ -95,6 +95,7 @@ pub struct RevHeader {
     pub author: String,
     pub email: String,
     pub timestamp: chrono::DateTime<Local>,
+    pub has_conflict: bool
 }
 
 #[derive(TS, Serialize)]

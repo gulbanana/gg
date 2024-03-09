@@ -1,15 +1,17 @@
 <script lang="ts">
+    import type { RepoStatus } from "./messages/RepoStatus.js";
     import type { LogPage } from "./messages/LogPage.js";
+    import type { LogNode } from "./messages/LogNode.js";
+    import type { RevId } from "./messages/RevId.js";
     import type { RevHeader } from "./messages/RevHeader.js";
     import { command, event } from "./ipc.js";
     import Bound from "./Bound.svelte";
     import IdSpan from "./IdSpan.svelte";
     import Pane from "./Pane.svelte";
-    import type { LogNode } from "./messages/LogNode.js";
-    import type { RevId } from "./messages/RevId.js";
 
     export let query: string;
 
+    const repo_status = event<RepoStatus>("gg://repo/status");
     const log_content = command<LogPage>("query_log");
     const change_content = event<RevHeader>("gg://change/select");
 
@@ -35,9 +37,13 @@
     interface GraphNode {
         row: number;
         column: number;
+
         id: RevId;
         parents: GraphNode[];
-        title: string;
+
+        desc: string;
+        is_conflict: boolean;
+        is_working_copy: boolean;
         select: () => void;
     }
 
@@ -64,7 +70,9 @@
                 column: unresolved_parents.size,
                 id: n.revision.change_id,
                 parents: [],
-                title: n.revision.description.lines[0],
+                desc: n.revision.description.lines[0],
+                is_working_copy: $repo_status.working_copy.prefix == n.revision.commit_id.prefix,
+                is_conflict: n.revision.has_conflict,
                 select: () => ($change_content = n.revision),
             };
 
@@ -111,28 +119,35 @@
                 style="width: 100%; height: {data.nodes.length * 30}px;"
             >
                 {#each formatNodes(data.nodes) as node}
+                    <!-- svelte-ignore a11y-click-events-have-key-events -->
+                    <!-- svelte-ignore a11y-no-static-element-interactions -->
                     <g
                         class="row"
                         transform="translate({node.column * 18} {node.row *
                             30})"
+                            on:click={node.select}
                     >
                         <rect
                             class="row-backdrop"
                             class:selected={$change_content?.change_id.prefix ==
                                 node.id.prefix}
+                            rx="3"
                             height="30"
                             width="100%"
                         />
+                        
                         <circle cx="9" cy="15" r="6" fill="none" />
-                        <foreignObject x="18" y="0" width="100%" height="30">
-                            <!-- svelte-ignore a11y-click-events-have-key-events -->
-                            <!-- svelte-ignore a11y-no-static-element-interactions -->
-                            <div class="change" on:click={node.select}>
-                                <span class="change-line">
-                                    <code>
-                                        <IdSpan id={node.id} type="change" />
-                                    </code>
-                                    {node.title}
+                        {#if node.is_working_copy}
+                            <circle cx="9" cy="15" r="3" />
+                        {/if}
+
+                        <foreignObject class="row-html" x="18" y="0" height="30">
+                            <div class="row-text" class:conflict={node.is_conflict}>
+                                <code>
+                                    <IdSpan type="change" id={node.id} />
+                                </code>
+                                <span class="row-desc">
+                                    {node.desc}
                                 </span>
                             </div>
                         </foreignObject>
@@ -160,6 +175,11 @@
         grid-template-columns: auto 1fr;
         gap: 3px;
     }
+    
+    input {
+        font-family: var(--stack-code);
+        font-size: 14px;
+    }
 
     .log-commits {
         overflow-x: hidden;
@@ -180,32 +200,38 @@
 
     .row-backdrop {
         stroke: none;
-        fill: none;
+        fill: transparent;
     }
 
     .row-backdrop:global(.selected) {
         fill: var(--ctp-base);
     }
 
-    .change {
-        height: 100%;
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
+    .row-html {
+        overflow: hidden;
+        width: calc(100% - 18px);
     }
 
-    .change-line {
+    .row-text {
+        height: 100%;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .row-text.conflict {
+        background: repeating-linear-gradient(
+            120deg,
+            transparent 0px,
+            transparent 12px,
+            var(--ctp-surface0) 12px,
+            var(--ctp-surface0) 15px
+        );
+    }
+
+    .row-desc {
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
-    }
-
-    .change-line > code {
-        margin: 0 6px;
-    }
-
-    input {
-        font-family: var(--stack-code);
-        font-size: 14px;
     }
 </style>
