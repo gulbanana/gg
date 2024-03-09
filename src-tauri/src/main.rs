@@ -23,7 +23,7 @@ use tauri_plugin_window_state::StateFlags;
 use gui_util::WorkerSession;
 use messages::{
     AbandonRevision, CheckoutRevision, CopyChanges, CreateRevision, DescribeRevision,
-    DuplicateRevision, MoveChanges, MutationResult, UndoOperation,
+    DuplicateRevisions, MoveChanges, MutationResult, UndoOperation,
 };
 use worker::{Mutation, Session, SessionEvent};
 
@@ -72,7 +72,7 @@ fn main() -> Result<()> {
             checkout_revision,
             create_revision,
             describe_revision,
-            duplicate_revision,
+            duplicate_revisions,
             abandon_revision,
             move_changes,
             copy_changes,
@@ -237,10 +237,10 @@ fn describe_revision(
 }
 
 #[tauri::command(async)]
-fn duplicate_revision(
+fn duplicate_revisions(
     window: Window,
     app_state: State<AppState>,
-    mutation: DuplicateRevision,
+    mutation: DuplicateRevisions,
 ) -> Result<MutationResult, InvokeError> {
     try_mutate(window, app_state, mutation)
 }

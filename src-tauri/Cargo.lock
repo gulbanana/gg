@@ -1794,6 +1794,7 @@ dependencies = [
  "chrono",
  "futures-util",
  "gix",
+ "indexmap 2.2.2",
  "itertools 0.12.1",
  "jj-cli",
  "jj-lib",

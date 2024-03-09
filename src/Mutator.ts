@@ -4,7 +4,7 @@ import type { CheckoutRevision } from "./messages/CheckoutRevision";
 import type { CopyChanges } from "./messages/CopyChanges";
 import type { CreateRevision } from "./messages/CreateRevision";
 import type { DescribeRevision } from "./messages/DescribeRevision";
-import type { DuplicateRevision } from "./messages/DuplicateRevision";
+import type { DuplicateRevisions } from "./messages/DuplicateRevisions";
 import type { MoveChanges } from "./messages/MoveChanges";
 import { mutate } from "./ipc";
 
@@ -66,8 +66,8 @@ export default class Mutator {
     }
 
     onDuplicate = () => {
-        mutate<DuplicateRevision>("duplicate_revision", {
-            change_id: this.#revision.change_id,
+        mutate<DuplicateRevisions>("duplicate_revisions", {
+            change_ids: [this.#revision.change_id],
         });
     }
 

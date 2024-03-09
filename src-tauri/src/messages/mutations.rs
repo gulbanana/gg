@@ -78,8 +78,8 @@ pub struct DescribeRevision {
     derive(TS),
     ts(export, export_to = "../src/messages/")
 )]
-pub struct DuplicateRevision {
-    pub change_id: RevId,
+pub struct DuplicateRevisions {
+    pub change_ids: Vec<RevId>,
 }
 
 #[derive(Deserialize, Debug)]

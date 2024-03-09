@@ -10,7 +10,7 @@ use jj_cli::{
     config::{default_config, LayeredConfigs},
     git_util::is_colocated_git_workspace,
 };
-use jj_lib::{file_util::relative_path, gitignore::GitIgnoreFile, op_store::WorkspaceId, repo::RepoLoaderError, repo_path::RepoPath, revset::RevsetIteratorExt, working_copy::{CheckoutStats, SnapshotOptions}};
+use jj_lib::{backend::BackendError, file_util::relative_path, gitignore::GitIgnoreFile, op_store::WorkspaceId, repo::RepoLoaderError, repo_path::RepoPath, revset::RevsetIteratorExt, working_copy::{CheckoutStats, SnapshotOptions}};
 use jj_lib::{
     backend::{ChangeId, CommitId},
     commit::Commit,
@@ -31,7 +31,7 @@ use jj_lib::{
     workspace::{self, Workspace, WorkspaceLoader},
 };
 
-use crate::messages;
+use crate::messages::{self, RevId};
 
 /// state that doesn't depend on jj-lib borrowings
 pub struct WorkerSession {
@@ -140,36 +140,6 @@ impl WorkspaceSession<'_> {
         Ok(SessionOperation::new(repo, workspace.workspace_id()))
     }
 
-    // XXX creates a parse context and a symbol resolver every time - they need to borrow many things
-    pub fn evaluate_revset_str<'op>(&'op self, revset_str: &str) -> Result<Box<dyn Revset + 'op>> {
-        let revset_expr = parse_revset(&self.parse_context(), revset_str)?;
-        let resolved_expression =
-            revset_expr.resolve_user_expression(self.operation.repo.as_ref(), &self.resolver())?;
-        let revset = resolved_expression.evaluate(self.operation.repo.as_ref())?;
-
-        Ok(revset)
-    }
-
-    pub fn evaluate_revset_expr<'op>(&'op self, revset_expr: Rc<RevsetExpression>) -> Result<Box<dyn Revset + 'op>> {
-        let resolved_expression =
-            revset_expr.resolve_user_expression(self.operation.repo.as_ref(), &self.resolver())?;
-        let revset = resolved_expression.evaluate(self.operation.repo.as_ref())?;
-
-        Ok(revset)
-    }
-
-    pub fn evaluate_rev_str(&self, revision_str: &str) -> Result<Commit> {
-        let revset = self.evaluate_revset_str(revision_str)?;      
-        let mut iter = revset.iter().commits(self.operation.repo.store()).fuse();
-        match (iter.next(), iter.next()) {
-            (Some(commit), None) => Ok(commit?),
-            (None, _) => Err(anyhow!(r#"Revset "{revision_str}" didn't resolve to any revisions"#)),
-            (Some(_), Some(_)) => {
-                Err(anyhow!(r#"Revset "{revision_str}" resolved to more than one revision"#))
-            }
-        }
-    }
-
     pub fn id(&self) -> &WorkspaceId {
         &self.workspace.workspace_id()
     }
@@ -184,6 +154,67 @@ impl WorkspaceSession<'_> {
 
     pub fn repo(&self) -> &ReadonlyRepo {
         self.operation.repo.as_ref()
+    }
+
+    /***********************************************************/
+    /* Functions for evaluating revset expressions             */
+    /* unfortunately parse_context and resolver are not cached */
+    /***********************************************************/
+
+    pub fn evaluate_revset_expr<'op>(&'op self, revset_expr: Rc<RevsetExpression>) -> Result<Box<dyn Revset + 'op>> {
+        let resolved_expression =
+            revset_expr.resolve_user_expression(self.operation.repo.as_ref(), &self.resolver())?;
+        let revset = resolved_expression.evaluate(self.operation.repo.as_ref())?;
+
+        Ok(revset)
+    }
+
+    pub fn evaluate_revset_str<'op>(&'op self, revset_str: &str) -> Result<Box<dyn Revset + 'op>> {
+        let revset_expr = parse_revset(&self.parse_context(), revset_str)?;
+        self.evaluate_revset_expr(revset_expr)
+    }
+
+
+    pub fn evaluate_revset_ids<'op>(&'op self, ids: &[RevId]) -> Result<Box<dyn Revset + 'op>> {
+        let mut revs_str = ids[0].hex.clone();
+
+        for id in ids.iter().skip(1) {
+            revs_str.push_str("|");
+            revs_str.push_str(&id.hex);
+        }
+
+        self.evaluate_revset_str(&revs_str)
+    }
+
+    pub fn resolve_single<'op, 'set: 'op, T: AsRef<dyn Revset + 'set>>(&'op self, revset: T) -> Result<Commit>  {
+        let mut iter = revset.as_ref().iter().commits(self.operation.repo.store()).fuse();
+        match (iter.next(), iter.next()) {
+            (Some(commit), None) => Ok(commit?),
+            (None, _) => Err(anyhow!(r#"Revset "{:?}" didn't resolve to any revisions"#, revset.as_ref())),
+            (Some(_), Some(_)) => {
+                Err(anyhow!(r#"Revset "{:?}" resolved to more than one revision"#, revset.as_ref()))
+            }
+        }
+    }
+
+    pub fn resolve_single_str(&self, revision_str: &str) -> Result<Commit> {
+        let revset = self.evaluate_revset_str(revision_str)?;
+        self.resolve_single(revset)
+    }
+
+    pub fn resolve_single_id(&self, id: &RevId) -> Result<Commit> {
+        self.resolve_single_str(&id.hex)
+    }
+
+    pub fn resolve_multiple<'op, 'set: 'op, T: AsRef<dyn Revset + 'set>>(&'op self, revset: T) -> Result<Vec<Commit>> {
+        let commits = revset.as_ref().iter().commits(self.operation.repo.store()).collect::<Result<Vec<Commit>, BackendError>>()?;
+        Ok(commits)
+    }
+
+    pub fn resolve_multiple_ids(&self, ids: &[RevId]) -> Result<Vec<Commit>> {
+        let revset = self.evaluate_revset_ids(ids)?;
+        let commits = self.resolve_multiple(revset)?;
+        Ok(commits)
     }
 
     /*************************************************************
