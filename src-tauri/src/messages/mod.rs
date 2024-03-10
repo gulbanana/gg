@@ -80,6 +80,7 @@ pub enum RepoConfig {
         default_query: String,
         latest_query: String,
         status: RepoStatus,
+        theme: Option<String>,
     },
     NoWorkspace {
         absolute_path: DisplayPath,

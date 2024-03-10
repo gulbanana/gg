@@ -33,7 +33,7 @@ use jj_lib::{
 };
 use thiserror::Error;
 
-use crate::messages::{self, RevId};
+use crate::{config::GGSettings, messages::{self, RevId}};
 
 /// state that doesn't depend on jj-lib borrowings
 pub struct WorkerSession {
@@ -296,6 +296,7 @@ impl WorkspaceSession<'_> {
             status: self.format_status(),
             default_query,
             latest_query,
+            theme: self.settings.theme_override()
         }
     }
 

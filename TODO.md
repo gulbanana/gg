@@ -34,7 +34,6 @@ These changes may or may not be implemented in the future.
 * feat: remotes/fetch/push
 * feat: tags display & management
 * feat: more settings
-    - force dark theme on/off
     - log revsets
     - large history/large checkout heuristics
 * design: decide whether to remove edit menu

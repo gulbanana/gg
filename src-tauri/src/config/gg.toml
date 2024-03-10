@@ -1,4 +1,8 @@
 [gg]
+
+# "light" or "dark". If not set, your OS settings will be used.
+# theme-override = 
+
 # Check whether revisions are immutable (ancestor of immutable_heads()) when
 # loading them; slow on large repositories. Even if disabled, immutability 
 # checks will still be done if you attempt to rewrite history.

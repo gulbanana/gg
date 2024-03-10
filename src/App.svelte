@@ -121,7 +121,9 @@
     }
 </script>
 
-<div id="shell">
+<div
+    id="shell"
+    class={$repoConfigEvent?.type == "Workspace" ? $repoConfigEvent.theme : ""}>
     {#if $repoConfigEvent?.type == "Workspace"}
         {#key $repoConfigEvent.absolute_path}
             <LogPane

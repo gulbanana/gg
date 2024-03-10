@@ -10,5 +10,6 @@ Initial experimental release. This version is compatible with Jujutsu 0.15.
 - Revision view with file-level change details and editing commands.
 - Context menus for basic editing operations on revisions, files and branches.
 - Transactional operations with single-level undo.
+- Light and dark themes.
 - Codesigned binaries for MacOS and Windows.
 - Completely untested binaries for Linux.
