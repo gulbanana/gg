@@ -26,6 +26,7 @@ jj-cli = { version = "0.15.1", default-features = false, features = [
 
 anyhow = "1.0.79"
 chrono = { version = "0.4.34", features = ["serde"] }
+config = { version = "0.13.4", default-features = false, features = ["toml"] }
 dunce = "1.0.4"
 itertools = "0.12.1"
 indexmap = "2.2.2"

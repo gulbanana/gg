@@ -9,7 +9,9 @@ Binaries are available for several platforms on the [releases page](https://gith
 Put `gg` on your path and run it from a Jujutsu workspace, or launch it separately and use the Repository->Open menu item to select a workspace directory. Tips:
 - On MacOS, try adding `/Applications/gg.app/Contents/MacOS/` to your PATH environment variable. On Windows, try `C:\Program Files\gg`.
 - You can pass the argument `--debug` for a bunch of extra logging to stdout.
-- `gg` uses `jj`'s config; `revset-aliases.immutable_heads()` is particularly important, as it determines how much history you can edit. 
+
+### Configuration
+GG uses `jj config`; `revset-aliases.immutable_heads()` is particularly important, as it determines how much history you can edit. GG has some additional settings of its own, with defaults and documentation [here](src-tauri/src/config/gg.toml).
 
 ## Features
 GG doesn't require [JJ](https://martinvonz.github.io/jj/latest/install-and-setup/) to run, but you'll need it for tasks GG doesn't cover. What it *can* do:

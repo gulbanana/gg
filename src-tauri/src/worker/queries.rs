@@ -14,11 +14,11 @@ use jj_lib::{
 use pollster::FutureExt;
 
 use crate::{
+    config::GGSettings,
     messages::{
         ChangeKind, LogCoordinates, LogLine, LogPage, LogRow, RevChange, RevHeader, RevResult,
         TreePath,
     },
-    settings::GGSettings,
 };
 
 use super::WorkspaceSession;

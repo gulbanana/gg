@@ -1,10 +1,10 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod config;
 mod gui_util;
 mod handler;
 mod menu;
 mod messages;
-mod settings;
 #[cfg(all(test, not(feature = "ts-rs")))]
 mod tests;
 mod worker;

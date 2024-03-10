@@ -4,10 +4,11 @@
 use std::{cell::OnceCell, collections::HashMap, env::VarError, path::{Path, PathBuf}, rc::Rc, sync::Arc};
 
 use anyhow::{anyhow, Context, Result};
+use config::Config;
 use itertools::Itertools;
 use jj_cli::{
     cli_util::{check_stale_working_copy, short_operation_hash, WorkingCopyFreshness},
-    config::{default_config, LayeredConfigs},
+    config::LayeredConfigs,
     git_util::is_colocated_git_workspace,
 };
 use jj_lib::{backend::BackendError, file_util::relative_path, gitignore::GitIgnoreFile, op_store::WorkspaceId, repo::RepoLoaderError, repo_path::RepoPath, revset::{RevsetEvaluationError, RevsetIteratorExt, RevsetResolutionError}, working_copy::{CheckoutStats, SnapshotOptions}};
@@ -92,7 +93,12 @@ impl WorkerSession {
     pub fn load_directory(&mut self, cwd: &Path) -> Result<WorkspaceSession> {
         let loader = WorkspaceLoader::init(find_workspace_dir(cwd))?;
 
-        let mut configs = LayeredConfigs::from_environment(default_config());
+        let defaults = Config::builder()
+            .add_source(jj_cli::config::default_config())
+            .add_source(config::File::from_str(include_str!("config/gg.toml"), config::FileFormat::Toml))
+            .build()?;
+
+        let mut configs = LayeredConfigs::from_environment(defaults);
         configs.read_user_config()?;
         configs.read_repo_config(loader.repo_path())?;
         let config = configs.merge();
