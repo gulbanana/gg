@@ -1,26 +1,36 @@
+use std::fmt::Display;
+
 use anyhow::{anyhow, Result};
 use indexmap::IndexMap;
 use itertools::Itertools;
 use jj_lib::{
     commit::Commit,
+    git::REMOTE_NAME_FOR_LOCAL_GIT_REPO,
     matchers::{EverythingMatcher, FilesMatcher, Matcher},
     object_id::ObjectId,
     op_walk,
     repo::Repo,
     repo_path::RepoPath,
     rewrite,
+    str_util::StringPattern,
 };
 
 use crate::{
     gui_util::WorkspaceSession,
     messages::{
         AbandonRevisions, CheckoutRevision, CopyChanges, CreateRevision, DescribeRevision,
-        DuplicateRevisions, MoveChanges, MutationResult, TrackBranch, TreePath, UndoOperation,
-        UntrackBranch,
+        DuplicateRevisions, MoveChanges, MutationResult, RefName, TrackBranch, TreePath,
+        UndoOperation, UntrackBranch,
     },
 };
 
 use super::Mutation;
+
+macro_rules! precondition {
+    ($($args:tt)*) => {
+        return Ok(MutationResult::PreconditionError { message: format!($($args)*) })
+    }
+}
 
 impl Mutation for CheckoutRevision {
     fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
@@ -29,7 +39,7 @@ impl Mutation for CheckoutRevision {
         let edited = ws.resolve_single_id(&self.change_id)?;
 
         if ws.check_immutable(vec![edited.id().clone()])? {
-            return Ok("Revision is immutable".into());
+            precondition!("Revision is immutable");
         }
 
         if edited.id() == ws.wc_id() {
@@ -91,7 +101,7 @@ impl Mutation for DescribeRevision {
         let described = ws.resolve_single_id(&self.change_id)?;
 
         if ws.check_immutable(vec![described.id().clone()])? {
-            return Ok("Revision is immutable".into());
+            precondition!("Revision {} is immutable", self.change_id.prefix);
         }
 
         if self.new_description == described.description() && !self.reset_author {
@@ -184,7 +194,7 @@ impl Mutation for AbandonRevisions {
         let abandoned_ids = abandoned_revset.iter().collect_vec();
 
         if ws.check_immutable(abandoned_ids.clone())? {
-            return Ok("Revisions are immutable".into());
+            precondition!("Revisions are immutable");
         }
 
         for id in &abandoned_ids {
@@ -220,7 +230,7 @@ impl Mutation for MoveChanges {
         let matcher = build_matcher(&self.paths);
 
         if ws.check_immutable(vec![from.id().clone(), to.id().clone()])? {
-            return Ok("Revisions are immutable".into());
+            precondition!("Revisions are immutable");
         }
 
         // construct a split tree and a remainder tree by copying changes from child to parent and from parent to child
@@ -281,7 +291,7 @@ impl Mutation for CopyChanges {
         let matcher = build_matcher(&self.paths);
 
         if ws.check_immutable(vec![to.id().clone()])? {
-            return Ok("Revisions are immutable".into());
+            precondition!("Revisions are immutable");
         }
 
         // construct a restore tree - the destination with some portions overwritten by the source
@@ -306,20 +316,84 @@ impl Mutation for CopyChanges {
 }
 
 impl Mutation for TrackBranch {
-    fn execute(
-        self: Box<Self>,
-        _ws: &mut WorkspaceSession,
-    ) -> Result<crate::messages::MutationResult> {
-        Ok("TrackBranch unimplemented".into())
+    fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
+        match self.name {
+            RefName::LocalBranch { branch_name, .. } => {
+                precondition!("{} is a local branch and cannot be tracked", branch_name);
+            }
+            RefName::RemoteBranch {
+                branch_name,
+                remote_name,
+                ..
+            } => {
+                let mut tx = ws.start_transaction()?;
+
+                let remote_ref: &jj_lib::op_store::RemoteRef = ws
+                    .repo()
+                    .view()
+                    .get_remote_branch(&branch_name, &remote_name);
+
+                if remote_ref.is_tracking() {
+                    precondition!("{branch_name}@{remote_name} is already tracked");
+                }
+
+                tx.mut_repo()
+                    .track_remote_branch(&branch_name, &remote_name);
+
+                match ws.finish_transaction(tx, format!("track remote branch {}", branch_name))? {
+                    Some(new_status) => Ok(MutationResult::Updated { new_status }),
+                    None => Ok(MutationResult::Unchanged),
+                }
+            }
+        }
     }
 }
 
 impl Mutation for UntrackBranch {
-    fn execute(
-        self: Box<Self>,
-        _ws: &mut WorkspaceSession,
-    ) -> Result<crate::messages::MutationResult> {
-        Ok("UntrackBranch unimplemented".into())
+    fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
+        let mut tx = ws.start_transaction()?;
+
+        let mut untracked = Vec::new();
+        match self.name {
+            RefName::LocalBranch { branch_name, .. } => {
+                // untrack all remotes
+                for ((name, remote), remote_ref) in ws.repo().view().remote_branches_matching(
+                    &StringPattern::exact(branch_name),
+                    &StringPattern::everything(),
+                ) {
+                    if remote != REMOTE_NAME_FOR_LOCAL_GIT_REPO && remote_ref.is_tracking() {
+                        tx.mut_repo().untrack_remote_branch(name, remote);
+                        untracked.push(format!("{name}@{remote}"));
+                    }
+                }
+            }
+            RefName::RemoteBranch {
+                branch_name,
+                remote_name,
+                ..
+            } => {
+                let remote_ref: &jj_lib::op_store::RemoteRef = ws
+                    .repo()
+                    .view()
+                    .get_remote_branch(&branch_name, &remote_name);
+
+                if !remote_ref.is_tracking() {
+                    precondition!("{branch_name}@{remote_name} is not tracked");
+                }
+
+                tx.mut_repo()
+                    .untrack_remote_branch(&branch_name, &remote_name);
+                untracked.push(format!("{branch_name}@{remote_name}"));
+            }
+        }
+
+        match ws.finish_transaction(
+            tx,
+            format!("untrack remote {}", combine_branches(&untracked)),
+        )? {
+            Some(new_status) => Ok(MutationResult::Updated { new_status }),
+            None => Ok(MutationResult::Unchanged),
+        }
     }
 }
 
@@ -330,11 +404,11 @@ impl Mutation for UndoOperation {
         let mut parent_ops = head_op.parents();
 
         let Some(parent_op) = parent_ops.next().transpose()? else {
-            return Ok("Cannot undo repo initialization".into());
+            precondition!("Cannot undo repo initialization");
         };
 
         if parent_ops.next().is_some() {
-            return Ok("Cannot undo a merge operation".into());
+            precondition!("Cannot undo a merge operation");
         };
 
         let mut tx = ws.start_transaction()?;
@@ -370,6 +444,13 @@ fn combine_messages(source: &Commit, destination: &Commit, abandon_source: bool)
         }
     } else {
         destination.description().to_owned()
+    }
+}
+
+fn combine_branches(branch_names: &[impl Display]) -> String {
+    match branch_names {
+        [branch_name] => format!("branch {}", branch_name),
+        branch_names => format!("branches {}", branch_names.iter().join(", ")),
     }
 }
 

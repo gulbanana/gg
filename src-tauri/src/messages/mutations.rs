@@ -25,20 +25,6 @@ pub enum MutationResult {
     },
 }
 
-impl From<String> for MutationResult {
-    fn from(value: String) -> Self {
-        MutationResult::PreconditionError { message: value }
-    }
-}
-
-impl From<&str> for MutationResult {
-    fn from(value: &str) -> Self {
-        MutationResult::PreconditionError {
-            message: value.to_owned(),
-        }
-    }
-}
-
 /// Makes a revision the working copy
 #[derive(Deserialize, Debug)]
 #[cfg_attr(

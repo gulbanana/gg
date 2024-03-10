@@ -69,7 +69,7 @@ pub struct WorkspaceSession<'a> {
 pub struct SessionOperation {
     pub repo: Arc<ReadonlyRepo>,
     pub wc_id: CommitId,
-    branches_index: OnceCell<Rc<RefNamesIndex>>,
+    branches_index: OnceCell<Rc<BranchIndex>>,
     prefix_context: OnceCell<Rc<IdPrefixContext>>,
     immutable_revisions: OnceCell<Rc<RevsetExpression>>
 }
@@ -288,7 +288,7 @@ impl WorkspaceSession<'_> {
         self.operation.immutable_revisions.get_or_init(|| build_immutable_revisions(&self.operation.repo, &self.aliases_map, &self.parse_context()).expect("init immutable heads"))
     }
 
-    pub fn branches_index(&self) -> &Rc<RefNamesIndex> {
+    pub fn branches_index(&self) -> &Rc<BranchIndex> {
         self.operation.branches_index
             .get_or_init(|| Rc::new(build_branches_index(self.operation.repo.as_ref())))
     }
@@ -783,11 +783,11 @@ fn parse_revset(
 /*************************/
 
 #[derive(Default)]
-pub struct RefNamesIndex {
+pub struct BranchIndex {
     index: HashMap<CommitId, Vec<messages::RefName>>,
 }
 
-impl RefNamesIndex {
+impl BranchIndex {
     fn insert<'a>(&mut self, ids: impl IntoIterator<Item = &'a CommitId>, name: messages::RefName) {
         for id in ids {
             let ref_names = self.index.entry(id.clone()).or_default();
@@ -804,30 +804,29 @@ impl RefNamesIndex {
     }
 }
 
-fn build_branches_index(repo: &ReadonlyRepo) -> RefNamesIndex {
-    let mut index = RefNamesIndex::default();
+fn build_branches_index(repo: &ReadonlyRepo) -> BranchIndex {
+    let mut index = BranchIndex::default();
     for (branch_name, branch_target) in repo.view().branches() {
         let local_target = branch_target.local_target;
         let remote_refs = branch_target.remote_refs;
         if local_target.is_present() {
-            let ref_name = messages::RefName {
-                name: branch_name.to_owned(),
-                remote: None,
+            index.insert(local_target.added_ids(), messages::RefName::LocalBranch {
+                branch_name: branch_name.to_owned(),
                 has_conflict: local_target.has_conflict(),
                 is_synced: remote_refs.iter().all(|&(_, remote_ref)| {
                     !remote_ref.is_tracking() || remote_ref.target == *local_target
                 }),
-            };
-            index.insert(local_target.added_ids(), ref_name);
+                is_tracking: remote_refs.iter().any(|&(_, remote_ref)| remote_ref.is_tracking())
+            });
         }
         for &(remote_name, remote_ref) in &remote_refs {
-            let ref_name = messages::RefName {
-                name: branch_name.to_owned(),
-                remote: Some(remote_name.to_owned()),
+            index.insert(remote_ref.target.added_ids(), messages::RefName::RemoteBranch {
+                branch_name: branch_name.to_owned(),
+                remote_name: remote_name.to_owned(),
                 has_conflict: remote_ref.target.has_conflict(),
                 is_synced: remote_ref.is_tracking() && remote_ref.target == *local_target,
-            };
-            index.insert(remote_ref.target.added_ids(), ref_name);
+                is_tracked: remote_ref.is_tracking()
+            });
         }
     }
     index

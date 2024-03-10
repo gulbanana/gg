@@ -28,10 +28,17 @@
     class="unbutton chip"
     class:conflict={ref.has_conflict}
     class:context={is_context}
+    class:desync={ref.type == "LocalBranch" &&
+        ref.is_tracking &&
+        !ref.is_synced}
     on:contextmenu={onMenu}>
     <Icon name="git-branch" />
     <span>
-        {ref.remote == null ? ref.name : `${ref.name}@${ref.remote}`}
+        {#if ref.type == "LocalBranch"}
+            {ref.branch_name}
+        {:else}
+            {ref.branch_name}@{ref.remote_name}
+        {/if}
     </span>
 </button>
 
@@ -59,5 +66,9 @@
     .context {
         border-color: var(--ctp-rosewater);
         color: var(--ctp-rosewater);
+    }
+
+    .desync {
+        border-style: dashed;
     }
 </style>

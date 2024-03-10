@@ -67,7 +67,7 @@
     <span class="email truncate">{rev.author.email}</span>
 
     <span class="refs">
-        {#each rev.branches.filter((b) => b.remote == null || !b.is_synced) as ref}
+        {#each rev.branches.filter((b) => b.type == "LocalBranch" || !b.is_synced || !b.is_tracked) as ref}
             <RefSummary {rev} {ref} />
         {/each}
     </span>

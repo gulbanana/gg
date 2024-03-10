@@ -1,6 +1,6 @@
 MVP requirements
 ----------------
-implement or disable branch context commands
+fix change line centering
 dnd rebase 
 - drop on node to reparent
 - drop on edge to insert

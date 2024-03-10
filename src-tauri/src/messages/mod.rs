@@ -104,21 +104,30 @@ pub struct RepoStatus {
 
 /// Branch or tag name with metadata.
 #[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(tag = "type")]
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
     ts(export, export_to = "../src/messages/")
 )]
-pub struct RefName {
-    /// Local name.
-    pub name: String,
-    /// Remote name if this is a remote or Git-tracking ref.
-    pub remote: Option<String>,
-    /// Ref target has conflicts.
-    pub has_conflict: bool,
-    /// Local ref is synchronized with all tracking remotes, or tracking remote
-    /// ref is synchronized with the local.
-    pub is_synced: bool,
+pub enum RefName {
+    LocalBranch {
+        branch_name: String,
+        has_conflict: bool,
+        /// Synchronized with all tracking remotes
+        is_synced: bool,
+        /// Has tracking remotes
+        is_tracking: bool,
+    },
+    RemoteBranch {
+        branch_name: String,
+        has_conflict: bool,
+        /// Tracking remote ref is synchronized with local ref
+        is_synced: bool,
+        /// Has local ref
+        is_tracked: bool,
+        remote_name: String,
+    },
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

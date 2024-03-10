@@ -6,7 +6,7 @@
     export let onClick: (event: MouseEvent) => void;
 </script>
 
-{#if disabled || $currentMutation}
+{#if disabled || (!safe && $currentMutation)}
     <button disabled class:safe>
         <slot />
     </button>
