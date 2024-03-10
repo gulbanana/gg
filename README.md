@@ -28,7 +28,7 @@ There's no roadmap as such, but items on [the to-do list](TODO.md) may or may no
 ### Known Issues
 GG is in early development and will have bugs. In theory it can't corrupt a repository thanks to the operation log, but it never hurts to make backups. 
 
-Log queries will be slower if your repo contains many commits outside the set determined by `immutable_heads()`. Immutability checking in the log view can be disabled by setting `gg.check-immutable = false`.
+If your repo is "too large" some features will be disabled for performance. See [the default config](src-tauri/src/config/gg.toml) for details.
 
 ## Development  
 Recommended IDE setup: [VS Code](https://code.visualstudio.com/) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer) + [Svelte](https://marketplace.visualstudio.com/items?itemName=svelte.svelte-vscode) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode).

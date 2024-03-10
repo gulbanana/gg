@@ -1,9 +1,15 @@
-[gg]
+[gg.queries]
+# Other query settings will default to false instead of true if a repo has this many commits.
+large_repo_heuristic = 100000
 
+# Check whether revisions are immutable when loading them; slow in large repositories. 
+# When disabled, immutability checks will still be done if you attempt to rewrite history.
+# check-immutable =
+
+# Take a snapshot when the window gains focus; slow in large checkouts. 
+# When disabled, snapshots will still be created if you run commands. 
+# auto-snapshot = 
+
+[gg.ui]
 # "light" or "dark". If not set, your OS settings will be used.
-# theme-override = 
-
-# Check whether revisions are immutable (ancestor of immutable_heads()) when
-# loading them; slow on large repositories. Even if disabled, immutability 
-# checks will still be done if you attempt to rewrite history.
-check-immutable = true
+# theme-override =

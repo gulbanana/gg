@@ -11,7 +11,7 @@ use jj_cli::{
     config::LayeredConfigs,
     git_util::is_colocated_git_workspace,
 };
-use jj_lib::{backend::BackendError, file_util::relative_path, gitignore::GitIgnoreFile, op_store::WorkspaceId, repo::RepoLoaderError, repo_path::RepoPath, revset::{RevsetEvaluationError, RevsetIteratorExt, RevsetResolutionError}, working_copy::{CheckoutStats, SnapshotOptions}};
+use jj_lib::{backend::BackendError, default_index::{AsCompositeIndex, DefaultReadonlyIndex}, file_util::relative_path, gitignore::GitIgnoreFile, op_store::WorkspaceId, repo::RepoLoaderError, repo_path::RepoPath, revset::{RevsetEvaluationError, RevsetIteratorExt, RevsetResolutionError}, working_copy::{CheckoutStats, SnapshotOptions}};
 use jj_lib::{
     backend::{ChangeId, CommitId},
     commit::Commit,
@@ -54,14 +54,15 @@ impl Default for WorkerSession {
 pub struct WorkspaceSession<'a> {
     pub(crate) session: &'a mut WorkerSession,
 
-    // workspace-level data, initialised once
+    // workspace-level data, initialised once    
     pub settings: UserSettings,
     workspace: Workspace,
     aliases_map: RevsetAliasesMap,    
+    is_large: bool,
 
     // operation-specific data, containing a repo view and derived extras
     operation: SessionOperation,
-    colocated: bool
+    is_colocated: bool
 }
 
 /// state derived from a specific operation
@@ -110,26 +111,34 @@ impl WorkerSession {
             &workspace::default_working_copy_factories(),
         )?;
 
+        let operation = Self::load_at_head(&settings, &workspace)?;
+
+        let index_store = workspace.repo_loader().index_store();
+        let index = index_store
+            .get_index_at_op(&operation.repo.operation(), workspace.repo_loader().store())?;
+        let is_large = if let Some(default_index) = index.as_any().downcast_ref::<DefaultReadonlyIndex>() {
+            let stats = default_index.as_composite().stats();
+            stats.num_commits as i64 >= settings.query_large_repo_heuristic()
+        } else {
+            true
+        };
+
         let aliases_map = build_aliases_map(&configs)?;
 
-        let operation = WorkspaceSession::load_at_head(&settings, &workspace)?;
-
-        let colocated = is_colocated_git_workspace(&workspace, &operation.repo);
+        let is_colocated = is_colocated_git_workspace(&workspace, &operation.repo);
 
         Ok(WorkspaceSession {
             session: self,
+            is_large,
             settings,
             workspace,
             aliases_map,
             operation,
-            colocated
+            is_colocated
         })
     }
-}
 
-impl WorkspaceSession<'_> {
-    // XXX not sure where this should go
-    fn load_at_head(
+        fn load_at_head(
         settings: &UserSettings,
         workspace: &Workspace,
     ) -> Result<SessionOperation> {
@@ -162,7 +171,9 @@ impl WorkspaceSession<'_> {
 
         Ok(SessionOperation::new(repo, workspace.workspace_id()))
     }
+}
 
+impl WorkspaceSession<'_> {
     pub fn id(&self) -> &WorkspaceId {
         &self.workspace.workspace_id()
     }
@@ -178,6 +189,10 @@ impl WorkspaceSession<'_> {
     // XXX maybe: hunt down uses and make nonpub
     pub fn repo(&self) -> &ReadonlyRepo {
         self.operation.repo.as_ref()
+    }
+
+    pub fn should_check_immutable(&self) -> bool {
+        self.settings.query_check_immutable().unwrap_or(!self.is_large)
     }
 
     /***********************************************************/
@@ -296,7 +311,7 @@ impl WorkspaceSession<'_> {
             status: self.format_status(),
             default_query,
             latest_query,
-            theme: self.settings.theme_override()
+            theme: self.settings.ui_theme_override()
         }
     }
 
@@ -391,7 +406,7 @@ impl WorkspaceSession<'_> {
      *********************************************************************/
 
     pub fn start_transaction(&mut self) -> Result<Transaction> {
-        self.import_and_snapshot()?;
+        self.import_and_snapshot(true)?;
         Ok(self.operation.repo.start_transaction(&self.settings))
     }
 
@@ -419,7 +434,7 @@ impl WorkspaceSession<'_> {
             .get_wc_commit_id(self.workspace.workspace_id())
             .map(|commit_id| tx.repo().store().get_commit(commit_id))
             .transpose()?;
-        if self.colocated {
+        if self.is_colocated {
             let git_repo = self
                 .operation
                 .git_backend()
@@ -442,14 +457,18 @@ impl WorkspaceSession<'_> {
     }
 
     // XXX does this need to do any operation merging in case of other writers?
-    pub fn import_and_snapshot(&mut self) -> Result<bool> {
-        if self.colocated {
+    pub fn import_and_snapshot(&mut self, force: bool) -> Result<bool> {
+        if !(force || self.settings.query_auto_snapshot().unwrap_or(!self.is_large)) {
+            return Ok(false)
+        }
+
+        if self.is_colocated {
             self.import_git_head()?;
         }
 
         let updated_working_copy = self.snapshot_working_copy()?;
 
-        if self.colocated {
+        if self.is_colocated {
             self.import_git_refs()?;
         }
 
@@ -525,7 +544,7 @@ impl WorkspaceSession<'_> {
 
             mut_repo.rebase_descendants(&self.settings)?;
 
-            if self.colocated {
+            if self.is_colocated {
                 git::export_refs(mut_repo)?;
             }
     

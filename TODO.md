@@ -4,13 +4,14 @@ implement or disable branch context commands
 dnd rebase 
 - drop on node to reparent
 - drop on edge to insert
-- drag extra parents in to merge
+- drop on parents to merge?
 dnd move
-- drag files onto commits
+- drag files onto commits to move or copy changes
 dnd branch
-- drag chips onto commits
-gecko-dev is too slow again, perhaps due to auto-snapshots
-work around or wait for the tauri bug wherein event listeners are cleaned up on page load - this prevents the macos prod build receiving events in frontend
+- drag chips onto commits to position branches
+tauri bug wherein event listeners are cleaned up on page load 
+- this prevents the macos prod build receiving events in frontend
+- wait for a fix, add workaround or revert to 2.0.0-beta-9
 
 Ideas and plans
 ---------------

@@ -108,7 +108,7 @@ impl Session for WorkerSession {
 
                     latest_wd = Some(resolved_wd);
 
-                    ws.import_and_snapshot()?;
+                    ws.import_and_snapshot(false)?;
 
                     tx.send(Ok(ws.format_config()))?;
 
@@ -249,7 +249,7 @@ impl Session for WorkspaceSession<'_> {
                     state.handle_query(&self, tx, rx, revset_string, None)?;
                 }
                 SessionEvent::ExecuteSnapshot { tx } => {
-                    if self.import_and_snapshot().is_ok_and(|updated| updated) {
+                    if self.import_and_snapshot(false).is_ok_and(|updated| updated) {
                         tx.send(Some(self.format_status()))?;
                     } else {
                         tx.send(None)?;

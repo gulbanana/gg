@@ -13,12 +13,8 @@ use jj_lib::{
 };
 use pollster::FutureExt;
 
-use crate::{
-    config::GGSettings,
-    messages::{
-        ChangeKind, LogCoordinates, LogLine, LogPage, LogRow, RevChange, RevHeader, RevResult,
-        TreePath,
-    },
+use crate::messages::{
+    ChangeKind, LogCoordinates, LogLine, LogPage, LogRow, RevChange, RevHeader, RevResult, TreePath,
 };
 
 use super::WorkspaceSession;
@@ -134,7 +130,7 @@ impl<'a, 'b> LogQuery<'a, 'b> {
 
             let known_immutable = if stem_known_immutable {
                 Some(true)
-            } else if !self.ws.settings.check_immutable() {
+            } else if !self.ws.should_check_immutable() {
                 Some(false)
             } else {
                 None

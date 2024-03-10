@@ -1,16 +1,28 @@
 use jj_lib::settings::UserSettings;
 
 pub trait GGSettings {
-    fn check_immutable(&self) -> bool;
-    fn theme_override(&self) -> Option<String>;
+    fn query_large_repo_heuristic(&self) -> i64;
+    fn query_auto_snapshot(&self) -> Option<bool>;
+    fn query_check_immutable(&self) -> Option<bool>;
+    fn ui_theme_override(&self) -> Option<String>;
 }
 
 impl GGSettings for UserSettings {
-    fn check_immutable(&self) -> bool {
-        self.config().get_bool("gg.check-immutable").unwrap_or(true)
+    fn query_large_repo_heuristic(&self) -> i64 {
+        self.config()
+            .get_int("gg.queries.large-repo-heuristic")
+            .unwrap_or(100000)
     }
 
-    fn theme_override(&self) -> Option<String> {
-        self.config().get_string("gg.theme-override").ok()
+    fn query_auto_snapshot(&self) -> Option<bool> {
+        self.config().get_bool("gg.queries.auto-snapshot").ok()
+    }
+
+    fn query_check_immutable(&self) -> Option<bool> {
+        self.config().get_bool("gg.queries.check-immutable").ok()
+    }
+
+    fn ui_theme_override(&self) -> Option<String> {
+        self.config().get_string("gg.ui.theme-override").ok()
     }
 }
