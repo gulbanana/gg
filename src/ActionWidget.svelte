@@ -41,13 +41,23 @@
         }
         &:active {
             padding: 2px 5px 0px 7px;
+            box-shadow:
+                1px 1px var(--ctp-lavender),
+                2px 2px var(--ctp-overlay0);
+            border-color: var(--ctp-lavender);
+            border-right-color: var(--ctp-maroon);
+            border-bottom-color: var(--ctp-maroon);
         }
     }
 
     button.safe {
-        background: var(--ctp-green);
+        background: var(--ctp-sapphire);
         &:hover {
             background: var(--ctp-teal);
+        }
+        &:active {
+            border-right-color: var(--ctp-teal);
+            border-bottom-color: var(--ctp-teal);
         }
     }
 

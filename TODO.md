@@ -11,6 +11,8 @@ dnd branch
 tauri bug wherein event listeners are cleaned up on page load 
 - this prevents the macos prod build receiving events in frontend
 - wait for a fix, add workaround or revert to 2.0.0-beta-9
+chip/icon state colour instead of ad-hoc decorations 
+list keyboardability
 
 Ideas and plans
 ---------------
@@ -18,11 +20,12 @@ These changes may or may not be implemented in the future.
 * bug: proper fix for https://github.com/tauri-apps/tauri/issues/9127 (currently worked-around via fork)
 * bug: failed command during long load never dismisses mutation-wait overlay
 * bug: open menu command sometimes opens multiple dialogues
-* edge case: change ids that refer to more than one rev
+* edge case: change ids that refer to more than one rev. currently both are selected and the right pane displays an error
+    - might require a more rigorous treatment of ids. always abandon-by-commit?
 * edge case: selection issues like "nothing selected yet" or a new query that doesn't include the selection. this might be fine as-is
 * edge case: what happens when we snapshot after the CLI does? when there's nothing *to* snapshot, we don't refresh the ui...
 * perf: optimise revdetail loads - we already have the header
-* perf: better solution to slow immutability check
+* perf: better solution to slow immutability check - jj-lib will have a revset contains cache soon
 * feat: log keyboard support
 * feat: log multiselect
 * feat: more context actions (incl. multiselect)
@@ -35,9 +38,9 @@ These changes may or may not be implemented in the future.
 * feat: tags display & management
 * feat: more settings
     - log revsets
-    - large history/large checkout heuristics
-* design: decide whether to remove edit menu
+* design: decide whether to remove edit menu and maybe add others
 * design: app icon
 * design: draw missing (edge-to-nowhere) graph nodes?
+* design: consider common signature control
 * epic: categorical expansion - trays, modals, pinned commits etc
 * chore: windows codesigning will break in august 2024; needs a new approach

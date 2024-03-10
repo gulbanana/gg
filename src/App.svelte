@@ -284,13 +284,15 @@
         border: 3px solid var(--ctp-overlay1);
 
         display: grid;
-        grid-template-columns: 30px 1fr 30px;
+        grid-template-columns: 30px 1fr 33px;
         grid-template-rows: 30px auto 30px;
     }
 
     #overlay-chrome > :global(button) {
         grid-area: 1/3/1/3;
+        width: 30px;
         height: 30px;
+        margin: 1px 3px 0 0;
     }
 
     #overlay-content {
