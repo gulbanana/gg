@@ -416,7 +416,7 @@ impl WorkspaceSession<'_> {
             let git_repo = self
                 .operation
                 .git_backend()
-                .unwrap()
+                .ok_or(anyhow!("colocated, but git backend not found"))?
                 .open_git_repo()?;
             if let Some(wc_commit) = &maybe_new_wc_commit {
                 git::reset_head(tx.mut_repo(), &git_repo, wc_commit)?;
@@ -728,7 +728,7 @@ fn build_prefix_context(settings: &UserSettings, workspace: &Workspace, aliases_
 fn build_immutable_revisions(repo: &ReadonlyRepo, aliases_map: &RevsetAliasesMap, parse_context: &RevsetParseContext) -> Result<Rc<RevsetExpression>> {
     let (params, immutable_heads_str) = aliases_map
         .get_function("immutable_heads")
-        .unwrap();
+        .ok_or(anyhow!(r#"The `revset-aliases.immutable_heads()` function was not found."#))?;
 
     if !params.is_empty() {
         return Err(anyhow!(r#"The `revset-aliases.immutable_heads()` function must be declared without arguments."#));

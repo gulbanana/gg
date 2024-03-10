@@ -62,7 +62,7 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
         with:
-          args: ${{ matrix.platform == 'macos-latest' && '--target universal-apple-darwin -v' || ''}}
+          args: ${{ matrix.platform == 'macos-latest' && '--target universal-apple-darwin' || ''}}
           tagName: v__VERSION__
           releaseName: 'GG __VERSION__'
           releaseBody: 'See the assets to download this version and install.'

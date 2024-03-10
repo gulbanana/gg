@@ -28,7 +28,7 @@ pub enum SessionEvent {
     EndSession,
     OpenWorkspace {
         tx: Sender<Result<messages::RepoConfig>>,
-        cwd: Option<PathBuf>,
+        wd: Option<PathBuf>,
     },
     QueryLog {
         tx: Sender<Result<messages::LogPage>>,
@@ -70,7 +70,7 @@ impl Session for WorkerSession {
     type Transition = ();
 
     fn handle_events(mut self, rx: &Receiver<SessionEvent>) -> Result<()> {
-        let mut latest_cwd: Option<PathBuf> = None;
+        let mut latest_wd: Option<PathBuf> = None;
 
         loop {
             let evt = rx.recv();
@@ -78,32 +78,42 @@ impl Session for WorkerSession {
             match evt {
                 Ok(SessionEvent::EndSession) => return Ok(()),
                 Ok(SessionEvent::ExecuteSnapshot { .. }) => (),
-                Ok(SessionEvent::OpenWorkspace { mut tx, mut cwd }) => loop {
-                    let resolved_cwd = cwd
-                        .clone()
-                        .or(latest_cwd)
-                        .unwrap_or_else(|| std::env::current_dir().unwrap());
+                Ok(SessionEvent::OpenWorkspace { mut tx, mut wd }) => loop {
+                    let resolved_wd = match wd.clone().or(latest_wd) {
+                        Some(wd) => wd,
+                        None => match std::env::current_dir().context("current_dir") {
+                            Ok(wd) => wd,
+                            Err(err) => {
+                                latest_wd = None;
+                                tx.send(Ok(messages::RepoConfig::NoWorkspace {
+                                    absolute_path: PathBuf::new().into(),
+                                    error: format!("{err:#}"),
+                                }))?;
+                                break;
+                            }
+                        },
+                    };
 
-                    let mut ws = match self.load_directory(&resolved_cwd) {
+                    let mut ws = match self.load_directory(&resolved_wd) {
                         Ok(ws) => ws,
                         Err(err) => {
-                            latest_cwd = None;
+                            latest_wd = None;
                             tx.send(Ok(messages::RepoConfig::NoWorkspace {
-                                absolute_path: resolved_cwd.into(),
+                                absolute_path: resolved_wd.into(),
                                 error: format!("{err:#}"),
                             }))?;
                             break;
                         }
                     };
 
-                    latest_cwd = Some(resolved_cwd);
+                    latest_wd = Some(resolved_wd);
 
                     ws.import_and_snapshot()?;
 
                     tx.send(Ok(ws.format_config()))?;
 
                     match ws.handle_events(rx).context("WorkspaceSession")? {
-                        WorkspaceResult::Reopen(new_tx, new_cwd) => (tx, cwd) = (new_tx, new_cwd),
+                        WorkspaceResult::Reopen(new_tx, new_cwd) => (tx, wd) = (new_tx, new_cwd),
                         WorkspaceResult::SessionComplete => return Ok(()),
                     }
                 },
@@ -213,7 +223,7 @@ impl Session for WorkspaceSession<'_> {
 
             match next_event {
                 SessionEvent::EndSession => return Ok(WorkspaceResult::SessionComplete),
-                SessionEvent::OpenWorkspace { tx, cwd } => {
+                SessionEvent::OpenWorkspace { tx, wd: cwd } => {
                     return Ok(WorkspaceResult::Reopen(tx, cwd));
                 }
                 SessionEvent::QueryRevision { tx, query } => {

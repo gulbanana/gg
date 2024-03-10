@@ -120,7 +120,7 @@ pub struct RefName {
     pub is_synced: bool,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(tag = "type")]
 #[cfg_attr(
     feature = "ts-rs",

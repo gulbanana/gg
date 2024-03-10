@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod gui_util;
+mod handler;
 mod menu;
 mod messages;
 mod settings;
@@ -14,7 +15,7 @@ use std::sync::mpsc::{channel, Sender};
 use std::sync::Mutex;
 use std::thread::{self, JoinHandle};
 
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use log::LevelFilter;
 use tauri::menu::Menu;
 use tauri::{ipc::InvokeError, Manager};
@@ -77,7 +78,7 @@ fn main() -> Result<()> {
                     if debug {
                         LevelFilter::Debug
                     } else {
-                        LevelFilter::Info
+                        LevelFilter::Warn
                     },
                 )
                 .build(),
@@ -102,27 +103,32 @@ fn main() -> Result<()> {
         ])
         .menu(menu::build_main)
         .setup(|app| {
-            let window = app.get_webview_window("main").unwrap();
+            let window = app
+                .get_webview_window("main")
+                .ok_or(anyhow!("preconfigured window not found"))?;
             let (sender, receiver) = channel();
 
             let handle = window.clone();
             let window_worker = thread::spawn(move || {
+                log::info!("start worker");
+
                 while let Err(err) = WorkerSession::default()
                     .handle_events(&receiver)
                     .context("worker")
                 {
-                    handle
-                        .emit(
-                            "gg://repo/config",
-                            messages::RepoConfig::DeadWorker {
-                                error: format!("{err:#}"),
-                            },
-                        )
-                        .unwrap();
+                    log::info!("restart worker: {err:#}");
+
+                    // it's ok if the worker has to restart, as long as we can notify the frontend of it
+                    handler::fatal!(handle.emit(
+                        "gg://repo/config",
+                        messages::RepoConfig::DeadWorker {
+                            error: format!("{err:#}"),
+                        },
+                    ));
                 }
             });
 
-            window.on_menu_event(menu::handle_event);
+            window.on_menu_event(|w, e| handler::fatal!(menu::handle_event(w, e)));
 
             let handle = window.clone();
             window.on_window_event(move |event| handle_window_event(&handle, event));
@@ -133,13 +139,12 @@ fn main() -> Result<()> {
                     serde_json::from_str(event.payload());
                 if let Some(menu) = handle.menu() {
                     if let Ok(selection) = payload {
-                        menu::handle_selection(menu, selection);
+                        handler::fatal!(menu::handle_selection(menu, selection));
                     }
                 }
             });
 
-            let (revision_menu, tree_menu, ref_menu) =
-                menu::build_context(app.handle()).expect("menu::build_context");
+            let (revision_menu, tree_menu, ref_menu) = menu::build_context(app.handle())?;
 
             let app_state = app.state::<AppState>();
             app_state.0.lock().unwrap().insert(
@@ -164,8 +169,8 @@ fn main() -> Result<()> {
 #[tauri::command(async)]
 fn notify_window_ready(window: Window) {
     log::debug!("window opened; loading cwd");
-    try_open_repository(&window, None).expect("try_open_repository");
-    window.show().expect("window.show()");
+    handler::fatal!(window.show());
+    handler::nonfatal!(try_open_repository(&window, None));
 }
 
 #[tauri::command]
@@ -177,7 +182,7 @@ fn forward_accelerator(window: Window, key: char) {
 
 #[tauri::command]
 fn forward_context_menu(window: Window, context: messages::MenuContext) -> Result<(), InvokeError> {
-    menu::handle_context(window, context).map_err(InvokeError::from_error)?;
+    menu::handle_context(window, context).map_err(InvokeError::from_anyhow)?;
     Ok(())
 }
 
@@ -336,7 +341,7 @@ fn try_open_repository(window: &Window, cwd: Option<PathBuf>) -> Result<()> {
 
     session_tx.send(SessionEvent::OpenWorkspace {
         tx: call_tx,
-        cwd: cwd.clone(),
+        wd: cwd.clone(),
     })?;
 
     match call_rx.recv()? {
@@ -386,12 +391,10 @@ fn handle_window_event(window: &WebviewWindow, event: &WindowEvent) {
             let session_tx: Sender<SessionEvent> = app_state.get_sender(window.label());
             let (call_tx, call_rx) = channel();
 
-            session_tx
-                .send(SessionEvent::ExecuteSnapshot { tx: call_tx })
-                .expect("session_tx");
+            handler::nonfatal!(session_tx.send(SessionEvent::ExecuteSnapshot { tx: call_tx }));
 
-            if let Ok(Some(status)) = call_rx.recv() {
-                window.emit("gg://repo/status", status).expect("emit");
+            if let Some(status) = handler::nonfatal!(call_rx.recv()) {
+                handler::nonfatal!(window.emit("gg://repo/status", status));
             }
         }
         _ => (),

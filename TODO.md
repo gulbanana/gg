@@ -10,6 +10,8 @@ dnd move
 dnd branch
 - drag chips onto commits
 gecko-dev is too slow again, perhaps due to auto-snapshots
+bug: macos production build not receiving repoConfig in frontend (and therefore totally unusable)
+robust error handling
 
 Ideas and plans
 ---------------
@@ -26,17 +28,19 @@ perf: better solution to slow immutability check
 feat: log keyboard support
 feat: log multiselect
 feat: more context actions (incl. multiselect)
-feat: file select/multiselect? large moves could be tedious otherwise
+feat: file select/multiselect? large moves could be tedious otherwise. maybe file menu?
 feat: redo/undo stack
 feat: operation menu - restores or views?
 feat: diffs and/or difftool
-feat: resolve (other than rebasing)
+feat: resolve workflow 
 feat: remotes/fetch/push
-feat: tags
+feat: tags display & management
 feat: more settings (and fix how settings work, with a base template)
 - force dark theme on/off
 - log revsets
+- large history/large checkout heuristics
 design: decide whether to remove edit menu
 design: app icon
 design: draw missing (edge-to-nowhere) graph nodes?
 epic: categorical expansion - trays, modals, pinned commits etc
+chore: windows codesigning will break in august 2024; needs a new approach

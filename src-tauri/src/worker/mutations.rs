@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use indexmap::IndexMap;
 use itertools::Itertools;
 use jj_lib::{
@@ -133,7 +133,7 @@ impl Mutation for DuplicateRevisions {
             .topo_order(&mut clonees.iter().map(|c| c.id())) // ensures that parents are duplicated first
             .into_iter()
         {
-            let clonee = store.get_commit(&clonee_id).unwrap();
+            let clonee = store.get_commit(&clonee_id)?;
             let clone_parents = clonee
                 .parents()
                 .iter()
@@ -158,7 +158,10 @@ impl Mutation for DuplicateRevisions {
         match ws.finish_transaction(tx, format!("duplicating {} commit(s)", clonees.len()))? {
             Some(new_status) => {
                 if clonees.len() == 1 {
-                    let new_commit = clones.get_index(0).unwrap().1;
+                    let new_commit = clones
+                        .get_index(0)
+                        .ok_or(anyhow!("single source should have single copy"))?
+                        .1;
                     let new_selection = ws.format_header(new_commit, None)?;
                     Ok(MutationResult::UpdatedSelection {
                         new_status,
@@ -242,7 +245,10 @@ impl Mutation for MoveChanges {
         // rebase descendants of source, which may include destination
         if tx.repo().index().is_ancestor(from.id(), to.id()) {
             let rebase_map = tx.mut_repo().rebase_descendants_return_map(&ws.settings)?;
-            let rebased_to_id = rebase_map.get(to.id()).unwrap().clone();
+            let rebased_to_id = rebase_map
+                .get(to.id())
+                .ok_or(anyhow!("descendant to_commit not found in rebase map"))?
+                .clone();
             to = tx.mut_repo().store().get_commit(&rebased_to_id)?;
         }
 

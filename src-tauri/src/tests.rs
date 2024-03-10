@@ -54,11 +54,11 @@ mod session {
 
         tx.send(SessionEvent::OpenWorkspace {
             tx: tx_good_repo,
-            cwd: None,
+            wd: None,
         })?;
         tx.send(SessionEvent::OpenWorkspace {
             tx: tx_bad_repo,
-            cwd: Some(PathBuf::new()),
+            wd: Some(PathBuf::new()),
         })?;
         tx.send(SessionEvent::EndSession)?;
 
@@ -81,11 +81,11 @@ mod session {
 
         tx.send(SessionEvent::OpenWorkspace {
             tx: tx_first_repo,
-            cwd: None,
+            wd: None,
         })?;
         tx.send(SessionEvent::OpenWorkspace {
             tx: tx_second_repo,
-            cwd: None,
+            wd: None,
         })?;
         tx.send(SessionEvent::EndSession)?;
 
@@ -109,7 +109,7 @@ mod session {
 
         tx.send(SessionEvent::OpenWorkspace {
             tx: tx_load,
-            cwd: None,
+            wd: None,
         })?;
         tx.send(SessionEvent::QueryLog {
             tx: tx_query,
@@ -117,7 +117,7 @@ mod session {
         })?;
         tx.send(SessionEvent::OpenWorkspace {
             tx: tx_reload,
-            cwd: None,
+            wd: None,
         })?;
         tx.send(SessionEvent::EndSession)?;
 
@@ -141,7 +141,7 @@ mod session {
 
         tx.send(SessionEvent::OpenWorkspace {
             tx: tx_load,
-            cwd: None,
+            wd: None,
         })?;
         tx.send(SessionEvent::QueryLog {
             tx: tx_query,
@@ -169,7 +169,7 @@ mod session {
 
         tx.send(SessionEvent::OpenWorkspace {
             tx: tx_load,
-            cwd: Some(repo.path().to_owned()),
+            wd: Some(repo.path().to_owned()),
         })?;
         tx.send(SessionEvent::QueryLog {
             tx: tx_page1,
@@ -208,7 +208,7 @@ mod session {
 
         tx.send(SessionEvent::OpenWorkspace {
             tx: tx_load,
-            cwd: Some(repo.path().to_owned()),
+            wd: Some(repo.path().to_owned()),
         })?;
         tx.send(SessionEvent::QueryLog {
             tx: tx_page1,
@@ -255,7 +255,7 @@ mod session {
 
         tx.send(SessionEvent::OpenWorkspace {
             tx: tx_load,
-            cwd: Some(repo.path().to_owned()),
+            wd: Some(repo.path().to_owned()),
         })?;
         tx.send(SessionEvent::QueryLog {
             tx: tx_page1,
@@ -299,7 +299,7 @@ mod session {
 
         tx.send(SessionEvent::OpenWorkspace {
             tx: tx_load,
-            cwd: Some(repo.path().to_owned()),
+            wd: Some(repo.path().to_owned()),
         })?;
         tx.send(SessionEvent::QueryLog {
             tx: tx_page,
@@ -331,7 +331,7 @@ mod session {
 
         tx.send(SessionEvent::OpenWorkspace {
             tx: tx_load,
-            cwd: None,
+            wd: None,
         })?;
         tx.send(SessionEvent::QueryRevision {
             tx: tx_query,

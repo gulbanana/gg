@@ -4,8 +4,9 @@ use anyhow::Result;
 
 use futures_util::StreamExt;
 use jj_lib::{
-    backend::CommitId,
+    backend::{BackendError, CommitId},
     matchers::EverythingMatcher,
+    merged_tree::TreeDiffStream,
     revset::Revset,
     revset_graph::{RevsetGraphEdge, RevsetGraphEdgeType, TopoGroupedRevsetGraphIterator},
     rewrite,
@@ -230,7 +231,6 @@ pub fn query_revision(ws: &WorkspaceSession, rev_str: &str) -> Result<RevResult>
 
     let parent_tree = rewrite::merge_commit_trees(ws.repo(), &commit.parents())?;
     let tree = commit.tree()?;
-    let mut tree_diff = parent_tree.diff_stream(&tree, &EverythingMatcher);
 
     let mut conflicts: Vec<TreePath> = Vec::new();
     for (repo_path, entry) in parent_tree.entries() {
@@ -240,23 +240,8 @@ pub fn query_revision(ws: &WorkspaceSession, rev_str: &str) -> Result<RevResult>
     }
 
     let mut changes = Vec::new();
-    async {
-        while let Some((repo_path, entry)) = tree_diff.next().await {
-            let (before, after) = entry.unwrap();
-            changes.push(RevChange {
-                path: ws.format_path(repo_path),
-                kind: if before.is_present() && after.is_present() {
-                    ChangeKind::Modified
-                } else if before.is_absent() {
-                    ChangeKind::Added
-                } else {
-                    ChangeKind::Deleted
-                },
-                has_conflict: !after.is_resolved(),
-            });
-        }
-    }
-    .block_on();
+    let tree_diff = parent_tree.diff_stream(&tree, &EverythingMatcher);
+    format_tree_changes(ws, &mut changes, tree_diff).block_on()?;
 
     let header = ws.format_header(&commit, None)?;
 
@@ -282,4 +267,26 @@ pub fn query_revision(ws: &WorkspaceSession, rev_str: &str) -> Result<RevResult>
         changes,
         conflicts,
     })
+}
+
+async fn format_tree_changes(
+    ws: &WorkspaceSession<'_>,
+    changes: &mut Vec<RevChange>,
+    mut tree_diff: TreeDiffStream<'_>,
+) -> Result<(), BackendError> {
+    while let Some((repo_path, entry)) = tree_diff.next().await {
+        let (before, after) = entry?;
+        changes.push(RevChange {
+            path: ws.format_path(repo_path),
+            kind: if before.is_present() && after.is_present() {
+                ChangeKind::Modified
+            } else if before.is_absent() {
+                ChangeKind::Added
+            } else {
+                ChangeKind::Deleted
+            },
+            has_conflict: !after.is_resolved(),
+        });
+    }
+    Ok(())
 }

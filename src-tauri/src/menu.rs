@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{anyhow, Context, Result};
 #[cfg(target_os = "macos")]
 use tauri::menu::AboutMetadata;
 use tauri::{
@@ -8,6 +8,7 @@ use tauri::{
 use tauri_plugin_dialog::DialogExt;
 
 use crate::{
+    handler,
     messages::{MenuContext, RevHeader},
     AppState,
 };
@@ -132,7 +133,6 @@ pub fn build_main(app_handle: &AppHandle) -> tauri::Result<Menu<Wry>> {
     Ok(menu)
 }
 
-// XXX make anyhow when possible
 pub fn build_context(
     app_handle: &AppHandle<Wry>,
 ) -> Result<(Menu<Wry>, Menu<Wry>, Menu<Wry>), tauri::Error> {
@@ -210,51 +210,43 @@ pub fn build_context(
     Ok((revision_menu, tree_menu, ref_menu))
 }
 
-// XXX unwrap(): see https://github.com/tauri-apps/tauri/pull/8777
 // enables global menu items based on currently selected revision
-pub fn handle_selection(menu: Menu<Wry>, selection: Option<RevHeader>) {
-    let commit_submenu = menu.get("commit").unwrap();
+pub fn handle_selection(menu: Menu<Wry>, selection: Option<RevHeader>) -> Result<()> {
+    let commit_submenu = menu.get("commit").ok_or(anyhow!("Commit menu not found"))?;
     let commit_submenu = commit_submenu.as_submenu_unchecked();
-
-    let set_enabled = |id: &str, value: bool| {
-        if let Some(item) = commit_submenu
-            .get(id)
-            .as_ref()
-            .and_then(|item| item.as_menuitem())
-        {
-            item.set_enabled(value).unwrap();
-        }
-    };
 
     match selection {
         None => {
-            set_enabled("commit_new", false);
-            set_enabled("commit_edit", false);
-            set_enabled("commit_duplicate", false);
-            set_enabled("commit_abandon", false);
-            set_enabled("commit_squash", false);
-            set_enabled("commit_restore", false);
+            commit_submenu.enable("commit_new", false)?;
+            commit_submenu.enable("commit_edit", false)?;
+            commit_submenu.enable("commit_duplicate", false)?;
+            commit_submenu.enable("commit_abandon", false)?;
+            commit_submenu.enable("commit_squash", false)?;
+            commit_submenu.enable("commit_restore", false)?;
         }
         Some(rev) => {
-            set_enabled("commit_new", true);
-            set_enabled("commit_edit", !rev.is_immutable && !rev.is_working_copy);
-            set_enabled("commit_duplicate", true);
-            set_enabled("commit_abandon", !rev.is_immutable);
-            set_enabled(
+            commit_submenu.enable("commit_new", true)?;
+            commit_submenu.enable("commit_edit", !rev.is_immutable && !rev.is_working_copy)?;
+            commit_submenu.enable("commit_duplicate", true)?;
+            commit_submenu.enable("commit_abandon", !rev.is_immutable)?;
+            commit_submenu.enable(
                 "commit_squash",
                 !rev.is_immutable && rev.parent_ids.len() == 1,
-            );
-            set_enabled(
+            )?;
+            commit_submenu.enable(
                 "commit_restore",
                 !rev.is_immutable && rev.parent_ids.len() == 1,
-            );
+            )?;
         }
-    }
+    };
+
+    Ok(())
 }
 
-// XXX make anyhow when possible
 // enables context menu items for a revision and shows the menu
-pub fn handle_context(window: Window, ctx: MenuContext) -> Result<(), tauri::Error> {
+pub fn handle_context(window: Window, ctx: MenuContext) -> Result<()> {
+    log::debug!("handling context {ctx:?}");
+
     let state = window.state::<AppState>();
     let guard = state.0.lock().expect("state mutex poisoned");
 
@@ -265,28 +257,18 @@ pub fn handle_context(window: Window, ctx: MenuContext) -> Result<(), tauri::Err
                 .expect("session not found")
                 .revision_menu;
 
-            let set_enabled = |id: &str, value: bool| {
-                if let Some(item) = context_menu
-                    .get(id)
-                    .as_ref()
-                    .and_then(|item| item.as_menuitem())
-                {
-                    item.set_enabled(value).unwrap();
-                }
-            };
-
-            set_enabled("revision_new", true);
-            set_enabled("revision_edit", !rev.is_immutable && !rev.is_working_copy);
-            set_enabled("revision_duplicate", true);
-            set_enabled("revision_abandon", !rev.is_immutable);
-            set_enabled(
+            context_menu.enable("revision_new", true)?;
+            context_menu.enable("revision_edit", !rev.is_immutable && !rev.is_working_copy)?;
+            context_menu.enable("revision_duplicate", true)?;
+            context_menu.enable("revision_abandon", !rev.is_immutable)?;
+            context_menu.enable(
                 "revision_squash",
                 !rev.is_immutable && rev.parent_ids.len() == 1,
-            );
-            set_enabled(
+            )?;
+            context_menu.enable(
                 "revision_restore",
                 !rev.is_immutable && rev.parent_ids.len() == 1,
-            );
+            )?;
 
             window.popup_menu(context_menu)?;
         }
@@ -296,24 +278,14 @@ pub fn handle_context(window: Window, ctx: MenuContext) -> Result<(), tauri::Err
                 .expect("session not found")
                 .tree_menu;
 
-            let set_enabled = |id: &str, value: bool| {
-                if let Some(item) = context_menu
-                    .get(id)
-                    .as_ref()
-                    .and_then(|item| item.as_menuitem())
-                {
-                    item.set_enabled(value).unwrap();
-                }
-            };
-
-            set_enabled(
+            context_menu.enable(
                 "tree_squash",
                 !rev.is_immutable && rev.parent_ids.len() == 1,
-            );
-            set_enabled(
+            )?;
+            context_menu.enable(
                 "tree_restore",
                 !rev.is_immutable && rev.parent_ids.len() == 1,
-            );
+            )?;
 
             window.popup_menu(context_menu)?;
         }
@@ -323,18 +295,8 @@ pub fn handle_context(window: Window, ctx: MenuContext) -> Result<(), tauri::Err
                 .expect("session not found")
                 .ref_menu;
 
-            let set_enabled = |id: &str, value: bool| {
-                if let Some(item) = context_menu
-                    .get(id)
-                    .as_ref()
-                    .and_then(|item| item.as_menuitem())
-                {
-                    item.set_enabled(value).unwrap();
-                }
-            };
-
-            set_enabled("branch_track", name.remote.is_none());
-            set_enabled("branch_untrack", name.remote.is_some());
+            context_menu.enable("branch_track", name.remote.is_none())?;
+            context_menu.enable("branch_untrack", name.remote.is_some())?;
 
             window.popup_menu(context_menu)?;
         }
@@ -343,40 +305,69 @@ pub fn handle_context(window: Window, ctx: MenuContext) -> Result<(), tauri::Err
     Ok(())
 }
 
-// XXX unwrap(): see https://github.com/tauri-apps/tauri/pull/8777
-pub fn handle_event(window: &Window, event: MenuEvent) {
+pub fn handle_event(window: &Window, event: MenuEvent) -> Result<()> {
+    log::debug!("handling event {event:?}");
+
     match event.id.0.as_str() {
         "repo_open" => repo_open(window),
         "repo_reopen" => repo_reopen(window),
-        "commit_new" => window.emit("gg://menu/commit", "new").unwrap(),
-        "commit_edit" => window.emit("gg://menu/commit", "edit").unwrap(),
-        "commit_duplicate" => window.emit("gg://menu/commit", "duplicate").unwrap(),
-        "commit_abandon" => window.emit("gg://menu/commit", "abandon").unwrap(),
-        "commit_squash" => window.emit("gg://menu/commit", "squash").unwrap(),
-        "commit_restore" => window.emit("gg://menu/commit", "restore").unwrap(),
-        "revision_new" => window.emit("gg://context/revision", "new").unwrap(),
-        "revision_edit" => window.emit("gg://context/revision", "edit").unwrap(),
-        "revision_duplicate" => window.emit("gg://context/revision", "duplicate").unwrap(),
-        "revision_abandon" => window.emit("gg://context/revision", "abandon").unwrap(),
-        "revision_squash" => window.emit("gg://context/revision", "squash").unwrap(),
-        "revision_restore" => window.emit("gg://context/revision", "restore").unwrap(),
-        "tree_squash" => window.emit("gg://context/tree", "squash").unwrap(),
-        "tree_restore" => window.emit("gg://context/tree", "restore").unwrap(),
-        "branch_track" => window.emit("gg://context/branch", "track").unwrap(),
-        "branch_untrack" => window.emit("gg://context/branch", "untrack").unwrap(),
+        "commit_new" => window.emit("gg://menu/commit", "new")?,
+        "commit_edit" => window.emit("gg://menu/commit", "edit")?,
+        "commit_duplicate" => window.emit("gg://menu/commit", "duplicate")?,
+        "commit_abandon" => window.emit("gg://menu/commit", "abandon")?,
+        "commit_squash" => window.emit("gg://menu/commit", "squash")?,
+        "commit_restore" => window.emit("gg://menu/commit", "restore")?,
+        "revision_new" => window.emit("gg://context/revision", "new")?,
+        "revision_edit" => window.emit("gg://context/revision", "edit")?,
+        "revision_duplicate" => window.emit("gg://context/revision", "duplicate")?,
+        "revision_abandon" => window.emit("gg://context/revision", "abandon")?,
+        "revision_squash" => window.emit("gg://context/revision", "squash")?,
+        "revision_restore" => window.emit("gg://context/revision", "restore")?,
+        "tree_squash" => window.emit("gg://context/tree", "squash")?,
+        "tree_restore" => window.emit("gg://context/tree", "restore")?,
+        "branch_track" => window.emit("gg://context/branch", "track")?,
+        "branch_untrack" => window.emit("gg://context/branch", "untrack")?,
         _ => (),
-    }
+    };
+
+    Ok(())
 }
 
 pub fn repo_open(window: &Window) {
     let window = window.clone();
     window.dialog().file().pick_folder(move |picked| {
         if let Some(cwd) = picked {
-            crate::try_open_repository(&window, Some(cwd)).expect("try_open_repository");
+            handler::fatal!(
+                crate::try_open_repository(&window, Some(cwd)).context("try_open_repository")
+            );
         }
     });
 }
 
 fn repo_reopen(window: &Window) {
-    crate::try_open_repository(window, None).expect("try_open_repository");
+    handler::fatal!(crate::try_open_repository(window, None).context("try_open_repository"));
+}
+
+trait Enabler {
+    fn enable(&self, id: &str, value: bool) -> tauri::Result<()>;
+}
+
+impl Enabler for Menu<Wry> {
+    fn enable(&self, id: &str, value: bool) -> tauri::Result<()> {
+        if let Some(item) = self.get(id).as_ref().and_then(|item| item.as_menuitem()) {
+            item.set_enabled(value)
+        } else {
+            Ok(())
+        }
+    }
+}
+
+impl Enabler for Submenu<Wry> {
+    fn enable(&self, id: &str, value: bool) -> tauri::Result<()> {
+        if let Some(item) = self.get(id).as_ref().and_then(|item| item.as_menuitem()) {
+            item.set_enabled(value)
+        } else {
+            Ok(())
+        }
+    }
 }

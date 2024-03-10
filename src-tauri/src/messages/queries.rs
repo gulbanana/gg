@@ -49,7 +49,7 @@ impl From<&Signature> for RevAuthor {
             name: value.name.clone(),
             email: value.email.clone(),
             timestamp: datetime_from_timestamp(&value.timestamp)
-                .unwrap()
+                .expect("convert timestamp to datetime")
                 .with_timezone(&Local),
         }
     }
@@ -170,8 +170,9 @@ fn datetime_from_timestamp(context: &Timestamp) -> Option<DateTime<FixedOffset>>
 
     Some(
         utc.with_timezone(
-            &FixedOffset::east_opt(context.tz_offset * 60)
-                .unwrap_or_else(|| FixedOffset::east_opt(0).unwrap()),
+            &FixedOffset::east_opt(context.tz_offset * 60).unwrap_or_else(|| {
+                FixedOffset::east_opt(0).expect("timezone offset out of bounds")
+            }),
         ),
     )
 }
