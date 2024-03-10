@@ -10,8 +10,7 @@ dnd move
 dnd branch
 - drag chips onto commits
 gecko-dev is too slow again, perhaps due to auto-snapshots
-bug: macos production build not receiving repoConfig in frontend (and therefore totally unusable)
-robust error handling
+work around or wait for the tauri bug wherein event listeners are cleaned up on page load - this prevents the macos prod build receiving events in frontend
 
 Ideas and plans
 ---------------

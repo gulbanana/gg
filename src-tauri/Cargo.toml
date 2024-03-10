@@ -13,7 +13,7 @@ tempfile = "3.10.1"
 zip = "0.6"
 
 [dependencies]
-tauri = { version = "2.0.0-beta", features = ["devtools"] }
+tauri = { version = "2.0.0-beta", features = [] }
 tauri-plugin-dialog = "2.0.0-beta"
 tauri-plugin-shell = "2.0.0-beta"
 tauri-plugin-window-state = "2.0.0-beta"
