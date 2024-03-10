@@ -1,6 +1,5 @@
 MVP requirements
 ----------------
-fix change line centering
 dnd rebase 
 - drop on node to reparent
 - drop on edge to insert

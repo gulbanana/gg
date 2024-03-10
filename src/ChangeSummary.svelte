@@ -42,11 +42,11 @@
 </script>
 
 <button
-    class="unbutton layout"
+    class="unbutton layout {className}"
     class:conflict={change.has_conflict}
     class:context={is_context}
     on:contextmenu={onMenu}>
-    <span class={className}><Icon name={icon} /></span>
+    <Icon name={icon} />
     <span>{change.path.relative_path}</span>
 </button>
 
@@ -69,15 +69,15 @@
         );
     }
 
-    .added {
-        color: var(--ctp-green);
+    .added > :global(svg) {
+        stroke: var(--ctp-green);
     }
 
-    .modified {
+    .modified > :global(svg) {
         color: var(--ctp-blue);
     }
 
-    .deleted {
+    .deleted > :global(svg) {
         color: var(--ctp-red);
     }
 
