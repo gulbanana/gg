@@ -15,6 +15,7 @@
 
 <style>
     .feather {
+        pointer-events: none;
         height: 16px;
         width: 16px;
         fill: none;

@@ -166,6 +166,12 @@ ol {
   padding: 0;
 }
 
+/* make generic elements drop-transparent */
+div,
+span {
+  pointer-events: none;
+}
+
 /* utility: buttons used as list items and draggables */
 .unbutton {
   background: transparent;

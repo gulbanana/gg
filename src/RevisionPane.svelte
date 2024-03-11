@@ -1,29 +1,26 @@
 <script lang="ts">
     import type { RevResult } from "./messages/RevResult";
     import { menuCommitEvent } from "./stores";
-    import ActionWidget from "./ActionWidget.svelte";
-    import Icon from "./Icon.svelte";
-    import IdSpan from "./IdSpan.svelte";
+    import ChangeSummary from "./objects/ChangeObject.svelte";
+    import RevisionItem from "./objects/RevisionObject.svelte";
+    import RevisionMutator from "./mutators/RevisionMutator";
+    import ActionWidget from "./controls/ActionWidget.svelte";
+    import Icon from "./controls/Icon.svelte";
+    import IdSpan from "./controls/IdSpan.svelte";
     import Pane from "./Pane.svelte";
-    import RevisionSummary from "./RevisionSummary.svelte";
-    import CheckWidget from "./CheckWidget.svelte";
-    import Mutator from "./RevisionMutator";
-    import ChangeSummary from "./ChangeSummary.svelte";
+    import CheckWidget from "./controls/CheckWidget.svelte";
     import GraphNode from "./GraphNode.svelte";
 
     export let rev: Extract<RevResult, { type: "Detail" }>;
 
-    let mutator = new Mutator(rev.header);
+    let mutator = new RevisionMutator(rev.header);
     let fullDescription = rev.header.description.lines.join("\n");
     let resetAuthor = false;
 
     let unresolvedConflicts = rev.conflicts.filter(
         (conflict) =>
-            rev.changes.findIndex(
-                (change) =>
-                    !change.has_conflict &&
-                    change.path.repo_path == conflict.repo_path,
-            ) == -1,
+            rev.changes.findIndex((change) => !change.has_conflict && change.path.repo_path == conflict.repo_path) ==
+            -1,
     );
 
     $: mutator.handle($menuCommitEvent);
@@ -43,29 +40,20 @@
             <ActionWidget onClick={mutator.onNew}>
                 <Icon name="edit" /> New
             </ActionWidget>
-            <ActionWidget
-                onClick={mutator.onEdit}
-                disabled={rev.header.is_immutable ||
-                    rev.header.is_working_copy}>
+            <ActionWidget onClick={mutator.onEdit} disabled={rev.header.is_immutable || rev.header.is_working_copy}>
                 <Icon name="edit-2" /> Edit
             </ActionWidget>
             <ActionWidget onClick={mutator.onDuplicate}>
                 <Icon name="copy" /> Duplicate
             </ActionWidget>
-            <ActionWidget
-                onClick={mutator.onAbandon}
-                disabled={rev.header.is_immutable}>
+            <ActionWidget onClick={mutator.onAbandon} disabled={rev.header.is_immutable}>
                 <Icon name="trash-2" /> Abandon
             </ActionWidget>
         </div>
     </h2>
 
     <div slot="body" class="body">
-        <textarea
-            class="desc"
-            spellcheck="false"
-            disabled={rev.header.is_immutable}
-            bind:value={fullDescription} />
+        <textarea class="desc" spellcheck="false" disabled={rev.header.is_immutable} bind:value={fullDescription} />
 
         <div class="signature-commands">
             <span>
@@ -82,30 +70,6 @@
         </div>
 
         <main>
-            {#if rev.changes.length > 0}
-                <section>
-                    <h3>File changes</h3>
-                    {#each rev.changes as change}
-                        <ChangeSummary rev={rev.header} {change} />
-                    {/each}
-                </section>
-
-                <div class="move-commands">
-                    <ActionWidget
-                        onClick={mutator.onSquash}
-                        disabled={rev.header.is_immutable ||
-                            rev.header.parent_ids.length != 1}>
-                        <Icon name="download" /> Squash
-                    </ActionWidget>
-                    <ActionWidget
-                        onClick={mutator.onRestore}
-                        disabled={rev.header.is_immutable ||
-                            rev.header.parent_ids.length != 1}>
-                        <Icon name="upload" /> Restore
-                    </ActionWidget>
-                </div>
-            {/if}
-
             {#if rev.parents.length > 0}
                 <section>
                     <h3>Parent revisions</h3>
@@ -113,14 +77,33 @@
                         <div class="row">
                             <svg>
                                 <foreignObject>
-                                    <RevisionSummary
-                                        prefix="parent"
-                                        rev={parent}
-                                        selected={false} />
+                                    <RevisionItem prefix="parent" header={parent} selected={false} />
                                 </foreignObject>
-                                <GraphNode rev={parent} />
+                                <GraphNode header={parent} />
                             </svg>
                         </div>
+                    {/each}
+                </section>
+            {/if}
+
+            {#if rev.changes.length > 0}
+                <div class="move-commands">
+                    <ActionWidget
+                        onClick={mutator.onSquash}
+                        disabled={rev.header.is_immutable || rev.header.parent_ids.length != 1}>
+                        <Icon name="upload" /> Squash
+                    </ActionWidget>
+                    <ActionWidget
+                        onClick={mutator.onRestore}
+                        disabled={rev.header.is_immutable || rev.header.parent_ids.length != 1}>
+                        <Icon name="download" /> Restore
+                    </ActionWidget>
+                </div>
+
+                <section>
+                    <h3>Changed files</h3>
+                    {#each rev.changes as change}
+                        <ChangeSummary header={rev.header} {change} />
                     {/each}
                 </section>
             {/if}
@@ -203,7 +186,7 @@
     }
 
     section > :global(*):not(:first-child) {
-        height: 27px;
+        height: 30px;
     }
 
     section.conflict {
@@ -230,6 +213,7 @@
 
     h3 {
         font-size: 1rem;
+        border-bottom: 1px solid var(--ctp-surface0);
     }
 
     .row {

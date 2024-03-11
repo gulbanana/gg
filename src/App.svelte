@@ -1,8 +1,8 @@
 <script lang="ts">
-    import type { RevId } from "./messages/RevId.js";
-    import type { RevResult } from "./messages/RevResult.js";
-    import type { RepoConfig } from "./messages/RepoConfig.js";
-    import type { UndoOperation } from "./messages/UndoOperation.js";
+    import type { RevId } from "./messages/RevId";
+    import type { RevResult } from "./messages/RevResult";
+    import type { RepoConfig } from "./messages/RepoConfig";
+    import type { UndoOperation } from "./messages/UndoOperation";
     import type { Event } from "@tauri-apps/api/event";
     import {
         type Query,
@@ -19,15 +19,15 @@
         repoStatusEvent,
         revisionSelectEvent,
     } from "./stores.js";
-    import RevisionMutator from "./RevisionMutator.js";
-    import TreeMutator from "./TreeMutator.js";
-    import Bound from "./Bound.svelte";
-    import Icon from "./Icon.svelte";
+    import BranchMutator from "./mutators/BranchMutator";
+    import ChangeMutator from "./mutators/ChangeMutator";
+    import RevisionMutator from "./mutators/RevisionMutator";
     import Pane from "./Pane.svelte";
-    import LogPane from "./LogPane.svelte";
     import RevisionPane from "./RevisionPane.svelte";
-    import ActionWidget from "./ActionWidget.svelte";
-    import BranchMutator from "./BranchMutator.js";
+    import LogPane from "./LogPane.svelte";
+    import BoundQuery from "./controls/BoundQuery.svelte";
+    import Icon from "./controls/Icon.svelte";
+    import ActionWidget from "./controls/ActionWidget.svelte";
 
     let selection: Query<RevResult> = {
         type: "wait",
@@ -99,7 +99,7 @@
     function mutateTree(event: Event<string>) {
         console.log(`mutateTree(${event.payload})`, $currentContext);
         if ($currentContext?.type == "Tree") {
-            new TreeMutator($currentContext.rev, $currentContext.path).handle(
+            new ChangeMutator($currentContext.rev, $currentContext.path).handle(
                 event.payload,
             );
         }
@@ -130,7 +130,7 @@
                 default_query={$repoConfigEvent.default_query}
                 latest_query={$repoConfigEvent.latest_query} />
         {/key}
-        <Bound query={selection} let:data>
+        <BoundQuery query={selection} let:data>
             {#if data.type == "Detail"}
                 <RevisionPane rev={data} />
             {:else}
@@ -146,7 +146,7 @@
             <Pane slot="wait">
                 <h2 slot="header">Loading...</h2>
             </Pane>
-        </Bound>
+        </BoundQuery>
 
         <div id="status-bar">
             <span>{$repoConfigEvent?.absolute_path}</span>

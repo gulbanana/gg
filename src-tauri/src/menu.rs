@@ -9,7 +9,7 @@ use tauri_plugin_dialog::DialogExt;
 
 use crate::{
     handler,
-    messages::{MenuContext, RefName, RevHeader},
+    messages::{Operand, RefName, RevHeader},
     AppState,
 };
 
@@ -244,35 +244,38 @@ pub fn handle_selection(menu: Menu<Wry>, selection: Option<RevHeader>) -> Result
 }
 
 // enables context menu items for a revision and shows the menu
-pub fn handle_context(window: Window, ctx: MenuContext) -> Result<()> {
+pub fn handle_context(window: Window, ctx: Operand) -> Result<()> {
     log::debug!("handling context {ctx:?}");
 
     let state = window.state::<AppState>();
     let guard = state.0.lock().expect("state mutex poisoned");
 
     match ctx {
-        MenuContext::Revision { rev } => {
+        Operand::Revision { header } => {
             let context_menu = &guard
                 .get(window.label())
                 .expect("session not found")
                 .revision_menu;
 
             context_menu.enable("revision_new", true)?;
-            context_menu.enable("revision_edit", !rev.is_immutable && !rev.is_working_copy)?;
+            context_menu.enable(
+                "revision_edit",
+                !header.is_immutable && !header.is_working_copy,
+            )?;
             context_menu.enable("revision_duplicate", true)?;
-            context_menu.enable("revision_abandon", !rev.is_immutable)?;
+            context_menu.enable("revision_abandon", !header.is_immutable)?;
             context_menu.enable(
                 "revision_squash",
-                !rev.is_immutable && rev.parent_ids.len() == 1,
+                !header.is_immutable && header.parent_ids.len() == 1,
             )?;
             context_menu.enable(
                 "revision_restore",
-                !rev.is_immutable && rev.parent_ids.len() == 1,
+                !header.is_immutable && header.parent_ids.len() == 1,
             )?;
 
             window.popup_menu(context_menu)?;
         }
-        MenuContext::Tree { rev, path: _path } => {
+        Operand::Change { header, .. } => {
             let context_menu = &guard
                 .get(window.label())
                 .expect("session not found")
@@ -280,16 +283,16 @@ pub fn handle_context(window: Window, ctx: MenuContext) -> Result<()> {
 
             context_menu.enable(
                 "tree_squash",
-                !rev.is_immutable && rev.parent_ids.len() == 1,
+                !header.is_immutable && header.parent_ids.len() == 1,
             )?;
             context_menu.enable(
                 "tree_restore",
-                !rev.is_immutable && rev.parent_ids.len() == 1,
+                !header.is_immutable && header.parent_ids.len() == 1,
             )?;
 
             window.popup_menu(context_menu)?;
         }
-        MenuContext::Branch { rev: _rev, name } => {
+        Operand::Branch { name, .. } => {
             let context_menu = &guard
                 .get(window.label())
                 .expect("session not found")

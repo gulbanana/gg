@@ -1,8 +1,8 @@
-import type { RevHeader } from "./messages/RevHeader";
-import type { RefName } from "./messages/RefName";
-import type { TrackBranch } from "./messages/TrackBranch";
-import { mutate } from "./ipc";
-import type { UntrackBranch } from "./messages/UntrackBranch";
+import type { RevHeader } from "../messages/RevHeader";
+import type { RefName } from "../messages/RefName";
+import type { TrackBranch } from "../messages/TrackBranch";
+import type { UntrackBranch } from "../messages/UntrackBranch";
+import { mutate } from "../ipc";
 
 export default class BranchMutator {
     #revision: RevHeader;
@@ -36,11 +36,11 @@ export default class BranchMutator {
         mutate<TrackBranch>("track_branch", {
             name: this.#name
         });
-    }
+    };
 
     onUntrack = () => {
         mutate<UntrackBranch>("untrack_branch", {
             name: this.#name
         });
-    }
+    };
 }

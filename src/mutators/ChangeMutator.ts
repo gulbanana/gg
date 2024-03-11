@@ -1,10 +1,10 @@
-import type { RevHeader } from "./messages/RevHeader";
-import type { CopyChanges } from "./messages/CopyChanges";
-import type { MoveChanges } from "./messages/MoveChanges";
-import { mutate } from "./ipc";
-import type { TreePath } from "./messages/TreePath";
+import type { RevHeader } from "../messages/RevHeader";
+import type { CopyChanges } from "../messages/CopyChanges";
+import type { MoveChanges } from "../messages/MoveChanges";
+import type { TreePath } from "../messages/TreePath";
+import { mutate } from "../ipc";
 
-export default class TreeMutator {
+export default class ChangeMutator {
     #revision: RevHeader;
     #path: TreePath;
 
@@ -36,7 +36,7 @@ export default class TreeMutator {
             to_id: this.#revision.parent_ids[0],
             paths: [this.#path]
         });
-    }
+    };
 
     onRestore = () => {
         mutate<CopyChanges>("copy_changes", {
@@ -44,5 +44,5 @@ export default class TreeMutator {
             to_id: this.#revision.change_id,
             paths: [this.#path]
         });
-    }
+    };
 }

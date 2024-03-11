@@ -1,5 +1,6 @@
 {
     "tabWidth": 4,
     "bracketSameLine": true,
-    "svelteBracketNewLine": false
+    "svelteBracketNewLine": false,
+    "printWidth": 120
 }

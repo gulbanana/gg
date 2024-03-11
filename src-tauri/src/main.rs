@@ -181,7 +181,7 @@ fn forward_accelerator(window: Window, key: char) {
 }
 
 #[tauri::command]
-fn forward_context_menu(window: Window, context: messages::MenuContext) -> Result<(), InvokeError> {
+fn forward_context_menu(window: Window, context: messages::Operand) -> Result<(), InvokeError> {
     menu::handle_context(window, context).map_err(InvokeError::from_anyhow)?;
     Ok(())
 }

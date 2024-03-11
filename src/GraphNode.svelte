@@ -2,18 +2,17 @@
     import type { RevHeader } from "./messages/RevHeader";
     import { currentContext } from "./stores.js";
 
-    export let rev: RevHeader;
+    export let header: RevHeader;
 
     let context = false;
-    $: context =
-        $currentContext?.type == "Revision" && rev == $currentContext.rev;
+    $: context = $currentContext?.type == "Revision" && header == $currentContext.header;
 </script>
 
-{#if rev.is_immutable}
+{#if header.is_immutable}
     <circle class:context cx="9" cy="15" r="6" />
 {:else}
     <circle class:context cx="9" cy="15" r="6" class="mutable" />
-    {#if rev.is_working_copy}
+    {#if header.is_working_copy}
         <circle class:context cx="9" cy="15" r="3" />
     {/if}
 {/if}

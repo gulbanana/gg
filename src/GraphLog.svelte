@@ -26,11 +26,7 @@
     export let scrollTop: number;
     export let rows: (EnhancedRow | null)[];
 
-    function sliceArray(
-        arr: (EnhancedRow | null)[],
-        start: number,
-        end: number,
-    ) {
+    function sliceArray(arr: (EnhancedRow | null)[], start: number, end: number) {
         arr = arr.slice(start, end);
 
         let expectedLength = end - start;
@@ -49,10 +45,7 @@
         return arr;
     }
 
-    function distinctLines(
-        keys: Set<number>,
-        row: EnhancedRow | null,
-    ): EnhancedLine[] {
+    function distinctLines(keys: Set<number>, row: EnhancedRow | null): EnhancedLine[] {
         if (row === null) {
             return [];
         }
@@ -81,22 +74,17 @@
 <svg class="graph" style="width: 100%; height: {graphHeight}px;">
     {#each visibleSlice.rows as row}
         {#key row}
-            <g
-                transform="translate({(row?.location[0] ?? 0) *
-                    columnWidth} {(row?.location[1] ?? 0) * rowHeight})">
+            <g transform="translate({(row?.location[0] ?? 0) * columnWidth} {(row?.location[1] ?? 0) * rowHeight})">
                 <foreignObject
                     class:placeholder={row === null}
                     height={rowHeight}
-                    width={containerWidth -
-                        (row?.location[0] ?? 0) * columnWidth}
-                    style="--leftpad: {(row?.padding ?? 0) * columnWidth +
-                        columnWidth +
-                        6}px;">
+                    width={containerWidth - (row?.location[0] ?? 0) * columnWidth}
+                    style="--leftpad: {(row?.padding ?? 0) * columnWidth + columnWidth + 6}px;">
                     <slot {row} />
                 </foreignObject>
 
                 {#if row}
-                    <GraphNode rev={row.revision} />
+                    <GraphNode header={row.revision} />
                 {/if}
             </g>
         {/key}
@@ -120,6 +108,8 @@
 
     foreignObject {
         overflow: hidden;
+        display: flex;
+        align-items: stretch;
     }
 
     .placeholder {

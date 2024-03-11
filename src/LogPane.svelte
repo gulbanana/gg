@@ -5,12 +5,8 @@
     import { query, delay } from "./ipc.js";
     import { repoStatusEvent, revisionSelectEvent } from "./stores.js";
     import Pane from "./Pane.svelte";
-    import {
-        type EnhancedRow,
-        default as GraphLog,
-        type EnhancedLine,
-    } from "./GraphLog.svelte";
-    import RevisionSummary from "./RevisionSummary.svelte";
+    import { type EnhancedRow, default as GraphLog, type EnhancedLine } from "./GraphLog.svelte";
+    import RevisionSummary from "./objects/RevisionObject.svelte";
 
     export let default_query: string;
     export let latest_query: string;
@@ -52,10 +48,7 @@
             }
         }
 
-        choices = [
-            { label: "Custom", query: entered_query, selected: true },
-            ...choices,
-        ];
+        choices = [{ label: "Custom", query: entered_query, selected: true }, ...choices];
 
         return choices;
     }
@@ -123,10 +116,7 @@
     // augment rows with all lines that pass through them
     let lineKey = 0;
     let passNextRow: EnhancedLine[] = [];
-    function addPageToGraph(
-        graph: EnhancedRow[],
-        page: LogRow[],
-    ): EnhancedRow[] {
+    function addPageToGraph(graph: EnhancedRow[], page: LogRow[]): EnhancedRow[] {
         for (let row of page) {
             let enhancedRow = row as EnhancedRow;
             enhancedRow.passingLines = passNextRow;
@@ -174,11 +164,7 @@
         switch (event.key) {
             case "ArrowUp":
                 event.preventDefault();
-                index = graphRows.findIndex(
-                    (row) =>
-                        row.revision.change_id.hex ==
-                        $revisionSelectEvent?.change_id.hex,
-                );
+                index = graphRows.findIndex((row) => row.revision.change_id.hex == $revisionSelectEvent?.change_id.hex);
                 if (index > 0) {
                     selectRow(index - 1);
                 }
@@ -186,11 +172,7 @@
 
             case "ArrowDown":
                 event.preventDefault();
-                index = graphRows.findIndex(
-                    (row) =>
-                        row.revision.change_id.hex ==
-                        $revisionSelectEvent?.change_id.hex,
-                );
+                index = graphRows.findIndex((row) => row.revision.change_id.hex == $revisionSelectEvent?.change_id.hex);
                 if (index != -1 && graphRows.length > index + 1) {
                     selectRow(index + 1);
                 }
@@ -198,11 +180,7 @@
 
             case "PageUp":
                 event.preventDefault();
-                index = graphRows.findIndex(
-                    (row) =>
-                        row.revision.change_id.hex ==
-                        $revisionSelectEvent?.change_id.hex,
-                );
+                index = graphRows.findIndex((row) => row.revision.change_id.hex == $revisionSelectEvent?.change_id.hex);
                 pageRows = log.clientHeight / 30;
                 index = Math.max(index - pageRows, 0);
                 selectRow(index);
@@ -210,11 +188,7 @@
 
             case "PageDown":
                 event.preventDefault();
-                index = graphRows.findIndex(
-                    (row) =>
-                        row.revision.change_id.hex ==
-                        $revisionSelectEvent?.change_id.hex,
-                );
+                index = graphRows.findIndex((row) => row.revision.change_id.hex == $revisionSelectEvent?.change_id.hex);
                 pageRows = log.clientHeight / 30;
                 index = Math.min(index + pageRows, graphRows.length - 1);
                 selectRow(index);
@@ -256,8 +230,7 @@
     <div slot="header" class="log-selector">
         <select bind:value={entered_query} on:change={reloadLog}>
             {#each choices as choice}
-                <option selected={choice.selected} value={choice.query}
-                    >{choice.label}</option>
+                <option selected={choice.selected} value={choice.query}>{choice.label}</option>
             {/each}
         </select>
         <input type="text" bind:value={entered_query} on:change={reloadLog} />
@@ -285,9 +258,8 @@
                 {#if row}
                     <RevisionSummary
                         prefix="log"
-                        rev={row.revision}
-                        selected={$revisionSelectEvent?.change_id.prefix ==
-                            row.revision.change_id.prefix} />
+                        header={row.revision}
+                        selected={$revisionSelectEvent?.change_id.prefix == row.revision.change_id.prefix} />
                 {/if}
             </GraphLog>
         {:else}

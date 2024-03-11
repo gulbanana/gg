@@ -1,12 +1,12 @@
-import type { RevHeader } from "./messages/RevHeader";
-import type { AbandonRevisions } from "./messages/AbandonRevisions";
-import type { CheckoutRevision } from "./messages/CheckoutRevision";
-import type { CopyChanges } from "./messages/CopyChanges";
-import type { CreateRevision } from "./messages/CreateRevision";
-import type { DescribeRevision } from "./messages/DescribeRevision";
-import type { DuplicateRevisions } from "./messages/DuplicateRevisions";
-import type { MoveChanges } from "./messages/MoveChanges";
-import { mutate } from "./ipc";
+import type { RevHeader } from "../messages/RevHeader";
+import type { AbandonRevisions } from "../messages/AbandonRevisions";
+import type { CheckoutRevision } from "../messages/CheckoutRevision";
+import type { CopyChanges } from "../messages/CopyChanges";
+import type { CreateRevision } from "../messages/CreateRevision";
+import type { DescribeRevision } from "../messages/DescribeRevision";
+import type { DuplicateRevisions } from "../messages/DuplicateRevisions";
+import type { MoveChanges } from "../messages/MoveChanges";
+import { mutate } from "../ipc";
 
 export default class RevisionMutator {
     #revision: RevHeader;
@@ -57,25 +57,25 @@ export default class RevisionMutator {
         mutate<CreateRevision>("create_revision", {
             parent_change_ids: [this.#revision.change_id],
         });
-    }
+    };
 
     onEdit = () => {
         mutate<CheckoutRevision>("checkout_revision", {
             change_id: this.#revision.change_id,
         });
-    }
+    };
 
     onDuplicate = () => {
         mutate<DuplicateRevisions>("duplicate_revisions", {
             change_ids: [this.#revision.change_id],
         });
-    }
+    };
 
     onAbandon = () => {
         mutate<AbandonRevisions>("abandon_revisions", {
             change_ids: [this.#revision.change_id],
         });
-    }
+    };
 
     onDescribe = (new_description: string, reset_author: boolean) => {
         mutate<DescribeRevision>("describe_revision", {
@@ -83,7 +83,7 @@ export default class RevisionMutator {
             new_description,
             reset_author,
         });
-    }
+    };
 
     onSquash = () => {
         mutate<MoveChanges>("move_changes", {
@@ -91,7 +91,7 @@ export default class RevisionMutator {
             to_id: this.#revision.parent_ids[0],
             paths: []
         });
-    }
+    };
 
     onRestore = () => {
         mutate<CopyChanges>("copy_changes", {
@@ -99,5 +99,5 @@ export default class RevisionMutator {
             to_id: this.#revision.change_id,
             paths: []
         });
-    }
+    };
 }

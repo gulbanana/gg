@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { currentMutation } from "./stores";
+    import { currentMutation } from "../stores";
 
     export let safe: boolean = false;
     export let disabled: boolean = false;

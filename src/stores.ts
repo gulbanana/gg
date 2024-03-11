@@ -2,7 +2,7 @@ import type { MutationResult } from "./messages/MutationResult";
 import type { RepoConfig } from "./messages/RepoConfig";
 import type { RepoStatus } from "./messages/RepoStatus";
 import type { RevHeader } from "./messages/RevHeader";
-import type { MenuContext } from "./messages/MenuContext";
+import type { Operand } from "./messages/Operand";
 import { writable } from "svelte/store";
 import { event, type Query } from "./ipc";
 
@@ -12,4 +12,5 @@ export const revisionSelectEvent = await event<RevHeader>("gg://revision/select"
 export const menuCommitEvent = await event<string>("gg://menu/commit");
 
 export const currentMutation = writable<Query<MutationResult> | null>(null);
-export const currentContext = writable<MenuContext | null>();
+export const currentContext = writable<Operand | null>();
+export const currentDrag = writable<Operand>();

@@ -130,6 +130,7 @@ pub enum RefName {
     },
 }
 
+/// Refers to one of the repository's manipulatable objects
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(tag = "type")]
 #[cfg_attr(
@@ -137,16 +138,16 @@ pub enum RefName {
     derive(TS),
     ts(export, export_to = "../src/messages/")
 )]
-pub enum MenuContext {
+pub enum Operand {
     Revision {
-        rev: RevHeader,
+        header: RevHeader,
     },
-    Tree {
-        rev: RevHeader,
-        path: TreePath, // someday: paths
+    Change {
+        header: RevHeader,
+        path: TreePath, // someday: hunks
     },
     Branch {
-        rev: RevHeader,
+        header: RevHeader,
         name: RefName,
     },
 }

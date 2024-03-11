@@ -3,4 +3,4 @@ import type { RefName } from "./RefName";
 import type { RevHeader } from "./RevHeader";
 import type { TreePath } from "./TreePath";
 
-export type MenuContext = { "type": "Revision", rev: RevHeader, } | { "type": "Tree", rev: RevHeader, path: TreePath, } | { "type": "Branch", rev: RevHeader, name: RefName, };
+export type Operand = { "type": "Revision", header: RevHeader, } | { "type": "Change", header: RevHeader, path: TreePath, } | { "type": "Branch", header: RevHeader, name: RefName, };

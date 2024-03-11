@@ -1,5 +1,10 @@
+<!--
+@component
+Abstraction of dubious utility - it's only used in one place, because most IPC does not follow a query-like pattern.
+-->
+
 <script lang="ts" generics="T">
-    import type { Query as Query } from "./ipc";
+    import type { Query as Query } from "../ipc";
 
     export let query: Query<T>;
     interface $$Slots {

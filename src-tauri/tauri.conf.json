@@ -18,7 +18,8 @@
         "focus": true,
         "width": 1280,
         "height": 720,
-        "visible": false
+        "visible": false,
+        "fileDropEnabled": false
       }
     ],
     "security": {
