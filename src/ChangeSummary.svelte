@@ -10,19 +10,19 @@
     export let change: RevChange;
 
     let icon: string;
-    let className: string;
+    let state: "add" | "change" | "remove";
     switch (change.kind) {
         case "Added":
             icon = "file-plus";
-            className = "added";
+            state = "add";
             break;
         case "Deleted":
             icon = "file-minus";
-            className = "deleted";
+            state = "remove";
             break;
         case "Modified":
             icon = "file";
-            className = "modified";
+            state = "change";
             break;
     }
 
@@ -42,11 +42,11 @@
 </script>
 
 <button
-    class="unbutton layout {className}"
+    class="unbutton layout"
     class:conflict={change.has_conflict}
     class:context={is_context}
     on:contextmenu={onMenu}>
-    <Icon name={icon} />
+    <Icon name={icon} state={is_context ? null : state} />
     <span>{change.path.relative_path}</span>
 </button>
 
@@ -67,18 +67,6 @@
             var(--ctp-surface0) 12px,
             var(--ctp-surface0) 15px
         );
-    }
-
-    .added > :global(svg) {
-        stroke: var(--ctp-green);
-    }
-
-    .modified > :global(svg) {
-        color: var(--ctp-blue);
-    }
-
-    .deleted > :global(svg) {
-        color: var(--ctp-red);
     }
 
     .context {

@@ -5,6 +5,8 @@ use zip::ZipArchive;
 
 use crate::messages::RevId;
 
+const WORKING_COPY: &str = "kppkuplp";
+
 fn mkchid(id: &str) -> RevId {
     RevId {
         hex: id.to_owned(),
@@ -303,7 +305,7 @@ mod session {
         })?;
         tx.send(SessionEvent::QueryLog {
             tx: tx_page,
-            query: "@|main".to_owned(),
+            query: "@|main@origin".to_owned(),
         })?;
         tx.send(SessionEvent::EndSession)?;
 
@@ -364,6 +366,7 @@ mod mutation {
             CheckoutRevision, CreateRevision, DescribeRevision, MoveChanges, MutationResult,
             RevResult, TreePath,
         },
+        tests::WORKING_COPY,
         worker::{queries, Mutation},
     };
 
@@ -456,7 +459,7 @@ mod mutation {
     #[test]
     fn edit() -> Result<()> {
         let repo = mkrepo();
-        let wc = String::from("wtorwkxr"); // will be abandoned
+        let wc = String::from(WORKING_COPY); // will be abandoned
         let conflicted = String::from("conflicted-merge");
 
         let mut session = WorkerSession::default();
@@ -486,7 +489,7 @@ mod mutation {
     #[test]
     fn new_single_parent() -> Result<()> {
         let repo = mkrepo();
-        let parent = String::from("wtorwkxr"); // will no longer be the WC
+        let parent = String::from(WORKING_COPY); // will no longer be the WC
 
         let mut session = WorkerSession::default();
         let mut ws = session.load_directory(repo.path())?;
@@ -634,7 +637,7 @@ mod mutation {
     fn move_changes_single_path() -> Result<()> {
         let repo = mkrepo();
         let from = String::from("mnkoropy");
-        let to = String::from("wtorwkxr");
+        let to = String::from(WORKING_COPY);
 
         let mut session = WorkerSession::default();
         let mut ws = session.load_directory(repo.path())?;

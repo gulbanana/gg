@@ -9,6 +9,16 @@
     export let rev: RevHeader;
     export let ref: RefName;
 
+    let state: "add" | "change" | "remove";
+    switch (ref.type) {
+        case "LocalBranch":
+            state = ref.is_synced ? "change" : "add";
+            break;
+        case "RemoteBranch":
+            state = ref.is_tracked ? "remove" : "change";
+            break;
+    }
+
     let is_context = false;
     $: is_context =
         $currentContext?.type == "Branch" && ref == $currentContext?.name;
@@ -28,11 +38,8 @@
     class="unbutton chip"
     class:conflict={ref.has_conflict}
     class:context={is_context}
-    class:desync={ref.type == "LocalBranch" &&
-        ref.is_tracking &&
-        !ref.is_synced}
     on:contextmenu={onMenu}>
-    <Icon name="git-branch" />
+    <Icon name="git-branch" state={is_context ? null : state} />
     <span>
         {#if ref.type == "LocalBranch"}
             {ref.branch_name}
@@ -66,9 +73,5 @@
     .context {
         border-color: var(--ctp-rosewater);
         color: var(--ctp-rosewater);
-    }
-
-    .desync {
-        border-style: dashed;
     }
 </style>

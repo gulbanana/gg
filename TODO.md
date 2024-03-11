@@ -11,7 +11,6 @@ dnd branch
 tauri bug wherein event listeners are cleaned up on page load 
 - this prevents the macos prod build receiving events in frontend
 - wait for a fix, add workaround or revert to 2.0.0-beta-9
-chip/icon state colour instead of ad-hoc decorations 
 list keyboardability
 
 Ideas and plans
@@ -26,9 +25,7 @@ These changes may or may not be implemented in the future.
 * edge case: what happens when we snapshot after the CLI does? when there's nothing *to* snapshot, we don't refresh the ui...
 * perf: optimise revdetail loads - we already have the header
 * perf: better solution to slow immutability check - jj-lib will have a revset contains cache soon
-* feat: log keyboard support
 * feat: log multiselect
-* feat: more context actions (incl. multiselect)
 * feat: file select/multiselect? large moves could be tedious otherwise. maybe file menu?
 * feat: redo/undo stack
 * feat: operation menu - restores or views?
@@ -36,6 +33,9 @@ These changes may or may not be implemented in the future.
 * feat: resolve workflow 
 * feat: remotes/fetch/push
 * feat: tags display & management
+* feat: more context actions 
+    - push branch
+    - delete local branch
 * feat: more settings
     - log revsets
 * design: decide whether to remove edit menu and maybe add others
