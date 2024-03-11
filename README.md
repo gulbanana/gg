@@ -1,4 +1,4 @@
-# ![icon](src-tauri/icons/20x20.png) GG - Gui for JJ
+# ![icon](src-tauri/icons/24x24.png) GG - Gui for JJ
 
 ![screenshot](src-tauri/resources/screenshot.png)
 
