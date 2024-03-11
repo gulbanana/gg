@@ -39,7 +39,6 @@ These changes may or may not be implemented in the future.
 * feat: more settings
     - log revsets
 * design: decide whether to remove edit menu and maybe add others
-* design: app icon
 * design: draw missing (edge-to-nowhere) graph nodes?
 * design: consider common signature control
 * epic: categorical expansion - trays, modals, pinned commits etc

@@ -1,3 +1,5 @@
+# ![icon](src-tauri/icons/20x20.png) GG - Gui for JJ
+
 ![screenshot](src-tauri/resources/screenshot.png)
 
 GG is an experimental GUI for [Jujutsu](https://github.com/martinvonz/jj). The idea is to take advantage of Jujutsu's clean [architecture](https://martinvonz.github.io/jj/latest/technical/architecture/) to present am interactive view of your repository. What if you were always in the middle of an interactive rebase, but this was actually good?
@@ -23,7 +25,7 @@ GG doesn't require [JJ](https://martinvonz.github.io/jj/latest/install-and-setup
 More detail is available in [the changelog](CHANGELOG.md).
 
 ### Future Features
-There's no roadmap as such, but items on [the to-do list](TODO.md) may or may not be implemented in future. 
+There's no roadmap as such, but items on [the to-do list](TODO.md) may or may not be implemented in future. Just about everything is subject to change for now, including the name.
 
 ### Known Issues
 GG is in early development and will have bugs. In theory it can't corrupt a repository thanks to the operation log, but it never hurts to make backups. 
