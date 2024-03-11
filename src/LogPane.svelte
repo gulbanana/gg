@@ -35,6 +35,11 @@
     let logScrollTop = 0;
     let pollFrame;
 
+    onMount(() => {
+        loadLog();
+        pollFrame = requestAnimationFrame(pollScroll);
+    });
+
     $: if (entered_query) choices = getChoices();
     $: if ($repoStatusEvent) reloadLog();
 
@@ -158,10 +163,93 @@
         pollFrame = requestAnimationFrame(pollScroll);
     }
 
-    onMount(() => {
-        loadLog();
-        pollFrame = requestAnimationFrame(pollScroll);
-    });
+    // all these findIndex and calculations are not efficient. probably doesn't matter
+    function onKeyDown(event: KeyboardEvent) {
+        if (!graphRows || graphRows.length == 0) {
+            return;
+        }
+
+        let index: number;
+        let pageRows: number;
+        switch (event.key) {
+            case "ArrowUp":
+                event.preventDefault();
+                index = graphRows.findIndex(
+                    (row) =>
+                        row.revision.change_id.hex ==
+                        $revisionSelectEvent?.change_id.hex,
+                );
+                if (index > 0) {
+                    selectRow(index - 1);
+                }
+                break;
+
+            case "ArrowDown":
+                event.preventDefault();
+                index = graphRows.findIndex(
+                    (row) =>
+                        row.revision.change_id.hex ==
+                        $revisionSelectEvent?.change_id.hex,
+                );
+                if (index != -1 && graphRows.length > index + 1) {
+                    selectRow(index + 1);
+                }
+                break;
+
+            case "PageUp":
+                event.preventDefault();
+                index = graphRows.findIndex(
+                    (row) =>
+                        row.revision.change_id.hex ==
+                        $revisionSelectEvent?.change_id.hex,
+                );
+                pageRows = log.clientHeight / 30;
+                index = Math.max(index - pageRows, 0);
+                selectRow(index);
+                break;
+
+            case "PageDown":
+                event.preventDefault();
+                index = graphRows.findIndex(
+                    (row) =>
+                        row.revision.change_id.hex ==
+                        $revisionSelectEvent?.change_id.hex,
+                );
+                pageRows = log.clientHeight / 30;
+                index = Math.min(index + pageRows, graphRows.length - 1);
+                selectRow(index);
+                break;
+
+            case "Home":
+                event.preventDefault();
+                selectRow(0);
+                break;
+
+            case "End":
+                event.preventDefault();
+                selectRow(graphRows.length - 1);
+                break;
+        }
+    }
+
+    function selectRow(row: number) {
+        log.focus();
+        $revisionSelectEvent = graphRows![row].revision;
+        let y = row * 30;
+        if (log.scrollTop + log.clientHeight < y + 30) {
+            log.scrollTo({
+                left: 0,
+                top: y - log.clientHeight + 30,
+                behavior: "smooth",
+            });
+        } else if (log.scrollTop > y) {
+            log.scrollTo({
+                left: 0,
+                top: y,
+                behavior: "smooth",
+            });
+        }
+    }
 </script>
 
 <Pane>
@@ -175,12 +263,18 @@
         <input type="text" bind:value={entered_query} on:change={reloadLog} />
     </div>
 
-    <div
+    <ol
         slot="body"
         class="log-commits"
+        role="listbox"
+        aria-label="log"
+        aria-multiselectable="false"
+        aria-activedescendant="log-{$revisionSelectEvent?.change_id.prefix}"
+        tabindex="0"
         bind:this={log}
         bind:clientHeight={logHeight}
-        bind:clientWidth={logWidth}>
+        bind:clientWidth={logWidth}
+        on:keydown={onKeyDown}>
         {#if graphRows}
             <GraphLog
                 containerHeight={logHeight}
@@ -190,6 +284,7 @@
                 let:row>
                 {#if row}
                     <RevisionSummary
+                        prefix="log"
                         rev={row.revision}
                         selected={$revisionSelectEvent?.change_id.prefix ==
                             row.revision.change_id.prefix} />
@@ -198,7 +293,7 @@
         {:else}
             <div>Loading changes...</div>
         {/if}
-    </div>
+    </ol>
 </Pane>
 
 <style>
@@ -219,7 +314,12 @@
         overflow-y: scroll;
         scrollbar-color: var(--ctp-text) var(--ctp-crust);
         display: grid;
-        user-select: none;
+        outline: none;
+    }
+
+    .log-commits:focus-visible {
+        outline: 2px solid var(--ctp-lavender);
+        border-radius: 3px;
     }
 
     .log-commits::-webkit-scrollbar {

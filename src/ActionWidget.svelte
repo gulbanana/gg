@@ -21,6 +21,7 @@
         height: 24px;
         font-size: 16px;
 
+        outline: none;
         background: var(--ctp-flamingo);
         border-width: 1px;
         border-radius: 3px;
@@ -38,6 +39,12 @@
     button:not(:disabled) {
         &:hover {
             background: var(--ctp-maroon);
+        }
+        &:focus-visible {
+            border-color: var(--ctp-lavender);
+            border-width: 2px;
+            padding: 0px 5px;
+            color: color-mix(in lch, black, var(--ctp-lavender));
         }
         &:active {
             padding: 2px 5px 0px 7px;

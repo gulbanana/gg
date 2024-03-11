@@ -2,10 +2,10 @@
 
 ![screenshot](src-tauri/resources/screenshot.png)
 
-GG is an experimental GUI for [Jujutsu](https://github.com/martinvonz/jj). The idea is to take advantage of Jujutsu's clean [architecture](https://martinvonz.github.io/jj/latest/technical/architecture/) to present am interactive view of your repository. What if you were always in the middle of an interactive rebase, but this was actually good?
+GG is an experimental GUI for [Jujutsu](https://github.com/martinvonz/jj). The idea is to take advantage of Jujutsu's composable primitives to present an interactive view of your repository. What if you were always in the middle of an interactive rebase, but this was actually good?
 
 ## Installation
-Binaries are available for several platforms on the [releases page](https://github.com/gulbanana/gg/releases). Use the `.dmg` or `.app.tar.gz`, and the `.msi` or `.exe` on Windows. To build from source, run `npm install` followed by `npm run tauri build`.
+GG is a desktop application with a keyboard & mouse interface, written in [Tauri](https://tauri.app/). Binaries are available for several platforms on the [releases page](https://github.com/gulbanana/gg/releases). Use the `.dmg` or `.app.tar.gz` on MacOS, and the `.msi` or `.exe` on Windows. To build from source, run `npm install` followed by `npm run tauri build`.
 
 ## Usage 
 Put `gg` on your path and run it from a Jujutsu workspace, or launch it separately and use the Repository->Open menu item to select a workspace directory. Tips:

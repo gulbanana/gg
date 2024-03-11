@@ -15,4 +15,9 @@
         color: var(--ctp-text);
         gap: 3px;
     }
+
+    input:focus-visible {
+        outline: 1px solid var(--ctp-lavender);
+        outline-offset: 0;
+    }
 </style>

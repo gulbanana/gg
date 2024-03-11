@@ -45,6 +45,7 @@
     class="unbutton layout"
     class:conflict={change.has_conflict}
     class:context={is_context}
+    tabindex="-1"
     on:contextmenu={onMenu}>
     <Icon name={icon} state={is_context ? null : state} />
     <span>{change.path.relative_path}</span>

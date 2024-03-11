@@ -38,6 +38,7 @@
     class="unbutton chip"
     class:conflict={ref.has_conflict}
     class:context={is_context}
+    tabindex="-1"
     on:contextmenu={onMenu}>
     <Icon name="git-branch" state={is_context ? null : state} />
     <span>

@@ -10,6 +10,7 @@
 
     export let rev: RevHeader;
     export let selected: boolean; // same as the imported event, but parent may want to force a value
+    export let prefix: string;
 
     let is_context = false;
     $: is_context =
@@ -47,10 +48,15 @@
 </script>
 
 <button
+    id="{prefix}-{rev.change_id.prefix}"
     class="unbutton layout"
     class:selected
     class:conflict={rev.has_conflict}
     class:context={is_context}
+    tabindex="-1"
+    role="option"
+    aria-selected={selected}
+    aria-label={rev.description.lines[0]}
     on:click={onSelect}
     on:contextmenu={onMenu}
     on:dblclick={onEdit}>

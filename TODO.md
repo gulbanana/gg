@@ -11,7 +11,6 @@ dnd branch
 tauri bug wherein event listeners are cleaned up on page load 
 - this prevents the macos prod build receiving events in frontend
 - wait for a fix, add workaround or revert to 2.0.0-beta-9
-list keyboardability
 
 Ideas and plans
 ---------------

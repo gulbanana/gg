@@ -114,6 +114,7 @@
                             <svg>
                                 <foreignObject>
                                     <RevisionSummary
+                                        prefix="parent"
                                         rev={parent}
                                         selected={false} />
                                 </foreignObject>

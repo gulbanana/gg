@@ -135,9 +135,12 @@ input {
   outline: none;
   border: 1px solid var(--ctp-overlay0);
   border-radius: 3px;
+  padding: 1px;
 
   &:focus-visible {
     border-color: var(--ctp-lavender);
+    border-width: 2px;
+    padding: 0;
   }
 
   caret-color: var(--ctp-rosewater);
@@ -157,6 +160,13 @@ h3 {
   margin: 0;
 }
 
+ul,
+ol {
+  margin: 0;
+  padding: 0;
+}
+
+/* utility: buttons used as list items and draggables */
 .unbutton {
   background: transparent;
   border: none;
