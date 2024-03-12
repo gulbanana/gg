@@ -26,11 +26,11 @@
     let operand: Operand = { type: "Branch", header, name };
 </script>
 
-<Object {operand} {label} conflicted={name.has_conflict} let:context>
+<Object {operand} {label} conflicted={name.has_conflict} let:context let:hint>
     <Zone {operand} let:target>
         <Chip {context} {target}>
             <Icon name="git-branch" state={context ? null : state} />
-            <span>{label}</span>
+            <span>{hint ?? label}</span>
         </Chip>
     </Zone>
 </Object>

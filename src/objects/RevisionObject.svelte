@@ -45,13 +45,14 @@
     label={header.description.lines[0]}
     on:click={onSelect}
     on:dblclick={onEdit}
-    let:context>
+    let:context
+    let:hint>
     <Zone {operand} let:target>
         <div class="layout" class:target>
             <IdSpan type="change" id={header.change_id} pronoun={context || target} />
 
             <span class="text desc truncate" class:indescribable={!context && header.description.lines[0] == ""}>
-                {header.description.lines[0] == "" ? "(no description set)" : header.description.lines[0]}
+                {hint ?? (header.description.lines[0] == "" ? "(no description set)" : header.description.lines[0])}
             </span>
 
             <span class="text email truncate">{header.author.email}</span>

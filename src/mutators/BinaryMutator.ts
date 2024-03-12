@@ -1,5 +1,8 @@
 import type { Operand } from "../messages/Operand";
 
+export type Eligibility = { type: "yes", hint: string } | { type: "maybe", hint: string } | { type: "no" };
+export type Hint = Extract<Eligibility, { hint: string }>;
+
 export default class BinaryMutator {
     #from: Operand;
     #to: Operand;
@@ -9,8 +12,28 @@ export default class BinaryMutator {
         this.#to = to;
     }
 
-    canDrop(): boolean {
-        return this.#from != this.#to;
+    static canDrag(from: Operand): Eligibility {
+        if (from.type != "Branch" && from.header.is_immutable) {
+            return { type: "maybe", hint: "(commit is immutable)" };
+        }
+
+        if (from.type == "Branch" && from.name.type == "RemoteBranch") {
+            return { type: "maybe", hint: "(branch is remote)" };
+        }
+
+        return { type: "yes", hint: "" };
+    }
+
+    canDrop(): Eligibility {
+        if (BinaryMutator.canDrag(this.#from).type != "yes") {
+            return { type: "no" };
+        }
+
+        if (this.#from == this.#to) {
+            return { type: "no" };
+        }
+
+        return { type: "yes", "hint": "" };
     }
 
     doDrop() {

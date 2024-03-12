@@ -11,7 +11,6 @@
     .chip {
         font-family: var(--stack-code);
         font-size: smaller;
-        color: var(--ctp-text);
 
         height: 24px;
         line-height: 16px;
@@ -27,8 +26,8 @@
     }
 
     .context {
-        border-color: var(--ctp-rosewater);
-        color: var(--ctp-rosewater);
+        color: inherit;
+        border-color: currentColor;
     }
 
     .target {

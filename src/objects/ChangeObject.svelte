@@ -29,11 +29,11 @@
     }
 </script>
 
-<Object {operand} conflicted={change.has_conflict} label={change.path.relative_path} let:context>
+<Object {operand} conflicted={change.has_conflict} label={change.path.relative_path} let:context let:hint>
     <Zone {operand} let:target>
         <div class="layout" class:target>
             <Icon name={icon} state={context ? null : state} />
-            <span>{change.path.relative_path}</span>
+            <span>{hint ?? change.path.relative_path}</span>
         </div>
     </Zone>
 </Object>

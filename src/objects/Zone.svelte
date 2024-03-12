@@ -17,17 +17,22 @@ A drop target for direct-manipulation objects.
     let target = false;
 
     function onDragEnter(event: DragEvent) {
-        event.preventDefault();
         event.stopPropagation();
 
-        if (new BinaryMutator($currentDrag, operand).canDrop()) {
+        let mutator = new BinaryMutator($currentDrag, operand);
+        if (mutator.canDrop().type == "yes") {
+            event.preventDefault();
             target = true;
         }
     }
 
     function onDragOver(event: DragEvent) {
-        event.preventDefault();
         event.stopPropagation();
+
+        let mutator = new BinaryMutator($currentDrag, operand);
+        if (mutator.canDrop().type == "yes") {
+            event.preventDefault();
+        }
     }
 
     function onDragLeave(event: DragEvent) {
@@ -36,7 +41,11 @@ A drop target for direct-manipulation objects.
 
     function onDrop(event: DragEvent) {
         target = false;
-        new BinaryMutator($currentDrag, operand).doDrop();
+
+        let mutator = new BinaryMutator($currentDrag, operand);
+        if (mutator.canDrop().type == "yes") {
+            mutator.doDrop();
+        }
     }
 </script>
 
