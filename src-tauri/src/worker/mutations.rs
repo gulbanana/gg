@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{collections::HashMap, fmt::Display};
 
 use anyhow::{anyhow, Result};
 use indexmap::IndexMap;
@@ -13,6 +13,7 @@ use jj_lib::{
     op_walk,
     repo::Repo,
     repo_path::RepoPath,
+    revset::{RevsetExpression, RevsetIteratorExt},
     rewrite,
     str_util::StringPattern,
 };
@@ -95,7 +96,81 @@ impl Mutation for CreateRevision {
 
 impl Mutation for InsertRevision {
     fn execute<'a>(self: Box<Self>, ws: &'a mut WorkspaceSession) -> Result<MutationResult> {
-        todo!()
+        let mut tx = ws.start_transaction()?;
+
+        let target: Commit = ws.resolve_single_id(&self.change_id)?;
+        let before = ws.resolve_single_id(&self.before_id)?;
+        let after = ws.resolve_single_id(&self.after_id)?;
+
+        if ws.check_immutable(vec![target.id().clone(), before.id().clone()])? {
+            precondition!("Some revisions are immutable");
+        }
+
+        // rebase children of target, and then auto-rebase their descendants
+        let children_expr = RevsetExpression::commit(target.id().clone()).children();
+        let children: Vec<_> = children_expr
+            .evaluate_programmatic(ws.repo())
+            .unwrap()
+            .iter()
+            .commits(ws.repo().store())
+            .try_collect()?;
+        let mut rebased_commit_ids = HashMap::new();
+        for child_commit in &children {
+            let new_child_parent_ids: Vec<CommitId> = child_commit
+                .parents()
+                .iter()
+                .flat_map(|c| {
+                    if c == &target {
+                        target.parents().iter().map(|c| c.id().clone()).collect()
+                    } else {
+                        [c.id().clone()].to_vec()
+                    }
+                })
+                .collect();
+
+            // some of the new parents may be ancestors of others
+            let new_child_parents_expression =
+                RevsetExpression::commits(new_child_parent_ids.clone()).minus(
+                    &RevsetExpression::commits(new_child_parent_ids.clone())
+                        .parents()
+                        .ancestors(),
+                );
+            let new_child_parents: Vec<Commit> = new_child_parents_expression
+                .evaluate_programmatic(tx.base_repo().as_ref())
+                .unwrap()
+                .iter()
+                .commits(tx.base_repo().store())
+                .try_collect()?;
+
+            rebased_commit_ids.insert(
+                child_commit.id().clone(),
+                rewrite::rebase_commit(
+                    &ws.settings,
+                    tx.mut_repo(),
+                    child_commit,
+                    &new_child_parents,
+                )?
+                .id()
+                .clone(),
+            );
+        }
+        rebased_commit_ids.extend(tx.mut_repo().rebase_descendants_return_map(&ws.settings)?);
+
+        // update after, which may have been a descendant of target
+        let after = rebased_commit_ids
+            .get(after.id())
+            .map_or(Ok(after.clone()), |rebased_before_id| {
+                tx.repo().store().get_commit(rebased_before_id)
+            })?;
+
+        // rebase the target (which now has no children), then the new post-target tree atop it
+        let target = rewrite::rebase_commit(&ws.settings, tx.mut_repo(), &target, &[after])?;
+        rewrite::rebase_commit(&ws.settings, tx.mut_repo(), &before, &[target])?;
+
+        match ws.finish_transaction(tx, format!("rebase commit {}", self.before_id.hex))? {
+            Some(new_status) => Ok(MutationResult::Updated { new_status }),
+            None => Ok(MutationResult::Unchanged),
+        }
     }
 }
 
