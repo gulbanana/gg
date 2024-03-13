@@ -1,6 +1,6 @@
 <script lang="ts">
     import type { RevResult } from "./messages/RevResult";
-    import { menuCommitEvent } from "./stores";
+    import { dragOverWidget, menuCommitEvent } from "./stores";
     import ChangeSummary from "./objects/ChangeObject.svelte";
     import RevisionItem from "./objects/RevisionObject.svelte";
     import RevisionMutator from "./mutators/RevisionMutator";
@@ -53,7 +53,13 @@
     </h2>
 
     <div slot="body" class="body">
-        <textarea class="desc" spellcheck="false" disabled={rev.header.is_immutable} bind:value={fullDescription} />
+        <textarea
+            class="desc"
+            spellcheck="false"
+            disabled={rev.header.is_immutable}
+            bind:value={fullDescription}
+            on:dragenter={dragOverWidget}
+            on:dragover={dragOverWidget} />
 
         <div class="signature-commands">
             <span>
@@ -69,7 +75,7 @@
             </ActionWidget>
         </div>
 
-        <main>
+        <div class="objects">
             {#if rev.parents.length > 0}
                 <section>
                     <h3>Parent revisions</h3>
@@ -118,7 +124,7 @@
                     {/each}
                 </section>
             {/if}
-        </main>
+        </div>
     </div>
 </Pane>
 
@@ -128,6 +134,7 @@
         grid-template-columns: minmax(0, 1fr) auto;
         align-items: center;
         text-wrap: nowrap;
+        font-weight: normal;
     }
 
     .title {
@@ -170,7 +177,7 @@
         color: var(--ctp-subtext0);
     }
 
-    main {
+    .objects {
         flex: 1;
         overflow: auto;
         scrollbar-color: var(--ctp-text) var(--ctp-mantle);
@@ -178,6 +185,7 @@
 
     section {
         background: var(--ctp-mantle);
+        color: var(--ctp-text);
         border-radius: 6px;
         padding: 3px;
         display: flex;

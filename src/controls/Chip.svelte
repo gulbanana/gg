@@ -20,7 +20,7 @@
         border: 1px solid var(--ctp-overlay1);
         border-radius: 12px;
         padding: 0 6px;
-        background: var(--ctp-crust);
+        background: var(--ctp-mantle);
         white-space: nowrap;
         gap: 3px;
     }

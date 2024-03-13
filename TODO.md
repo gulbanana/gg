@@ -3,7 +3,6 @@ MVP requirements
 drag & drop ux:
 - drop onto lines
 - drop onto parents (but not commits within)
-- remove from parents
 - effect-of-drop hints
 - why-no-drop hints
 drag & drop interactions:
@@ -34,6 +33,7 @@ These changes may or may not be implemented in the future.
 * perf: optimise revdetail loads - we already have the header
 * perf: better solution to slow immutability check - jj-lib will have a revset contains cache soon
 * feat: log multiselect
+* feat: log filters (find commits that change path etc)
 * feat: file select/multiselect? large moves could be tedious otherwise. maybe file menu?
 * feat: redo/undo stack
 * feat: operation menu - restores or views?

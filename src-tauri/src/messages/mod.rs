@@ -139,8 +139,13 @@ pub enum RefName {
     ts(export, export_to = "../src/messages/")
 )]
 pub enum Operand {
+    Repository,
     Revision {
         header: RevHeader,
+    },
+    Parent {
+        header: RevHeader,
+        child: RevHeader,
     },
     Change {
         header: RevHeader,
