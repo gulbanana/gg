@@ -18,6 +18,7 @@ drag & drop interactions:
 tauri bug wherein event listeners are cleaned up on page load 
 - this prevents the macos prod build receiving events in frontend
 - probably fixed in beta-11, or revert to 2.0.0-beta-9
+if enough dragdrop stuff works, add immutable to the rev title and remove some buttons
 
 Ideas and plans
 ---------------

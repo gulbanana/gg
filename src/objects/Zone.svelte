@@ -9,42 +9,39 @@ A drop target for direct-manipulation objects.
     import { currentSource, currentTarget } from "../stores";
 
     interface $$Slots {
-        default: { target: boolean };
+        default: { target: boolean; hint: string | null };
     }
 
     export let operand: Operand;
 
-    function onDragEnter(event: DragEvent) {
-        event.stopPropagation();
-
-        let mutator = new BinaryMutator($currentSource, operand);
-        if (mutator.canDrop().type == "yes") {
-            event.preventDefault();
-            $currentTarget = operand;
-        }
-    }
+    let dropHint: string | null = null;
 
     function onDragOver(event: DragEvent) {
         event.stopPropagation();
 
-        let mutator = new BinaryMutator($currentSource, operand);
-        if (mutator.canDrop().type == "yes") {
+        let canDrop = new BinaryMutator($currentSource!, operand).canDrop();
+        if (canDrop.type == "yes") {
             event.preventDefault();
             if ($currentTarget != operand) {
                 $currentTarget = operand;
             }
+        } else if (canDrop.type == "maybe") {
+            event.preventDefault();
+            dropHint = canDrop.hint;
         }
     }
 
     function onDragLeave(event: DragEvent) {
         $currentTarget = null;
+        dropHint = null;
     }
 
     function onDrop(event: DragEvent) {
         event.stopPropagation();
         $currentTarget = null;
+        dropHint = null;
 
-        let mutator = new BinaryMutator($currentSource, operand);
+        let mutator = new BinaryMutator($currentSource!, operand);
         if (mutator.canDrop().type == "yes") {
             mutator.doDrop();
         }
@@ -53,16 +50,21 @@ A drop target for direct-manipulation objects.
 
 <div
     role="presentation"
-    on:dragenter={onDragEnter}
+    class:hint={dropHint}
+    on:dragenter={onDragOver}
     on:dragover={onDragOver}
     on:dragleave={onDragLeave}
     on:drop={onDrop}>
-    <slot target={$currentTarget == operand} />
+    <slot target={$currentTarget == operand} hint={dropHint} />
 </div>
 
 <style>
     div {
         width: 100%;
         pointer-events: all;
+    }
+
+    .hint {
+        color: var(--ctp-peach);
     }
 </style>

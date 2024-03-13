@@ -11,6 +11,8 @@
         repoConfigEvent,
         repoStatusEvent,
         revisionSelectEvent,
+        currentSource,
+        currentTarget,
     } from "./stores.js";
     import BranchMutator from "./mutators/BranchMutator";
     import ChangeMutator from "./mutators/ChangeMutator";
@@ -22,10 +24,14 @@
     import Icon from "./controls/Icon.svelte";
     import ActionWidget from "./controls/ActionWidget.svelte";
     import Zone from "./objects/Zone.svelte";
+    import BinaryMutator, { type RichHint } from "./mutators/BinaryMutator";
+    import type { Operand } from "./messages/Operand";
+    import IdSpan from "./controls/IdSpan.svelte";
 
     let selection: Query<RevResult> = {
         type: "wait",
     };
+    let dropHint: RichHint | null = null;
 
     document.addEventListener("keydown", (event) => {
         if (event.key === "o" && event.ctrlKey) {
@@ -46,6 +52,7 @@
 
     $: if ($repoConfigEvent) loadRepo($repoConfigEvent);
     $: if ($repoStatusEvent && $revisionSelectEvent) loadChange($revisionSelectEvent.change_id);
+    $: setDropHint($currentSource, $currentTarget);
 
     async function loadRepo(config: RepoConfig) {
         $revisionSelectEvent = undefined;
@@ -97,13 +104,33 @@
         $currentContext = null;
     }
 
+    function setDropHint(source: Operand | null, target: Operand | null) {
+        if (source) {
+            if (target) {
+                let canDrop = new BinaryMutator(source, target).canDrop();
+                if (canDrop.type == "yes") {
+                    dropHint = canDrop.hint;
+                    return;
+                }
+            }
+
+            let canDrag = BinaryMutator.canDrag(source);
+            if (canDrag.type == "yes") {
+                dropHint = canDrag.hint;
+                return;
+            }
+        }
+
+        dropHint = null;
+    }
+
     function onUndo() {
         mutate<UndoOperation>("undo_operation", null);
     }
 </script>
 
 <Zone operand={{ type: "Repository" }} let:target>
-    <div id="shell" class:target class={$repoConfigEvent?.type == "Workspace" ? $repoConfigEvent.theme : ""}>
+    <div id="shell" class={$repoConfigEvent?.type == "Workspace" ? $repoConfigEvent.theme : ""}>
         {#if $repoConfigEvent?.type == "Workspace"}
             {#key $repoConfigEvent.absolute_path}
                 <LogPane default_query={$repoConfigEvent.default_query} latest_query={$repoConfigEvent.latest_query} />
@@ -184,13 +211,31 @@
 
         <div class="separator span" />
 
-        <div id="status-bar" class="span">
-            <span>{$repoConfigEvent?.type == "Workspace" ? $repoConfigEvent.absolute_path : "No workspace"}</span>
-            <span id="status-operation">{$repoStatusEvent?.operation_description ?? "no operation"}</span>
-            <ActionWidget onClick={onUndo} disabled={!$repoConfigEvent}>
-                <Icon name="rotate-ccw" /> Undo
-            </ActionWidget>
-        </div>
+        {#if !dropHint}
+            <div id="status-bar" class="span repo-bar">
+                <span>{$repoConfigEvent?.type == "Workspace" ? $repoConfigEvent.absolute_path : "No workspace"}</span>
+                <span id="status-operation">{$repoStatusEvent?.operation_description ?? "no operation"}</span>
+                <ActionWidget onClick={onUndo} disabled={!$repoConfigEvent}>
+                    <Icon name="rotate-ccw" /> Undo
+                </ActionWidget>
+            </div>
+        {:else}
+            <div id="status-bar" class="span drag-bar" class:target>
+                <div>
+                    {#each dropHint as run, i}
+                        {#if typeof run == "string"}
+                            <span>{run}{i == dropHint.length - 1 ? "." : ""}</span>
+                        {:else}
+                            <span
+                                ><IdSpan type={dropHint.commit ? "commit" : "change"} id={run}></IdSpan>{i ==
+                                dropHint.length - 1
+                                    ? "."
+                                    : ""}</span>
+                        {/if}
+                    {/each}
+                </div>
+            </div>
+        {/if}
     </div>
 </Zone>
 
@@ -209,11 +254,6 @@
         user-select: none;
     }
 
-    #shell.target {
-        background: var(--ctp-peach);
-        color: black;
-    }
-
     .separator {
         background: var(--ctp-overlay0);
     }
@@ -224,11 +264,23 @@
 
     #status-bar {
         padding: 0 9px;
-
-        display: grid;
-        grid-template-columns: auto 1fr auto;
         gap: 6px;
         align-items: center;
+    }
+
+    .repo-bar {
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+    }
+
+    .drag-bar {
+        display: flex;
+        justify-content: center;
+    }
+
+    .target {
+        background: var(--ctp-flamingo);
+        color: black;
     }
 
     #status-operation {

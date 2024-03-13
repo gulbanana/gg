@@ -169,7 +169,8 @@ ol {
 /* make generic elements drop-transparent */
 div,
 span,
-section {
+section,
+h3 {
   pointer-events: none;
 }
 

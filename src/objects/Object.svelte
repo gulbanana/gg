@@ -71,6 +71,7 @@ Core component for direct-manipulation objects. A drag&drop source.
     }
 
     function onDragEnd() {
+        $currentSource = null;
         dragging = false;
         dragHint = null;
     }

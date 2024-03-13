@@ -1,8 +1,8 @@
 <script lang="ts">
     import type { RevResult } from "./messages/RevResult";
     import { dragOverWidget, menuCommitEvent } from "./stores";
-    import ChangeSummary from "./objects/ChangeObject.svelte";
-    import RevisionItem from "./objects/RevisionObject.svelte";
+    import ChangeObject from "./objects/ChangeObject.svelte";
+    import RevisionObject from "./objects/RevisionObject.svelte";
     import RevisionMutator from "./mutators/RevisionMutator";
     import ActionWidget from "./controls/ActionWidget.svelte";
     import Icon from "./controls/Icon.svelte";
@@ -10,6 +10,7 @@
     import Pane from "./Pane.svelte";
     import CheckWidget from "./controls/CheckWidget.svelte";
     import GraphNode from "./GraphNode.svelte";
+    import Zone from "./objects/Zone.svelte";
 
     export let rev: Extract<RevResult, { type: "Detail" }>;
 
@@ -34,9 +35,12 @@
             {#if rev.header.is_working_copy}
                 | Working copy
             {/if}
+            {#if rev.header.is_immutable}
+                | Immutable
+            {/if}
         </span>
 
-        <div class="primary-commands">
+        <div class="checkout-commands">
             <ActionWidget onClick={mutator.onNew}>
                 <Icon name="edit" /> New
             </ActionWidget>
@@ -45,9 +49,6 @@
             </ActionWidget>
             <ActionWidget onClick={mutator.onDuplicate}>
                 <Icon name="copy" /> Duplicate
-            </ActionWidget>
-            <ActionWidget onClick={mutator.onAbandon} disabled={rev.header.is_immutable}>
-                <Icon name="trash-2" /> Abandon
             </ActionWidget>
         </div>
     </h2>
@@ -77,19 +78,21 @@
 
         <div class="objects">
             {#if rev.parents.length > 0}
-                <section>
-                    <h3>Parent revisions</h3>
-                    {#each rev.parents as parent}
-                        <div class="row">
-                            <svg>
-                                <foreignObject>
-                                    <RevisionItem prefix="parent" header={parent} selected={false} />
-                                </foreignObject>
-                                <GraphNode header={parent} />
-                            </svg>
-                        </div>
-                    {/each}
-                </section>
+                <Zone operand={{ type: "Merge", header: rev.header }} let:target>
+                    <section class:target>
+                        <h3>Parent revisions</h3>
+                        {#each rev.parents as parent}
+                            <div class="row">
+                                <svg>
+                                    <foreignObject>
+                                        <RevisionObject header={parent} child={rev.header} selected={false} />
+                                    </foreignObject>
+                                    <GraphNode header={parent} />
+                                </svg>
+                            </div>
+                        {/each}
+                    </section>
+                </Zone>
             {/if}
 
             {#if rev.changes.length > 0}
@@ -109,7 +112,7 @@
                 <section>
                     <h3>Changed files</h3>
                     {#each rev.changes as change}
-                        <ChangeSummary header={rev.header} {change} />
+                        <ChangeObject header={rev.header} {change} />
                     {/each}
                 </section>
             {/if}
@@ -143,7 +146,7 @@
         white-space: nowrap;
     }
 
-    .primary-commands {
+    .checkout-commands {
         height: 30px;
         padding: 0 3px;
         display: flex;
@@ -209,6 +212,11 @@
 
     section.conflict > :global(*):not(:first-child) {
         margin-left: 24px;
+    }
+
+    section.target {
+        color: black;
+        background: var(--ctp-flamingo);
     }
 
     .move-commands {
