@@ -11,7 +11,7 @@
     import Zone from "./Zone.svelte";
 
     export let header: RevHeader;
-    export let child: RevHeader | null;
+    export let child: RevHeader | null = null;
     export let selected: boolean; // same as the imported event, but parent may want to force a value
 
     let operand: Operand = child ? { type: "Parent", header, child } : { type: "Revision", header };

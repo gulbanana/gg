@@ -8,7 +8,8 @@ Initial experimental release. This version is compatible with Jujutsu 0.15.
 - Graph-based log displaying summaries, author and status.
 - Log queries in Jujutsu's [revset language](https://martinvonz.github.io/jj/latest/revsets/).
 - Revision view with file-level change details and editing commands.
-- Context menus for basic editing operations on revisions, files and branches.
+- Drag and drop to move, remove and recombine revisions/files/branches.
+- Context menus for common operations.
 - Transactional operations with single-level undo.
 - Light and dark themes.
 - Codesigned binaries for MacOS and Windows.

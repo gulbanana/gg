@@ -84,7 +84,7 @@
                         {#each rev.parents as parent}
                             <div class="row">
                                 <svg>
-                                    <foreignObject>
+                                    <foreignObject x="0" y="0" width="100%" height="30">
                                         <RevisionObject header={parent} child={rev.header} selected={false} />
                                     </foreignObject>
                                     <GraphNode header={parent} />
@@ -244,7 +244,8 @@
     }
 
     foreignObject {
-        width: calc(100% - 3px);
-        height: 27px;
+        width: 100%;
+        height: 30px;
+        padding-right: 3px;
     }
 </style>

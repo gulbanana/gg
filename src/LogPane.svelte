@@ -7,18 +7,19 @@
     import Pane from "./Pane.svelte";
     import { type EnhancedRow, default as GraphLog, type EnhancedLine } from "./GraphLog.svelte";
     import RevisionSummary from "./objects/RevisionObject.svelte";
+    import SelectWidget from "./controls/SelectWidget.svelte";
 
     export let default_query: string;
     export let latest_query: string;
 
     const presets = [
-        { label: "Default", query: default_query },
-        { label: "Tracked Branches", query: "@ | ancestors(branches(), 5)" },
+        { label: "Default", value: default_query },
+        { label: "Tracked Branches", value: "@ | ancestors(branches(), 5)" },
         {
             label: "Remote Branches",
-            query: "@ | ancestors(remote_branches(), 5)",
+            value: "@ | ancestors(remote_branches(), 5)",
         },
-        { label: "All Revisions", query: "all()" },
+        { label: "All Revisions", value: "all()" },
     ];
 
     let choices: ReturnType<typeof getChoices>;
@@ -42,13 +43,13 @@
     function getChoices() {
         let choices = presets.map((p) => ({ ...p, selected: false }));
         for (let choice of choices) {
-            if (entered_query == choice.query) {
+            if (entered_query == choice.value) {
                 choice.selected = true;
                 return choices;
             }
         }
 
-        choices = [{ label: "Custom", query: entered_query, selected: true }, ...choices];
+        choices = [{ label: "Custom", value: entered_query, selected: true }, ...choices];
 
         return choices;
     }
@@ -234,11 +235,9 @@
 
 <Pane>
     <div slot="header" class="log-selector">
-        <select bind:value={entered_query} on:change={reloadLog}>
-            {#each choices as choice}
-                <option selected={choice.selected} value={choice.query}>{choice.label}</option>
-            {/each}
-        </select>
+        <SelectWidget options={choices} bind:value={entered_query} on:change={reloadLog}>
+            <svelte:fragment let:option>{option.label}</svelte:fragment>
+        </SelectWidget>
         <input type="text" bind:value={entered_query} on:change={reloadLog} />
     </div>
 
@@ -263,7 +262,6 @@
                 let:row>
                 {#if row}
                     <RevisionSummary
-                        prefix="log"
                         header={row.revision}
                         selected={$revisionSelectEvent?.change_id.prefix == row.revision.change_id.prefix} />
                 {/if}
