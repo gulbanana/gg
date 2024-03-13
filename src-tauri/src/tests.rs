@@ -620,7 +620,7 @@ mod mutation {
         assert!(matches!(parent_rev, RevResult::Detail { header, .. } if header.has_conflict));
 
         let result = MoveChanges {
-            from_change_id: mkchid(&child),
+            from_id: mkchid(&child),
             to_id: mkchid(&parent),
             paths: vec![],
         }
@@ -648,7 +648,7 @@ mod mutation {
         assert!(matches!(to_rev, RevResult::Detail { changes, .. } if changes.len() == 0));
 
         let result = MoveChanges {
-            from_change_id: mkchid(&from),
+            from_id: mkchid(&from),
             to_id: mkchid(&to),
             paths: vec![TreePath {
                 repo_path: "c.txt".to_owned(),

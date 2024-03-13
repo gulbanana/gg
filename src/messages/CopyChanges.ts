@@ -2,4 +2,4 @@
 import type { RevId } from "./RevId";
 import type { TreePath } from "./TreePath";
 
-export interface CopyChanges { from_change_id: RevId, to_id: RevId, paths: Array<TreePath>, }
+export interface CopyChanges { from_id: RevId, to_id: RevId, paths: Array<TreePath>, }

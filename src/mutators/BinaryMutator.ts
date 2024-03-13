@@ -1,9 +1,12 @@
+import { mutate } from "../ipc";
 import type { Operand } from "../messages/Operand";
 import type { RevId } from "../messages/RevId";
+import type { AbandonRevisions } from "../messages/AbandonRevisions";
+import type { MoveChanges } from "../messages/MoveChanges";
+import type { CopyChanges } from "../messages/CopyChanges";
 
 export type RichHint = (string | RevId)[] & { commit?: boolean };
 export type Eligibility = { type: "yes", hint: RichHint } | { type: "maybe", hint: string } | { type: "no" };
-
 
 export default class BinaryMutator {
     #from: Operand;
@@ -111,6 +114,41 @@ export default class BinaryMutator {
     }
 
     doDrop() {
-        console.log("dropping " + this.#from.type + " onto " + this.#to.type);
+        if (this.#from.type == "Revision") {
+            if (this.#to.type == "Revision") {
+                console.log("unimplemented: rebase (append)");
+            } else if (this.#to.type == "Parent") {
+                console.log("unimplemented: rebase (insert)");
+            } else if (this.#to.type == "Merge") {
+                console.log("unimplemented: rebase (add parent)");
+            } else if (this.#to.type == "Repository") {
+                // abandon source
+                mutate<AbandonRevisions>("abandon_revisions", { commit_ids: [this.#from.header.commit_id] })
+            }
+        }
+
+        if (this.#from.type == "Parent") {
+            if (this.#to.type == "Repository") {
+                console.log("unimplemented: rebase (remove parent)");
+            }
+        }
+
+        if (this.#from.type == "Change") {
+            if (this.#to.type == "Revision") {
+                // squash path to target
+                mutate<MoveChanges>("move_changes", { from_id: this.#from.header.change_id, to_id: this.#to.header.change_id, paths: [this.#from.path] })
+            } else if (this.#to.type == "Repository") {
+                // restore path from source parent to source
+                mutate<CopyChanges>("copy_changes", { from_id: this.#from.header.parent_ids[0], to_id: this.#from.header.change_id, paths: [this.#from.path] });
+            }
+        }
+
+        if (this.#from.type == "Branch") {
+            if (this.#to.type == "Revision") {
+                console.log("unimplemented: move branch");
+            }
+        }
+
+        console.log("error: unknown validated mutation");
     }
 }

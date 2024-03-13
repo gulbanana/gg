@@ -4,6 +4,7 @@ use anyhow::{anyhow, Result};
 use indexmap::IndexMap;
 use itertools::Itertools;
 use jj_lib::{
+    backend::CommitId,
     commit::Commit,
     git::REMOTE_NAME_FOR_LOCAL_GIT_REPO,
     matchers::{EverythingMatcher, FilesMatcher, Matcher},
@@ -190,19 +191,20 @@ impl Mutation for AbandonRevisions {
     fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction()?;
 
-        let abandoned_revset = ws.evaluate_revset_ids(&self.change_ids)?;
-        let abandoned_ids = abandoned_revset.iter().collect_vec();
+        let abandoned_ids = self
+            .commit_ids
+            .into_iter()
+            .map(|id| CommitId::try_from_hex(&id.hex).expect("frontend-validated id"))
+            .collect_vec();
 
         if ws.check_immutable(abandoned_ids.clone())? {
-            precondition!("Revisions are immutable");
+            precondition!("Some revisions are immutable");
         }
 
         for id in &abandoned_ids {
             tx.mut_repo().record_abandoned_commit(id.clone());
         }
         tx.mut_repo().rebase_descendants(&ws.settings)?;
-
-        drop(abandoned_revset);
 
         let transaction_description = if abandoned_ids.len() == 1 {
             format!("abandon commit {}", abandoned_ids[0].hex())
@@ -225,7 +227,7 @@ impl Mutation for MoveChanges {
     fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction()?;
 
-        let from = ws.resolve_single_id(&self.from_change_id)?;
+        let from = ws.resolve_single_id(&self.from_id)?;
         let mut to = ws.resolve_single_id(&self.to_id)?;
         let matcher = build_matcher(&self.paths);
 
@@ -286,7 +288,7 @@ impl Mutation for CopyChanges {
     fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction()?;
 
-        let from_tree = ws.resolve_single_id(&self.from_change_id)?.tree()?;
+        let from_tree = ws.resolve_single_id(&self.from_id)?.tree()?;
         let to = ws.resolve_single_id(&self.to_id)?;
         let matcher = build_matcher(&self.paths);
 
