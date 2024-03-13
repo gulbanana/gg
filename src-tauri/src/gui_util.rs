@@ -11,7 +11,7 @@ use jj_cli::{
     config::LayeredConfigs,
     git_util::is_colocated_git_workspace,
 };
-use jj_lib::{backend::BackendError, default_index::{AsCompositeIndex, DefaultReadonlyIndex}, file_util::relative_path, gitignore::GitIgnoreFile, op_store::WorkspaceId, repo::RepoLoaderError, repo_path::RepoPath, revset::{RevsetEvaluationError, RevsetIteratorExt, RevsetResolutionError}, view::View, working_copy::{CheckoutStats, SnapshotOptions}};
+use jj_lib::{backend::BackendError, default_index::{AsCompositeIndex, DefaultReadonlyIndex}, file_util::relative_path, gitignore::GitIgnoreFile, op_store::WorkspaceId, repo::RepoLoaderError, repo_path::RepoPath, revset::{RevsetEvaluationError, RevsetIteratorExt, RevsetResolutionError}, rewrite, view::View, working_copy::{CheckoutStats, SnapshotOptions}};
 use jj_lib::{
     backend::{ChangeId, CommitId},
     commit::Commit,
@@ -629,6 +629,70 @@ impl WorkspaceSession<'_> {
             
         self.finish_transaction(tx, "import git refs")?;
         Ok(())
+    }
+
+    /*************************************************************************************************/
+    /* Rebase functions - the idea is to have several composable rebase ops that use these utilities */
+    /* arguably they should be in a Transaction-wrapper struct, but i'm not yet sure whether to      */
+    /* complicate the interface of trait Mutation                                                    */
+    /*************************************************************************************************/
+
+    pub fn disinherit_children(
+        &self,
+        tx: &mut Transaction,
+        target: &Commit,
+    ) -> Result<HashMap<CommitId, CommitId>> {
+        // find all children of target
+        let children_expr = RevsetExpression::commit(target.id().clone()).children();
+        let children: Vec<_> = children_expr
+            .evaluate_programmatic(self.operation.repo.as_ref())?            
+            .iter()
+            .commits(self.operation.repo.store())
+            .try_collect()?;
+
+        // rebase each child, and then auto-rebase their descendants
+        let mut rebased_commit_ids = HashMap::new();
+        for child_commit in &children {
+            let new_child_parent_ids: Vec<CommitId> = child_commit
+                .parents()
+                .iter()
+                .flat_map(|c| {
+                    if c == target {
+                        target.parents().iter().map(|c| c.id().clone()).collect()
+                    } else {
+                        [c.id().clone()].to_vec()
+                    }
+                })
+                .collect();
+
+            // some of the new parents may be ancestors of others
+            let new_child_parents_expression = RevsetExpression::commits(new_child_parent_ids.clone())
+                .minus(
+                    &RevsetExpression::commits(new_child_parent_ids.clone())
+                        .parents()
+                        .ancestors(),
+                );
+            let new_child_parents: Vec<Commit> = new_child_parents_expression
+                .evaluate_programmatic(tx.base_repo().as_ref())?
+                .iter()
+                .commits(tx.base_repo().store())
+                .try_collect()?;
+
+            rebased_commit_ids.insert(
+                child_commit.id().clone(),
+                rewrite::rebase_commit(
+                    &self.settings,
+                    tx.mut_repo(),
+                    child_commit,
+                    &new_child_parents,
+                )?
+                .id()
+                .clone(),
+            );
+        }
+        rebased_commit_ids.extend(tx.mut_repo().rebase_descendants_return_map(&self.settings)?);
+
+        Ok(rebased_commit_ids)
     }
 }
 

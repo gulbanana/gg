@@ -1,12 +1,6 @@
-MVP requirements
+Desirable things
 ----------------
-drag & drop interactions:
-- implement InsertRevision
-- implement MoveRevision
-- implement or defer copy-drags (restore change, duplicate revision)
 
-Ideas and plans
----------------
 These changes may or may not be implemented in the future.
 * bug: proper fix for https://github.com/tauri-apps/tauri/issues/9127 (currently worked-around via fork; fix may be in master, or it might not work)
 * bug: failed command during long load never dismisses mutation-wait overlay
@@ -15,6 +9,7 @@ These changes may or may not be implemented in the future.
 * edge case: what happens when we snapshot after the CLI does? when there's nothing *to* snapshot, we don't refresh the ui...
 * perf: optimise revdetail loads - we already have the header
 * perf: better solution to slow immutability check - jj-lib will have a revset contains cache soon
+* feat: alternate drag modes for copy/duplicate, maybe for rebase-all-descendants
 * feat: log multiselect
 * feat: log filters (find commits that change path etc)
 * feat: file select/multiselect? large moves could be tedious otherwise. maybe file menu?
