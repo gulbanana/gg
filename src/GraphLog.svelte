@@ -3,7 +3,7 @@
 <script context="module" lang="ts">
     import type { LogLine } from "./messages/LogLine.js";
 
-    export type EnhancedLine = LogLine & { key: number };
+    export type EnhancedLine = LogLine & { key: number; parent: RevHeader; child: RevHeader };
 
     export interface EnhancedRow extends LogRow {
         passingLines: Array<EnhancedLine>;
@@ -14,6 +14,7 @@
     import type { LogRow } from "./messages/LogRow.js";
     import GraphLine from "./GraphLine.svelte";
     import GraphNode from "./GraphNode.svelte";
+    import type { RevHeader } from "./messages/RevHeader.js";
 
     interface $$Slots {
         default: { row: EnhancedRow | null };
@@ -50,14 +51,26 @@
             return [];
         }
 
-        return row.passingLines.filter((l) => {
-            if (keys.has(l.key)) {
-                return false;
-            } else {
-                keys.add(l.key);
-                return true;
-            }
-        });
+        return row.passingLines
+            .filter((l) => {
+                if (keys.has(l.key)) {
+                    return false;
+                } else {
+                    keys.add(l.key);
+                    return true;
+                }
+            })
+            .sort((a, b) => {
+                let aSameColumn = a.source[0] == a.target[0];
+                let bSameColumn = b.source[0] == b.target[0];
+                if (aSameColumn && !bSameColumn) {
+                    return -1;
+                } else if (bSameColumn && !aSameColumn) {
+                    return 1;
+                } else {
+                    return 0;
+                }
+            });
     }
 
     $: graphHeight = Math.max(containerHeight, rows.length * rowHeight);

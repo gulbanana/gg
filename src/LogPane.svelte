@@ -119,6 +119,9 @@
     function addPageToGraph(graph: EnhancedRow[], page: LogRow[]): EnhancedRow[] {
         for (let row of page) {
             let enhancedRow = row as EnhancedRow;
+            for (let passingRow of passNextRow) {
+                passingRow.parent = row.revision;
+            }
             enhancedRow.passingLines = passNextRow;
             passNextRow = [];
 
@@ -128,10 +131,13 @@
 
                 if (line.type == "ToIntersection") {
                     // ToIntersection lines begin at their owning row, so they run from this row to the next one that we read (which may not be on the same page)
+                    enhancedLine.child = row.revision;
                     enhancedRow.passingLines.push(enhancedLine);
                     passNextRow.push(enhancedLine);
                 } else {
                     // other lines end at their owning row, so we need to add them to all previous rows and then this one
+                    enhancedLine.parent = row.revision;
+                    enhancedLine.child = graph[line.source[1]].revision;
                     for (let i = line.source[1]; i < line.target[1]; i++) {
                         graph[i].passingLines.push(enhancedLine);
                     }

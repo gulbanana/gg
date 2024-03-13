@@ -1,7 +1,6 @@
 MVP requirements
 ----------------
 drag & drop ux:
-- drop onto lines
 - drop onto parents (but not commits within)
 - effect-of-drop hints
 - why-no-drop hints
