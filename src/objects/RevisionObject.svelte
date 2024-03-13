@@ -111,6 +111,7 @@
         align-self: center;
         display: flex;
         justify-content: end;
+        color: var(--ctp-text);
     }
 
     /* multiple elements can have these */
