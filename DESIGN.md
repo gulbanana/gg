@@ -28,8 +28,11 @@ including:
 - `WorkspaceSession` - Workspace open, able to execute mutations
 - `QuerySession` - Paged query in progress, able to fetch efficiently
 
-IPC is divided into several categories:
+IPC is divided into four categories, which is probably one too many:
 - Client->Server **commands** trigger backend actions for native UI integration.
 - Client->Server **queries** request information from the session without affecting state.
 - Client->Server **mutations** modify session state in a structured fashion.
 - Server->Client and Client->Client **events** are broadcast to push information to the UI.
+
+Drag & drop capabilities are implemented by `objects/Object.svelte`, a draggable item, and
+`objects/Zone.svelte`, a droppable region. Policy is centralised in `mutators/BinaryMutator.ts`.

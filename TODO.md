@@ -1,7 +1,3 @@
-MVP
----
-Remove/add parent should not remove *children*.
-
 Desirable things
 ----------------
 

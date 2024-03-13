@@ -7,9 +7,10 @@ GG is an experimental GUI for [Jujutsu](https://github.com/martinvonz/jj). The i
 ## Installation
 GG is a desktop application with a keyboard & mouse interface, written in [Tauri](https://tauri.app/). Binaries are available for several platforms on the [releases page](https://github.com/gulbanana/gg/releases). Use the `.dmg` or `.app.tar.gz` on MacOS, and the `.msi` or `.exe` on Windows. To build from source, run `npm install` followed by `npm run tauri build`.
 
-## Usage 
+### Setup 
 Put `gg` on your path and run it from a Jujutsu workspace, or launch it separately and use the Repository->Open menu item to select a workspace directory. Tips:
-- On MacOS, try adding `/Applications/gg.app/Contents/MacOS/` to your PATH environment variable. On Windows, try `C:\Program Files\gg`.
+- On MacOS, try adding `/Applications/gg.app/Contents/MacOS/` to your PATH environment variable. On Windows, add `C:\Program Files\gg\`.
+- Using `gg &` on MacOS/Linux or `start gg` on Windows will run in the background without blocking your shell.
 - You can pass the argument `--debug` for a bunch of extra logging to stdout.
 
 ### Configuration
