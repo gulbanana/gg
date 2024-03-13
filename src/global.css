@@ -179,6 +179,7 @@ select,
 input,
 button,
 ol,
-ul {
+ul,
+label {
   pointer-events: all;
 }
