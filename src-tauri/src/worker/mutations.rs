@@ -9,6 +9,7 @@ use jj_lib::{
     git::REMOTE_NAME_FOR_LOCAL_GIT_REPO,
     matchers::{EverythingMatcher, FilesMatcher, Matcher},
     object_id::ObjectId,
+    op_store::RefTarget,
     op_walk,
     repo::Repo,
     repo_path::RepoPath,
@@ -20,8 +21,8 @@ use crate::{
     gui_util::WorkspaceSession,
     messages::{
         AbandonRevisions, CheckoutRevision, CopyChanges, CreateRevision, DescribeRevision,
-        DuplicateRevisions, MoveChanges, MutationResult, RefName, TrackBranch, TreePath,
-        UndoOperation, UntrackBranch,
+        DuplicateRevisions, MoveBranch, MoveChanges, MutationResult, RefName, TrackBranch,
+        TreePath, UndoOperation, UntrackBranch,
     },
 };
 
@@ -330,10 +331,8 @@ impl Mutation for TrackBranch {
             } => {
                 let mut tx = ws.start_transaction()?;
 
-                let remote_ref: &jj_lib::op_store::RemoteRef = ws
-                    .repo()
-                    .view()
-                    .get_remote_branch(&branch_name, &remote_name);
+                let remote_ref: &jj_lib::op_store::RemoteRef =
+                    ws.view().get_remote_branch(&branch_name, &remote_name);
 
                 if remote_ref.is_tracking() {
                     precondition!("{branch_name}@{remote_name} is already tracked");
@@ -359,7 +358,7 @@ impl Mutation for UntrackBranch {
         match self.name {
             RefName::LocalBranch { branch_name, .. } => {
                 // untrack all remotes
-                for ((name, remote), remote_ref) in ws.repo().view().remote_branches_matching(
+                for ((name, remote), remote_ref) in ws.view().remote_branches_matching(
                     &StringPattern::exact(branch_name),
                     &StringPattern::everything(),
                 ) {
@@ -374,10 +373,8 @@ impl Mutation for UntrackBranch {
                 remote_name,
                 ..
             } => {
-                let remote_ref: &jj_lib::op_store::RemoteRef = ws
-                    .repo()
-                    .view()
-                    .get_remote_branch(&branch_name, &remote_name);
+                let remote_ref: &jj_lib::op_store::RemoteRef =
+                    ws.view().get_remote_branch(&branch_name, &remote_name);
 
                 if !remote_ref.is_tracking() {
                     precondition!("{branch_name}@{remote_name} is not tracked");
@@ -399,10 +396,46 @@ impl Mutation for UntrackBranch {
     }
 }
 
+// does not currently enforce fast-forwards
+impl Mutation for MoveBranch {
+    fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
+        let mut tx = ws.start_transaction()?;
+
+        match self.name {
+            RefName::RemoteBranch {
+                branch_name,
+                remote_name,
+                ..
+            } => {
+                precondition!("Branch is remote: {branch_name}@{remote_name}")
+            }
+            RefName::LocalBranch { branch_name, .. } => {
+                let to = ws.resolve_single_id(&self.to_id)?;
+
+                let old_target = ws.view().get_local_branch(&branch_name);
+                if old_target.is_absent() {
+                    precondition!("No such branch: {branch_name}");
+                }
+
+                tx.mut_repo()
+                    .set_local_branch_target(&branch_name, RefTarget::normal(to.id().clone()));
+
+                match ws.finish_transaction(
+                    tx,
+                    format!("point {} to commit {}", branch_name, to.id().hex()),
+                )? {
+                    Some(new_status) => Ok(MutationResult::Updated { new_status }),
+                    None => Ok(MutationResult::Unchanged),
+                }
+            }
+        }
+    }
+}
+
 // this is another case where it would be nice if we could reuse jj-cli's error messages
 impl Mutation for UndoOperation {
     fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
-        let head_op = op_walk::resolve_op_with_repo(ws.repo(), "@")?;
+        let head_op = op_walk::resolve_op_with_repo(ws.repo(), "@")?; // XXX this should be behind an abstraction, maybe reused in snapshot
         let mut parent_ops = head_op.parents();
 
         let Some(parent_op) = parent_ops.next().transpose()? else {

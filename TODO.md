@@ -1,14 +1,10 @@
 MVP requirements
 ----------------
 drag & drop interactions:
-- make parents their own context?
 - revision to node rebase
 - revision to edge insert
 - revision to parents add-parent
 - parents-out remove-parent (not if last!)
-- branch to revision set
-- branch-out delete? or not mvp
-- change to revision squash
 - stretch: change to revision restore
 - stretch: revision to revision/edge duplicate
 
@@ -32,8 +28,8 @@ These changes may or may not be implemented in the future.
 * feat: remotes/fetch/push
 * feat: tags display & management
 * feat: more mutations
-    - push branch
     - delete local branch
+    - drag branches onto each other to create a merge? might be a little too opinionated
 * feat: more settings
     - log revsets
 * design: decide whether to remove edit menu and maybe add others

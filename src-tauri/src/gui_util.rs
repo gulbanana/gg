@@ -11,7 +11,7 @@ use jj_cli::{
     config::LayeredConfigs,
     git_util::is_colocated_git_workspace,
 };
-use jj_lib::{backend::BackendError, default_index::{AsCompositeIndex, DefaultReadonlyIndex}, file_util::relative_path, gitignore::GitIgnoreFile, op_store::WorkspaceId, repo::RepoLoaderError, repo_path::RepoPath, revset::{RevsetEvaluationError, RevsetIteratorExt, RevsetResolutionError}, working_copy::{CheckoutStats, SnapshotOptions}};
+use jj_lib::{backend::BackendError, default_index::{AsCompositeIndex, DefaultReadonlyIndex}, file_util::relative_path, gitignore::GitIgnoreFile, op_store::WorkspaceId, repo::RepoLoaderError, repo_path::RepoPath, revset::{RevsetEvaluationError, RevsetIteratorExt, RevsetResolutionError}, view::View, working_copy::{CheckoutStats, SnapshotOptions}};
 use jj_lib::{
     backend::{ChangeId, CommitId},
     commit::Commit,
@@ -180,6 +180,10 @@ impl WorkspaceSession<'_> {
 
     pub fn wc_id(&self) -> &CommitId {
         &self.operation.wc_id
+    }
+
+    pub fn view(&self) -> &View {
+        self.operation.repo.view()
     }
 
     pub fn get_commit(&self, id: &CommitId) -> Result<Commit> {

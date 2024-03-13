@@ -4,6 +4,7 @@ import type { RevId } from "../messages/RevId";
 import type { AbandonRevisions } from "../messages/AbandonRevisions";
 import type { MoveChanges } from "../messages/MoveChanges";
 import type { CopyChanges } from "../messages/CopyChanges";
+import type { MoveBranch } from "../messages/MoveBranch";
 
 export type RichHint = (string | RevId)[] & { commit?: boolean };
 export type Eligibility = { type: "yes", hint: RichHint } | { type: "maybe", hint: string } | { type: "no" };
@@ -107,6 +108,8 @@ export default class BinaryMutator {
         if (this.#from.type == "Branch") {
             if (this.#to.type == "Revision") {
                 return { type: "yes", hint: [`Moving branch ${this.#from.name.branch_name} to `, this.#to.header.change_id] };
+            } else if (this.#to.type == "Branch" && this.#from.name.branch_name == this.#to.name.branch_name) {
+                return { type: "yes", hint: [`Resetting branch ${this.#from.name.branch_name} to remote`] };
             }
         }
 
@@ -145,7 +148,9 @@ export default class BinaryMutator {
 
         if (this.#from.type == "Branch") {
             if (this.#to.type == "Revision") {
-                console.log("unimplemented: move branch");
+                mutate<MoveBranch>("move_branch", { to_id: this.#to.header.change_id, name: this.#from.name })
+            } else if (this.#to.type == "Branch") {
+                mutate<MoveBranch>("move_branch", { to_id: this.#to.header.change_id, name: this.#from.name })
             }
         }
 

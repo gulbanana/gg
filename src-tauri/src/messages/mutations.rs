@@ -131,4 +131,15 @@ pub struct UntrackBranch {
     derive(TS),
     ts(export, export_to = "../src/messages/")
 )]
+pub struct MoveBranch {
+    pub name: RefName,
+    pub to_id: RevId,
+}
+
+#[derive(Deserialize, Debug)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(TS),
+    ts(export, export_to = "../src/messages/")
+)]
 pub struct UndoOperation;
