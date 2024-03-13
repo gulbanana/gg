@@ -3,7 +3,7 @@
     import type { CheckoutRevision } from "../messages/CheckoutRevision";
     import type { CreateRevision } from "../messages/CreateRevision";
     import type { Operand } from "../messages/Operand";
-    import { revisionSelectEvent } from "../stores.js";
+    import { currentTarget, revisionSelectEvent } from "../stores.js";
     import { mutate } from "../ipc";
     import IdSpan from "../controls/IdSpan.svelte";
     import BranchObject from "./BranchObject.svelte";
@@ -11,10 +11,10 @@
     import Zone from "./Zone.svelte";
 
     export let header: RevHeader;
+    export let child: RevHeader | null;
     export let selected: boolean; // same as the imported event, but parent may want to force a value
-    export let prefix: string;
 
-    let operand: Operand = { type: "Revision", header };
+    let operand: Operand = child ? { type: "Parent", header, child } : { type: "Revision", header };
 
     function onSelect() {
         revisionSelectEvent.set(header);
@@ -39,20 +39,26 @@
 
 <Object
     {operand}
-    id="{prefix}-{header.change_id.prefix}"
+    id="{child ? 'parent' : 'log'}-{header.change_id.prefix}"
     conflicted={header.has_conflict}
     {selected}
     label={header.description.lines[0]}
     on:click={onSelect}
     on:dblclick={onEdit}
     let:context
-    let:hint>
-    <Zone {operand} let:target>
-        <div class="layout" class:target>
-            <IdSpan type="change" id={header.change_id} pronoun={context || target} />
+    let:hint={dragHint}>
+    {#if child}
+        <!-- Parents aren't a drop target -->
+        <div class="layout">
+            <IdSpan
+                type="change"
+                id={header.change_id}
+                pronoun={context ||
+                    ($currentTarget?.type == "Merge" &&
+                        $currentTarget.header.parent_ids.findIndex((id) => id.hex == header.commit_id.hex) != -1)} />
 
             <span class="text desc truncate" class:indescribable={!context && header.description.lines[0] == ""}>
-                {hint ?? (header.description.lines[0] == "" ? "(no description set)" : header.description.lines[0])}
+                {dragHint ?? (header.description.lines[0] == "" ? "(no description set)" : header.description.lines[0])}
             </span>
 
             <span class="text email truncate">{header.author.email}</span>
@@ -65,7 +71,29 @@
                 {/each}
             </span>
         </div>
-    </Zone>
+    {:else}
+        <Zone {operand} let:target let:hint={dropHint}>
+            <div class="layout" class:target>
+                <IdSpan type="change" id={header.change_id} pronoun={context || target || dropHint != null} />
+
+                <span class="text desc truncate" class:indescribable={!context && header.description.lines[0] == ""}>
+                    {dragHint ??
+                        dropHint ??
+                        (header.description.lines[0] == "" ? "(no description set)" : header.description.lines[0])}
+                </span>
+
+                <span class="text email truncate">{header.author.email}</span>
+
+                <span class="refs">
+                    {#each header.branches.filter((b) => b.type == "LocalBranch" || !b.is_synced || !b.is_tracked) as ref}
+                        <div>
+                            <BranchObject {header} name={ref} />
+                        </div>
+                    {/each}
+                </span>
+            </div>
+        </Zone>
+    {/if}
 </Object>
 
 <style>

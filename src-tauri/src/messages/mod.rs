@@ -143,6 +143,9 @@ pub enum Operand {
     Revision {
         header: RevHeader,
     },
+    Merge {
+        header: RevHeader,
+    },
     Parent {
         header: RevHeader,
         child: RevHeader,

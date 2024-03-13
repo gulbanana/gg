@@ -13,7 +13,7 @@ export const menuCommitEvent = await event<string>("gg://menu/commit");
 
 export const currentMutation = writable<Query<MutationResult> | null>(null);
 export const currentContext = writable<Operand | null>();
-export const currentSource = writable<Operand>();
+export const currentSource = writable<Operand | null>();
 export const currentTarget = writable<Operand | null>();
 
 export function dragOverWidget(event: DragEvent) {
