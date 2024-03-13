@@ -55,7 +55,7 @@ export default class BinaryMutator {
 
     canDrop(): Eligibility {
         // generic prohibitions - don't drop undroppables, don't drop on yourself
-        if (BinaryMutator.canDrag(this.#from).type != "yes") {
+        if (BinaryMutator.canDrag(this.#from).type != "yes" && !(this.#from.type == "Revision" && this.#to.type == "Merge")) {
             return { type: "no" };
         } else if (this.#from == this.#to) {
             return { type: "no" };
@@ -102,8 +102,7 @@ export default class BinaryMutator {
                 if (this.#from.header.parent_ids.length == 1) {
                     return { type: "yes", hint: [`Restoring changes at ${this.#from.path.relative_path} from parent `, this.#from.header.parent_ids[0]] };
                 } else {
-                    //return { type: "maybe", hint: "(revision has multiple parents)" };
-                    return { type: "no" };
+                    return { type: "maybe", hint: "Can't restore: revision has multiple parents." };
                 }
             }
         }
@@ -129,8 +128,8 @@ export default class BinaryMutator {
                 mutate<InsertRevision>("insert_revision", { change_id: this.#from.header.change_id, after_id: this.#to.header.change_id, before_id: this.#to.child.change_id })
             } else if (this.#to.type == "Merge") {
                 // rebase subtree onto additional targets
-                let newParents = [...this.#from.header.parent_ids, this.#to.header.change_id];
-                mutate<MoveSource>("move_source", { change_id: this.#from.header.change_id, parent_ids: newParents });
+                let newParents = [...this.#to.header.parent_ids, this.#from.header.change_id];
+                mutate<MoveSource>("move_source", { change_id: this.#to.header.change_id, parent_ids: newParents });
             } else if (this.#to.type == "Repository") {
                 // abandon source
                 mutate<AbandonRevisions>("abandon_revisions", { commit_ids: [this.#from.header.commit_id] })

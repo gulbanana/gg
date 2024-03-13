@@ -65,7 +65,6 @@ Core component for direct-manipulation objects. A drag&drop source.
                 dragHint = canDrag.hint;
                 let empty = document.createElement("div");
                 event.dataTransfer?.setDragImage(empty, 0, 0);
-                event.dataTransfer!.dropEffect = "none";
             }
         }
     }

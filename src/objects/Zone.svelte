@@ -13,6 +13,7 @@ A drop target for direct-manipulation objects.
     }
 
     export let operand: Operand;
+    export let alwaysTarget: boolean = false;
 
     let dropHint: string | null = null;
 
@@ -28,6 +29,9 @@ A drop target for direct-manipulation objects.
         } else if (canDrop.type == "maybe") {
             event.preventDefault();
             dropHint = canDrop.hint;
+            if (alwaysTarget && $currentTarget != operand) {
+                $currentTarget = operand;
+            }
         }
     }
 

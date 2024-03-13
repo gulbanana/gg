@@ -32,6 +32,7 @@
         type: "wait",
     };
     let dropHint: RichHint | null = null;
+    let hint = false;
 
     document.addEventListener("keydown", (event) => {
         if (event.key === "o" && event.ctrlKey) {
@@ -105,11 +106,16 @@
     }
 
     function setDropHint(source: Operand | null, target: Operand | null) {
+        hint = false;
         if (source) {
             if (target) {
                 let canDrop = new BinaryMutator(source, target).canDrop();
                 if (canDrop.type == "yes") {
                     dropHint = canDrop.hint;
+                    return;
+                } else if (canDrop.type == "maybe") {
+                    dropHint = [canDrop.hint];
+                    hint = true;
                     return;
                 }
             }
@@ -129,7 +135,7 @@
     }
 </script>
 
-<Zone operand={{ type: "Repository" }} let:target>
+<Zone operand={{ type: "Repository" }} alwaysTarget let:target>
     <div id="shell" class={$repoConfigEvent?.type == "Workspace" ? $repoConfigEvent.theme : ""}>
         {#if $repoConfigEvent?.type == "Workspace"}
             {#key $repoConfigEvent.absolute_path}
@@ -220,7 +226,7 @@
                 </ActionWidget>
             </div>
         {:else}
-            <div id="status-bar" class="span drag-bar" class:target>
+            <div id="status-bar" class="span drag-bar" class:target class:hint>
                 <div>
                     {#each dropHint as run, i}
                         {#if typeof run == "string"}
@@ -281,6 +287,11 @@
     .target {
         background: var(--ctp-flamingo);
         color: black;
+    }
+
+    .hint {
+        background: transparent;
+        color: var(--ctp-peach);
     }
 
     #status-operation {
