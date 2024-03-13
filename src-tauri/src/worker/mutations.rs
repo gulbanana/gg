@@ -21,8 +21,8 @@ use crate::{
     gui_util::WorkspaceSession,
     messages::{
         AbandonRevisions, CheckoutRevision, CopyChanges, CreateRevision, DescribeRevision,
-        DuplicateRevisions, MoveBranch, MoveChanges, MutationResult, RefName, TrackBranch,
-        TreePath, UndoOperation, UntrackBranch,
+        DuplicateRevisions, InsertRevision, MoveBranch, MoveChanges, MoveRevision, MutationResult,
+        RefName, TrackBranch, TreePath, UndoOperation, UntrackBranch,
     },
 };
 
@@ -64,10 +64,7 @@ impl Mutation for CheckoutRevision {
 }
 
 impl Mutation for CreateRevision {
-    fn execute<'a>(
-        self: Box<CreateRevision>,
-        ws: &'a mut WorkspaceSession,
-    ) -> Result<MutationResult> {
+    fn execute<'a>(self: Box<Self>, ws: &'a mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction()?;
 
         let parents_revset = ws.evaluate_revset_ids(&self.parent_change_ids)?;
@@ -93,6 +90,18 @@ impl Mutation for CreateRevision {
             }
             None => Ok(MutationResult::Unchanged),
         }
+    }
+}
+
+impl Mutation for InsertRevision {
+    fn execute<'a>(self: Box<Self>, ws: &'a mut WorkspaceSession) -> Result<MutationResult> {
+        todo!()
+    }
+}
+
+impl Mutation for MoveRevision {
+    fn execute<'a>(self: Box<Self>, ws: &'a mut WorkspaceSession) -> Result<MutationResult> {
+        todo!()
     }
 }
 

@@ -47,6 +47,29 @@ pub struct CreateRevision {
     pub parent_change_ids: Vec<RevId>,
 }
 
+#[derive(Deserialize, Debug)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(TS),
+    ts(export, export_to = "../src/messages/")
+)]
+pub struct InsertRevision {
+    pub change_id: RevId,
+    pub after_id: RevId,
+    pub before_id: RevId,
+}
+
+#[derive(Deserialize, Debug)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(TS),
+    ts(export, export_to = "../src/messages/")
+)]
+pub struct MoveRevision {
+    pub change_id: RevId,
+    pub parent_ids: Vec<RevId>,
+}
+
 /// Updates a revision's description
 #[derive(Deserialize, Debug)]
 #[cfg_attr(

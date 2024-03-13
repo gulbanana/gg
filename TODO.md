@@ -1,12 +1,9 @@
 MVP requirements
 ----------------
 drag & drop interactions:
-- revision to node rebase
-- revision to edge insert
-- revision to parents add-parent
-- parents-out remove-parent (not if last!)
-- stretch: change to revision restore
-- stretch: revision to revision/edge duplicate
+- implement InsertRevision
+- implement MoveRevision
+- implement or defer copy-drags (restore change, duplicate revision)
 
 Ideas and plans
 ---------------

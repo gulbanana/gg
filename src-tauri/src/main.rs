@@ -25,8 +25,8 @@ use tauri_plugin_window_state::StateFlags;
 use gui_util::WorkerSession;
 use messages::{
     AbandonRevisions, CheckoutRevision, CopyChanges, CreateRevision, DescribeRevision,
-    DuplicateRevisions, MoveBranch, MoveChanges, MutationResult, TrackBranch, UndoOperation,
-    UntrackBranch,
+    DuplicateRevisions, InsertRevision, MoveBranch, MoveChanges, MoveRevision, MutationResult,
+    TrackBranch, UndoOperation, UntrackBranch,
 };
 use worker::{Mutation, Session, SessionEvent};
 
@@ -93,6 +93,8 @@ fn main() -> Result<()> {
             query_revision,
             checkout_revision,
             create_revision,
+            insert_revision,
+            move_revision,
             describe_revision,
             duplicate_revisions,
             abandon_revisions,
@@ -258,6 +260,24 @@ fn create_revision(
     window: Window,
     app_state: State<AppState>,
     mutation: CreateRevision,
+) -> Result<MutationResult, InvokeError> {
+    try_mutate(window, app_state, mutation)
+}
+
+#[tauri::command(async)]
+fn insert_revision(
+    window: Window,
+    app_state: State<AppState>,
+    mutation: InsertRevision,
+) -> Result<MutationResult, InvokeError> {
+    try_mutate(window, app_state, mutation)
+}
+
+#[tauri::command(async)]
+fn move_revision(
+    window: Window,
+    app_state: State<AppState>,
+    mutation: MoveRevision,
 ) -> Result<MutationResult, InvokeError> {
     try_mutate(window, app_state, mutation)
 }
