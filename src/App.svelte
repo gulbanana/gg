@@ -4,14 +4,7 @@
     import type { RepoConfig } from "./messages/RepoConfig";
     import type { UndoOperation } from "./messages/UndoOperation";
     import type { Event } from "@tauri-apps/api/event";
-    import {
-        type Query,
-        query,
-        command,
-        mutate,
-        delay,
-        onEvent,
-    } from "./ipc.js";
+    import { type Query, query, command, mutate, delay, onEvent } from "./ipc.js";
     import {
         currentMutation,
         currentContext,
@@ -28,6 +21,7 @@
     import BoundQuery from "./controls/BoundQuery.svelte";
     import Icon from "./controls/Icon.svelte";
     import ActionWidget from "./controls/ActionWidget.svelte";
+    import Zone from "./objects/Zone.svelte";
 
     let selection: Query<RevResult> = {
         type: "wait",
@@ -42,11 +36,7 @@
         }
     });
 
-    document.body.addEventListener(
-        "click",
-        () => currentContext.set(null),
-        true,
-    );
+    document.body.addEventListener("click", () => currentContext.set(null), true);
 
     command("notify_window_ready");
 
@@ -55,8 +45,7 @@
     onEvent("gg://context/branch", mutateBranch);
 
     $: if ($repoConfigEvent) loadRepo($repoConfigEvent);
-    $: if ($repoStatusEvent && $revisionSelectEvent)
-        loadChange($revisionSelectEvent.change_id);
+    $: if ($repoStatusEvent && $revisionSelectEvent) loadChange($revisionSelectEvent.change_id);
 
     async function loadRepo(config: RepoConfig) {
         $revisionSelectEvent = undefined;
@@ -77,11 +66,7 @@
             rev = await fetch;
         }
 
-        if (
-            rev.type == "data" &&
-            rev.value.type == "NotFound" &&
-            id.hex != $repoStatusEvent?.working_copy.hex
-        ) {
+        if (rev.type == "data" && rev.value.type == "NotFound" && id.hex != $repoStatusEvent?.working_copy.hex) {
             return loadChange($repoStatusEvent?.working_copy!);
         }
 
@@ -91,17 +76,15 @@
     function mutateRevision(event: Event<string>) {
         console.log(`mutateRevision(${event.payload})`, $currentContext);
         if ($currentContext?.type == "Revision") {
-            new RevisionMutator($currentContext.rev).handle(event.payload);
+            new RevisionMutator($currentContext.header).handle(event.payload);
         }
         $currentContext = null;
     }
 
     function mutateTree(event: Event<string>) {
         console.log(`mutateTree(${event.payload})`, $currentContext);
-        if ($currentContext?.type == "Tree") {
-            new ChangeMutator($currentContext.rev, $currentContext.path).handle(
-                event.payload,
-            );
+        if ($currentContext?.type == "Change") {
+            new ChangeMutator($currentContext.header, $currentContext.path).handle(event.payload);
         }
         $currentContext = null;
     }
@@ -109,9 +92,7 @@
     function mutateBranch(event: Event<string>) {
         console.log(`mutateBranch(${event.payload})`, $currentContext);
         if ($currentContext?.type == "Branch") {
-            new BranchMutator($currentContext.rev, $currentContext.name).handle(
-                event.payload,
-            );
+            new BranchMutator($currentContext.header, $currentContext.name).handle(event.payload);
         }
         $currentContext = null;
     }
@@ -121,111 +102,97 @@
     }
 </script>
 
-<div
-    id="shell"
-    class={$repoConfigEvent?.type == "Workspace" ? $repoConfigEvent.theme : ""}>
-    {#if $repoConfigEvent?.type == "Workspace"}
-        {#key $repoConfigEvent.absolute_path}
-            <LogPane
-                default_query={$repoConfigEvent.default_query}
-                latest_query={$repoConfigEvent.latest_query} />
-        {/key}
-        <BoundQuery query={selection} let:data>
-            {#if data.type == "Detail"}
-                <RevisionPane rev={data} />
-            {:else}
-                <Pane>
-                    <h2 slot="header">Not Found</h2>
-                    <p slot="body">Revset '{data.query}' is empty.</p>
+<Zone operand={{ type: "Repository" }} let:target>
+    <div id="shell" class:target class={$repoConfigEvent?.type == "Workspace" ? $repoConfigEvent.theme : ""}>
+        {#if $repoConfigEvent?.type == "Workspace"}
+            {#key $repoConfigEvent.absolute_path}
+                <LogPane default_query={$repoConfigEvent.default_query} latest_query={$repoConfigEvent.latest_query} />
+            {/key}
+
+            <div class="separator" />
+
+            <BoundQuery query={selection} let:data>
+                {#if data.type == "Detail"}
+                    <RevisionPane rev={data} />
+                {:else}
+                    <Pane>
+                        <h2 slot="header">Not Found</h2>
+                        <p slot="body">Revset '{data.query}' is empty.</p>
+                    </Pane>
+                {/if}
+                <Pane slot="error" let:message>
+                    <h2 slot="header">Error</h2>
+                    <p slot="body" class="error-text">{message}</p>
                 </Pane>
-            {/if}
-            <Pane slot="error" let:message>
-                <h2 slot="header">Error</h2>
-                <p slot="body" class="error-text">{message}</p>
-            </Pane>
-            <Pane slot="wait">
-                <h2 slot="header">Loading...</h2>
-            </Pane>
-        </BoundQuery>
+                <Pane slot="wait">
+                    <h2 slot="header">Loading...</h2>
+                </Pane>
+            </BoundQuery>
 
-        <div id="status-bar">
-            <span>{$repoConfigEvent?.absolute_path}</span>
-            <span id="status-operation"
-                >{$repoStatusEvent?.operation_description}</span>
-            <ActionWidget onClick={onUndo}
-                ><Icon name="rotate-ccw" /> Undo</ActionWidget>
-        </div>
+            {#if $currentMutation}
+                <div id="overlay">
+                    {#if $currentMutation.type == "data"}
+                        {#if $currentMutation.value.type == "InternalError" || $currentMutation.value.type == "PreconditionError"}
+                            <div id="overlay-chrome">
+                                <div id="overlay-content">
+                                    <h3 class="error-text">Command Error</h3>
+                                    <p>
+                                        {$currentMutation.value.message}
+                                    </p>
+                                </div>
 
-        {#if $currentMutation}
-            <div id="overlay">
-                {#if $currentMutation.type == "data"}
-                    {#if $currentMutation.value.type == "InternalError" || $currentMutation.value.type == "PreconditionError"}
+                                <ActionWidget safe onClick={() => ($currentMutation = null)}>
+                                    <Icon name="x" />
+                                </ActionWidget>
+                            </div>
+                        {/if}
+                    {:else if $currentMutation.type == "error"}
                         <div id="overlay-chrome">
                             <div id="overlay-content">
-                                <h3 class="error-text">Command Error</h3>
+                                <h3 class="error-text">IPC Error</h3>
                                 <p>
-                                    {$currentMutation.value.message}
+                                    {$currentMutation.message}
                                 </p>
                             </div>
 
-                            <ActionWidget
-                                safe
-                                onClick={() => ($currentMutation = null)}>
+                            <ActionWidget safe onClick={() => ($currentMutation = null)}>
                                 <Icon name="x" />
                             </ActionWidget>
                         </div>
                     {/if}
-                {:else if $currentMutation.type == "error"}
-                    <div id="overlay-chrome">
-                        <div id="overlay-content">
-                            <h3 class="error-text">IPC Error</h3>
-                            <p>
-                                {$currentMutation.message}
-                            </p>
-                        </div>
-
-                        <ActionWidget
-                            safe
-                            onClick={() => ($currentMutation = null)}>
-                            <Icon name="x" />
-                        </ActionWidget>
-                    </div>
-                {/if}
+                </div>
+            {/if}
+        {:else if !$repoConfigEvent}
+            <div id="fatal-error">
+                <div id="error-content">
+                    <p class="error-text">Error communicating with backend. You may need to restart GG to continue.</p>
+                </div>
+            </div>
+        {:else}
+            <div id="fatal-error">
+                <div id="error-content">
+                    {#if $repoConfigEvent.type == "NoWorkspace"}
+                        <h2>No Workspace Loaded</h2>
+                    {:else}
+                        <h2 class="error-text">Internal Error</h2>
+                    {/if}
+                    <p>{$repoConfigEvent.error}</p>
+                    <p>Try opening a workspace from the Repository menu.</p>
+                </div>
             </div>
         {/if}
-    {:else if !$repoConfigEvent}
-        <div id="fatal-error">
-            <div id="error-content">
-                <p class="error-text">
-                    Error communicating with backend. You may need to restart GG
-                    to continue.
-                </p>
-            </div>
+
+        <div class="separator span" />
+
+        <div id="status-bar" class="span">
+            <span>{$repoConfigEvent?.type == "Workspace" ? $repoConfigEvent.absolute_path : "No workspace"}</span>
+            <span id="status-operation">{$repoStatusEvent?.operation_description ?? "no operation"}</span>
+            <ActionWidget onClick={onUndo} disabled={!$repoConfigEvent}>
+                <Icon name="rotate-ccw" /> Undo
+            </ActionWidget>
         </div>
-        <div id="status-bar">
-            <span>Internal Error</span>
-        </div>
-    {:else}
-        <div id="fatal-error">
-            <div id="error-content">
-                {#if $repoConfigEvent.type == "NoWorkspace"}
-                    <h2>No Workspace Loaded</h2>
-                {:else}
-                    <h2 class="error-text">Internal Error</h2>
-                {/if}
-                <p>{$repoConfigEvent.error}</p>
-                <p>Try opening a workspace from the Repository menu.</p>
-            </div>
-        </div>
-        <div id="status-bar">
-            {#if $repoConfigEvent.type != "DeadWorker"}
-                <span>{$repoConfigEvent?.absolute_path}</span>
-            {:else}
-                <span>Internal Error</span>
-            {/if}
-        </div>
-    {/if}
-</div>
+    </div>
+</Zone>
 
 <style>
     #shell {
@@ -233,26 +200,35 @@
         height: 100vh;
 
         display: grid;
-        grid-template-columns: 1fr 1fr;
-        grid-template-rows: 1fr 30px;
-        gap: 3px;
+        grid-template-columns: 1fr 3px 1fr;
+        grid-template-rows: 1fr 3px 30px;
 
-        background: var(--ctp-overlay0);
+        background: var(--ctp-crust);
         color: var(--ctp-text);
 
         user-select: none;
     }
 
+    #shell.target {
+        background: var(--ctp-peach);
+        color: black;
+    }
+
+    .separator {
+        background: var(--ctp-overlay0);
+    }
+
+    .span {
+        grid-column: 1/4;
+    }
+
     #status-bar {
-        grid-column: 1/3;
         padding: 0 9px;
 
         display: grid;
         grid-template-columns: auto 1fr auto;
         gap: 6px;
         align-items: center;
-
-        background: var(--ctp-crust);
     }
 
     #status-operation {
@@ -309,7 +285,7 @@
     }
 
     #fatal-error {
-        grid-column: 1/3;
+        grid-column: 1/4;
         display: grid;
         align-items: center;
         justify-content: center;

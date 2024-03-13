@@ -324,6 +324,7 @@ pub fn handle_context(window: Window, ctx: Operand) -> Result<()> {
 
             window.popup_menu(context_menu)?;
         }
+        _ => (), // no popup required
     };
 
     Ok(())

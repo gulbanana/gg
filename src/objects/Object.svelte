@@ -6,7 +6,7 @@ Core component for direct-manipulation objects. A drag&drop source.
 <script lang="ts">
     import type { Operand } from "../messages/Operand";
     import { command } from "../ipc";
-    import { currentContext, currentDrag } from "../stores";
+    import { currentContext, currentSource } from "../stores";
     import { createEventDispatcher } from "svelte";
     import BinaryMutator from "../mutators/BinaryMutator";
 
@@ -39,11 +39,13 @@ Core component for direct-manipulation objects. A drag&drop source.
     }
 
     function onMenu(event: Event) {
-        event.preventDefault();
-        event.stopPropagation();
+        if (operand.type == "Branch" || operand.type == "Change" || operand.type == "Revision") {
+            event.preventDefault();
+            event.stopPropagation();
 
-        currentContext.set(operand);
-        command("forward_context_menu", { context: operand });
+            currentContext.set(operand);
+            command("forward_context_menu", { context: operand });
+        }
     }
 
     function onDragStart(event: DragEvent) {
@@ -56,7 +58,7 @@ Core component for direct-manipulation objects. A drag&drop source.
             return;
         } else {
             event.dataTransfer?.setData("text/plain", ""); // if we need more than one drag to be active, this could store a key
-            $currentDrag = operand; // it would've been nice to just put this in the drag data but chrome says That's Insecure
+            $currentSource = operand; // it would've been nice to just put this in the drag data but chrome says That's Insecure
             dragging = true;
 
             if (canDrag.type == "maybe") {

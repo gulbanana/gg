@@ -13,7 +13,7 @@ export default class BinaryMutator {
     }
 
     static canDrag(from: Operand): Eligibility {
-        if (from.type != "Branch" && from.header.is_immutable) {
+        if ((from.type == "Revision" || from.type == "Change" || from.type == "Parent") && from.header.is_immutable) {
             return { type: "maybe", hint: "(commit is immutable)" };
         }
 

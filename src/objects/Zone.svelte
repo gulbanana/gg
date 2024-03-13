@@ -6,7 +6,7 @@ A drop target for direct-manipulation objects.
 <script lang="ts">
     import type { Operand } from "../messages/Operand";
     import BinaryMutator from "../mutators/BinaryMutator";
-    import { currentDrag } from "../stores";
+    import { currentSource, currentTarget } from "../stores";
 
     interface $$Slots {
         default: { target: boolean };
@@ -14,35 +14,37 @@ A drop target for direct-manipulation objects.
 
     export let operand: Operand;
 
-    let target = false;
-
     function onDragEnter(event: DragEvent) {
         event.stopPropagation();
 
-        let mutator = new BinaryMutator($currentDrag, operand);
+        let mutator = new BinaryMutator($currentSource, operand);
         if (mutator.canDrop().type == "yes") {
             event.preventDefault();
-            target = true;
+            $currentTarget = operand;
         }
     }
 
     function onDragOver(event: DragEvent) {
         event.stopPropagation();
 
-        let mutator = new BinaryMutator($currentDrag, operand);
+        let mutator = new BinaryMutator($currentSource, operand);
         if (mutator.canDrop().type == "yes") {
             event.preventDefault();
+            if ($currentTarget != operand) {
+                $currentTarget = operand;
+            }
         }
     }
 
     function onDragLeave(event: DragEvent) {
-        target = false;
+        $currentTarget = null;
     }
 
     function onDrop(event: DragEvent) {
-        target = false;
+        event.stopPropagation();
+        $currentTarget = null;
 
-        let mutator = new BinaryMutator($currentDrag, operand);
+        let mutator = new BinaryMutator($currentSource, operand);
         if (mutator.canDrop().type == "yes") {
             mutator.doDrop();
         }
@@ -55,7 +57,7 @@ A drop target for direct-manipulation objects.
     on:dragover={onDragOver}
     on:dragleave={onDragLeave}
     on:drop={onDrop}>
-    <slot {target} />
+    <slot target={$currentTarget == operand} />
 </div>
 
 <style>

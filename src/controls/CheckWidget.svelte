@@ -1,9 +1,11 @@
 <script lang="ts">
+    import { dragOverWidget } from "../stores";
+
     export let checked: boolean;
 </script>
 
 <label>
-    <input type="checkbox" bind:checked />
+    <input type="checkbox" bind:checked on:dragenter={dragOverWidget} on:dragover={dragOverWidget} />
     <slot />
 </label>
 

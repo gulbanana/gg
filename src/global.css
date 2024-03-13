@@ -168,16 +168,16 @@ ol {
 
 /* make generic elements drop-transparent */
 div,
-span {
+span,
+section {
   pointer-events: none;
 }
 
-/* utility: buttons used as list items and draggables */
-.unbutton {
-  background: transparent;
-  border: none;
-  margin: 0;
-  padding: 0;
-  color: inherit;
-  text-align: left;
+textarea,
+select,
+input,
+button,
+ol,
+ul {
+  pointer-events: all;
 }

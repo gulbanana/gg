@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { currentMutation } from "../stores";
+    import { currentMutation, dragOverWidget } from "../stores";
 
     export let safe: boolean = false;
     export let disabled: boolean = false;
@@ -7,11 +7,11 @@
 </script>
 
 {#if disabled || (!safe && $currentMutation)}
-    <button disabled class:safe>
+    <button disabled class:safe on:dragenter={dragOverWidget} on:dragover={dragOverWidget}>
         <slot />
     </button>
 {:else}
-    <button on:click={onClick} class:safe>
+    <button class:safe on:click={onClick} on:dragenter={dragOverWidget} on:dragover={dragOverWidget}>
         <slot />
     </button>
 {/if}
