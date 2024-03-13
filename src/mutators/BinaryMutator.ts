@@ -7,6 +7,7 @@ import type { CopyChanges } from "../messages/CopyChanges";
 import type { MoveBranch } from "../messages/MoveBranch";
 import type { InsertRevision } from "../messages/InsertRevision";
 import type { MoveRevision } from "../messages/MoveRevision";
+import type { MoveSource } from "../messages/MoveSource";
 
 export type RichHint = (string | RevId)[] & { commit?: boolean };
 export type Eligibility = { type: "yes", hint: RichHint } | { type: "maybe", hint: string } | { type: "no" };
@@ -121,15 +122,15 @@ export default class BinaryMutator {
     doDrop() {
         if (this.#from.type == "Revision") {
             if (this.#to.type == "Revision") {
-                // rebase onto single target
+                // rebase rev onto single target
                 mutate<MoveRevision>("move_revision", { change_id: this.#from.header.change_id, parent_ids: [this.#to.header.change_id] });
             } else if (this.#to.type == "Parent") {
                 // rebase between targets 
                 mutate<InsertRevision>("insert_revision", { change_id: this.#from.header.change_id, after_id: this.#to.header.change_id, before_id: this.#to.child.change_id })
             } else if (this.#to.type == "Merge") {
-                // rebase onto additional targets 
+                // rebase subtree onto additional targets
                 let newParents = [...this.#from.header.parent_ids, this.#to.header.change_id];
-                mutate<MoveRevision>("move_revision", { change_id: this.#from.header.change_id, parent_ids: newParents });
+                mutate<MoveSource>("move_source", { change_id: this.#from.header.change_id, parent_ids: newParents });
             } else if (this.#to.type == "Repository") {
                 // abandon source
                 mutate<AbandonRevisions>("abandon_revisions", { commit_ids: [this.#from.header.commit_id] })
@@ -138,10 +139,10 @@ export default class BinaryMutator {
 
         if (this.#from.type == "Parent") {
             if (this.#to.type == "Repository") {
-                // rebase onto fewer targets 
+                // rebase subtree onto fewer targets 
                 let removeCommit = this.#from.header.commit_id;
                 let newParents = this.#from.child.parent_ids.filter(id => id.hex != removeCommit.hex);
-                mutate<MoveRevision>("move_revision", { change_id: this.#from.child.change_id, parent_ids: newParents });
+                mutate<MoveSource>("move_source", { change_id: this.#from.child.change_id, parent_ids: newParents });
             }
         }
 

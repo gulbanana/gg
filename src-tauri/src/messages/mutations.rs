@@ -70,6 +70,17 @@ pub struct MoveRevision {
     pub parent_ids: Vec<RevId>,
 }
 
+#[derive(Deserialize, Debug)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(TS),
+    ts(export, export_to = "../src/messages/")
+)]
+pub struct MoveSource {
+    pub change_id: RevId,
+    pub parent_ids: Vec<RevId>,
+}
+
 /// Updates a revision's description
 #[derive(Deserialize, Debug)]
 #[cfg_attr(

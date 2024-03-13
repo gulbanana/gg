@@ -21,8 +21,8 @@ use crate::{
     gui_util::WorkspaceSession,
     messages::{
         AbandonRevisions, CheckoutRevision, CopyChanges, CreateRevision, DescribeRevision,
-        DuplicateRevisions, InsertRevision, MoveBranch, MoveChanges, MoveRevision, MutationResult,
-        RefName, TrackBranch, TreePath, UndoOperation, UntrackBranch,
+        DuplicateRevisions, InsertRevision, MoveBranch, MoveChanges, MoveRevision, MoveSource,
+        MutationResult, RefName, TrackBranch, TreePath, UndoOperation, UntrackBranch,
     },
 };
 
@@ -119,43 +119,6 @@ impl Mutation for InsertRevision {
         let rebased_id = target.id().hex();
         let target = rewrite::rebase_commit(&ws.settings, tx.mut_repo(), &target, &[after])?;
         rewrite::rebase_commit(&ws.settings, tx.mut_repo(), &before, &[target])?;
-
-        match ws.finish_transaction(tx, format!("rebase commit {}", rebased_id))? {
-            Some(new_status) => Ok(MutationResult::Updated { new_status }),
-            None => Ok(MutationResult::Unchanged),
-        }
-    }
-}
-
-impl Mutation for MoveRevision {
-    fn execute<'a>(self: Box<Self>, ws: &'a mut WorkspaceSession) -> Result<MutationResult> {
-        let mut tx = ws.start_transaction()?;
-
-        let target = ws.resolve_single_id(&self.change_id)?;
-        let parents = ws.resolve_multiple_ids(&self.parent_ids)?;
-
-        if ws.check_immutable(vec![target.id().clone()])? {
-            precondition!("Revision {} is immutable", self.change_id.prefix);
-        }
-
-        // rebase the target's children
-        let rebased_children = ws.disinherit_children(&mut tx, &target)?;
-
-        // update parents, which may have been descendants of the target
-        let parents: Vec<_> = parents
-            .iter()
-            .map(|new_parent| {
-                rebased_children
-                    .get(new_parent.id())
-                    .map_or(Ok(new_parent.clone()), |rebased_new_parent_id| {
-                        tx.repo().store().get_commit(rebased_new_parent_id)
-                    })
-            })
-            .try_collect()?;
-
-        // rebase the target itself
-        let rebased_id = target.id().hex();
-        rewrite::rebase_commit(&ws.settings, tx.mut_repo(), &target, &parents)?;
 
         match ws.finish_transaction(tx, format!("rebase commit {}", rebased_id))? {
             Some(new_status) => Ok(MutationResult::Updated { new_status }),
@@ -286,6 +249,65 @@ impl Mutation for AbandonRevisions {
         };
 
         match ws.finish_transaction(tx, transaction_description)? {
+            Some(new_status) => Ok(MutationResult::Updated { new_status }),
+            None => Ok(MutationResult::Unchanged),
+        }
+    }
+}
+
+impl Mutation for MoveRevision {
+    fn execute<'a>(self: Box<Self>, ws: &'a mut WorkspaceSession) -> Result<MutationResult> {
+        let mut tx = ws.start_transaction()?;
+
+        let target = ws.resolve_single_id(&self.change_id)?;
+        let parents = ws.resolve_multiple_ids(&self.parent_ids)?;
+
+        if ws.check_immutable(vec![target.id().clone()])? {
+            precondition!("Revision {} is immutable", self.change_id.prefix);
+        }
+
+        // rebase the target's children
+        let rebased_children = ws.disinherit_children(&mut tx, &target)?;
+
+        // update parents, which may have been descendants of the target
+        let parents: Vec<_> = parents
+            .iter()
+            .map(|new_parent| {
+                rebased_children
+                    .get(new_parent.id())
+                    .map_or(Ok(new_parent.clone()), |rebased_new_parent_id| {
+                        tx.repo().store().get_commit(rebased_new_parent_id)
+                    })
+            })
+            .try_collect()?;
+
+        // rebase the target itself
+        let rebased_id = target.id().hex();
+        rewrite::rebase_commit(&ws.settings, tx.mut_repo(), &target, &parents)?;
+
+        match ws.finish_transaction(tx, format!("rebase commit {}", rebased_id))? {
+            Some(new_status) => Ok(MutationResult::Updated { new_status }),
+            None => Ok(MutationResult::Unchanged),
+        }
+    }
+}
+
+impl Mutation for MoveSource {
+    fn execute<'a>(self: Box<Self>, ws: &'a mut WorkspaceSession) -> Result<MutationResult> {
+        let mut tx = ws.start_transaction()?;
+
+        let target = ws.resolve_single_id(&self.change_id)?;
+        let parents = ws.resolve_multiple_ids(&self.parent_ids)?;
+
+        if ws.check_immutable(vec![target.id().clone()])? {
+            precondition!("Revision {} is immutable", self.change_id.prefix);
+        }
+
+        // just rebase the target, which will also rebase its descendants
+        let rebased_id = target.id().hex();
+        rewrite::rebase_commit(&ws.settings, tx.mut_repo(), &target, &parents)?;
+
+        match ws.finish_transaction(tx, format!("rebase commit {}", rebased_id))? {
             Some(new_status) => Ok(MutationResult::Updated { new_status }),
             None => Ok(MutationResult::Unchanged),
         }

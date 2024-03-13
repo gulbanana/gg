@@ -25,8 +25,8 @@ use tauri_plugin_window_state::StateFlags;
 use gui_util::WorkerSession;
 use messages::{
     AbandonRevisions, CheckoutRevision, CopyChanges, CreateRevision, DescribeRevision,
-    DuplicateRevisions, InsertRevision, MoveBranch, MoveChanges, MoveRevision, MutationResult,
-    TrackBranch, UndoOperation, UntrackBranch,
+    DuplicateRevisions, InsertRevision, MoveBranch, MoveChanges, MoveRevision, MoveSource,
+    MutationResult, TrackBranch, UndoOperation, UntrackBranch,
 };
 use worker::{Mutation, Session, SessionEvent};
 
@@ -94,10 +94,11 @@ fn main() -> Result<()> {
             checkout_revision,
             create_revision,
             insert_revision,
-            move_revision,
             describe_revision,
             duplicate_revisions,
             abandon_revisions,
+            move_revision,
+            move_source,
             move_changes,
             copy_changes,
             track_branch,
@@ -274,15 +275,6 @@ fn insert_revision(
 }
 
 #[tauri::command(async)]
-fn move_revision(
-    window: Window,
-    app_state: State<AppState>,
-    mutation: MoveRevision,
-) -> Result<MutationResult, InvokeError> {
-    try_mutate(window, app_state, mutation)
-}
-
-#[tauri::command(async)]
 fn describe_revision(
     window: Window,
     app_state: State<AppState>,
@@ -305,6 +297,24 @@ fn abandon_revisions(
     window: Window,
     app_state: State<AppState>,
     mutation: AbandonRevisions,
+) -> Result<MutationResult, InvokeError> {
+    try_mutate(window, app_state, mutation)
+}
+
+#[tauri::command(async)]
+fn move_revision(
+    window: Window,
+    app_state: State<AppState>,
+    mutation: MoveRevision,
+) -> Result<MutationResult, InvokeError> {
+    try_mutate(window, app_state, mutation)
+}
+
+#[tauri::command(async)]
+fn move_source(
+    window: Window,
+    app_state: State<AppState>,
+    mutation: MoveSource,
 ) -> Result<MutationResult, InvokeError> {
     try_mutate(window, app_state, mutation)
 }
