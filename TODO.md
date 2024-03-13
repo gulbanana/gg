@@ -1,9 +1,5 @@
 MVP requirements
 ----------------
-drag & drop ux:
-- drop onto parents (but not commits within)
-- effect-of-drop hints
-- why-no-drop hints
 drag & drop interactions:
 - make parents their own context?
 - revision to node rebase
@@ -15,10 +11,6 @@ drag & drop interactions:
 - change to revision squash
 - stretch: change to revision restore
 - stretch: revision to revision/edge duplicate
-tauri bug wherein event listeners are cleaned up on page load 
-- this prevents the macos prod build receiving events in frontend
-- probably fixed in beta-11, or revert to 2.0.0-beta-9
-if enough dragdrop stuff works, add immutable to the rev title and remove some buttons
 
 Ideas and plans
 ---------------
