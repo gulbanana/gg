@@ -123,16 +123,20 @@ export default class BinaryMutator {
             if (this.#to.type == "Revision") {
                 // rebase rev onto single target
                 mutate<MoveRevision>("move_revision", { change_id: this.#from.header.change_id, parent_ids: [this.#to.header.change_id] });
+                return;
             } else if (this.#to.type == "Parent") {
                 // rebase between targets 
-                mutate<InsertRevision>("insert_revision", { change_id: this.#from.header.change_id, after_id: this.#to.header.change_id, before_id: this.#to.child.change_id })
+                mutate<InsertRevision>("insert_revision", { change_id: this.#from.header.change_id, after_id: this.#to.header.change_id, before_id: this.#to.child.change_id });
+                return;
             } else if (this.#to.type == "Merge") {
                 // rebase subtree onto additional targets
                 let newParents = [...this.#to.header.parent_ids, this.#from.header.change_id];
                 mutate<MoveSource>("move_source", { change_id: this.#to.header.change_id, parent_ids: newParents });
+                return;
             } else if (this.#to.type == "Repository") {
                 // abandon source
-                mutate<AbandonRevisions>("abandon_revisions", { commit_ids: [this.#from.header.commit_id] })
+                mutate<AbandonRevisions>("abandon_revisions", { commit_ids: [this.#from.header.commit_id] });
+                return;
             }
         }
 
@@ -142,24 +146,29 @@ export default class BinaryMutator {
                 let removeCommit = this.#from.header.commit_id;
                 let newParents = this.#from.child.parent_ids.filter(id => id.hex != removeCommit.hex);
                 mutate<MoveSource>("move_source", { change_id: this.#from.child.change_id, parent_ids: newParents });
+                return;
             }
         }
 
         if (this.#from.type == "Change") {
             if (this.#to.type == "Revision") {
                 // squash path to target
-                mutate<MoveChanges>("move_changes", { from_id: this.#from.header.change_id, to_id: this.#to.header.change_id, paths: [this.#from.path] })
+                mutate<MoveChanges>("move_changes", { from_id: this.#from.header.change_id, to_id: this.#to.header.change_id, paths: [this.#from.path] });
+                return;
             } else if (this.#to.type == "Repository") {
                 // restore path from source parent to source
                 mutate<CopyChanges>("copy_changes", { from_id: this.#from.header.parent_ids[0], to_id: this.#from.header.change_id, paths: [this.#from.path] });
+                return;
             }
         }
 
         if (this.#from.type == "Branch") {
             if (this.#to.type == "Revision") {
-                mutate<MoveBranch>("move_branch", { to_id: this.#to.header.change_id, name: this.#from.name })
+                mutate<MoveBranch>("move_branch", { to_id: this.#to.header.change_id, name: this.#from.name });
+                return;
             } else if (this.#to.type == "Branch") {
-                mutate<MoveBranch>("move_branch", { to_id: this.#to.header.change_id, name: this.#from.name })
+                mutate<MoveBranch>("move_branch", { to_id: this.#to.header.change_id, name: this.#from.name });
+                return;
             }
         }
 

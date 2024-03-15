@@ -23,9 +23,11 @@
                 let canDrop = new BinaryMutator(source, target).canDrop();
                 if (canDrop.type == "yes") {
                     dropHint = canDrop.hint;
+                    console.log("set", dropHint);
                     return;
                 } else if (canDrop.type == "maybe") {
                     dropHint = [canDrop.hint];
+                    console.log("set", dropHint);
                     maybe = true;
                     return;
                 }
@@ -34,11 +36,13 @@
             let canDrag = BinaryMutator.canDrag(source);
             if (canDrag.type == "yes") {
                 dropHint = canDrag.hint;
+                console.log("set", dropHint);
                 return;
             }
         }
 
         dropHint = null;
+        console.log("set", dropHint);
     }
 
     function onUndo() {
@@ -52,7 +56,9 @@
 
 {#if !dropHint}
     <div id="status-bar" class="repo-bar">
-        <span>{$repoConfigEvent?.type == "Workspace" ? $repoConfigEvent.absolute_path : "No workspace"}</span>
+        <span id="status-workspace">
+            {$repoConfigEvent?.type == "Workspace" ? $repoConfigEvent.absolute_path : "No workspace"}
+        </span>
         <div id="status-remotes" class="substatus">
             {#if $repoConfigEvent?.type == "Workspace"}
                 {#each $repoConfigEvent.git_remotes as remote}
@@ -104,7 +110,7 @@
 
     .repo-bar {
         display: grid;
-        grid-template-columns: minmax(auto, 33%) 1fr minmax(auto, 33%);
+        grid-template-columns: minmax(auto, 40%) 1fr minmax(auto, 40%);
     }
 
     .drag-bar {
@@ -127,7 +133,13 @@
         height: 100%;
         padding: 0 3px;
         justify-content: end;
+    }
+
+    #status-operation > span,
+    #status-workspace {
+        white-space: nowrap;
         overflow: hidden;
+        text-overflow: ellipsis;
     }
 
     .target {

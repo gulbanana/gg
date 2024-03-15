@@ -42,13 +42,15 @@ A drop target for direct-manipulation objects.
 
     function onDrop(event: DragEvent) {
         event.stopPropagation();
-        $currentTarget = null;
-        dropHint = null;
 
         let mutator = new BinaryMutator($currentSource!, operand);
         if (mutator.canDrop().type == "yes") {
             mutator.doDrop();
         }
+
+        $currentSource = null;
+        $currentTarget = null;
+        dropHint = null;
     }
 </script>
 
