@@ -110,7 +110,7 @@ impl Session for WorkerSession {
 
                     ws.import_and_snapshot(false)?;
 
-                    tx.send(Ok(ws.format_config()))?;
+                    tx.send(ws.format_config())?;
 
                     match ws.handle_events(rx).context("WorkspaceSession")? {
                         WorkspaceResult::Reopen(new_tx, new_cwd) => (tx, wd) = (new_tx, new_cwd),

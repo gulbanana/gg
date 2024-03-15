@@ -5,6 +5,7 @@ use std::{cell::OnceCell, collections::HashMap, env::VarError, path::{Path, Path
 
 use anyhow::{anyhow, Context, Result};
 use config::Config;
+use git2::Repository;
 use itertools::Itertools;
 use jj_cli::{
     cli_util::{check_stale_working_copy, short_operation_hash, WorkingCopyFreshness},
@@ -301,8 +302,16 @@ impl WorkspaceSession<'_> {
      * IPC-message formatting functions *
      ************************************/
 
-    pub fn format_config(&self) -> messages::RepoConfig {
+    pub fn format_config(&self) -> Result<messages::RepoConfig> {
+        let absolute_path = self.workspace.workspace_root().into();
+
+        let git_remotes = match self.operation.git_repo()? {
+            Some(repo) => repo.remotes()?.iter().flatten().map(|s| s.to_owned()).collect(),
+            None => vec![]
+        };
+
         let default_query = self.settings.default_revset();
+        
         let latest_query = self
             .session
             .latest_query
@@ -310,13 +319,14 @@ impl WorkspaceSession<'_> {
             .unwrap_or_else(|| &default_query)
             .clone();
 
-        messages::RepoConfig::Workspace {
-            absolute_path: self.workspace.workspace_root().into(),
-            status: self.format_status(),
+        Ok(messages::RepoConfig::Workspace {
+            absolute_path,
+            git_remotes,
             default_query,
             latest_query,
+            status: self.format_status(),
             theme: self.settings.ui_theme_override()
-        }
+        })
     }
 
     pub fn format_status(&self) -> messages::RepoStatus {
@@ -715,6 +725,13 @@ impl SessionOperation {
 
     fn git_backend(&self) -> Option<&GitBackend> {
         self.repo.store().backend_impl().downcast_ref()
+    }
+
+    fn git_repo(&self) -> Result<Option<Repository>> {
+        match self.git_backend() {
+            Some(backend) => Ok(Some(backend.open_git_repo()?)),
+            None => Ok(None)
+        }
     }
 
     pub fn base_ignores(&self) -> Result<Arc<GitIgnoreFile>> {
