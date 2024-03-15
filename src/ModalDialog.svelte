@@ -42,7 +42,7 @@
     }
 
     #overlay-header {
-        margin-top: 3px;
+        margin-top: 6px;
         padding: 0 15px;
         grid-area: 1/2/2/2;
         display: flex;

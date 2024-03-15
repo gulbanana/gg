@@ -3,7 +3,9 @@
     import Icon from "./controls/Icon.svelte";
     import IdSpan from "./controls/IdSpan.svelte";
     import { mutate } from "./ipc";
+    import type { FetchRemote } from "./messages/FetchRemote";
     import type { Operand } from "./messages/Operand";
+    import type { PushRemote } from "./messages/PushRemote";
     import type { UndoOperation } from "./messages/UndoOperation";
     import type { RichHint } from "./mutators/BinaryMutator";
     import BinaryMutator from "./mutators/BinaryMutator";
@@ -23,11 +25,9 @@
                 let canDrop = new BinaryMutator(source, target).canDrop();
                 if (canDrop.type == "yes") {
                     dropHint = canDrop.hint;
-                    console.log("set", dropHint);
                     return;
                 } else if (canDrop.type == "maybe") {
                     dropHint = [canDrop.hint];
-                    console.log("set", dropHint);
                     maybe = true;
                     return;
                 }
@@ -36,29 +36,37 @@
             let canDrag = BinaryMutator.canDrag(source);
             if (canDrag.type == "yes") {
                 dropHint = canDrag.hint;
-                console.log("set", dropHint);
                 return;
             }
         }
 
         dropHint = null;
-        console.log("set", dropHint);
     }
 
     function onUndo() {
         mutate<UndoOperation>("undo_operation", null);
     }
 
-    function onPush(remote: string) {}
+    function onPush(remote: string) {
+        mutate<PushRemote>("push_remote", {
+            name: remote,
+        });
+    }
 
-    function onFetch(remote: string) {}
+    function onFetch(remote: string) {
+        mutate<FetchRemote>("fetch_remote", {
+            name: remote,
+        });
+    }
 </script>
 
 {#if !dropHint}
     <div id="status-bar" class="repo-bar">
-        <span id="status-workspace">
-            {$repoConfigEvent?.type == "Workspace" ? $repoConfigEvent.absolute_path : "No workspace"}
-        </span>
+        <div class="substatus">
+            <span id="status-workspace">
+                {$repoConfigEvent?.type == "Workspace" ? $repoConfigEvent.absolute_path : "No workspace"}
+            </span>
+        </div>
         <div id="status-remotes" class="substatus">
             {#if $repoConfigEvent?.type == "Workspace"}
                 {#each $repoConfigEvent.git_remotes as remote}
@@ -119,10 +127,15 @@
     }
 
     .substatus {
+        height: 100%;
         display: flex;
         align-items: center;
         gap: 6px;
         white-space: nowrap;
+    }
+
+    .substatus > span {
+        height: 21px;
     }
 
     #status-remotes {

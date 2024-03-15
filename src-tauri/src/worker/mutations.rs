@@ -21,8 +21,9 @@ use crate::{
     gui_util::WorkspaceSession,
     messages::{
         AbandonRevisions, CheckoutRevision, CopyChanges, CreateRevision, DescribeRevision,
-        DuplicateRevisions, InsertRevision, MoveBranch, MoveChanges, MoveRevision, MoveSource,
-        MutationResult, RefName, TrackBranch, TreePath, UndoOperation, UntrackBranch,
+        DuplicateRevisions, FetchRemote, InsertRevision, MoveBranch, MoveChanges, MoveRevision,
+        MoveSource, MutationResult, PushRemote, RefName, TrackBranch, TreePath, UndoOperation,
+        UntrackBranch,
     },
 };
 
@@ -519,6 +520,18 @@ impl Mutation for MoveBranch {
                 }
             }
         }
+    }
+}
+
+impl Mutation for PushRemote {
+    fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
+        todo!("PushRemote")
+    }
+}
+
+impl Mutation for FetchRemote {
+    fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
+        todo!("FetchRemote")
     }
 }
 

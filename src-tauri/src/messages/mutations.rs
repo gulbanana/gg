@@ -176,4 +176,24 @@ pub struct MoveBranch {
     derive(TS),
     ts(export, export_to = "../src/messages/")
 )]
+pub struct PushRemote {
+    name: String,
+}
+
+#[derive(Deserialize, Debug)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(TS),
+    ts(export, export_to = "../src/messages/")
+)]
+pub struct FetchRemote {
+    name: String,
+}
+
+#[derive(Deserialize, Debug)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(TS),
+    ts(export, export_to = "../src/messages/")
+)]
 pub struct UndoOperation;

@@ -25,8 +25,8 @@ use tauri_plugin_window_state::StateFlags;
 use gui_util::WorkerSession;
 use messages::{
     AbandonRevisions, CheckoutRevision, CopyChanges, CreateRevision, DescribeRevision,
-    DuplicateRevisions, InsertRevision, MoveBranch, MoveChanges, MoveRevision, MoveSource,
-    MutationResult, TrackBranch, UndoOperation, UntrackBranch,
+    DuplicateRevisions, FetchRemote, InsertRevision, MoveBranch, MoveChanges, MoveRevision,
+    MoveSource, MutationResult, PushRemote, TrackBranch, UndoOperation, UntrackBranch,
 };
 use worker::{Mutation, Session, SessionEvent};
 
@@ -104,6 +104,8 @@ fn main() -> Result<()> {
             track_branch,
             untrack_branch,
             move_branch,
+            push_remote,
+            fetch_remote,
             undo_operation
         ])
         .menu(menu::build_main)
@@ -360,6 +362,24 @@ fn move_branch(
     window: Window,
     app_state: State<AppState>,
     mutation: MoveBranch,
+) -> Result<MutationResult, InvokeError> {
+    try_mutate(window, app_state, mutation)
+}
+
+#[tauri::command(async)]
+fn push_remote(
+    window: Window,
+    app_state: State<AppState>,
+    mutation: PushRemote,
+) -> Result<MutationResult, InvokeError> {
+    try_mutate(window, app_state, mutation)
+}
+
+#[tauri::command(async)]
+fn fetch_remote(
+    window: Window,
+    app_state: State<AppState>,
+    mutation: FetchRemote,
 ) -> Result<MutationResult, InvokeError> {
     try_mutate(window, app_state, mutation)
 }
