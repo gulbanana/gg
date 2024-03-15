@@ -1,6 +1,8 @@
 # GG Changelog
 
-## Unreleased
+## [0.15.1](releases/tag/v0.15.1)
+
+A bugfix release.
 
 ### Fixed
 - Several buttons had stopped working due to IPC changes:
