@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use indexmap::IndexMap;
 use itertools::Itertools;
 use jj_lib::{
@@ -98,9 +98,15 @@ impl Mutation for InsertRevision {
     fn execute<'a>(self: Box<Self>, ws: &'a mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction()?;
 
-        let target = ws.resolve_single_id(&self.change_id)?;
-        let before = ws.resolve_single_id(&self.before_id)?;
-        let after = ws.resolve_single_id(&self.after_id)?;
+        let target = ws
+            .resolve_single_id(&self.change_id)
+            .context("resolve change_id")?;
+        let before = ws
+            .resolve_single_id(&self.before_id)
+            .context("resolve before_id")?;
+        let after = ws
+            .resolve_single_id(&self.after_id)
+            .context("resolve after_id")?;
 
         if ws.check_immutable(vec![target.id().clone(), before.id().clone()])? {
             precondition!("Some revisions are immutable");

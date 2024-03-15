@@ -14,9 +14,9 @@ export interface Settable<T> extends Readable<T> {
 /**
  * multiplexes tauri events into a svelte store; never actually unsubscribes because the store protocol isn't async
  */
-export async function event<T>(name: string): Promise<Settable<T | undefined>> {
+export async function event<T>(name: string, initialValue: T): Promise<Settable<T>> {
     const subscribers = new Set<Subscriber<T>>();
-    let lastValue: T | undefined;
+    let lastValue: T = initialValue;
 
     const unlisten = await listen<T>(name, event => {
         for (let subscriber of subscribers) {
@@ -37,7 +37,7 @@ export async function event<T>(name: string): Promise<Settable<T | undefined>> {
             return () => subscribers.delete(run);
         },
 
-        set(value: T | undefined) {
+        set(value: T) {
             lastValue = value;
             emit(name, value);
         }
@@ -47,15 +47,11 @@ export async function event<T>(name: string): Promise<Settable<T | undefined>> {
 /**
  * subscribes to tauri events for a component's lifetime
  */
-export function onEvent<T>(name: string, callback: EventCallback<T>) {
-    console.log("request mount " + name);
+export function onEvent<T>(name: string, callback: (payload: T) => void) {
     onMount(() => {
-        console.log("do mount " + name);
-        let promise = listen<T>(name, e => { console.log("do receive " + name); callback(e); });
+        let promise = listen<T>(name, e => callback(e.payload));
         return () => {
-            console.log("request unmount " + name);
             promise.then((unlisten) => {
-                console.log("do unmount " + name);
                 unlisten();
             });
         };
@@ -79,7 +75,7 @@ export async function query<T>(command: string, request?: InvokeArgs): Promise<Q
 /**
  * call an IPC which, if successful, has backend side-effects
  */
-export function command(command: string, request?: InvokeArgs) {
+export function trigger(command: string, request?: InvokeArgs) {
     (async () => {
         try {
             await invoke(command, request);
@@ -101,14 +97,20 @@ export function mutate<T>(command: string, mutation: T) {
             let result = await Promise.race([fetch.then(r => Promise.resolve<Query<MutationResult>>({ type: "data", value: r })), delay<MutationResult>()]);
             currentMutation.set(result);
             let value = await fetch;
-            if (value.type != "InternalError" && value.type != "PreconditionError") {
-                if (value.type == "Updated" || value.type == "UpdatedSelection") {
+
+            // succeeded; dismiss modals
+            if (value.type == "Updated" || value.type == "UpdatedSelection" || value.type == "Unchanged") {
+                if (value.type != "Unchanged") {
                     repoStatusEvent.set(value.new_status);
                     if (value.type == "UpdatedSelection") {
                         revisionSelectEvent.set(value.new_selection);
                     }
                 }
                 currentMutation.set(null);
+
+                // failed; transition from overlay or delay to error
+            } else {
+                currentMutation.set({ type: "data", value });
             }
         } catch (error: any) {
             console.log(error);

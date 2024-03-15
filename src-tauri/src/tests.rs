@@ -70,7 +70,7 @@ mod session {
         assert!(matches!(config, RepoConfig::Workspace { .. }));
 
         let config = rx_bad_repo.recv()??;
-        assert!(matches!(config, RepoConfig::NoWorkspace { .. }));
+        assert!(matches!(config, RepoConfig::LoadError { .. }));
 
         Ok(())
     }

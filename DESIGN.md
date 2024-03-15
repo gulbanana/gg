@@ -29,7 +29,7 @@ including:
 - `QuerySession` - Paged query in progress, able to fetch efficiently
 
 IPC is divided into four categories, which is probably one too many:
-- Client->Server **commands** trigger backend actions for native UI integration.
+- Client->Server **triggers** cause the backend to perform native UI actions.
 - Client->Server **queries** request information from the session without affecting state.
 - Client->Server **mutations** modify session state in a structured fashion.
 - Server->Client and Client->Client **events** are broadcast to push information to the UI.

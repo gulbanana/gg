@@ -21,7 +21,7 @@ pub enum MutationResult {
         message: String,
     },
     InternalError {
-        message: String,
+        message: MultilineString,
     },
 }
 

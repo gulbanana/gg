@@ -128,8 +128,8 @@ fn main() -> Result<()> {
                     // it's ok if the worker has to restart, as long as we can notify the frontend of it
                     handler::fatal!(handle.emit(
                         "gg://repo/config",
-                        messages::RepoConfig::DeadWorker {
-                            error: format!("{err:#}"),
+                        messages::RepoConfig::WorkerError {
+                            message: format!("{err:#}"),
                         },
                     ));
                 }
@@ -414,9 +414,9 @@ fn try_open_repository(window: &Window, cwd: Option<PathBuf>) -> Result<()> {
             log::warn!("load workspace failed: {err}");
             window.emit(
                 "gg://repo/config",
-                messages::RepoConfig::NoWorkspace {
+                messages::RepoConfig::LoadError {
                     absolute_path: cwd.unwrap_or(PathBuf::new()).into(),
-                    error: format!("{:#?}", err),
+                    message: format!("{:#?}", err),
                 },
             )?;
         }

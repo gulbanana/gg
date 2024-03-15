@@ -2,17 +2,13 @@
     import type { RevId } from "./messages/RevId";
     import type { RevResult } from "./messages/RevResult";
     import type { RepoConfig } from "./messages/RepoConfig";
-    import type { UndoOperation } from "./messages/UndoOperation";
-    import type { Event } from "@tauri-apps/api/event";
-    import { type Query, query, command, mutate, delay, onEvent } from "./ipc.js";
+    import { type Query, query, trigger, mutate, delay, onEvent } from "./ipc.js";
     import {
         currentMutation,
         currentContext,
         repoConfigEvent,
         repoStatusEvent,
         revisionSelectEvent,
-        currentSource,
-        currentTarget,
     } from "./stores.js";
     import BranchMutator from "./mutators/BranchMutator";
     import ChangeMutator from "./mutators/ChangeMutator";
@@ -25,6 +21,7 @@
     import StatusBar from "./StatusBar.svelte";
     import ModalOverlay from "./ModalOverlay.svelte";
     import ModalDialog from "./ModalDialog.svelte";
+    import { onMount } from "svelte";
 
     let selection: Query<RevResult> = {
         type: "wait",
@@ -33,7 +30,7 @@
     document.addEventListener("keydown", (event) => {
         if (event.key === "o" && event.ctrlKey) {
             event.preventDefault();
-            command("forward_accelerator", { key: "o" });
+            trigger("forward_accelerator", { key: "o" });
         } else if (event.key == "escape") {
             currentMutation.set(null);
         }
@@ -41,7 +38,17 @@
 
     document.body.addEventListener("click", () => currentContext.set(null), true);
 
-    command("notify_window_ready");
+    // this is a special case - most triggers are fire-and-forget, but we really need a
+    // gg://repo/config event in response to this one. if it takes too long, we make our own
+    trigger("notify_window_ready");
+    let loadTimeout: number | null;
+    onMount(() => {
+        if ($repoConfigEvent.type == "Initial") {
+            loadTimeout = setTimeout(() => {
+                repoConfigEvent.set({ type: "TimeoutError" });
+            }, 10_000);
+        }
+    });
 
     onEvent("gg://context/revision", mutateRevision);
     onEvent("gg://context/tree", mutateTree);
@@ -51,6 +58,11 @@
     $: if ($repoStatusEvent && $revisionSelectEvent) loadChange($revisionSelectEvent.change_id);
 
     async function loadRepo(config: RepoConfig) {
+        if (loadTimeout) {
+            clearTimeout(loadTimeout);
+            loadTimeout = null;
+        }
+
         $revisionSelectEvent = undefined;
         if (config.type == "Workspace") {
             $repoStatusEvent = config.status;
@@ -76,26 +88,26 @@
         selection = rev;
     }
 
-    function mutateRevision(event: Event<string>) {
-        console.log(`mutateRevision(${event.payload})`, $currentContext);
+    function mutateRevision(event: string) {
+        console.log(`mutateRevision(${event})`, $currentContext);
         if ($currentContext?.type == "Revision") {
-            new RevisionMutator($currentContext.header).handle(event.payload);
+            new RevisionMutator($currentContext.header).handle(event);
         }
         $currentContext = null;
     }
 
-    function mutateTree(event: Event<string>) {
-        console.log(`mutateTree(${event.payload})`, $currentContext);
+    function mutateTree(event: string) {
+        console.log(`mutateTree(${event})`, $currentContext);
         if ($currentContext?.type == "Change") {
-            new ChangeMutator($currentContext.header, $currentContext.path).handle(event.payload);
+            new ChangeMutator($currentContext.header, $currentContext.path).handle(event);
         }
         $currentContext = null;
     }
 
-    function mutateBranch(event: Event<string>) {
-        console.log(`mutateBranch(${event.payload})`, $currentContext);
+    function mutateBranch(event: string) {
+        console.log(`mutateBranch(${event})`, $currentContext);
         if ($currentContext?.type == "Branch") {
-            new BranchMutator($currentContext.header, $currentContext.name).handle(event.payload);
+            new BranchMutator($currentContext.header, $currentContext.name).handle(event);
         }
         $currentContext = null;
     }
@@ -103,7 +115,15 @@
 
 <Zone operand={{ type: "Repository" }} alwaysTarget let:target>
     <div id="shell" class={$repoConfigEvent?.type == "Workspace" ? $repoConfigEvent.theme : ""}>
-        {#if $repoConfigEvent?.type == "Workspace"}
+        {#if $repoConfigEvent.type == "Initial"}
+            <Pane>
+                <h2 slot="header">Loading...</h2>
+            </Pane>
+
+            <div class="separator" />
+
+            <Pane />
+        {:else if $repoConfigEvent.type == "Workspace"}
             {#key $repoConfigEvent.absolute_path}
                 <LogPane default_query={$repoConfigEvent.default_query} latest_query={$repoConfigEvent.latest_query} />
             {/key}
@@ -127,17 +147,25 @@
                     <h2 slot="header">Loading...</h2>
                 </Pane>
             </BoundQuery>
-        {:else if !$repoConfigEvent}
+        {:else if $repoConfigEvent.type == "LoadError"}
             <ModalOverlay>
-                <ModalDialog title="Fatal Error" severe>
-                    <p>Error communicating with backend. You may need to restart GG to continue.</p>
+                <ModalDialog title="No Workspace Loaded">
+                    <p>{$repoConfigEvent.message}.</p>
+                    <p>Try opening a workspace from the Repository menu.</p>
+                </ModalDialog>
+            </ModalOverlay>
+        {:else if $repoConfigEvent.type == "TimeoutError"}
+            <ModalOverlay>
+                <ModalDialog title="No Workspace Loaded" severe>
+                    <p>Error communicating with backend: the operation is taking too long.</p>
+                    <p>You may need to restart GG to continue.</p>
                 </ModalDialog>
             </ModalOverlay>
         {:else}
             <ModalOverlay>
-                <ModalDialog title={$repoConfigEvent.type == "NoWorkspace" ? "No Workspace Loaded" : "Internal Error"}>
-                    <p>{$repoConfigEvent.error}.</p>
-                    <p>Try opening a workspace from the Repository menu.</p>
+                <ModalDialog title="Fatal Error" severe>
+                    <p>Error communicating with backend: {$repoConfigEvent.message}.</p>
+                    <p>You may need to restart GG to continue.</p>
                 </ModalDialog>
             </ModalOverlay>
         {/if}
@@ -150,7 +178,15 @@
             <ModalOverlay>
                 {#if $currentMutation.type == "data" && ($currentMutation.value.type == "InternalError" || $currentMutation.value.type == "PreconditionError")}
                     <ModalDialog title="Command Error" onClose={() => ($currentMutation = null)} severe>
-                        <p>{$currentMutation.value.message}</p>
+                        {#if $currentMutation.value.type == "InternalError"}
+                            <p>
+                                {#each $currentMutation.value.message.lines as line}
+                                    {line}<br />
+                                {/each}
+                            </p>
+                        {:else}
+                            <p>{$currentMutation.value.message}</p>
+                        {/if}
                     </ModalDialog>
                 {:else if $currentMutation.type == "error"}
                     <ModalDialog title="IPC Error" onClose={() => ($currentMutation = null)} severe>

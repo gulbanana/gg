@@ -75,6 +75,8 @@ pub struct TreePath {
     ts(export, export_to = "../src/messages/")
 )]
 pub enum RepoConfig {
+    #[allow(dead_code)]
+    Initial,
     Workspace {
         absolute_path: DisplayPath,
         git_remotes: Vec<String>,
@@ -83,12 +85,14 @@ pub enum RepoConfig {
         status: RepoStatus,
         theme: Option<String>,
     },
-    NoWorkspace {
+    #[allow(dead_code)]
+    TimeoutError,
+    LoadError {
         absolute_path: DisplayPath,
-        error: String,
+        message: String,
     },
-    DeadWorker {
-        error: String,
+    WorkerError {
+        message: String,
     },
 }
 

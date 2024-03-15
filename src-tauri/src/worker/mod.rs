@@ -2,7 +2,6 @@
 //! The worker thread is a state machine, running different handle functions based on loaded data
 
 use std::{
-    any::type_name_of_val,
     fmt::Debug,
     panic::{catch_unwind, AssertUnwindSafe},
     path::PathBuf,
@@ -51,6 +50,10 @@ pub enum SessionEvent {
 }
 
 pub trait Mutation: Debug {
+    fn describe(&self) -> String {
+        std::any::type_name::<Self>().to_owned()
+    }
+
     fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<messages::MutationResult>;
 
     fn execute_unboxed(self, ws: &mut WorkspaceSession) -> Result<messages::MutationResult>
@@ -85,9 +88,9 @@ impl Session for WorkerSession {
                             Ok(wd) => wd,
                             Err(err) => {
                                 latest_wd = None;
-                                tx.send(Ok(messages::RepoConfig::NoWorkspace {
+                                tx.send(Ok(messages::RepoConfig::LoadError {
                                     absolute_path: PathBuf::new().into(),
-                                    error: format!("{err:#}"),
+                                    message: format!("{err:#}"),
                                 }))?;
                                 break;
                             }
@@ -98,9 +101,9 @@ impl Session for WorkerSession {
                         Ok(ws) => ws,
                         Err(err) => {
                             latest_wd = None;
-                            tx.send(Ok(messages::RepoConfig::NoWorkspace {
+                            tx.send(Ok(messages::RepoConfig::LoadError {
                                 absolute_path: resolved_wd.into(),
-                                error: format!("{err:#}"),
+                                message: format!("{err:#}"),
                             }))?;
                             break;
                         }
@@ -256,16 +259,19 @@ impl Session for WorkspaceSession<'_> {
                     }
                 }
                 SessionEvent::ExecuteMutation { tx, mutation } => {
-                    let name = type_name_of_val(mutation.as_ref());
+                    let name = mutation.as_ref().describe();
                     match catch_unwind(AssertUnwindSafe(|| {
-                        mutation.execute(&mut self).context(name)
+                        mutation.execute(&mut self).with_context(|| name.clone())
                     })) {
                         Ok(result) => {
                             tx.send(match result {
                                 Ok(result) => result,
-                                Err(err) => messages::MutationResult::InternalError {
-                                    message: err.to_string(),
-                                },
+                                Err(err) => {
+                                    log::error!("{err:?}");
+                                    messages::MutationResult::InternalError {
+                                        message: (&*format!("{err:?}")).into(),
+                                    }
+                                }
                             })?;
                         }
                         Err(panic) => {
@@ -275,8 +281,11 @@ impl Session for WorkspaceSession<'_> {
                             }
                             .to_owned();
                             message.insert_str(0, ": ");
-                            message.insert_str(0, name);
-                            tx.send(messages::MutationResult::InternalError { message })?;
+                            message.insert_str(0, &name);
+                            log::error!("{message}");
+                            tx.send(messages::MutationResult::InternalError {
+                                message: (&*message).into(),
+                            })?;
                         }
                     }
                 }

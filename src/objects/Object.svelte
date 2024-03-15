@@ -5,7 +5,7 @@ Core component for direct-manipulation objects. A drag&drop source.
 
 <script lang="ts">
     import type { Operand } from "../messages/Operand";
-    import { command } from "../ipc";
+    import { trigger } from "../ipc";
     import { currentContext, currentSource } from "../stores";
     import { createEventDispatcher } from "svelte";
     import BinaryMutator from "../mutators/BinaryMutator";
@@ -44,7 +44,7 @@ Core component for direct-manipulation objects. A drag&drop source.
             event.stopPropagation();
 
             currentContext.set(operand);
-            command("forward_context_menu", { context: operand });
+            trigger("forward_context_menu", { context: operand });
         }
     }
 

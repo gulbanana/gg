@@ -1,6 +1,6 @@
 <script lang="ts">
     import type { RevResult } from "./messages/RevResult";
-    import { dragOverWidget, menuCommitEvent } from "./stores";
+    import { dragOverWidget } from "./stores";
     import ChangeObject from "./objects/ChangeObject.svelte";
     import RevisionObject from "./objects/RevisionObject.svelte";
     import RevisionMutator from "./mutators/RevisionMutator";
@@ -11,6 +11,7 @@
     import CheckWidget from "./controls/CheckWidget.svelte";
     import GraphNode from "./GraphNode.svelte";
     import Zone from "./objects/Zone.svelte";
+    import { onEvent } from "./ipc";
 
     export let rev: Extract<RevResult, { type: "Detail" }>;
 
@@ -24,7 +25,7 @@
             -1,
     );
 
-    $: mutator.handle($menuCommitEvent);
+    onEvent<string>("gg://menu/commit", (event) => mutator.handle(event));
 </script>
 
 <Pane>

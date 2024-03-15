@@ -6,10 +6,9 @@ import type { Operand } from "./messages/Operand";
 import { writable } from "svelte/store";
 import { event, type Query } from "./ipc";
 
-export const repoConfigEvent = await event<RepoConfig>("gg://repo/config");
-export const repoStatusEvent = await event<RepoStatus>("gg://repo/status");
-export const revisionSelectEvent = await event<RevHeader>("gg://revision/select");
-export const menuCommitEvent = await event<string>("gg://menu/commit");
+export const repoConfigEvent = await event<RepoConfig>("gg://repo/config", { type: "Initial" });
+export const repoStatusEvent = await event<RepoStatus | undefined>("gg://repo/status", undefined);
+export const revisionSelectEvent = await event<RevHeader | undefined>("gg://revision/select", undefined);
 
 export const currentMutation = writable<Query<MutationResult> | null>(null);
 export const currentContext = writable<Operand | null>();
