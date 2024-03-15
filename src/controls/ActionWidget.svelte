@@ -1,9 +1,10 @@
 <script lang="ts">
     import { currentMutation, dragOverWidget } from "../stores";
 
+    export let tip: string;
+    export let onClick: (event: MouseEvent) => void;
     export let safe: boolean = false;
     export let disabled: boolean = false;
-    export let onClick: (event: MouseEvent) => void;
 </script>
 
 {#if disabled || (!safe && $currentMutation)}
@@ -11,7 +12,12 @@
         <slot />
     </button>
 {:else}
-    <button class:safe on:click={onClick} on:dragenter={dragOverWidget} on:dragover={dragOverWidget}>
+    <button
+        class:safe
+        on:click={onClick}
+        on:dragenter={dragOverWidget}
+        on:dragover={dragOverWidget}
+        title={safe ? "" : tip}>
         <slot />
     </button>
 {/if}

@@ -5,6 +5,9 @@
 ### Added
 - Added git remotes to the status bar, with push & fetch commands.
 
+### Changed
+- Improved button animations.
+
 ## [0.15.2](releases/tag/v0.15.2)
 
 ### Fixed
