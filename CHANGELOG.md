@@ -1,8 +1,11 @@
 # GG Changelog
 
-## [0.15.1](releases/tag/v0.15.1)
+## [0.15.2](releases/tag/v0.15.2)
 
-A bugfix release.
+### Fixed
+- Right click -> Abandon revision... again.
+
+## [0.15.1](releases/tag/v0.15.1)
 
 ### Fixed
 - Several buttons had stopped working due to IPC changes:
