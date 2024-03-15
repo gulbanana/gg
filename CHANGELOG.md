@@ -3,8 +3,11 @@
 ## Unreleased
 
 ### Fixed
-- The Squash/Restore buttons on the right pane was nonfunctional.
-- Right click -> Abandon revision was nonfunctional.
+- Several buttons had stopped working due to IPC changes:
+  * The Squash/Restore buttons on the right pane.
+  * Right click -> Abandon revision.
+  * Right click -> Squash into parent.
+  * Right click -> Restore from parent.
 
 ## [0.15.0](releases/tag/v0.15.0)
 Initial experimental release. This version is compatible with Jujutsu 0.15.

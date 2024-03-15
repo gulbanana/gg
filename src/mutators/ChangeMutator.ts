@@ -32,7 +32,7 @@ export default class ChangeMutator {
 
     onSquash = () => {
         mutate<MoveChanges>("move_changes", {
-            from_change_id: this.#revision.change_id,
+            from_id: this.#revision.change_id,
             to_id: this.#revision.parent_ids[0],
             paths: [this.#path]
         });
@@ -40,7 +40,7 @@ export default class ChangeMutator {
 
     onRestore = () => {
         mutate<CopyChanges>("copy_changes", {
-            from_change_id: this.#revision.parent_ids[0],
+            from_id: this.#revision.parent_ids[0],
             to_id: this.#revision.change_id,
             paths: [this.#path]
         });
