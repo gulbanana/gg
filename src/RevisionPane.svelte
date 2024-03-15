@@ -41,13 +41,16 @@
         </span>
 
         <div class="checkout-commands">
-            <ActionWidget onClick={mutator.onNew}>
-                <Icon name="edit" /> New
-            </ActionWidget>
-            <ActionWidget onClick={mutator.onEdit} disabled={rev.header.is_immutable || rev.header.is_working_copy}>
+            <ActionWidget
+                tip="make working copy"
+                onClick={mutator.onEdit}
+                disabled={rev.header.is_immutable || rev.header.is_working_copy}>
                 <Icon name="edit-2" /> Edit
             </ActionWidget>
-            <ActionWidget onClick={mutator.onDuplicate}>
+            <ActionWidget tip="create a child" onClick={mutator.onNew}>
+                <Icon name="edit" /> New
+            </ActionWidget>
+            <ActionWidget tip="create a subling" onClick={mutator.onDuplicate}>
                 <Icon name="copy" /> Duplicate
             </ActionWidget>
         </div>
@@ -70,6 +73,7 @@
             <CheckWidget bind:checked={resetAuthor}>Reset</CheckWidget>
             <span></span>
             <ActionWidget
+                tip="set commit message"
                 onClick={() => mutator.onDescribe(fullDescription, resetAuthor)}
                 disabled={rev.header.is_immutable}>
                 <Icon name="file-text" /> Describe
@@ -98,11 +102,13 @@
             {#if rev.changes.length > 0}
                 <div class="move-commands">
                     <ActionWidget
+                        tip="move all changes to parent"
                         onClick={mutator.onSquash}
                         disabled={rev.header.is_immutable || rev.header.parent_ids.length != 1}>
                         <Icon name="upload" /> Squash
                     </ActionWidget>
                     <ActionWidget
+                        tip="copy all changes from parent"
                         onClick={mutator.onRestore}
                         disabled={rev.header.is_immutable || rev.header.parent_ids.length != 1}>
                         <Icon name="download" /> Restore
@@ -222,6 +228,7 @@
     .move-commands {
         height: 30px;
         width: 100%;
+        padding: 0 3px;
         display: flex;
         align-items: center;
         justify-content: space-between;

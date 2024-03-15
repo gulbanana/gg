@@ -1,0 +1,142 @@
+<script lang="ts">
+    import ActionWidget from "./controls/ActionWidget.svelte";
+    import Icon from "./controls/Icon.svelte";
+    import IdSpan from "./controls/IdSpan.svelte";
+    import { mutate } from "./ipc";
+    import type { Operand } from "./messages/Operand";
+    import type { UndoOperation } from "./messages/UndoOperation";
+    import type { RichHint } from "./mutators/BinaryMutator";
+    import BinaryMutator from "./mutators/BinaryMutator";
+    import { currentSource, currentTarget, repoConfigEvent, repoStatusEvent } from "./stores";
+
+    export let target: boolean;
+
+    let dropHint: RichHint | null = null;
+    let maybe = false;
+
+    $: setDropHint($currentSource, $currentTarget);
+
+    function setDropHint(source: Operand | null, target: Operand | null) {
+        maybe = false;
+        if (source) {
+            if (target) {
+                let canDrop = new BinaryMutator(source, target).canDrop();
+                if (canDrop.type == "yes") {
+                    dropHint = canDrop.hint;
+                    return;
+                } else if (canDrop.type == "maybe") {
+                    dropHint = [canDrop.hint];
+                    maybe = true;
+                    return;
+                }
+            }
+
+            let canDrag = BinaryMutator.canDrag(source);
+            if (canDrag.type == "yes") {
+                dropHint = canDrag.hint;
+                return;
+            }
+        }
+
+        dropHint = null;
+    }
+
+    function onUndo() {
+        mutate<UndoOperation>("undo_operation", null);
+    }
+
+    function onPush(remote: string) {}
+
+    function onFetch(remote: string) {}
+</script>
+
+{#if !dropHint}
+    <div id="status-bar" class="repo-bar">
+        <span>{$repoConfigEvent?.type == "Workspace" ? $repoConfigEvent.absolute_path : "No workspace"}</span>
+        <div id="status-remotes" class="substatus">
+            {#if $repoConfigEvent?.type == "Workspace"}
+                {#each $repoConfigEvent.git_remotes as remote}
+                    <div class="substatus">
+                        <ActionWidget tip="git push (all branches)" onClick={() => onPush(remote)}>
+                            <Icon name="upload-cloud" />
+                        </ActionWidget>
+                        <span>{remote}</span>
+                        <ActionWidget tip="git fetch" onClick={() => onFetch(remote)}>
+                            <Icon name="download-cloud" />
+                        </ActionWidget>
+                    </div>
+                {/each}
+            {/if}
+        </div>
+        <div id="status-operation" class="substatus">
+            <span>
+                {$repoConfigEvent?.type != "Workspace" ? "" : $repoStatusEvent?.operation_description ?? "no operation"}
+            </span>
+            <ActionWidget tip="undo latest operation" onClick={onUndo} disabled={$repoConfigEvent?.type != "Workspace"}>
+                <Icon name="rotate-ccw" /> Undo
+            </ActionWidget>
+        </div>
+    </div>
+{:else}
+    <div id="status-bar" class="drag-bar" class:target class:maybe>
+        <div>
+            {#each dropHint as run, i}
+                {#if typeof run == "string"}
+                    <span>{run}{i == dropHint.length - 1 ? "." : ""}</span>
+                {:else}
+                    <span>
+                        <IdSpan type={dropHint.commit ? "commit" : "change"} id={run} />{i == dropHint.length - 1
+                            ? "."
+                            : ""}</span>
+                {/if}
+            {/each}
+        </div>
+    </div>
+{/if}
+
+<style>
+    #status-bar {
+        grid-area: footer;
+        padding: 0 6px;
+        gap: 6px;
+        align-items: center;
+    }
+
+    .repo-bar {
+        display: grid;
+        grid-template-columns: minmax(auto, 33%) 1fr minmax(auto, 33%);
+    }
+
+    .drag-bar {
+        display: flex;
+        justify-content: center;
+    }
+
+    .substatus {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        white-space: nowrap;
+    }
+
+    #status-remotes {
+        justify-content: space-evenly;
+    }
+
+    #status-operation {
+        height: 100%;
+        padding: 0 3px;
+        justify-content: end;
+        overflow: hidden;
+    }
+
+    .target {
+        background: var(--ctp-flamingo);
+        color: black;
+    }
+
+    .maybe {
+        background: transparent;
+        color: var(--ctp-peach);
+    }
+</style>

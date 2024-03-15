@@ -6,12 +6,13 @@ Abstraction of dubious utility - it's only used in one place, because most IPC d
 <script lang="ts" generics="T">
     import type { Query as Query } from "../ipc";
 
-    export let query: Query<T>;
     interface $$Slots {
         wait: {};
         error: { message: string };
         default: { data: T };
     }
+
+    export let query: Query<T>;
 
     let type = query.type;
 </script>

@@ -21,18 +21,14 @@
     import RevisionPane from "./RevisionPane.svelte";
     import LogPane from "./LogPane.svelte";
     import BoundQuery from "./controls/BoundQuery.svelte";
-    import Icon from "./controls/Icon.svelte";
-    import ActionWidget from "./controls/ActionWidget.svelte";
     import Zone from "./objects/Zone.svelte";
-    import BinaryMutator, { type RichHint } from "./mutators/BinaryMutator";
-    import type { Operand } from "./messages/Operand";
-    import IdSpan from "./controls/IdSpan.svelte";
+    import StatusBar from "./StatusBar.svelte";
+    import ModalOverlay from "./ModalOverlay.svelte";
+    import ModalDialog from "./ModalDialog.svelte";
 
     let selection: Query<RevResult> = {
         type: "wait",
     };
-    let dropHint: RichHint | null = null;
-    let hint = false;
 
     document.addEventListener("keydown", (event) => {
         if (event.key === "o" && event.ctrlKey) {
@@ -53,7 +49,6 @@
 
     $: if ($repoConfigEvent) loadRepo($repoConfigEvent);
     $: if ($repoStatusEvent && $revisionSelectEvent) loadChange($revisionSelectEvent.change_id);
-    $: setDropHint($currentSource, $currentTarget);
 
     async function loadRepo(config: RepoConfig) {
         $revisionSelectEvent = undefined;
@@ -104,35 +99,6 @@
         }
         $currentContext = null;
     }
-
-    function setDropHint(source: Operand | null, target: Operand | null) {
-        hint = false;
-        if (source) {
-            if (target) {
-                let canDrop = new BinaryMutator(source, target).canDrop();
-                if (canDrop.type == "yes") {
-                    dropHint = canDrop.hint;
-                    return;
-                } else if (canDrop.type == "maybe") {
-                    dropHint = [canDrop.hint];
-                    hint = true;
-                    return;
-                }
-            }
-
-            let canDrag = BinaryMutator.canDrag(source);
-            if (canDrag.type == "yes") {
-                dropHint = canDrag.hint;
-                return;
-            }
-        }
-
-        dropHint = null;
-    }
-
-    function onUndo() {
-        mutate<UndoOperation>("undo_operation", null);
-    }
 </script>
 
 <Zone operand={{ type: "Repository" }} alwaysTarget let:target>
@@ -155,92 +121,43 @@
                 {/if}
                 <Pane slot="error" let:message>
                     <h2 slot="header">Error</h2>
-                    <p slot="body" class="error-text">{message}</p>
+                    <p slot="body">{message}</p>
                 </Pane>
                 <Pane slot="wait">
                     <h2 slot="header">Loading...</h2>
                 </Pane>
             </BoundQuery>
-
-            {#if $currentMutation}
-                <div id="overlay">
-                    {#if $currentMutation.type == "data"}
-                        {#if $currentMutation.value.type == "InternalError" || $currentMutation.value.type == "PreconditionError"}
-                            <div id="overlay-chrome">
-                                <div id="overlay-content">
-                                    <h3 class="error-text">Command Error</h3>
-                                    <p>
-                                        {$currentMutation.value.message}
-                                    </p>
-                                </div>
-
-                                <ActionWidget safe onClick={() => ($currentMutation = null)}>
-                                    <Icon name="x" />
-                                </ActionWidget>
-                            </div>
-                        {/if}
-                    {:else if $currentMutation.type == "error"}
-                        <div id="overlay-chrome">
-                            <div id="overlay-content">
-                                <h3 class="error-text">IPC Error</h3>
-                                <p>
-                                    {$currentMutation.message}
-                                </p>
-                            </div>
-
-                            <ActionWidget safe onClick={() => ($currentMutation = null)}>
-                                <Icon name="x" />
-                            </ActionWidget>
-                        </div>
-                    {/if}
-                </div>
-            {/if}
         {:else if !$repoConfigEvent}
-            <div id="fatal-error">
-                <div id="error-content">
-                    <p class="error-text">Error communicating with backend. You may need to restart GG to continue.</p>
-                </div>
-            </div>
+            <ModalOverlay>
+                <ModalDialog title="Fatal Error" severe>
+                    <p>Error communicating with backend. You may need to restart GG to continue.</p>
+                </ModalDialog>
+            </ModalOverlay>
         {:else}
-            <div id="fatal-error">
-                <div id="error-content">
-                    {#if $repoConfigEvent.type == "NoWorkspace"}
-                        <h2>No Workspace Loaded</h2>
-                    {:else}
-                        <h2 class="error-text">Internal Error</h2>
-                    {/if}
-                    <p>{$repoConfigEvent.error}</p>
+            <ModalOverlay>
+                <ModalDialog title={$repoConfigEvent.type == "NoWorkspace" ? "No Workspace Loaded" : "Internal Error"}>
+                    <p>{$repoConfigEvent.error}.</p>
                     <p>Try opening a workspace from the Repository menu.</p>
-                </div>
-            </div>
+                </ModalDialog>
+            </ModalOverlay>
         {/if}
 
-        <div class="separator span" />
+        <div class="separator" style="grid-area: 2/1/3/4" />
 
-        {#if !dropHint}
-            <div id="status-bar" class="span repo-bar">
-                <span>{$repoConfigEvent?.type == "Workspace" ? $repoConfigEvent.absolute_path : "No workspace"}</span>
-                <span id="status-operation">{$repoStatusEvent?.operation_description ?? "no operation"}</span>
-                <ActionWidget onClick={onUndo} disabled={!$repoConfigEvent}>
-                    <Icon name="rotate-ccw" /> Undo
-                </ActionWidget>
-            </div>
-        {:else}
-            <div id="status-bar" class="span drag-bar" class:target class:hint>
-                <div>
-                    {#each dropHint as run, i}
-                        {#if typeof run == "string"}
-                            <span>{run}{i == dropHint.length - 1 ? "." : ""}</span>
-                        {:else}
-                            <span
-                                ><IdSpan type={dropHint.commit ? "commit" : "change"} id={run}></IdSpan>{i ==
-                                dropHint.length - 1
-                                    ? "."
-                                    : ""}</span>
-                        {/if}
-                    {/each}
-                </div>
-            </div>
+        <StatusBar {target} />
+
+        {#if $currentMutation}
+            <ModalOverlay>
+                {#if $currentMutation.type == "data" && ($currentMutation.value.type == "InternalError" || $currentMutation.value.type == "PreconditionError")}
+                    <ModalDialog title="Command Error" onClose={() => ($currentMutation = null)} severe>
+                        <p>{$currentMutation.value.message}</p>
+                    </ModalDialog>
+                {:else if $currentMutation.type == "error"}
+                    <ModalDialog title="IPC Error" onClose={() => ($currentMutation = null)} severe>
+                        <p>{$currentMutation.message}</p>
+                    </ModalDialog>
+                {/if}
+            </ModalOverlay>
         {/if}
     </div>
 </Zone>
@@ -253,6 +170,10 @@
         display: grid;
         grid-template-columns: 1fr 3px 1fr;
         grid-template-rows: 1fr 3px 30px;
+        grid-template-areas:
+            "content content content"
+            ". . ."
+            "footer footer footer";
 
         background: var(--ctp-crust);
         color: var(--ctp-text);
@@ -262,109 +183,5 @@
 
     .separator {
         background: var(--ctp-overlay0);
-    }
-
-    .span {
-        grid-column: 1/4;
-    }
-
-    #status-bar {
-        padding: 0 9px;
-        gap: 6px;
-        align-items: center;
-    }
-
-    .repo-bar {
-        display: grid;
-        grid-template-columns: auto 1fr auto;
-    }
-
-    .drag-bar {
-        display: flex;
-        justify-content: center;
-    }
-
-    .target {
-        background: var(--ctp-flamingo);
-        color: black;
-    }
-
-    .hint {
-        background: transparent;
-        color: var(--ctp-peach);
-    }
-
-    #status-operation {
-        display: flex;
-        justify-content: end;
-        white-space: nowrap;
-        overflow: hidden;
-    }
-
-    #overlay {
-        z-index: 1;
-        position: absolute;
-        top: 0;
-        right: 0;
-        bottom: 0;
-        left: 0;
-        background: rgb(var(--ctp-overlay1-rgb) / 40%);
-
-        display: grid;
-        grid-template-columns: 1fr auto 1fr;
-        grid-template-rows: 1fr auto 2fr;
-    }
-
-    #overlay-chrome {
-        grid-area: 2/2/2/2;
-
-        background: var(--ctp-mantle);
-        border-radius: 9px;
-        border: 3px solid var(--ctp-overlay1);
-
-        display: grid;
-        grid-template-columns: 30px 1fr 33px;
-        grid-template-rows: 30px auto 30px;
-    }
-
-    #overlay-chrome > :global(button) {
-        grid-area: 1/3/1/3;
-        width: 30px;
-        height: 30px;
-        margin: 1px 3px 0 0;
-    }
-
-    #overlay-content {
-        grid-area: 2/2/2/2;
-        padding: 0 30px;
-    }
-
-    #overlay-content > :first-child {
-        margin-top: 0;
-    }
-
-    #overlay-content > :last-child {
-        margin-bottom: 0;
-    }
-
-    #fatal-error {
-        grid-column: 1/4;
-        display: grid;
-        align-items: center;
-        justify-content: center;
-    }
-
-    #error-content {
-        background: var(--ctp-mantle);
-        padding: 30px;
-        border-radius: 9px;
-    }
-
-    #error-content > p:last-child {
-        margin-bottom: 0;
-    }
-
-    .error-text {
-        color: var(--ctp-red);
     }
 </style>

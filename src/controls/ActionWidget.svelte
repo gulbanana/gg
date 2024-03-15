@@ -22,6 +22,7 @@
         font-size: 16px;
 
         outline: none;
+        margin: 0;
         background: var(--ctp-flamingo);
         border-width: 1px;
         border-radius: 3px;
@@ -47,13 +48,12 @@
             color: color-mix(in lch, black, var(--ctp-lavender));
         }
         &:active {
-            padding: 2px 5px 0px 7px;
-            box-shadow:
-                1px 1px var(--ctp-lavender),
-                2px 2px var(--ctp-overlay0);
-            border-color: var(--ctp-lavender);
-            border-right-color: var(--ctp-maroon);
-            border-bottom-color: var(--ctp-maroon);
+            margin: 1px 0px 0px 1px;
+            padding: 1px 5px 0px 6px;
+            box-shadow: 1px 1px var(--ctp-overlay0);
+            &:focus-visible {
+                padding: 1px 4px 0px 5px;
+            }
         }
     }
 
