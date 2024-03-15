@@ -73,7 +73,7 @@ export default class RevisionMutator {
 
     onAbandon = () => {
         mutate<AbandonRevisions>("abandon_revisions", {
-            change_ids: [this.#revision.change_id],
+            commit_ids: [this.#revision.change_id],
         });
     };
 
@@ -87,7 +87,7 @@ export default class RevisionMutator {
 
     onSquash = () => {
         mutate<MoveChanges>("move_changes", {
-            from_change_id: this.#revision.change_id,
+            from_id: this.#revision.change_id,
             to_id: this.#revision.parent_ids[0],
             paths: []
         });
@@ -95,7 +95,7 @@ export default class RevisionMutator {
 
     onRestore = () => {
         mutate<CopyChanges>("copy_changes", {
-            from_change_id: this.#revision.parent_ids[0],
+            from_id: this.#revision.parent_ids[0],
             to_id: this.#revision.change_id,
             paths: []
         });
