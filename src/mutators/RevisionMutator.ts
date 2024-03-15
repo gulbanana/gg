@@ -73,7 +73,7 @@ export default class RevisionMutator {
 
     onAbandon = () => {
         mutate<AbandonRevisions>("abandon_revisions", {
-            commit_ids: [this.#revision.change_id],
+            commit_ids: [this.#revision.commit_id],
         });
     };
 
