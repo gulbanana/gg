@@ -1,13 +1,13 @@
 <script lang="ts">
-    import { currentMutation, dragOverWidget } from "../stores";
+    import { dragOverWidget, hasModal } from "../stores";
 
-    export let tip: string;
+    export let tip: string = "";
     export let onClick: (event: MouseEvent) => void;
     export let safe: boolean = false;
     export let disabled: boolean = false;
 </script>
 
-{#if disabled || (!safe && $currentMutation)}
+{#if disabled || (!safe && $hasModal)}
     <button disabled class:safe on:dragenter={dragOverWidget} on:dragover={dragOverWidget}>
         <slot />
     </button>
@@ -51,7 +51,7 @@
             border-color: var(--ctp-lavender);
             border-width: 2px;
             padding: 0px 5px;
-            color: color-mix(in lch, black, var(--ctp-lavender));
+            text-decoration: underline;
         }
         &:active {
             margin: 1px 0px 0px 1px;

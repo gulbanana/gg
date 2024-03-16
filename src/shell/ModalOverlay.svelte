@@ -1,3 +1,15 @@
+<script lang="ts">
+    import { onMount } from "svelte";
+    import { hasModal } from "../stores";
+
+    onMount(() => {
+        $hasModal = true;
+        return () => {
+            $hasModal = false;
+        };
+    });
+</script>
+
 <div id="overlay">
     <slot />
 </div>

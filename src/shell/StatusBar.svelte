@@ -1,15 +1,15 @@
 <script lang="ts">
-    import ActionWidget from "./controls/ActionWidget.svelte";
-    import Icon from "./controls/Icon.svelte";
-    import IdSpan from "./controls/IdSpan.svelte";
-    import { mutate } from "./ipc";
-    import type { FetchRemote } from "./messages/FetchRemote";
-    import type { Operand } from "./messages/Operand";
-    import type { PushRemote } from "./messages/PushRemote";
-    import type { UndoOperation } from "./messages/UndoOperation";
-    import type { RichHint } from "./mutators/BinaryMutator";
-    import BinaryMutator from "./mutators/BinaryMutator";
-    import { currentSource, currentTarget, repoConfigEvent, repoStatusEvent } from "./stores";
+    import ActionWidget from "../controls/ActionWidget.svelte";
+    import Icon from "../controls/Icon.svelte";
+    import IdSpan from "../controls/IdSpan.svelte";
+    import { mutate } from "../ipc";
+    import type { FetchRemote } from "../messages/FetchRemote";
+    import type { Operand } from "../messages/Operand";
+    import type { PushRemote } from "../messages/PushRemote";
+    import type { UndoOperation } from "../messages/UndoOperation";
+    import type { RichHint } from "../mutators/BinaryMutator";
+    import BinaryMutator from "../mutators/BinaryMutator";
+    import { currentSource, currentTarget, hasModal, repoConfigEvent, repoStatusEvent } from "../stores";
 
     export let target: boolean;
 
@@ -61,7 +61,7 @@
 </script>
 
 {#if !dropHint}
-    <div id="status-bar" class="repo-bar">
+    <div id="status-bar" class="repo-bar" inert={$hasModal}>
         <div class="substatus">
             <span id="status-workspace">
                 {$repoConfigEvent?.type == "Workspace" ? $repoConfigEvent.absolute_path : "No workspace"}

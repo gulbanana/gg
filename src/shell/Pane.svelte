@@ -1,4 +1,8 @@
-<section>
+<script lang="ts">
+    import { hasModal } from "../stores";
+</script>
+
+<section inert={$hasModal}>
     <div class="header">
         <slot name="header" />
     </div>

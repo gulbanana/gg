@@ -6,6 +6,7 @@ These changes may or may not be implemented in the future.
 * bug: mutations that hang forever also leave the gui in an overlay state (but it's not clear we could recover from this...)
 * bug: open menu command sometimes opens multiple dialogues
 * bug: does not work when core.fsmonitor is true (watchman support not compiled in?)
+* bug: appimage breaks cwd(). look at the OWD envar
 * edge case: change ids that refer to more than one rev. currently both are selected and the right pane displays an error. 
 * edge case: what happens when we snapshot after the CLI does? when there's nothing *to* snapshot, we don't refresh the ui...
 * edge case: mutations can fail due to ambiguity due to other writers; this should update the UI. maybe use a special From on resolve_change
@@ -23,8 +24,9 @@ These changes may or may not be implemented in the future.
 * feat: remotes/fetch/push
 * feat: tags display & management
 * feat: view commit ids in log (configurable?)
-* feat: structured op descs - want to be able to present them more nicely, extracting ids etc. tags?
-* feat: view repo at different ops (slider?) 
+* feat: structured op descs - want to be able to present them more nicely, extracting ids etc. tags? 
+    - there's a request for this to be part of jj
+* feat: view repo at different ops (slider? entire pane?) 
 * feat: more mutations
     - delete local branch
     - drag branches onto each other to create a merge? might be a little too opinionated

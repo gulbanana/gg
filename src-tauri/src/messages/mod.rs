@@ -6,7 +6,7 @@ mod queries;
 pub use mutations::*;
 pub use queries::*;
 
-use std::path::Path;
+use std::{collections::HashMap, path::Path};
 
 use chrono::{DateTime, FixedOffset, Local, LocalResult, TimeZone, Utc};
 use jj_lib::backend::{Signature, Timestamp};
@@ -163,4 +163,26 @@ pub enum Operand {
         header: RevHeader,
         name: RefName,
     },
+}
+
+#[derive(Serialize, Debug, Clone)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(TS),
+    ts(export, export_to = "../src/messages/")
+)]
+pub struct InputRequest {
+    pub title: String,
+    pub fields: Vec<String>,
+}
+
+#[derive(Deserialize, Debug)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(TS),
+    ts(export, export_to = "../src/messages/")
+)]
+pub struct InputResponse {
+    pub cancel: bool,
+    pub fields: HashMap<String, String>,
 }

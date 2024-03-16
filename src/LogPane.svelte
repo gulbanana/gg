@@ -4,7 +4,7 @@
     import type { LogRow } from "./messages/LogRow.js";
     import { query, delay } from "./ipc.js";
     import { repoStatusEvent, revisionSelectEvent } from "./stores.js";
-    import Pane from "./Pane.svelte";
+    import Pane from "./shell/Pane.svelte";
     import { type EnhancedRow, default as GraphLog, type EnhancedLine } from "./GraphLog.svelte";
     import RevisionSummary from "./objects/RevisionObject.svelte";
     import SelectWidget from "./controls/SelectWidget.svelte";

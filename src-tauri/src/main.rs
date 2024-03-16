@@ -25,10 +25,13 @@ use tauri_plugin_window_state::StateFlags;
 use gui_util::WorkerSession;
 use messages::{
     AbandonRevisions, CheckoutRevision, CopyChanges, CreateRevision, DescribeRevision,
-    DuplicateRevisions, FetchRemote, InsertRevision, MoveBranch, MoveChanges, MoveRevision,
-    MoveSource, MutationResult, PushRemote, RevId, TrackBranch, UndoOperation, UntrackBranch,
+    DuplicateRevisions, FetchRemote, InputResponse, InsertRevision, MoveBranch, MoveChanges,
+    MoveRevision, MoveSource, MutationResult, PushRemote, RevId, TrackBranch, UndoOperation,
+    UntrackBranch,
 };
 use worker::{Mutation, Session, SessionEvent};
+
+use crate::messages::InputRequest;
 
 #[derive(Default)]
 struct AppState(Mutex<HashMap<String, WindowState>>);
@@ -86,6 +89,7 @@ fn main() -> Result<()> {
         )
         .invoke_handler(tauri::generate_handler![
             notify_window_ready,
+            notify_input,
             forward_accelerator,
             forward_context_menu,
             query_log,
@@ -178,6 +182,11 @@ fn notify_window_ready(window: Window) {
     log::debug!("window opened; loading cwd");
     handler::fatal!(window.show());
     handler::nonfatal!(try_open_repository(&window, None));
+}
+
+#[tauri::command(async)]
+fn notify_input(window: Window, response: InputResponse) -> Result<(), InvokeError> {
+    Err(InvokeError::from_anyhow(anyhow!("Received {:?}", response)))
 }
 
 #[tauri::command]

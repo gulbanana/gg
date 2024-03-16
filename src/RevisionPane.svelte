@@ -7,7 +7,7 @@
     import ActionWidget from "./controls/ActionWidget.svelte";
     import Icon from "./controls/Icon.svelte";
     import IdSpan from "./controls/IdSpan.svelte";
-    import Pane from "./Pane.svelte";
+    import Pane from "./shell/Pane.svelte";
     import CheckWidget from "./controls/CheckWidget.svelte";
     import GraphNode from "./GraphNode.svelte";
     import Zone from "./objects/Zone.svelte";

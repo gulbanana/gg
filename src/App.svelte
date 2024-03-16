@@ -9,20 +9,24 @@
         repoConfigEvent,
         repoStatusEvent,
         revisionSelectEvent,
+        currentInput,
     } from "./stores.js";
     import BranchMutator from "./mutators/BranchMutator";
     import ChangeMutator from "./mutators/ChangeMutator";
     import RevisionMutator from "./mutators/RevisionMutator";
-    import Pane from "./Pane.svelte";
+    import Pane from "./shell/Pane.svelte";
     import RevisionPane from "./RevisionPane.svelte";
     import LogPane from "./LogPane.svelte";
     import BoundQuery from "./controls/BoundQuery.svelte";
     import Zone from "./objects/Zone.svelte";
-    import StatusBar from "./StatusBar.svelte";
-    import ModalOverlay from "./ModalOverlay.svelte";
-    import ModalDialog from "./ModalDialog.svelte";
+    import StatusBar from "./shell/StatusBar.svelte";
+    import ModalOverlay from "./shell/ModalOverlay.svelte";
+    import ErrorDialog from "./shell/ErrorDialog.svelte";
     import { onMount } from "svelte";
     import IdSpan from "./controls/IdSpan.svelte";
+    import InputDialog from "./shell/InputDialog.svelte";
+    import type { InputRequest } from "./messages/InputRequest";
+    import type { InputResponse } from "./messages/InputResponse";
 
     let selection: Query<RevResult> = {
         type: "wait",
@@ -32,8 +36,6 @@
         if (event.key === "o" && event.ctrlKey) {
             event.preventDefault();
             trigger("forward_accelerator", { key: "o" });
-        } else if (event.key == "escape") {
-            currentMutation.set(null);
         }
     });
 
@@ -54,6 +56,7 @@
     onEvent("gg://context/revision", mutateRevision);
     onEvent("gg://context/tree", mutateTree);
     onEvent("gg://context/branch", mutateBranch);
+    onEvent("gg://input", requestInput);
 
     $: if ($repoConfigEvent) loadRepo($repoConfigEvent);
     $: if ($repoStatusEvent && $revisionSelectEvent) loadChange($revisionSelectEvent.id);
@@ -113,6 +116,15 @@
         }
         $currentContext = null;
     }
+
+    function requestInput(event: InputRequest) {
+        $currentInput = Object.assign(event, {
+            callback: (response: InputResponse) => {
+                $currentInput = null;
+                trigger("notify_input", { response });
+            },
+        });
+    }
 </script>
 
 <Zone operand={{ type: "Repository" }} alwaysTarget let:target>
@@ -153,24 +165,24 @@
             </BoundQuery>
         {:else if $repoConfigEvent.type == "LoadError"}
             <ModalOverlay>
-                <ModalDialog title="No Workspace Loaded">
+                <ErrorDialog title="No Workspace Loaded">
                     <p>{$repoConfigEvent.message}.</p>
                     <p>Try opening a workspace from the Repository menu.</p>
-                </ModalDialog>
+                </ErrorDialog>
             </ModalOverlay>
         {:else if $repoConfigEvent.type == "TimeoutError"}
             <ModalOverlay>
-                <ModalDialog title="No Workspace Loaded" severe>
+                <ErrorDialog title="No Workspace Loaded" severe>
                     <p>Error communicating with backend: the operation is taking too long.</p>
                     <p>You may need to restart GG to continue.</p>
-                </ModalDialog>
+                </ErrorDialog>
             </ModalOverlay>
         {:else}
             <ModalOverlay>
-                <ModalDialog title="Fatal Error" severe>
+                <ErrorDialog title="Fatal Error" severe>
                     <p>Error communicating with backend: {$repoConfigEvent.message}.</p>
                     <p>You may need to restart GG to continue.</p>
-                </ModalDialog>
+                </ErrorDialog>
             </ModalOverlay>
         {/if}
 
@@ -181,7 +193,7 @@
         {#if $currentMutation}
             <ModalOverlay>
                 {#if $currentMutation.type == "data" && ($currentMutation.value.type == "InternalError" || $currentMutation.value.type == "PreconditionError")}
-                    <ModalDialog title="Command Error" onClose={() => ($currentMutation = null)} severe>
+                    <ErrorDialog title="Command Error" onClose={() => ($currentMutation = null)} severe>
                         {#if $currentMutation.value.type == "InternalError"}
                             <p>
                                 {#each $currentMutation.value.message.lines as line}
@@ -191,12 +203,19 @@
                         {:else}
                             <p>{$currentMutation.value.message}</p>
                         {/if}
-                    </ModalDialog>
+                    </ErrorDialog>
                 {:else if $currentMutation.type == "error"}
-                    <ModalDialog title="IPC Error" onClose={() => ($currentMutation = null)} severe>
+                    <ErrorDialog title="IPC Error" onClose={() => ($currentMutation = null)} severe>
                         <p>{$currentMutation.message}</p>
-                    </ModalDialog>
+                    </ErrorDialog>
                 {/if}
+            </ModalOverlay>
+        {:else if $currentInput}
+            <ModalOverlay>
+                <InputDialog
+                    title={$currentInput.title}
+                    fields={$currentInput.fields}
+                    on:response={(event) => $currentInput?.callback(event.detail)} />
             </ModalOverlay>
         {/if}
     </div>
