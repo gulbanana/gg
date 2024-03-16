@@ -1,0 +1,41 @@
+name: 'ci'
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  svelte-check:
+    runs-on: "ubuntu-22.04"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v3
+        with:
+            node-version: '20'
+            cache: 'npm'
+      
+      - name: install packages
+        run: npm install --package-lock=false 
+
+      - name: run check
+        run: npm run check
+
+  cargo-test:
+    runs-on: "ubuntu-22.04"
+    steps:
+      - uses: actions/checkout@v4
+            
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: run tests
+        run: cd src-tauri && cargo test
+
