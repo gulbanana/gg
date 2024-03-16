@@ -214,7 +214,7 @@ impl WorkspaceSession<'_> {
 
     pub fn evaluate_revset_expr<'op>(&'op self, revset_expr: Rc<RevsetExpression>) -> Result<Box<dyn Revset + 'op>, RevsetError> {
         let resolved_expression =
-            revset_expr.resolve_user_expression(self.operation.repo.as_ref(), &self.resolver())?;            
+            revset_expr.resolve_user_expression(self.operation.repo.as_ref(), &self.resolver())?;
         let revset = resolved_expression.evaluate(self.operation.repo.as_ref())?;
         Ok(revset)
     }
@@ -260,7 +260,12 @@ impl WorkspaceSession<'_> {
     // policy: some commands try to operate on a change in order to preserve visual identity, but 
     // can fall back to operating on the commit described by the change at the time of the gesture
     pub fn resolve_optional_id(&self, id: &RevId) -> Result<Option<Commit>, RevsetError> {
-        let change_revset = self.evaluate_revset_str(&id.change.hex)?;
+        let change_revset = match self.evaluate_revset_str(&id.change.hex) {
+            Ok(revset) => revset,
+            Err(RevsetError::Resolution(RevsetResolutionError::NoSuchRevision { .. })) => return Ok(None),
+            Err(err) => return Err(err)
+        };
+
         let mut change_iter = change_revset.as_ref().iter().commits(self.operation.repo.store()).fuse();
         match (change_iter.next(), change_iter.next()) {
             (Some(commit), None) => Ok(Some(commit?)),
@@ -277,18 +282,26 @@ impl WorkspaceSession<'_> {
     }
 
     // policy: most commands prefer to operate on a change and will fail if the change has become ambiguous 
-    pub fn resolve_optional_change(&self, id: &messages::ChangeId) -> Result<Option<Commit>, RevsetError> {
-        let revset = self.evaluate_revset_str(&id.hex)?;
+    pub fn resolve_optional_change(&self, id: &messages::ChangeId) -> Result<Option<Commit>, RevsetError> {        
+        let revset = match self.evaluate_revset_str(&id.hex) {
+            Ok(revset) => revset,
+            Err(RevsetError::Resolution(RevsetResolutionError::NoSuchRevision { .. })) => return Ok(None),
+            Err(err) => return Err(err)
+        };
+
         self.resolve_optional(revset)
     }
 
     // policy: enforces that the requested change maps only to the expected commit
     pub fn resolve_single_change(&self, id: &RevId) -> Result<Commit, RevsetError> {
         match self.resolve_optional_change(&id.change)? {
-            Some(commit) => if commit.id().hex().starts_with(&id.commit.prefix) {
-                Ok(commit)
-            } else {
-                Err(RevsetError::Other(anyhow!(r#""{}" didn't resolve to the expected commit {}"#, id.change.prefix, id.commit.prefix)))
+            Some(commit) => {
+                let resolved_id = commit.id();
+                if resolved_id == self.wc_id() || resolved_id.hex().starts_with(&id.commit.prefix) {
+                    Ok(commit)
+                } else {
+                    Err(RevsetError::Other(anyhow!(r#""{}" didn't resolve to the expected commit {}"#, id.change.prefix, id.commit.prefix)))
+                }
             }
             None => Err(RevsetError::Other(anyhow!(r#""{}" didn't resolve to any revisions"#, id.change.prefix)))
         }

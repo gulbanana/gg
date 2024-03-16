@@ -38,15 +38,19 @@ mod revs {
     use super::mkid;
 
     pub fn working_copy() -> RevId {
-        mkid("kppkuplp", "a625ed5a")
+        mkid("kppkuplp", "a625ed5aa71d7c68b98b1d1521b2e1cbd0c54a0d")
     }
 
     pub fn main_branch() -> RevId {
-        mkid("mnkoropy", "87e9c6c0")
+        mkid("mnkoropy", "87e9c6c03e1b727ff712d962c03b32fffb704bc0")
     }
 
     pub fn conflict_branch() -> RevId {
-        mkid("nwrnuwyp", "880abeef")
+        mkid("nwrnuwyp", "880abeefdd3ac344e2a0901c5f486d02d34053da")
+    }
+
+    pub fn resolve_conflict() -> RevId {
+        mkid("rrxroxys", "db297552443bcafc0f0715b7ace7fb4488d7954d")
     }
 }
 
@@ -58,7 +62,7 @@ mod session {
     use crate::{
         gui_util::WorkerSession,
         messages::{LogPage, RepoConfig, RevResult},
-        tests::mkid,
+        tests::{mkid, revs},
         worker::{Session, SessionEvent},
     };
 
@@ -279,8 +283,6 @@ mod session {
         let (tx_rev, rx_rev) = channel::<Result<RevResult>>();
         let (tx_page2, rx_page2) = channel::<Result<LogPage>>();
 
-        let wc = mkid("kppkuplp", "a625ed5a");
-
         tx.send(SessionEvent::OpenWorkspace {
             tx: tx_load,
             wd: Some(repo.path().to_owned()),
@@ -289,7 +291,10 @@ mod session {
             tx: tx_page1,
             query: "all()".to_owned(),
         })?;
-        tx.send(SessionEvent::QueryRevision { tx: tx_rev, id: wc })?;
+        tx.send(SessionEvent::QueryRevision {
+            tx: tx_rev,
+            id: revs::working_copy(),
+        })?;
         tx.send(SessionEvent::QueryLogNextPage { tx: tx_page2 })?;
         tx.send(SessionEvent::EndSession)?;
 
@@ -607,7 +612,8 @@ mod mutation {
             matches!(rev, RevResult::Detail { header, changes, .. } if header.description.lines[0] == "" && changes.len() == 0)
         );
 
-        fs::write(repo.path().join("new.txt"), []).unwrap();
+        fs::write(repo.path().join("new.txt"), []).unwrap(); // changes the WC commit
+
         DescribeRevision {
             id: revs::working_copy(),
             new_description: "wip".to_owned(),
@@ -626,7 +632,6 @@ mod mutation {
     #[test]
     fn move_changes() -> Result<()> {
         let repo = mkrepo();
-        let child = mkid("rrxroxys", "db297552"); // resolves conflict
 
         let mut session = WorkerSession::default();
         let mut ws = session.load_directory(repo.path())?;
@@ -635,7 +640,7 @@ mod mutation {
         assert!(matches!(parent_rev, RevResult::Detail { header, .. } if header.has_conflict));
 
         let result = MoveChanges {
-            from_id: child,
+            from_id: revs::resolve_conflict(),
             to_id: revs::conflict_branch().commit,
             paths: vec![],
         }
