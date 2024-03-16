@@ -42,7 +42,7 @@ impl Mutation for CheckoutRevision {
     fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction()?;
 
-        let edited = ws.resolve_single_id(&self.change_id)?;
+        let edited = ws.resolve_single_change(&self.id)?;
 
         if ws.check_immutable(vec![edited.id().clone()])? {
             precondition!("Revision is immutable");
@@ -71,7 +71,13 @@ impl Mutation for CreateRevision {
     fn execute<'a>(self: Box<Self>, ws: &'a mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction()?;
 
-        let parents_revset = ws.evaluate_revset_ids(&self.parent_change_ids)?;
+        let parents_revset = ws.evaluate_revset_changes(
+            &self
+                .parent_ids
+                .into_iter()
+                .map(|id| id.change)
+                .collect_vec(),
+        )?;
 
         let parent_ids = parents_revset.iter().collect_vec();
         let parent_commits = ws.resolve_multiple(parents_revset)?;
@@ -102,13 +108,13 @@ impl Mutation for InsertRevision {
         let mut tx = ws.start_transaction()?;
 
         let target = ws
-            .resolve_single_id(&self.change_id)
+            .resolve_single_change(&self.id)
             .context("resolve change_id")?;
         let before = ws
-            .resolve_single_id(&self.before_id)
+            .resolve_single_change(&self.before_id)
             .context("resolve before_id")?;
         let after = ws
-            .resolve_single_id(&self.after_id)
+            .resolve_single_change(&self.after_id)
             .context("resolve after_id")?;
 
         if ws.check_immutable(vec![target.id().clone(), before.id().clone()])? {
@@ -141,10 +147,10 @@ impl Mutation for DescribeRevision {
     fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction()?;
 
-        let described = ws.resolve_single_id(&self.change_id)?;
+        let described = ws.resolve_single_change(&self.id)?;
 
         if ws.check_immutable(vec![described.id().clone()])? {
-            precondition!("Revision {} is immutable", self.change_id.prefix);
+            precondition!("Revision {} is immutable", self.id.change.prefix);
         }
 
         if self.new_description == described.description() && !self.reset_author {
@@ -174,7 +180,7 @@ impl Mutation for DuplicateRevisions {
     fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction()?;
 
-        let clonees = ws.resolve_multiple_ids(&self.change_ids)?;
+        let clonees = ws.resolve_multiple_changes(self.ids)?;
         let mut clones: IndexMap<Commit, Commit> = IndexMap::new();
 
         let base_repo = tx.base_repo().clone();
@@ -234,7 +240,7 @@ impl Mutation for AbandonRevisions {
         let mut tx = ws.start_transaction()?;
 
         let abandoned_ids = self
-            .commit_ids
+            .ids
             .into_iter()
             .map(|id| CommitId::try_from_hex(&id.hex).expect("frontend-validated id"))
             .collect_vec();
@@ -269,11 +275,11 @@ impl Mutation for MoveRevision {
     fn execute<'a>(self: Box<Self>, ws: &'a mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction()?;
 
-        let target = ws.resolve_single_id(&self.change_id)?;
-        let parents = ws.resolve_multiple_ids(&self.parent_ids)?;
+        let target = ws.resolve_single_change(&self.id)?;
+        let parents = ws.resolve_multiple_changes(self.parent_ids)?;
 
         if ws.check_immutable(vec![target.id().clone()])? {
-            precondition!("Revision {} is immutable", self.change_id.prefix);
+            precondition!("Revision {} is immutable", self.id.change.prefix);
         }
 
         // rebase the target's children
@@ -306,11 +312,11 @@ impl Mutation for MoveSource {
     fn execute<'a>(self: Box<Self>, ws: &'a mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction()?;
 
-        let target = ws.resolve_single_id(&self.change_id)?;
-        let parents = ws.resolve_multiple_ids(&self.parent_ids)?;
+        let target = ws.resolve_single_change(&self.id)?;
+        let parents = ws.resolve_multiple_commits(&self.parent_ids)?;
 
         if ws.check_immutable(vec![target.id().clone()])? {
-            precondition!("Revision {} is immutable", self.change_id.prefix);
+            precondition!("Revision {} is immutable", self.id.change.prefix);
         }
 
         // just rebase the target, which will also rebase its descendants
@@ -328,8 +334,8 @@ impl Mutation for MoveChanges {
     fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction()?;
 
-        let from = ws.resolve_single_id(&self.from_id)?;
-        let mut to = ws.resolve_single_id(&self.to_id)?;
+        let from = ws.resolve_single_change(&self.from_id)?;
+        let mut to = ws.resolve_single_commit(&self.to_id)?;
         let matcher = build_matcher(&self.paths);
 
         if ws.check_immutable(vec![from.id().clone(), to.id().clone()])? {
@@ -389,8 +395,8 @@ impl Mutation for CopyChanges {
     fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction()?;
 
-        let from_tree = ws.resolve_single_id(&self.from_id)?.tree()?;
-        let to = ws.resolve_single_id(&self.to_id)?;
+        let from_tree = ws.resolve_single_commit(&self.from_id)?.tree()?;
+        let to = ws.resolve_single_change(&self.to_id)?;
         let matcher = build_matcher(&self.paths);
 
         if ws.check_immutable(vec![to.id().clone()])? {
@@ -510,7 +516,7 @@ impl Mutation for MoveBranch {
                 precondition!("Branch is remote: {branch_name}@{remote_name}")
             }
             RefName::LocalBranch { branch_name, .. } => {
-                let to = ws.resolve_single_id(&self.to_id)?;
+                let to = ws.resolve_single_change(&self.to_id)?;
 
                 let old_target = ws.view().get_local_branch(&branch_name);
                 if old_target.is_absent() {

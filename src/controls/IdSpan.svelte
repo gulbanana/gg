@@ -1,15 +1,15 @@
 <script lang="ts">
-    import type { RevId } from "../messages/RevId";
+    import type { ChangeId } from "../messages/ChangeId";
+    import type { CommitId } from "../messages/CommitId";
     import { currentTarget } from "../stores";
-    export let id: RevId;
-    export let type: "change" | "commit";
+    export let id: ChangeId | CommitId;
     export let pronoun: boolean = false;
 
     let suffix = id.rest.substring(0, 8 - id.prefix.length);
 </script>
 
 <span class="id" class:pronoun={pronoun || $currentTarget?.type == "Repository"}>
-    <span class="prefix {type}">{id.prefix}</span>{suffix}
+    <span class="prefix {id.type}">{id.prefix}</span>{suffix}
 </span>
 
 <style>
@@ -20,11 +20,11 @@
         font-family: var(--stack-code);
     }
 
-    .change {
+    .ChangeId {
         color: var(--ctp-pink);
     }
 
-    .commit {
+    .CommitId {
         color: var(--ctp-mauve);
     }
 

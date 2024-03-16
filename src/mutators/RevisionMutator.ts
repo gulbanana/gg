@@ -55,31 +55,31 @@ export default class RevisionMutator {
 
     onNew = () => {
         mutate<CreateRevision>("create_revision", {
-            parent_change_ids: [this.#revision.change_id],
+            parent_ids: [this.#revision.id],
         });
     };
 
     onEdit = () => {
         mutate<CheckoutRevision>("checkout_revision", {
-            change_id: this.#revision.change_id,
+            id: this.#revision.id,
         });
     };
 
     onDuplicate = () => {
         mutate<DuplicateRevisions>("duplicate_revisions", {
-            change_ids: [this.#revision.change_id],
+            ids: [this.#revision.id],
         });
     };
 
     onAbandon = () => {
         mutate<AbandonRevisions>("abandon_revisions", {
-            commit_ids: [this.#revision.commit_id],
+            ids: [this.#revision.id.commit],
         });
     };
 
     onDescribe = (new_description: string, reset_author: boolean) => {
         mutate<DescribeRevision>("describe_revision", {
-            change_id: this.#revision.change_id,
+            id: this.#revision.id,
             new_description,
             reset_author,
         });
@@ -87,7 +87,7 @@ export default class RevisionMutator {
 
     onSquash = () => {
         mutate<MoveChanges>("move_changes", {
-            from_id: this.#revision.change_id,
+            from_id: this.#revision.id,
             to_id: this.#revision.parent_ids[0],
             paths: []
         });
@@ -96,7 +96,7 @@ export default class RevisionMutator {
     onRestore = () => {
         mutate<CopyChanges>("copy_changes", {
             from_id: this.#revision.parent_ids[0],
-            to_id: this.#revision.change_id,
+            to_id: this.#revision.id,
             paths: []
         });
     };

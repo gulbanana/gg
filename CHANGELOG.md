@@ -4,6 +4,8 @@
 
 ### Added
 - Added git remotes to the status bar, with push & fetch commands.
+- GG now understands divergent changes. It will let you abandon them, and prevent you from further-diverging them accidentally.
+- Improved error messages and the UI around them.
 
 ### Changed
 - Improved button animations.

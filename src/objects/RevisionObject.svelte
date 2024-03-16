@@ -27,11 +27,11 @@
 
         if (header.is_immutable) {
             mutate<CreateRevision>("create_revision", {
-                parent_change_ids: [header.change_id],
+                parent_ids: [header.id],
             });
         } else {
             mutate<CheckoutRevision>("checkout_revision", {
-                change_id: header.change_id,
+                id: header.id,
             });
         }
     }
@@ -39,7 +39,7 @@
 
 <Object
     {operand}
-    id="{child ? 'parent' : 'log'}-{header.change_id.prefix}"
+    id="{child ? 'parent' : 'log'}-{header.id.commit.prefix}"
     conflicted={header.has_conflict}
     {selected}
     label={header.description.lines[0]}
@@ -51,11 +51,10 @@
         <!-- Parents aren't a drop target -->
         <div class="layout">
             <IdSpan
-                type="change"
-                id={header.change_id}
+                id={header.id.change}
                 pronoun={context ||
                     ($currentTarget?.type == "Merge" &&
-                        $currentTarget.header.parent_ids.findIndex((id) => id.hex == header.commit_id.hex) != -1)} />
+                        $currentTarget.header.parent_ids.findIndex((id) => id.hex == header.id.commit.hex) != -1)} />
 
             <span class="text desc truncate" class:indescribable={!context && header.description.lines[0] == ""}>
                 {dragHint ?? (header.description.lines[0] == "" ? "(no description set)" : header.description.lines[0])}
@@ -74,7 +73,7 @@
     {:else}
         <Zone {operand} let:target let:hint={dropHint}>
             <div class="layout" class:target>
-                <IdSpan type="change" id={header.change_id} pronoun={context || target || dropHint != null} />
+                <IdSpan id={header.id.change} pronoun={context || target || dropHint != null} />
 
                 <span class="text desc truncate" class:indescribable={!context && header.description.lines[0] == ""}>
                     {dragHint ??

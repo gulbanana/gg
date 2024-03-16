@@ -14,7 +14,8 @@ use jj_lib::{
 use pollster::FutureExt;
 
 use crate::messages::{
-    ChangeKind, LogCoordinates, LogLine, LogPage, LogRow, RevChange, RevHeader, RevResult, TreePath,
+    ChangeKind, LogCoordinates, LogLine, LogPage, LogRow, RevChange, RevHeader, RevId, RevResult,
+    TreePath,
 };
 
 use super::WorkspaceSession;
@@ -215,14 +216,10 @@ impl<'a, 'b> LogQuery<'a, 'b> {
 }
 
 // XXX this is reloading the header, which the client already has
-pub fn query_revision(ws: &WorkspaceSession, rev_str: &str) -> Result<RevResult> {
-    let commit = match ws.resolve_optional_str(rev_str)? {
+pub fn query_revision(ws: &WorkspaceSession, id: RevId) -> Result<RevResult> {
+    let commit = match ws.resolve_optional_id(&id)? {
         Some(commit) => commit,
-        None => {
-            return Ok(RevResult::NotFound {
-                query: rev_str.to_owned(),
-            })
-        }
+        None => return Ok(RevResult::NotFound { id }),
     };
 
     let parent_tree = rewrite::merge_commit_trees(ws.repo(), &commit.parents())?;

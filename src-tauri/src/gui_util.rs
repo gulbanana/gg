@@ -224,43 +224,81 @@ impl WorkspaceSession<'_> {
         self.evaluate_revset_expr(revset_expr)
     }
 
-    pub fn evaluate_revset_ids<'op>(&'op self, ids: &[RevId]) -> Result<Box<dyn Revset + 'op>, RevsetError> {
-        let mut revs_str = ids[0].hex.clone();
-
-        for id in ids.iter().skip(1) {
-            revs_str.push_str("|");
-            revs_str.push_str(&id.hex);
-        }
-
-        self.evaluate_revset_str(&revs_str)
+    pub fn evaluate_revset_commits<'op>(&'op self, ids: &[messages::CommitId]) -> Result<Box<dyn Revset + 'op>, RevsetError> {
+        let expr = RevsetExpression::commits(
+        ids.iter().map(|id| CommitId::try_from_hex(id.hex.as_str()).expect("frontend-validated id")).collect()
+        );
+        self.evaluate_revset_expr(expr)
     }
 
-    pub fn resolve_single<'op, 'set: 'op, T: AsRef<dyn Revset + 'set>>(&'op self, revset: T) -> Result<Commit, RevsetError> {
+    pub fn evaluate_revset_changes<'op>(&'op self, ids: &[messages::ChangeId]) -> Result<Box<dyn Revset + 'op>, RevsetError> {
+        let mut expr = RevsetExpression::none();
+        for id in ids.iter() {
+            expr = expr.union(&RevsetExpression::symbol(id.hex.clone()))
+        }
+        self.evaluate_revset_expr(expr)
+    }
+
+    fn resolve_optional<'op, 'set: 'op, T: AsRef<dyn Revset + 'set>>(&'op self, revset: T) -> Result<Option<Commit>, RevsetError> {
         let mut iter = revset.as_ref().iter().commits(self.operation.repo.store()).fuse();
         match (iter.next(), iter.next()) {
-            (Some(commit), None) => Ok(commit?),
-            (None, _) => Err(RevsetError::Other(anyhow!(r#"Revset "{:?}" didn't resolve to any revisions"#, revset.as_ref()))),
+            (Some(commit), None) => Ok(Some(commit?)),
+            (None, _) => Ok(None),
             (Some(_), Some(_)) => {
                 Err(RevsetError::Other(anyhow!(r#"Revset "{:?}" resolved to more than one revision"#, revset.as_ref())))
             }
         }
     }
 
-    pub fn resolve_single_str(&self, revision_str: &str) -> Result<Commit, RevsetError> {
-        let revset = self.evaluate_revset_str(revision_str)?;
-        self.resolve_single(revset)
-    }
-
-    pub fn resolve_single_id(&self, id: &RevId) -> Result<Commit, RevsetError> {
-        self.resolve_single_str(&id.hex)
-    }
-
-    pub fn resolve_optional_str(&self, revision_str: &str) -> Result<Option<Commit>, RevsetError> {
-        match self.resolve_single_str(revision_str) {
-            Ok(commit) => Ok(Some(commit)),
-            Err(RevsetError::Resolution(RevsetResolutionError::NoSuchRevision { .. })) => Ok(None),            
-            Err(err) => Err(err)
+    fn resolve_single<'op, 'set: 'op, T: AsRef<dyn Revset + 'set>>(&'op self, revset: T) -> Result<Commit, RevsetError> {
+        match self.resolve_optional(revset)? {
+            Some(commit) => Ok(commit),
+            None => Err(RevsetError::Other(anyhow!("Revset didn't resolve to any revisions")))
         }
+    }
+
+    // policy: some commands try to operate on a change in order to preserve visual identity, but 
+    // can fall back to operating on the commit described by the change at the time of the gesture
+    pub fn resolve_optional_id(&self, id: &RevId) -> Result<Option<Commit>, RevsetError> {
+        let change_revset = self.evaluate_revset_str(&id.change.hex)?;
+        let mut change_iter = change_revset.as_ref().iter().commits(self.operation.repo.store()).fuse();
+        match (change_iter.next(), change_iter.next()) {
+            (Some(commit), None) => Ok(Some(commit?)),
+            (None, _) => Ok(None),
+            (Some(_), Some(_)) => {            
+                let commit_revset = self.evaluate_revset_commits(&[id.commit.clone()])?;
+                let mut commit_iter = commit_revset.as_ref().iter().commits(self.operation.repo.store()).fuse();
+                match commit_iter.next() {
+                    Some(commit) => Ok(Some(commit?)),
+                    None => Ok(None),
+                }
+            }
+        }
+    }
+
+    // policy: most commands prefer to operate on a change and will fail if the change has become ambiguous 
+    pub fn resolve_optional_change(&self, id: &messages::ChangeId) -> Result<Option<Commit>, RevsetError> {
+        let revset = self.evaluate_revset_str(&id.hex)?;
+        self.resolve_optional(revset)
+    }
+
+    // policy: enforces that the requested change maps only to the expected commit
+    pub fn resolve_single_change(&self, id: &RevId) -> Result<Commit, RevsetError> {
+        match self.resolve_optional_change(&id.change)? {
+            Some(commit) => if commit.id().hex().starts_with(&id.commit.prefix) {
+                Ok(commit)
+            } else {
+                Err(RevsetError::Other(anyhow!(r#""{}" didn't resolve to the expected commit {}"#, id.change.prefix, id.commit.prefix)))
+            }
+            None => Err(RevsetError::Other(anyhow!(r#""{}" didn't resolve to any revisions"#, id.change.prefix)))
+        }
+    }
+
+    // not-really-policy: sometimes we only have a commit, not a change. this is a compromise and will ideally be eliminated
+    pub fn resolve_single_commit(&self, id: &messages::CommitId) -> Result<Commit, RevsetError> {
+        let expr = RevsetExpression::commit(CommitId::try_from_hex(&id.hex).expect("frontend-validated id"));
+        let revset = self.evaluate_revset_expr(expr)?;
+        self.resolve_single(revset)
     }
 
     pub fn resolve_multiple<'op, 'set: 'op, T: AsRef<dyn Revset + 'set>>(&'op self, revset: T) -> Result<Vec<Commit>, RevsetError> {
@@ -268,8 +306,15 @@ impl WorkspaceSession<'_> {
         Ok(commits)
     }
 
-    pub fn resolve_multiple_ids(&self, ids: &[RevId]) -> Result<Vec<Commit>, RevsetError> {
-        let revset = self.evaluate_revset_ids(ids)?;
+    pub fn resolve_multiple_commits(&self, ids: &[messages::CommitId]) -> Result<Vec<Commit>, RevsetError> {
+        let revset = self.evaluate_revset_commits(ids)?;
+        let commits = self.resolve_multiple(revset)?;
+        Ok(commits)
+    }
+
+    // XXX ideally this would apply the same policy as resolve_single_change
+    pub fn resolve_multiple_changes(&self, ids: impl IntoIterator<Item=RevId>) -> Result<Vec<Commit>, RevsetError> {
+        let revset = self.evaluate_revset_changes(&ids.into_iter().map(|id| id.change).collect_vec())?;
         let commits = self.resolve_multiple(revset)?;
         Ok(commits)
     }
@@ -350,7 +395,7 @@ impl WorkspaceSession<'_> {
         }
     }
 
-    pub fn format_commit_id(&self, id: &CommitId) -> messages::RevId {
+    pub fn format_commit_id(&self, id: &CommitId) -> messages::CommitId {
         let prefix_len = self
             .prefix_context()
             .shortest_commit_prefix_len(self.operation.repo.as_ref(), id);
@@ -358,10 +403,10 @@ impl WorkspaceSession<'_> {
         let hex = id.hex();
         let mut prefix = hex.clone();
         let rest = prefix.split_off(prefix_len);
-        messages::RevId { hex, prefix, rest }
+        messages::CommitId { hex, prefix, rest }
     }
 
-    fn format_change_id(&self, id: &ChangeId) -> messages::RevId {
+    fn format_change_id(&self, id: &ChangeId) -> messages::ChangeId {
         let prefix_len = self
             .prefix_context()
             .shortest_change_prefix_len(self.operation.repo.as_ref(), id);
@@ -369,7 +414,14 @@ impl WorkspaceSession<'_> {
         let hex = to_reverse_hex(&id.hex()).expect("format change id as reverse hex");
         let mut prefix = hex.clone();
         let rest = prefix.split_off(prefix_len);
-        messages::RevId { hex, prefix, rest }
+        messages::ChangeId { hex, prefix, rest }
+    }
+
+    pub fn format_id(&self, commit: &Commit) -> RevId {
+        RevId { 
+            commit: self.format_commit_id(commit.id()),
+            change: self.format_change_id(commit.change_id())
+        }
     }
 
     pub fn format_header(&self, commit: &Commit, known_immutable: Option<bool>) -> Result<messages::RevHeader> {
@@ -381,8 +433,7 @@ impl WorkspaceSession<'_> {
             .unwrap_or_else(|| self.check_immutable(vec![commit.id().clone()]))?;
 
         Ok(messages::RevHeader {
-            change_id: self.format_change_id(commit.change_id()),
-            commit_id: self.format_commit_id(commit.id()),
+            id: self.format_id(commit),
             description: commit.description().into(),
             author: commit.author().into(),
             has_conflict: commit.has_conflict()?,

@@ -10,7 +10,7 @@ use std::{
 
 use anyhow::{anyhow, Context, Result};
 
-use crate::messages;
+use crate::messages::{self, RevId};
 use crate::{
     gui_util::{WorkerSession, WorkspaceSession},
     messages::LogPage,
@@ -38,7 +38,7 @@ pub enum SessionEvent {
     },
     QueryRevision {
         tx: Sender<Result<messages::RevResult>>,
-        query: String,
+        id: RevId,
     },
     ExecuteSnapshot {
         tx: Sender<Option<messages::RepoStatus>>,
@@ -229,8 +229,8 @@ impl Session for WorkspaceSession<'_> {
                 SessionEvent::OpenWorkspace { tx, wd: cwd } => {
                     return Ok(WorkspaceResult::Reopen(tx, cwd));
                 }
-                SessionEvent::QueryRevision { tx, query } => {
-                    tx.send(queries::query_revision(&self, &query))?
+                SessionEvent::QueryRevision { tx, id } => {
+                    tx.send(queries::query_revision(&self, id))?
                 }
                 SessionEvent::QueryLog {
                     tx,
@@ -304,8 +304,8 @@ impl Session for queries::LogQuery<'_, '_> {
             let evt = rx.recv();
             log::debug!("LogQuery handling {evt:?}");
             match evt {
-                Ok(SessionEvent::QueryRevision { tx, query }) => {
-                    tx.send(queries::query_revision(&self.ws, &query))?
+                Ok(SessionEvent::QueryRevision { tx, id }) => {
+                    tx.send(queries::query_revision(&self.ws, id))?
                 }
                 Ok(SessionEvent::QueryLogNextPage { tx }) => tx.send(self.get_page())?,
                 Ok(unhandled) => return Ok(QueryResult(unhandled, self.state)),

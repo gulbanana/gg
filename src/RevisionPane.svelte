@@ -31,8 +31,7 @@
 <Pane>
     <h2 slot="header" class="header">
         <span class="title">
-            <IdSpan type="change" id={rev.header.change_id} />
-            | <IdSpan type="commit" id={rev.header.commit_id} />
+            <IdSpan id={rev.header.id.change} /> | <IdSpan id={rev.header.id.commit} />
             {#if rev.header.is_working_copy}
                 | Working copy
             {/if}

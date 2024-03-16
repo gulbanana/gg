@@ -171,7 +171,7 @@
         switch (event.key) {
             case "ArrowUp":
                 event.preventDefault();
-                index = graphRows.findIndex((row) => row.revision.change_id.hex == $revisionSelectEvent?.change_id.hex);
+                index = graphRows.findIndex((row) => row.revision.id.commit.hex == $revisionSelectEvent?.id.commit.hex);
                 if (index > 0) {
                     selectRow(index - 1);
                 }
@@ -179,7 +179,7 @@
 
             case "ArrowDown":
                 event.preventDefault();
-                index = graphRows.findIndex((row) => row.revision.change_id.hex == $revisionSelectEvent?.change_id.hex);
+                index = graphRows.findIndex((row) => row.revision.id.commit.hex == $revisionSelectEvent?.id.commit.hex);
                 if (index != -1 && graphRows.length > index + 1) {
                     selectRow(index + 1);
                 }
@@ -187,7 +187,7 @@
 
             case "PageUp":
                 event.preventDefault();
-                index = graphRows.findIndex((row) => row.revision.change_id.hex == $revisionSelectEvent?.change_id.hex);
+                index = graphRows.findIndex((row) => row.revision.id.commit.hex == $revisionSelectEvent?.id.commit.hex);
                 pageRows = log.clientHeight / 30;
                 index = Math.max(index - pageRows, 0);
                 selectRow(index);
@@ -195,7 +195,7 @@
 
             case "PageDown":
                 event.preventDefault();
-                index = graphRows.findIndex((row) => row.revision.change_id.hex == $revisionSelectEvent?.change_id.hex);
+                index = graphRows.findIndex((row) => row.revision.id.commit.hex == $revisionSelectEvent?.id.commit.hex);
                 pageRows = log.clientHeight / 30;
                 index = Math.min(index + pageRows, graphRows.length - 1);
                 selectRow(index);
@@ -247,7 +247,7 @@
         role="listbox"
         aria-label="log"
         aria-multiselectable="false"
-        aria-activedescendant="log-{$revisionSelectEvent?.change_id.prefix}"
+        aria-activedescendant="log-{$revisionSelectEvent?.id.commit.prefix}"
         tabindex="0"
         bind:this={log}
         bind:clientHeight={logHeight}
@@ -263,7 +263,7 @@
                 {#if row}
                     <RevisionSummary
                         header={row.revision}
-                        selected={$revisionSelectEvent?.change_id.prefix == row.revision.change_id.prefix} />
+                        selected={$revisionSelectEvent?.id.commit.hex == row.revision.id.commit.hex} />
                 {/if}
             </GraphLog>
         {:else}

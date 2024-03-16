@@ -98,10 +98,7 @@
                 {#if typeof run == "string"}
                     <span>{run}{i == dropHint.length - 1 ? "." : ""}</span>
                 {:else}
-                    <span>
-                        <IdSpan type={dropHint.commit ? "commit" : "change"} id={run} />{i == dropHint.length - 1
-                            ? "."
-                            : ""}</span>
+                    <span><IdSpan id={run} />{i == dropHint.length - 1 ? "." : ""}</span>
                 {/if}
             {/each}
         </div>

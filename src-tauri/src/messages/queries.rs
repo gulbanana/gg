@@ -1,6 +1,64 @@
 use super::*;
 
 /// A change or commit id with a disambiguated prefix
+pub trait Id {
+    fn hex(&self) -> &String;
+    fn prefix(&self) -> &String;
+    fn rest(&self) -> &String;
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(tag = "type")]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(TS),
+    ts(export, export_to = "../src/messages/")
+)]
+pub struct CommitId {
+    pub hex: String,
+    pub prefix: String,
+    pub rest: String,
+}
+
+impl Id for CommitId {
+    fn hex(&self) -> &String {
+        &self.hex
+    }
+    fn prefix(&self) -> &String {
+        &self.prefix
+    }
+    fn rest(&self) -> &String {
+        &self.rest
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(tag = "type")]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(TS),
+    ts(export, export_to = "../src/messages/")
+)]
+pub struct ChangeId {
+    pub hex: String,
+    pub prefix: String,
+    pub rest: String,
+}
+
+impl Id for ChangeId {
+    fn hex(&self) -> &String {
+        &self.hex
+    }
+    fn prefix(&self) -> &String {
+        &self.prefix
+    }
+    fn rest(&self) -> &String {
+        &self.rest
+    }
+}
+
+/// A pair of ids representing the ui's view of a revision.
+/// The worker may use one or both depending on policy.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[cfg_attr(
     feature = "ts-rs",
@@ -8,9 +66,8 @@ use super::*;
     ts(export, export_to = "../src/messages/")
 )]
 pub struct RevId {
-    pub hex: String,
-    pub prefix: String,
-    pub rest: String,
+    pub change: ChangeId,
+    pub commit: CommitId,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -20,15 +77,14 @@ pub struct RevId {
     ts(export, export_to = "../src/messages/")
 )]
 pub struct RevHeader {
-    pub change_id: RevId,
-    pub commit_id: RevId,
+    pub id: RevId,
     pub description: MultilineString,
     pub author: RevAuthor,
     pub has_conflict: bool,
     pub is_working_copy: bool,
     pub is_immutable: bool,
     pub branches: Vec<RefName>,
-    pub parent_ids: Vec<RevId>,
+    pub parent_ids: Vec<CommitId>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -88,7 +144,7 @@ pub enum ChangeKind {
 )]
 pub enum RevResult {
     NotFound {
-        query: String,
+        id: RevId,
     },
     Detail {
         header: RevHeader,

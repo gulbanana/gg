@@ -104,7 +104,7 @@ pub enum RepoConfig {
 )]
 pub struct RepoStatus {
     pub operation_description: String,
-    pub working_copy: RevId,
+    pub working_copy: CommitId,
 }
 
 /// Branch or tag name with metadata.

@@ -22,6 +22,7 @@
     import ModalOverlay from "./ModalOverlay.svelte";
     import ModalDialog from "./ModalDialog.svelte";
     import { onMount } from "svelte";
+    import IdSpan from "./controls/IdSpan.svelte";
 
     let selection: Query<RevResult> = {
         type: "wait",
@@ -55,7 +56,7 @@
     onEvent("gg://context/branch", mutateBranch);
 
     $: if ($repoConfigEvent) loadRepo($repoConfigEvent);
-    $: if ($repoStatusEvent && $revisionSelectEvent) loadChange($revisionSelectEvent.change_id);
+    $: if ($repoStatusEvent && $revisionSelectEvent) loadChange($revisionSelectEvent.id);
 
     async function loadRepo(config: RepoConfig) {
         if (loadTimeout) {
@@ -70,9 +71,7 @@
     }
 
     async function loadChange(id: RevId) {
-        let fetch = await query<RevResult>("query_revision", {
-            query: id.hex,
-        });
+        let fetch = await query<RevResult>("query_revision", { id });
 
         let rev = await Promise.race([fetch, delay<RevResult>()]);
 
@@ -81,8 +80,11 @@
             rev = await fetch;
         }
 
-        if (rev.type == "data" && rev.value.type == "NotFound" && id.hex != $repoStatusEvent?.working_copy.hex) {
-            return loadChange($repoStatusEvent?.working_copy!);
+        if (rev.type == "data" && rev.value.type == "NotFound" && id.commit.hex != $repoStatusEvent?.working_copy.hex) {
+            return loadChange({
+                change: { type: "ChangeId", hex: "@", prefix: "@", rest: "" },
+                commit: $repoStatusEvent!.working_copy,
+            });
         }
 
         selection = rev;
@@ -136,7 +138,9 @@
                 {:else}
                     <Pane>
                         <h2 slot="header">Not Found</h2>
-                        <p slot="body">Revset '{data.query}' is empty.</p>
+                        <p slot="body">
+                            Revision <IdSpan id={data.id.change} />|<IdSpan id={data.id.commit} /> does not exist.
+                        </p>
                     </Pane>
                 {/if}
                 <Pane slot="error" let:message>

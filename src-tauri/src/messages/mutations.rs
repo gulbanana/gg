@@ -33,7 +33,7 @@ pub enum MutationResult {
     ts(export, export_to = "../src/messages/")
 )]
 pub struct CheckoutRevision {
-    pub change_id: RevId,
+    pub id: RevId,
 }
 
 /// Creates a new revision and makes it the working copy
@@ -44,7 +44,7 @@ pub struct CheckoutRevision {
     ts(export, export_to = "../src/messages/")
 )]
 pub struct CreateRevision {
-    pub parent_change_ids: Vec<RevId>,
+    pub parent_ids: Vec<RevId>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -54,7 +54,7 @@ pub struct CreateRevision {
     ts(export, export_to = "../src/messages/")
 )]
 pub struct InsertRevision {
-    pub change_id: RevId,
+    pub id: RevId,
     pub after_id: RevId,
     pub before_id: RevId,
 }
@@ -66,7 +66,7 @@ pub struct InsertRevision {
     ts(export, export_to = "../src/messages/")
 )]
 pub struct MoveRevision {
-    pub change_id: RevId,
+    pub id: RevId,
     pub parent_ids: Vec<RevId>,
 }
 
@@ -77,8 +77,8 @@ pub struct MoveRevision {
     ts(export, export_to = "../src/messages/")
 )]
 pub struct MoveSource {
-    pub change_id: RevId,
-    pub parent_ids: Vec<RevId>,
+    pub id: RevId,
+    pub parent_ids: Vec<CommitId>,
 }
 
 /// Updates a revision's description
@@ -89,7 +89,7 @@ pub struct MoveSource {
     ts(export, export_to = "../src/messages/")
 )]
 pub struct DescribeRevision {
-    pub change_id: RevId,
+    pub id: RevId,
     pub new_description: String,
     pub reset_author: bool,
 }
@@ -102,7 +102,7 @@ pub struct DescribeRevision {
     ts(export, export_to = "../src/messages/")
 )]
 pub struct DuplicateRevisions {
-    pub change_ids: Vec<RevId>,
+    pub ids: Vec<RevId>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -112,7 +112,7 @@ pub struct DuplicateRevisions {
     ts(export, export_to = "../src/messages/")
 )]
 pub struct AbandonRevisions {
-    pub commit_ids: Vec<RevId>,
+    pub ids: Vec<CommitId>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -123,7 +123,7 @@ pub struct AbandonRevisions {
 )]
 pub struct MoveChanges {
     pub from_id: RevId,
-    pub to_id: RevId,
+    pub to_id: CommitId, // limitation: we don't know parent chids because they are more expensive to look up
     pub paths: Vec<TreePath>,
 }
 
@@ -134,7 +134,7 @@ pub struct MoveChanges {
     ts(export, export_to = "../src/messages/")
 )]
 pub struct CopyChanges {
-    pub from_id: RevId,
+    pub from_id: CommitId, // limitation: we don't know parent chids because they are more expensive to look up
     pub to_id: RevId,
     pub paths: Vec<TreePath>,
 }

@@ -26,7 +26,7 @@ use gui_util::WorkerSession;
 use messages::{
     AbandonRevisions, CheckoutRevision, CopyChanges, CreateRevision, DescribeRevision,
     DuplicateRevisions, FetchRemote, InsertRevision, MoveBranch, MoveChanges, MoveRevision,
-    MoveSource, MutationResult, PushRemote, TrackBranch, UndoOperation, UntrackBranch,
+    MoveSource, MutationResult, PushRemote, RevId, TrackBranch, UndoOperation, UntrackBranch,
 };
 use worker::{Mutation, Session, SessionEvent};
 
@@ -235,13 +235,13 @@ fn query_log_next_page(
 fn query_revision(
     window: Window,
     app_state: State<AppState>,
-    query: String,
+    id: RevId,
 ) -> Result<messages::RevResult, InvokeError> {
     let session_tx: Sender<SessionEvent> = app_state.get_sender(window.label());
     let (call_tx, call_rx) = channel();
 
     session_tx
-        .send(SessionEvent::QueryRevision { tx: call_tx, query })
+        .send(SessionEvent::QueryRevision { tx: call_tx, id })
         .map_err(InvokeError::from_error)?;
     call_rx
         .recv()
