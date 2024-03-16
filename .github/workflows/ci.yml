@@ -24,6 +24,8 @@ jobs:
 
   cargo-test:
     runs-on: "ubuntu-22.04"
+    env:
+        RUST_BACKTRACE: "1"
     steps:
       - uses: actions/checkout@v4
             
