@@ -49,13 +49,13 @@
 
     function onPush(remote: string) {
         mutate<PushRemote>("push_remote", {
-            name: remote,
+            remote_name: remote,
         });
     }
 
     function onFetch(remote: string) {
         mutate<FetchRemote>("fetch_remote", {
-            name: remote,
+            remote_name: remote,
         });
     }
 </script>

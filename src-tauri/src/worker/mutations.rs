@@ -1,4 +1,7 @@
-use std::fmt::Display;
+use std::{
+    fmt::Display,
+    path::{Path, PathBuf},
+};
 
 use anyhow::{anyhow, Context, Result};
 use indexmap::IndexMap;
@@ -6,7 +9,7 @@ use itertools::Itertools;
 use jj_lib::{
     backend::CommitId,
     commit::Commit,
-    git::REMOTE_NAME_FOR_LOCAL_GIT_REPO,
+    git::{RemoteCallbacks, REMOTE_NAME_FOR_LOCAL_GIT_REPO},
     matchers::{EverythingMatcher, FilesMatcher, Matcher},
     object_id::ObjectId,
     op_store::RefTarget,
@@ -537,7 +540,40 @@ impl Mutation for PushRemote {
 
 impl Mutation for FetchRemote {
     fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
-        todo!("FetchRemote")
+        let mut tx = ws.start_transaction()?;
+
+        match ws.git_repo()? {
+            None => precondition!("No git backend"),
+            Some(git_repo) => {
+                // XXX this would limit it to known branches
+                // let branch_names = ws
+                //     .view()
+                //     .remote_branches(&self.remote_name)
+                //     .map(|b| StringPattern::Exact(b.0.to_owned()))
+                //     .collect_vec();
+
+                let mut callbacks = RemoteCallbacks::default();
+                let mut get_ssh_keys_fn = get_ssh_keys;
+                callbacks.get_ssh_keys = Some(&mut get_ssh_keys_fn);
+
+                jj_lib::git::fetch(
+                    tx.mut_repo(),
+                    &git_repo,
+                    &self.remote_name,
+                    &[StringPattern::everything()],
+                    callbacks,
+                    &ws.settings.git_settings(),
+                )?;
+
+                match ws.finish_transaction(
+                    tx,
+                    format!("fetch from git remote(s) {}", self.remote_name),
+                )? {
+                    Some(new_status) => Ok(MutationResult::Updated { new_status }),
+                    None => Ok(MutationResult::Unchanged),
+                }
+            }
+        }
     }
 }
 
@@ -608,4 +644,26 @@ fn build_matcher(paths: &Vec<TreePath>) -> Box<dyn Matcher> {
                 .map(|p| RepoPath::from_internal_string(&p.repo_path)),
         ))
     }
+}
+
+/*****************/
+/* from git_util */
+/*****************/
+
+fn get_ssh_keys(_username: &str) -> Vec<PathBuf> {
+    let mut paths = vec![];
+    if let Some(home_dir) = dirs::home_dir() {
+        let ssh_dir = Path::new(&home_dir).join(".ssh");
+        for filename in ["id_ed25519_sk", "id_ed25519", "id_rsa"] {
+            let key_path = ssh_dir.join(filename);
+            if key_path.is_file() {
+                log::info!("found ssh key {key_path:?}");
+                paths.push(key_path);
+            }
+        }
+    }
+    if paths.is_empty() {
+        log::info!("no ssh key found");
+    }
+    paths
 }

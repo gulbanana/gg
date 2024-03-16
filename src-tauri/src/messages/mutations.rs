@@ -177,7 +177,7 @@ pub struct MoveBranch {
     ts(export, export_to = "../src/messages/")
 )]
 pub struct PushRemote {
-    name: String,
+    pub remote_name: String,
 }
 
 #[derive(Deserialize, Debug)]
@@ -187,7 +187,7 @@ pub struct PushRemote {
     ts(export, export_to = "../src/messages/")
 )]
 pub struct FetchRemote {
-    name: String,
+    pub remote_name: String,
 }
 
 #[derive(Deserialize, Debug)]

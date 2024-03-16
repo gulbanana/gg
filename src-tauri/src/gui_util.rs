@@ -195,6 +195,13 @@ impl WorkspaceSession<'_> {
     pub fn repo(&self) -> &ReadonlyRepo {
         self.operation.repo.as_ref()
     }
+    
+    pub fn git_repo(&self) -> Result<Option<Repository>> {
+        match self.operation.git_backend() {
+            Some(backend) => Ok(Some(backend.open_git_repo()?)),
+            None => Ok(None)
+        }
+    }
 
     pub fn should_check_immutable(&self) -> bool {
         self.settings.query_check_immutable().unwrap_or(!self.is_large)
@@ -305,7 +312,7 @@ impl WorkspaceSession<'_> {
     pub fn format_config(&self) -> Result<messages::RepoConfig> {
         let absolute_path = self.workspace.workspace_root().into();
 
-        let git_remotes = match self.operation.git_repo()? {
+        let git_remotes = match self.git_repo()? {
             Some(repo) => repo.remotes()?.iter().flatten().map(|s| s.to_owned()).collect(),
             None => vec![]
         };
@@ -725,13 +732,6 @@ impl SessionOperation {
 
     fn git_backend(&self) -> Option<&GitBackend> {
         self.repo.store().backend_impl().downcast_ref()
-    }
-
-    fn git_repo(&self) -> Result<Option<Repository>> {
-        match self.git_backend() {
-            Some(backend) => Ok(Some(backend.open_git_repo()?)),
-            None => Ok(None)
-        }
     }
 
     pub fn base_ignores(&self) -> Result<Arc<GitIgnoreFile>> {

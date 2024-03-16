@@ -1973,6 +1973,7 @@ dependencies = [
  "anyhow",
  "chrono",
  "config",
+ "dirs",
  "dunce",
  "futures-util",
  "git2",
