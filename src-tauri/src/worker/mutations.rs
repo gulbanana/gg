@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{collections::HashSet, fmt::Display};
 
 use anyhow::{anyhow, Context, Result};
 use indexmap::IndexMap;
@@ -6,14 +6,17 @@ use itertools::Itertools;
 use jj_lib::{
     backend::CommitId,
     commit::Commit,
-    git::REMOTE_NAME_FOR_LOCAL_GIT_REPO,
+    git::{self, GitBranchPushTargets, REMOTE_NAME_FOR_LOCAL_GIT_REPO},
     matchers::{EverythingMatcher, FilesMatcher, Matcher},
     object_id::ObjectId,
     op_store::RefTarget,
     op_walk,
+    refs::{self, BranchPushAction},
     repo::Repo,
     repo_path::RepoPath,
+    revset::{self, RevsetIteratorExt},
     rewrite,
+    settings::UserSettings,
     str_util::StringPattern,
 };
 
@@ -538,7 +541,118 @@ impl Mutation for MoveBranch {
 
 impl Mutation for PushRemote {
     fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
-        todo!("PushRemote")
+        let mut tx = ws.start_transaction()?;
+
+        let git_repo = match ws.git_repo()? {
+            Some(git_repo) => git_repo,
+            None => precondition!("No git backend"),
+        };
+
+        // determine branches to push
+        // XXX does not yet push deleted branches - before doing so, we'd want to indicate in the UI that this is going to happen
+        let mut branch_updates = vec![];
+        for (branch_name, targets) in ws.view().local_remote_branches(&self.remote_name) {
+            if !targets.remote_ref.is_tracking() {
+                continue;
+            }
+
+            let push_action = refs::classify_branch_push_action(targets);
+            match push_action {
+                BranchPushAction::AlreadyMatches => (),
+                BranchPushAction::LocalConflicted => {
+                    precondition!("Branch {branch_name} is conflicted.")
+                }
+                BranchPushAction::RemoteConflicted => precondition!(
+                    "Branch {}@{} is conflicted. Try fetching first.",
+                    branch_name,
+                    self.remote_name
+                ),
+                BranchPushAction::RemoteUntracked => precondition!(
+                    "Non-tracking remote branch {}@{} exists. Try tracking it first.",
+                    branch_name,
+                    self.remote_name
+                ),
+                BranchPushAction::Update(update) => {
+                    branch_updates.push((branch_name.to_owned(), update))
+                }
+            };
+        }
+
+        let mut new_heads = vec![];
+        let mut force_pushed_branches = HashSet::new();
+        for (branch_name, update) in &branch_updates {
+            if let Some(new_target) = &update.new_target {
+                new_heads.push(new_target.clone());
+                let force = match &update.old_target {
+                    None => false,
+                    Some(old_target) => !ws.repo().index().is_ancestor(old_target, new_target),
+                };
+                if force {
+                    force_pushed_branches.insert(branch_name.to_string());
+                }
+            }
+        }
+
+        // check for conflicts
+        let mut old_heads = ws
+            .view()
+            .remote_branches(&self.remote_name)
+            .flat_map(|(_, old_head)| old_head.target.added_ids())
+            .cloned()
+            .collect_vec();
+        if old_heads.is_empty() {
+            old_heads.push(ws.repo().store().root_commit_id().clone());
+        }
+        for commit in revset::walk_revs(ws.repo(), &new_heads, &old_heads)?
+            .iter()
+            .commits(ws.repo().store())
+        {
+            let commit = commit?;
+            let mut reasons = vec![];
+            if commit.description().is_empty() {
+                reasons.push("it has no description");
+            }
+            if commit.author().name.is_empty()
+                || commit.author().name == UserSettings::USER_NAME_PLACEHOLDER
+                || commit.author().email.is_empty()
+                || commit.author().email == UserSettings::USER_EMAIL_PLACEHOLDER
+                || commit.committer().name.is_empty()
+                || commit.committer().name == UserSettings::USER_NAME_PLACEHOLDER
+                || commit.committer().email.is_empty()
+                || commit.committer().email == UserSettings::USER_EMAIL_PLACEHOLDER
+            {
+                reasons.push("it has no author and/or committer set");
+            }
+            if commit.has_conflict()? {
+                reasons.push("it has conflicts");
+            }
+            if !reasons.is_empty() {
+                precondition!(
+                    "Won't push revision {} since {}",
+                    ws.format_change_id(commit.change_id()).prefix,
+                    reasons.join(" and ")
+                );
+            }
+        }
+
+        let targets = GitBranchPushTargets {
+            branch_updates,
+            force_pushed_branches,
+        };
+        callbacks::with_git(|cb| {
+            git::push_branches(tx.mut_repo(), &git_repo, &self.remote_name, &targets, cb)
+        })?;
+
+        match ws.finish_transaction(
+            tx,
+            format!(
+                "push all tracked branches to git remote {}",
+                self.remote_name
+            ),
+        )? {
+            Some(new_status) => Ok(MutationResult::Updated { new_status }),
+            None => Ok(MutationResult::Unchanged),
+        }
     }
 }
 
@@ -546,35 +660,32 @@ impl Mutation for FetchRemote {
     fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction()?;
 
-        match ws.git_repo()? {
+        let git_repo = match ws.git_repo()? {
+            Some(git_repo) => git_repo,
             None => precondition!("No git backend"),
-            Some(git_repo) => {
-                // XXX this would limit it to known branches
-                // let branch_names = ws
-                //     .view()
-                //     .remote_branches(&self.remote_name)
-                //     .map(|b| StringPattern::Exact(b.0.to_owned()))
-                //     .collect_vec();
+        };
 
-                callbacks::with_git(|cb| {
-                    jj_lib::git::fetch(
-                        tx.mut_repo(),
-                        &git_repo,
-                        &self.remote_name,
-                        &[StringPattern::everything()],
-                        cb,
-                        &ws.settings.git_settings(),
-                    )
-                })?;
+        // XXX this would limit it to known branches
+        // let branch_names = ws
+        //     .view()
+        //     .remote_branches(&self.remote_name)
+        //     .map(|b| StringPattern::Exact(b.0.to_owned()))
+        //     .collect_vec();
 
-                match ws.finish_transaction(
-                    tx,
-                    format!("fetch from git remote(s) {}", self.remote_name),
-                )? {
-                    Some(new_status) => Ok(MutationResult::Updated { new_status }),
-                    None => Ok(MutationResult::Unchanged),
-                }
-            }
+        callbacks::with_git(|cb| {
+            git::fetch(
+                tx.mut_repo(),
+                &git_repo,
+                &self.remote_name,
+                &[StringPattern::everything()],
+                cb,
+                &ws.settings.git_settings(),
+            )
+        })?;
+
+        match ws.finish_transaction(tx, format!("fetch from git remote(s) {}", self.remote_name))? {
+            Some(new_status) => Ok(MutationResult::Updated { new_status }),
+            None => Ok(MutationResult::Unchanged),
         }
     }
 }

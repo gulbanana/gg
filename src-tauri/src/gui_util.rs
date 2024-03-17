@@ -419,7 +419,7 @@ impl WorkspaceSession<'_> {
         messages::CommitId { hex, prefix, rest }
     }
 
-    fn format_change_id(&self, id: &ChangeId) -> messages::ChangeId {
+    pub fn format_change_id(&self, id: &ChangeId) -> messages::ChangeId {
         let prefix_len = self
             .prefix_context()
             .shortest_change_prefix_len(self.operation.repo.as_ref(), id);
