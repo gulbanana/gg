@@ -1,5 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod callbacks;
 mod config;
 mod gui_util;
 mod handler;
@@ -31,28 +32,46 @@ use messages::{
 };
 use worker::{Mutation, Session, SessionEvent};
 
-use crate::messages::InputRequest;
-
 #[derive(Default)]
 struct AppState(Mutex<HashMap<String, WindowState>>);
 
 struct WindowState {
     _worker: JoinHandle<()>,
-    channel: Sender<SessionEvent>,
+    worker_channel: Sender<SessionEvent>,
+    input_channel: Option<Sender<InputResponse>>,
     revision_menu: Menu<Wry>,
     tree_menu: Menu<Wry>,
     ref_menu: Menu<Wry>,
 }
 
 impl AppState {
-    fn get_sender(&self, window_label: &str) -> Sender<SessionEvent> {
+    fn get_session(&self, window_label: &str) -> Sender<SessionEvent> {
         self.0
             .lock()
             .expect("state mutex poisoned")
             .get(window_label)
             .expect("session not found")
-            .channel
+            .worker_channel
             .clone()
+    }
+
+    fn set_input(&self, window_label: &str, tx: Sender<InputResponse>) {
+        self.0
+            .lock()
+            .expect("state mutex poisoned")
+            .get_mut(window_label)
+            .expect("session not found")
+            .input_channel = Some(tx);
+    }
+
+    fn take_input(&self, window_label: &str) -> Option<Sender<InputResponse>> {
+        self.0
+            .lock()
+            .expect("state mutex poisoned")
+            .get_mut(window_label)
+            .expect("session not found")
+            .input_channel
+            .take()
     }
 }
 
@@ -119,6 +138,10 @@ fn main() -> Result<()> {
                 .ok_or(anyhow!("preconfigured window not found"))?;
             let (sender, receiver) = channel();
 
+            callbacks::UI_WINDOW
+                .set(window.clone())
+                .expect("init UI_WINDOW");
+
             let handle = window.clone();
             let window_worker = thread::spawn(move || {
                 log::info!("start worker");
@@ -162,7 +185,8 @@ fn main() -> Result<()> {
                 window.label().to_owned(),
                 WindowState {
                     _worker: window_worker,
-                    channel: sender,
+                    worker_channel: sender,
+                    input_channel: None,
                     revision_menu,
                     tree_menu,
                     ref_menu,
@@ -185,8 +209,16 @@ fn notify_window_ready(window: Window) {
 }
 
 #[tauri::command(async)]
-fn notify_input(window: Window, response: InputResponse) -> Result<(), InvokeError> {
-    Err(InvokeError::from_anyhow(anyhow!("Received {:?}", response)))
+fn notify_input(
+    window: Window,
+    app_state: State<AppState>,
+    response: InputResponse,
+) -> Result<(), InvokeError> {
+    let response_tx = app_state
+        .take_input(window.label())
+        .ok_or(anyhow!("Nobody is listening."))
+        .map_err(InvokeError::from_anyhow)?;
+    response_tx.send(response).map_err(InvokeError::from_error)
 }
 
 #[tauri::command]
@@ -208,7 +240,7 @@ fn query_log(
     app_state: State<AppState>,
     revset: String,
 ) -> Result<messages::LogPage, InvokeError> {
-    let session_tx: Sender<SessionEvent> = app_state.get_sender(window.label());
+    let session_tx: Sender<SessionEvent> = app_state.get_session(window.label());
     let (call_tx, call_rx) = channel();
 
     session_tx
@@ -228,7 +260,7 @@ fn query_log_next_page(
     window: Window,
     app_state: State<AppState>,
 ) -> Result<messages::LogPage, InvokeError> {
-    let session_tx: Sender<SessionEvent> = app_state.get_sender(window.label());
+    let session_tx: Sender<SessionEvent> = app_state.get_session(window.label());
     let (call_tx, call_rx) = channel();
 
     session_tx
@@ -246,7 +278,7 @@ fn query_revision(
     app_state: State<AppState>,
     id: RevId,
 ) -> Result<messages::RevResult, InvokeError> {
-    let session_tx: Sender<SessionEvent> = app_state.get_sender(window.label());
+    let session_tx: Sender<SessionEvent> = app_state.get_session(window.label());
     let (call_tx, call_rx) = channel();
 
     session_tx
@@ -406,7 +438,7 @@ fn try_open_repository(window: &Window, cwd: Option<PathBuf>) -> Result<()> {
 
     let app_state = window.state::<AppState>();
 
-    let session_tx: Sender<SessionEvent> = app_state.get_sender(window.label());
+    let session_tx: Sender<SessionEvent> = app_state.get_session(window.label());
     let (call_tx, call_rx) = channel();
 
     session_tx.send(SessionEvent::OpenWorkspace {
@@ -439,7 +471,7 @@ fn try_mutate<T: Mutation + Send + Sync + 'static>(
     app_state: State<AppState>,
     mutation: T,
 ) -> Result<MutationResult, InvokeError> {
-    let session_tx: Sender<SessionEvent> = app_state.get_sender(window.label());
+    let session_tx: Sender<SessionEvent> = app_state.get_session(window.label());
     let (call_tx, call_rx) = channel();
 
     session_tx
@@ -458,14 +490,19 @@ fn handle_window_event(window: &WebviewWindow, event: &WindowEvent) {
 
             let app_state = window.state::<AppState>();
 
-            let session_tx: Sender<SessionEvent> = app_state.get_sender(window.label());
+            let session_tx: Sender<SessionEvent> = app_state.get_session(window.label());
             let (call_tx, call_rx) = channel();
 
             handler::nonfatal!(session_tx.send(SessionEvent::ExecuteSnapshot { tx: call_tx }));
 
-            if let Some(status) = handler::nonfatal!(call_rx.recv()) {
-                handler::nonfatal!(window.emit("gg://repo/status", status));
-            }
+            // events are handled on the main thread, so don't wait for
+            // a worker response - that's a recipe for deadlock
+            let window = window.clone();
+            thread::spawn(move || {
+                if let Some(status) = handler::nonfatal!(call_rx.recv()) {
+                    handler::nonfatal!(window.emit("gg://repo/status", status));
+                }
+            });
         }
         _ => (),
     }

@@ -173,6 +173,7 @@ pub enum Operand {
 )]
 pub struct InputRequest {
     pub title: String,
+    pub detail: String,
     pub fields: Vec<String>,
 }
 

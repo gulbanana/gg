@@ -9,6 +9,7 @@
     }
 
     export let title: string;
+    export let detail: String;
     export let fields: string[];
 
     let dispatch = createEventDispatcher();
@@ -40,9 +41,10 @@
 </script>
 
 <ModalDialog {title} on:cancel={onCancel} on:default={onEnter}>
+    <p>{detail}</p>
     {#each fields as field}
         <label for={field}>{field}:</label>
-        <input id="field-{field}" type="text" />
+        <input id="field-{field}" type={field == "Password" ? "password" : "text"} />
     {/each}
     <svelte:fragment slot="commands">
         <ActionWidget safe onClick={onEnter}>Enter</ActionWidget>
@@ -51,8 +53,9 @@
 </ModalDialog>
 
 <style>
-    :first-of-type {
-        margin-top: 1em;
+    p {
+        grid-column: 1/3;
+        word-wrap: break-word;
     }
 
     :last-of-type {

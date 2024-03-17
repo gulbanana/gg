@@ -1,7 +1,4 @@
-use std::{
-    fmt::Display,
-    path::{Path, PathBuf},
-};
+use std::fmt::Display;
 
 use anyhow::{anyhow, Context, Result};
 use indexmap::IndexMap;
@@ -9,7 +6,7 @@ use itertools::Itertools;
 use jj_lib::{
     backend::CommitId,
     commit::Commit,
-    git::{RemoteCallbacks, REMOTE_NAME_FOR_LOCAL_GIT_REPO},
+    git::REMOTE_NAME_FOR_LOCAL_GIT_REPO,
     matchers::{EverythingMatcher, FilesMatcher, Matcher},
     object_id::ObjectId,
     op_store::RefTarget,
@@ -21,6 +18,7 @@ use jj_lib::{
 };
 
 use crate::{
+    callbacks,
     gui_util::WorkspaceSession,
     messages::{
         AbandonRevisions, CheckoutRevision, CopyChanges, CreateRevision, DescribeRevision,
@@ -558,18 +556,16 @@ impl Mutation for FetchRemote {
                 //     .map(|b| StringPattern::Exact(b.0.to_owned()))
                 //     .collect_vec();
 
-                let mut callbacks = RemoteCallbacks::default();
-                let mut get_ssh_keys_fn = get_ssh_keys;
-                callbacks.get_ssh_keys = Some(&mut get_ssh_keys_fn);
-
-                jj_lib::git::fetch(
-                    tx.mut_repo(),
-                    &git_repo,
-                    &self.remote_name,
-                    &[StringPattern::everything()],
-                    callbacks,
-                    &ws.settings.git_settings(),
-                )?;
+                callbacks::with_git(|cb| {
+                    jj_lib::git::fetch(
+                        tx.mut_repo(),
+                        &git_repo,
+                        &self.remote_name,
+                        &[StringPattern::everything()],
+                        cb,
+                        &ws.settings.git_settings(),
+                    )
+                })?;
 
                 match ws.finish_transaction(
                     tx,
@@ -650,26 +646,4 @@ fn build_matcher(paths: &Vec<TreePath>) -> Box<dyn Matcher> {
                 .map(|p| RepoPath::from_internal_string(&p.repo_path)),
         ))
     }
-}
-
-/*****************/
-/* from git_util */
-/*****************/
-
-fn get_ssh_keys(_username: &str) -> Vec<PathBuf> {
-    let mut paths = vec![];
-    if let Some(home_dir) = dirs::home_dir() {
-        let ssh_dir = Path::new(&home_dir).join(".ssh");
-        for filename in ["id_ed25519_sk", "id_ed25519", "id_rsa"] {
-            let key_path = ssh_dir.join(filename);
-            if key_path.is_file() {
-                log::info!("found ssh key {key_path:?}");
-                paths.push(key_path);
-            }
-        }
-    }
-    if paths.is_empty() {
-        log::info!("no ssh key found");
-    }
-    paths
 }

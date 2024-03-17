@@ -190,7 +190,15 @@
 
         <StatusBar {target} />
 
-        {#if $currentMutation}
+        {#if $currentInput}
+            <ModalOverlay>
+                <InputDialog
+                    title={$currentInput.title}
+                    detail={$currentInput.detail}
+                    fields={$currentInput.fields}
+                    on:response={(event) => $currentInput?.callback(event.detail)} />
+            </ModalOverlay>
+        {:else if $currentMutation}
             <ModalOverlay>
                 {#if $currentMutation.type == "data" && ($currentMutation.value.type == "InternalError" || $currentMutation.value.type == "PreconditionError")}
                     <ErrorDialog title="Command Error" onClose={() => ($currentMutation = null)} severe>
@@ -209,13 +217,6 @@
                         <p>{$currentMutation.message}</p>
                     </ErrorDialog>
                 {/if}
-            </ModalOverlay>
-        {:else if $currentInput}
-            <ModalOverlay>
-                <InputDialog
-                    title={$currentInput.title}
-                    fields={$currentInput.fields}
-                    on:response={(event) => $currentInput?.callback(event.detail)} />
             </ModalOverlay>
         {/if}
     </div>

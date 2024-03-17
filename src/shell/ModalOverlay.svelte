@@ -27,7 +27,7 @@
         pointer-events: all;
 
         display: grid;
-        grid-template-columns: 1fr auto 1fr;
+        grid-template-columns: minmax(16.6%, 1fr) auto minmax(16.6%, 1fr);
         grid-template-rows: 1fr auto 2fr;
     }
 </style>
