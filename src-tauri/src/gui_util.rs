@@ -281,20 +281,18 @@ impl WorkspaceSession<'_> {
         }
     }
 
-    // policy: most commands prefer to operate on a change and will fail if the change has become ambiguous 
-    pub fn resolve_optional_change(&self, id: &messages::ChangeId) -> Result<Option<Commit>, RevsetError> {        
-        let revset = match self.evaluate_revset_str(&id.hex) {
-            Ok(revset) => revset,
-            Err(RevsetError::Resolution(RevsetResolutionError::NoSuchRevision { .. })) => return Ok(None),
-            Err(err) => return Err(err)
+    // policy: most commands prefer to operate on a change and will fail if the change has been evolved; however, 
+    // if it's become divergent, they will fall back to the known commit so that divergences can be resolved
+    pub fn resolve_single_change(&self, id: &RevId) -> Result<Commit, RevsetError> {
+        let revset = self.evaluate_revset_str(&id.change.hex)?;
+        let mut iter = revset.as_ref().iter().commits(self.operation.repo.store()).fuse();
+        let optional_change = match (iter.next(), iter.next()) {
+            (Some(commit), None) => Some(commit?),
+            (None, _) => None,
+            (Some(_), Some(_)) => Some(self.resolve_single_commit(&id.commit)?)            
         };
 
-        self.resolve_optional(revset)
-    }
-
-    // policy: enforces that the requested change maps only to the expected commit
-    pub fn resolve_single_change(&self, id: &RevId) -> Result<Commit, RevsetError> {
-        match self.resolve_optional_change(&id.change)? {
+        match optional_change {
             Some(commit) => {
                 let resolved_id = commit.id();
                 if resolved_id == self.wc_id() || resolved_id.hex().starts_with(&id.commit.prefix) {

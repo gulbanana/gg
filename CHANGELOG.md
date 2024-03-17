@@ -1,11 +1,10 @@
 # GG Changelog
 
-## Unreleased
+## [0.15.3](releases/tag/v0.15.3)
 
 ### Added
 - Added git remotes to the status bar, with push & fetch commands.
-- GG now understands divergent changes. It will let you abandon them, and prevent you from further-diverging them accidentally.
-- Improved error messages and the UI around them.
+- GG now understands divergent changes, and can target commits that have a shared change id.
 - New config option gg.queries.log-page-size.
 - Miscellaneous design improvements.
 
