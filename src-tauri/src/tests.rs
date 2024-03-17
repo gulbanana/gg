@@ -218,7 +218,7 @@ mod session {
         tx.send(SessionEvent::EndSession)?;
 
         WorkerSession {
-            log_page_size: 6,
+            force_log_page_size: Some(6),
             ..Default::default()
         }
         .handle_events(&rx)?;
@@ -261,7 +261,7 @@ mod session {
         tx.send(SessionEvent::EndSession)?;
 
         WorkerSession {
-            log_page_size: 6,
+            force_log_page_size: Some(6),
             ..Default::default()
         }
         .handle_events(&rx)?;
@@ -308,7 +308,7 @@ mod session {
         tx.send(SessionEvent::EndSession)?;
 
         WorkerSession {
-            log_page_size: 6,
+            force_log_page_size: Some(6),
             ..Default::default()
         }
         .handle_events(&rx)?;
@@ -347,7 +347,7 @@ mod session {
         tx.send(SessionEvent::EndSession)?;
 
         WorkerSession {
-            log_page_size: 2,
+            force_log_page_size: Some(2),
             ..Default::default()
         }
         .handle_events(&rx)?;

@@ -1,6 +1,7 @@
 use jj_lib::settings::UserSettings;
 
 pub trait GGSettings {
+    fn query_log_page_size(&self) -> usize;
     fn query_large_repo_heuristic(&self) -> i64;
     fn query_auto_snapshot(&self) -> Option<bool>;
     fn query_check_immutable(&self) -> Option<bool>;
@@ -8,6 +9,12 @@ pub trait GGSettings {
 }
 
 impl GGSettings for UserSettings {
+    fn query_log_page_size(&self) -> usize {
+        self.config()
+            .get_int("gg.queries.log-page-size")
+            .unwrap_or(1000) as usize
+    }
+
     fn query_large_repo_heuristic(&self) -> i64 {
         self.config()
             .get_int("gg.queries.large-repo-heuristic")

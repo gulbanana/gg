@@ -38,15 +38,15 @@ use crate::{config::GGSettings, messages::{self, RevId}};
 
 /// state that doesn't depend on jj-lib borrowings
 pub struct WorkerSession {
-    pub log_page_size: usize,
+    pub force_log_page_size: Option<usize>,
     pub latest_query: Option<String>,
 }
 
 impl Default for WorkerSession {
     fn default() -> Self {
         WorkerSession {
-            log_page_size: 1000, // XXX make configurable?
-            latest_query: None
+            force_log_page_size: None,
+            latest_query: None,
         }
     }    
 }

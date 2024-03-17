@@ -21,6 +21,29 @@ use self::queries::LogQueryState;
 pub mod mutations;
 pub mod queries;
 
+/// implemented by states of the event loop
+pub trait Session {
+    type Transition;
+    fn handle_events(self, rx: &Receiver<SessionEvent>) -> Result<Self::Transition>;
+}
+
+/// implemented by structured-change commands
+pub trait Mutation: Debug {
+    fn describe(&self) -> String {
+        std::any::type_name::<Self>().to_owned()
+    }
+
+    fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<messages::MutationResult>;
+
+    fn execute_unboxed(self, ws: &mut WorkspaceSession) -> Result<messages::MutationResult>
+    where
+        Self: Sized,
+    {
+        Box::new(self).execute(ws)
+    }
+}
+
+/// messages sent to a worker from other threads. most come with a channel allowing a response
 #[derive(Debug)]
 pub enum SessionEvent {
     #[allow(dead_code)]
@@ -49,24 +72,20 @@ pub enum SessionEvent {
     },
 }
 
-pub trait Mutation: Debug {
-    fn describe(&self) -> String {
-        std::any::type_name::<Self>().to_owned()
-    }
-
-    fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<messages::MutationResult>;
-
-    fn execute_unboxed(self, ws: &mut WorkspaceSession) -> Result<messages::MutationResult>
-    where
-        Self: Sized,
-    {
-        Box::new(self).execute(ws)
-    }
+/// transitions for a workspace session
+pub enum WorkspaceResult {
+    Reopen(Sender<Result<messages::RepoConfig>>, Option<PathBuf>), // workspace -> workspace
+    SessionComplete,                                               // workspace -> worker
 }
 
-pub trait Session {
-    type Transition;
-    fn handle_events(self, rx: &Receiver<SessionEvent>) -> Result<Self::Transition>;
+/// transition for a query session
+pub struct QueryResult(SessionEvent, LogQueryState); // query -> workspace
+
+/// event loop state for a workspace session
+#[derive(Default)]
+struct WorkspaceState {
+    pub unhandled_event: Option<SessionEvent>,
+    pub unpaged_query: Option<LogQueryState>,
 }
 
 impl Session for WorkerSession {
@@ -137,78 +156,6 @@ impl Session for WorkerSession {
     }
 }
 
-/// transition types for a WorkspaceSession
-pub enum WorkspaceResult {
-    Reopen(Sender<Result<messages::RepoConfig>>, Option<PathBuf>),
-    SessionComplete,
-}
-
-/// event loop state for a WorkspaceSession
-#[derive(Default)]
-struct WorkspaceState {
-    pub unhandled_event: Option<SessionEvent>,
-    pub unpaged_query: Option<LogQueryState>,
-}
-
-impl WorkspaceState {
-    pub fn handle_query(
-        &mut self,
-        ws: &WorkspaceSession,
-        tx: Sender<Result<LogPage>>,
-        rx: &Receiver<SessionEvent>,
-        revset_str: Option<&str>,
-        query_state: Option<LogQueryState>,
-    ) -> Result<()> {
-        let query_state = match query_state.or_else(|| self.unpaged_query.take()) {
-            Some(x) => x,
-            None => {
-                tx.send(Err(anyhow!(
-                    "page requested without query in progress or new query"
-                )))?;
-
-                self.unhandled_event = None;
-                self.unpaged_query = None;
-                return Ok(());
-            }
-        };
-
-        let revset_str = match revset_str {
-            Some(x) => x,
-            None => {
-                tx.send(Err(anyhow!("page requested without query in progress")))?;
-
-                self.unhandled_event = None;
-                self.unpaged_query = None;
-                return Ok(());
-            }
-        };
-
-        let revset = match ws
-            .evaluate_revset_str(revset_str)
-            .context("evaluate revset")
-        {
-            Ok(x) => x,
-            Err(err) => {
-                tx.send(Err(err))?;
-
-                self.unhandled_event = None;
-                self.unpaged_query = None;
-                return Ok(());
-            }
-        };
-
-        let mut query = queries::LogQuery::new(ws, &*revset, query_state);
-        let page = query.get_page();
-        tx.send(page)?;
-
-        let QueryResult(next_event, next_query) = query.handle_events(rx).context("LogQuery")?;
-
-        self.unhandled_event = Some(next_event);
-        self.unpaged_query = Some(next_query);
-        Ok(())
-    }
-}
-
 impl Session for WorkspaceSession<'_> {
     type Transition = WorkspaceResult;
 
@@ -236,12 +183,14 @@ impl Session for WorkspaceSession<'_> {
                     tx,
                     query: revset_string,
                 } => {
-                    state.handle_query(
+                    let log_page_size = self.session.force_log_page_size.unwrap_or(1000);
+                    handle_query(
+                        &mut state,
                         &self,
                         tx,
                         rx,
                         Some(&revset_string),
-                        Some(LogQueryState::new(self.session.log_page_size)),
+                        Some(LogQueryState::new(log_page_size)),
                     )?;
 
                     self.session.latest_query = Some(revset_string);
@@ -249,7 +198,7 @@ impl Session for WorkspaceSession<'_> {
                 SessionEvent::QueryLogNextPage { tx } => {
                     let revset_string = self.session.latest_query.as_ref().map(|x| x.as_str());
 
-                    state.handle_query(&self, tx, rx, revset_string, None)?;
+                    handle_query(&mut state, &self, tx, rx, revset_string, None)?;
                 }
                 SessionEvent::ExecuteSnapshot { tx } => {
                     if self.import_and_snapshot(false).is_ok_and(|updated| updated) {
@@ -294,8 +243,6 @@ impl Session for WorkspaceSession<'_> {
     }
 }
 
-pub struct QueryResult(SessionEvent, LogQueryState);
-
 impl Session for queries::LogQuery<'_, '_> {
     type Transition = QueryResult;
 
@@ -313,4 +260,62 @@ impl Session for queries::LogQuery<'_, '_> {
             };
         }
     }
+}
+
+/// helper function for transitioning from workspace state to query state
+fn handle_query(
+    state: &mut WorkspaceState,
+    ws: &WorkspaceSession,
+    tx: Sender<Result<LogPage>>,
+    rx: &Receiver<SessionEvent>,
+    revset_str: Option<&str>,
+    query_state: Option<LogQueryState>,
+) -> Result<()> {
+    let query_state = match query_state.or_else(|| state.unpaged_query.take()) {
+        Some(x) => x,
+        None => {
+            tx.send(Err(anyhow!(
+                "page requested without query in progress or new query"
+            )))?;
+
+            state.unhandled_event = None;
+            state.unpaged_query = None;
+            return Ok(());
+        }
+    };
+
+    let revset_str = match revset_str {
+        Some(x) => x,
+        None => {
+            tx.send(Err(anyhow!("page requested without query in progress")))?;
+
+            state.unhandled_event = None;
+            state.unpaged_query = None;
+            return Ok(());
+        }
+    };
+
+    let revset = match ws
+        .evaluate_revset_str(revset_str)
+        .context("evaluate revset")
+    {
+        Ok(x) => x,
+        Err(err) => {
+            tx.send(Err(err))?;
+
+            state.unhandled_event = None;
+            state.unpaged_query = None;
+            return Ok(());
+        }
+    };
+
+    let mut query = queries::LogQuery::new(ws, &*revset, query_state);
+    let page = query.get_page();
+    tx.send(page)?;
+
+    let QueryResult(next_event, next_query) = query.handle_events(rx).context("LogQuery")?;
+
+    state.unhandled_event = Some(next_event);
+    state.unpaged_query = Some(next_query);
+    Ok(())
 }
