@@ -12,14 +12,17 @@
 
     let label: string;
     let state: "add" | "change" | "remove";
+    let disconnected: boolean;
     switch (name.type) {
         case "LocalBranch":
             label = name.branch_name;
             state = name.is_synced ? "change" : "add";
+            disconnected = !name.is_tracking;
             break;
         case "RemoteBranch":
             label = `${name.branch_name}@${name.remote_name}`;
             state = name.is_tracked ? "remove" : "change";
+            disconnected = name.is_deleted;
             break;
     }
 
@@ -28,7 +31,7 @@
 
 <Object {operand} {label} conflicted={name.has_conflict} let:context let:hint>
     <Zone {operand} let:target>
-        <Chip {context} {target}>
+        <Chip {context} {target} {disconnected}>
             <Icon name="git-branch" state={context ? null : state} />
             <span>{hint ?? label}</span>
         </Chip>

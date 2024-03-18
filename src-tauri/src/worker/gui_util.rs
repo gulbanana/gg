@@ -958,7 +958,8 @@ fn build_branches_index(repo: &ReadonlyRepo) -> BranchIndex {
                 remote_name: remote_name.to_owned(),
                 has_conflict: remote_ref.target.has_conflict(),
                 is_synced: remote_ref.is_tracking() && remote_ref.target == *local_target,
-                is_tracked: remote_ref.is_tracking()
+                is_tracked: remote_ref.is_tracking(),
+                is_deleted: local_target.is_absent()
             });
         }
     }

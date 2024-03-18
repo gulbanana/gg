@@ -10,7 +10,6 @@ These changes may or may not be implemented in the future.
 * edge case: mutations can fail due to ambiguity due to other writers; this should update the UI. maybe use a special From on resolve_change
 * perf: optimise revdetail loads - we already have the header
 * perf: better solution to slow immutability check - jj-lib will have a revset contains cache soon
-* feat: mark more branch states in the ui - local-not-remote, will-delete 
 * feat: alternate drag modes for copy/duplicate, maybe for rebase-all-descendants
 * feat: log multiselect
 * feat: log filters (find commits that change path etc)
@@ -27,6 +26,7 @@ These changes may or may not be implemented in the future.
 * feat: structured op descs - want to be able to present them more nicely, extracting ids etc. tags? 
     - there's a request for this to be part of jj
 * feat: more mutations
+    - make track available to recreate deleting remotes
     - delete branch
     - push branch 
     - fetch branch?

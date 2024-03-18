@@ -1,9 +1,10 @@
 <script lang="ts">
     export let context: boolean;
     export let target: boolean;
+    export let disconnected: boolean = false;
 </script>
 
-<div class="chip" class:context class:target>
+<div class="chip" class:context class:target class:disconnected>
     <slot />
 </div>
 
@@ -33,5 +34,9 @@
     .target {
         background: var(--ctp-flamingo);
         color: black;
+    }
+
+    .disconnected {
+        border-style: dashed;
     }
 </style>

@@ -131,6 +131,8 @@ pub enum RefName {
         is_synced: bool,
         /// Has local ref
         is_tracked: bool,
+        /// Local ref has been deleted
+        is_deleted: bool,
         remote_name: String,
     },
 }
