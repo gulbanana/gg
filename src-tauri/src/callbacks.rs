@@ -9,11 +9,11 @@ use std::{
 
 use anyhow::Result;
 use jj_lib::{git::RemoteCallbacks, repo::MutableRepo};
-use tauri::{Manager, WebviewWindow};
+use tauri::{Manager, Window};
 
 use crate::{messages::InputRequest, worker::WorkerCallbacks, AppState};
 
-pub struct FrontendCallbacks(pub WebviewWindow);
+pub struct FrontendCallbacks(pub Window);
 
 impl WorkerCallbacks for FrontendCallbacks {
     fn with_git(

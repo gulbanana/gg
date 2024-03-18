@@ -17,7 +17,7 @@ use anyhow::{anyhow, Context, Result};
 use log::LevelFilter;
 use tauri::menu::Menu;
 use tauri::{ipc::InvokeError, Manager};
-use tauri::{State, WebviewWindow, Window, WindowEvent, Wry};
+use tauri::{State, Window, WindowEvent, Wry};
 use tauri_plugin_window_state::StateFlags;
 
 use messages::{
@@ -138,7 +138,7 @@ fn main() -> Result<()> {
                 .ok_or(anyhow!("preconfigured window not found"))?;
             let (sender, receiver) = channel();
 
-            let handle = window.clone();
+            let mut handle = window.as_ref().window();
             let window_worker = thread::spawn(move || {
                 log::info!("start worker");
 
@@ -160,10 +160,10 @@ fn main() -> Result<()> {
 
             window.on_menu_event(|w, e| handler::fatal!(menu::handle_event(w, e)));
 
-            let handle = window.clone();
+            handle = window.as_ref().window();
             window.on_window_event(move |event| handle_window_event(&handle, event));
 
-            let handle = window.clone();
+            handle = window.as_ref().window();
             window.listen("gg://revision/select", move |event| {
                 let payload: Result<Option<messages::RevHeader>, serde_json::Error> =
                     serde_json::from_str(event.payload());
@@ -497,7 +497,7 @@ fn try_mutate<T: Mutation + Send + Sync + 'static>(
     call_rx.recv().map_err(InvokeError::from_error)
 }
 
-fn handle_window_event(window: &WebviewWindow, event: &WindowEvent) {
+fn handle_window_event(window: &Window, event: &WindowEvent) {
     match *event {
         WindowEvent::Focused(true) => {
             log::debug!("window focused; requesting snapshot");
