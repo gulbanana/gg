@@ -41,7 +41,9 @@
 </script>
 
 <ModalDialog {title} on:cancel={onCancel} on:default={onEnter}>
-    <p>{detail}</p>
+    {#if detail != ""}
+        <p>{detail}</p>
+    {/if}
     {#each fields as field}
         <label for={field}>{field}:</label>
         <input id="field-{field}" type={field == "Password" ? "password" : "text"} />
@@ -56,6 +58,10 @@
     p {
         grid-column: 1/3;
         word-wrap: break-word;
+    }
+
+    label:first-child {
+        margin-top: 1em;
     }
 
     :last-of-type {

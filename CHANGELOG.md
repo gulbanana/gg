@@ -3,10 +3,15 @@
 ## [0.15.3](releases/tag/v0.15.3)
 
 ### Added
-- Added git remotes to the status bar, with push & fetch commands.
-- GG now understands divergent changes, and can target commits that have a shared change id.
+- Git remotes in the status bar, with push & fetch commands.
+- "Create branch" command on revisions. 
 - New config option gg.queries.log-page-size.
 - Miscellaneous design improvements.
+
+### Fixed 
+- GG now understands divergent changes, and can act on commits that have a shared change id. 
+  Note that if you do anything to such commits other than abandoning them, you're likely to 
+  create even more divergent commits!
 
 ## [0.15.2](releases/tag/v0.15.2)
 

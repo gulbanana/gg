@@ -2,8 +2,9 @@ import { invoke, type InvokeArgs } from "@tauri-apps/api/core";
 import { emit, listen, type EventCallback } from "@tauri-apps/api/event";
 import type { Readable, Subscriber, Unsubscriber } from "svelte/store";
 import type { MutationResult } from "./messages/MutationResult";
-import { currentMutation, repoStatusEvent, revisionSelectEvent } from "./stores";
+import { currentInput, currentMutation, repoStatusEvent, revisionSelectEvent } from "./stores";
 import { onMount } from "svelte";
+import { resolve } from "@tauri-apps/api/path";
 
 export type Query<T> = { type: "wait" } | { type: "data", value: T } | { type: "error", message: string };
 
@@ -125,5 +126,16 @@ export function mutate<T>(command: string, mutation: T) {
 export function delay<T>(): Promise<Query<T>> {
     return new Promise(function (resolve) {
         setTimeout(() => resolve({ type: "wait" }), 250);
+    });
+}
+
+export function getInput<const T extends string[]>(title: string, detail: string, fields: T): Promise<{ [K in typeof fields[number]]: string } | null> {
+    return new Promise(resolve => {
+        currentInput.set({
+            title, detail, fields, callback: response => {
+                currentInput.set(null);
+                resolve(response.cancel ? null : response.fields as any);
+            }
+        });
     });
 }

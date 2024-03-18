@@ -22,10 +22,10 @@ use jj_lib::{
 
 use super::{gui_util::WorkspaceSession, Mutation};
 use crate::messages::{
-    AbandonRevisions, CheckoutRevision, CopyChanges, CreateRevision, DescribeRevision,
-    DuplicateRevisions, FetchRemote, InsertRevision, MoveBranch, MoveChanges, MoveRevision,
-    MoveSource, MutationResult, PushRemote, RefName, TrackBranch, TreePath, UndoOperation,
-    UntrackBranch,
+    AbandonRevisions, CheckoutRevision, CopyChanges, CreateBranch, CreateRevision, DeleteBranch,
+    DescribeRevision, DuplicateRevisions, FetchRemote, InsertRevision, MoveBranch, MoveChanges,
+    MoveRevision, MoveSource, MutationResult, PushRemote, RefName, TrackBranch, TreePath,
+    UndoOperation, UntrackBranch,
 };
 
 macro_rules! precondition {
@@ -494,6 +494,61 @@ impl Mutation for UntrackBranch {
         )? {
             Some(new_status) => Ok(MutationResult::Updated { new_status }),
             None => Ok(MutationResult::Unchanged),
+        }
+    }
+}
+
+impl Mutation for CreateBranch {
+    fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
+        let mut tx = ws.start_transaction()?;
+
+        let existing_branch = ws.view().get_local_branch(&self.name);
+        if existing_branch.is_present() {
+            precondition!("{} already exists", self.name);
+        }
+
+        let commit = ws.resolve_single_change(&self.id)?;
+        tx.mut_repo()
+            .set_local_branch_target(&self.name, RefTarget::normal(commit.id().clone()));
+
+        match ws.finish_transaction(
+            tx,
+            format!(
+                "create {} pointing to commit {}",
+                self.name,
+                ws.format_commit_id(commit.id()).hex
+            ),
+        )? {
+            Some(new_status) => Ok(MutationResult::Updated { new_status }),
+            None => Ok(MutationResult::Unchanged),
+        }
+    }
+}
+
+impl Mutation for DeleteBranch {
+    fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
+        match self.name {
+            RefName::RemoteBranch {
+                branch_name,
+                remote_name,
+                ..
+            } => {
+                precondition!(
+                    "{}@{} is a remote branch and cannot be deleted",
+                    branch_name,
+                    remote_name
+                );
+            }
+            RefName::LocalBranch { branch_name, .. } => {
+                let mut tx = ws.start_transaction()?;
+
+                tx.mut_repo().remove_branch(&branch_name);
+
+                match ws.finish_transaction(tx, format!("forget {}", branch_name))? {
+                    Some(new_status) => Ok(MutationResult::Updated { new_status }),
+                    None => Ok(MutationResult::Unchanged),
+                }
+            }
         }
     }
 }

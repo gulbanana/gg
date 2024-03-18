@@ -87,6 +87,14 @@ pub fn build_main(app_handle: &AppHandle) -> tauri::Result<Menu<Wry>> {
                 true,
                 None::<&str>,
             )?,
+            &PredefinedMenuItem::separator(app_handle)?,
+            &MenuItem::with_id(
+                app_handle,
+                "commit_branch",
+                "Create branch",
+                true,
+                None::<&str>,
+            )?,
         ],
     )?;
 
@@ -176,6 +184,14 @@ pub fn build_context(
                 true,
                 None::<&str>,
             )?,
+            &PredefinedMenuItem::separator(app_handle)?,
+            &MenuItem::with_id(
+                app_handle,
+                "revision_branch",
+                "Create branch",
+                true,
+                None::<&str>,
+            )?,
         ],
     )?;
 
@@ -237,6 +253,7 @@ pub fn handle_selection(menu: Menu<Wry>, selection: Option<RevHeader>) -> Result
                 "commit_restore",
                 !rev.is_immutable && rev.parent_ids.len() == 1,
             )?;
+            commit_submenu.enable("commit_branch", true)?;
         }
     };
 
@@ -272,6 +289,7 @@ pub fn handle_context(window: Window, ctx: Operand) -> Result<()> {
                 "revision_restore",
                 !header.is_immutable && header.parent_ids.len() == 1,
             )?;
+            context_menu.enable("revision_branch", true)?;
 
             window.popup_menu(context_menu)?;
         }
@@ -342,12 +360,14 @@ pub fn handle_event(window: &Window, event: MenuEvent) -> Result<()> {
         "commit_abandon" => window.emit("gg://menu/commit", "abandon")?,
         "commit_squash" => window.emit("gg://menu/commit", "squash")?,
         "commit_restore" => window.emit("gg://menu/commit", "restore")?,
+        "commit_branch" => window.emit("gg://menu/commit", "branch")?,
         "revision_new" => window.emit("gg://context/revision", "new")?,
         "revision_edit" => window.emit("gg://context/revision", "edit")?,
         "revision_duplicate" => window.emit("gg://context/revision", "duplicate")?,
         "revision_abandon" => window.emit("gg://context/revision", "abandon")?,
         "revision_squash" => window.emit("gg://context/revision", "squash")?,
         "revision_restore" => window.emit("gg://context/revision", "restore")?,
+        "revision_branch" => window.emit("gg://context/revision", "branch")?,
         "tree_squash" => window.emit("gg://context/tree", "squash")?,
         "tree_restore" => window.emit("gg://context/tree", "restore")?,
         "branch_track" => window.emit("gg://context/branch", "track")?,

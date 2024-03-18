@@ -6,7 +6,8 @@ import type { CreateRevision } from "../messages/CreateRevision";
 import type { DescribeRevision } from "../messages/DescribeRevision";
 import type { DuplicateRevisions } from "../messages/DuplicateRevisions";
 import type { MoveChanges } from "../messages/MoveChanges";
-import { mutate } from "../ipc";
+import type { CreateBranch } from "../messages/CreateBranch";
+import { getInput, mutate } from "../ipc";
 
 export default class RevisionMutator {
     #revision: RevHeader;
@@ -47,6 +48,9 @@ export default class RevisionMutator {
                 if (!this.#revision.is_immutable && this.#revision.parent_ids.length == 1) {
                     this.onRestore();
                 }
+                break;
+            case "branch":
+                this.onBranch();
                 break;
             default:
                 console.log(`unimplemented mutation '${event}'`, this);
@@ -100,4 +104,12 @@ export default class RevisionMutator {
             paths: []
         });
     };
+
+    onBranch = async () => {
+        let response = await getInput("Create Branch", "", ["Branch Name"]);
+        if (response) {
+            let name = response["Branch Name"];
+            mutate<CreateBranch>("create_branch", { name, id: this.#revision.id })
+        }
+    }
 }
