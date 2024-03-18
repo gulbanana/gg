@@ -1,100 +1,101 @@
-//! This module is a temporary compromise allowing coupling from the worker back to the UI.
-//! It's not possible to abstract over jj_lib::git::RemoteCallbacks at the moment.
+//! Sometimes callbacks are buried deep in library code, requiring user input.
+//! This module offers an overcomplicated and fragile solution.
 
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
-    sync::{mpsc::channel, OnceLock},
+    sync::mpsc::channel,
 };
 
-use jj_lib::git::RemoteCallbacks;
+use anyhow::Result;
+use jj_lib::{git::RemoteCallbacks, repo::MutableRepo};
 use tauri::{Manager, WebviewWindow};
 
-use crate::{messages::InputRequest, AppState};
+use crate::{gui_util::WorkerCallbacks, messages::InputRequest, AppState};
 
-pub static UI_WINDOW: OnceLock<WebviewWindow> = OnceLock::new();
+pub struct FrontendCallbacks(pub WebviewWindow);
 
-pub fn with_git<T>(f: impl FnOnce(RemoteCallbacks<'_>) -> T) -> T {
-    let mut callbacks = RemoteCallbacks::default();
+impl WorkerCallbacks for FrontendCallbacks {
+    fn with_git(
+        &self,
+        repo: &mut MutableRepo,
+        f: &dyn Fn(&mut MutableRepo, RemoteCallbacks<'_>) -> Result<()>,
+    ) -> Result<()> {
+        let mut cb = RemoteCallbacks::default();
 
-    let get_ssh_keys = &mut get_ssh_keys;
-    callbacks.get_ssh_keys = Some(get_ssh_keys);
+        let get_ssh_keys = &mut get_ssh_keys;
+        cb.get_ssh_keys = Some(get_ssh_keys);
 
-    let get_password = &mut |url: &str, username: &str| {
-        request_input(
-            format!("Please enter a password for {} at {}", username, url),
-            ["Password".into()],
-        )
-        .and_then(|mut fields| fields.remove("Password"))
-    };
-    callbacks.get_password = Some(get_password);
+        let get_password = &mut |url: &str, username: &str| {
+            self.request_input(
+                format!("Please enter a password for {} at {}", username, url),
+                ["Password".into()],
+            )
+            .and_then(|mut fields| fields.remove("Password"))
+        };
+        cb.get_password = Some(get_password);
 
-    let get_username_password = &mut |url: &str| {
-        request_input(
-            format!("Please enter a username and password for {}", url),
-            ["Username".into(), "Password".into()],
-        )
-        .and_then(|mut fields| {
-            fields.remove("Username").and_then(|username| {
-                fields
-                    .remove("Password")
-                    .map(|password| (username, password))
+        let get_username_password = &mut |url: &str| {
+            self.request_input(
+                format!("Please enter a username and password for {}", url),
+                ["Username".into(), "Password".into()],
+            )
+            .and_then(|mut fields| {
+                fields.remove("Username").and_then(|username| {
+                    fields
+                        .remove("Password")
+                        .map(|password| (username, password))
+                })
             })
-        })
-    };
-    callbacks.get_username_password = Some(get_username_password);
+        };
+        cb.get_username_password = Some(get_username_password);
 
-    f(callbacks)
+        f(repo, cb)
+    }
 }
 
-fn request_input<T: IntoIterator<Item = String>>(
-    detail: String,
-    fields: T,
-) -> Option<HashMap<String, String>> {
-    log::debug!("request input");
+impl FrontendCallbacks {
+    fn request_input<T: IntoIterator<Item = String>>(
+        &self,
+        detail: String,
+        fields: T,
+    ) -> Option<HashMap<String, String>> {
+        log::debug!("request input");
 
-    // get the global [note: :-(] user-input window
-    let window = match UI_WINDOW.get() {
-        Some(window) => window.clone(),
-        None => {
-            log::error!("input request failed: UI_WINDOW not set");
-            return None;
-        }
-    };
+        // initialise a channel to receive responses
+        let (tx, rx) = channel();
+        self.0.state::<AppState>().set_input(self.0.label(), tx);
 
-    // initialise a channel to receive responses
-    let (tx, rx) = channel();
-    window.state::<AppState>().set_input(window.label(), tx);
-
-    // send the request
-    match window.emit(
-        "gg://input",
-        InputRequest {
-            title: String::from("Git login"),
-            detail,
-            fields: fields.into_iter().collect(),
-        },
-    ) {
-        Ok(_) => (),
-        Err(err) => {
-            log::error!("input request failed: emit failed: {err}");
-            return None;
-        }
-    }
-
-    // wait for the response
-    match rx.recv() {
-        Ok(response) => {
-            if response.cancel {
-                log::error!("input request failed: input cancelled");
-                None
-            } else {
-                Some(response.fields)
+        // send the request
+        match self.0.emit(
+            "gg://input",
+            InputRequest {
+                title: String::from("Git login"),
+                detail,
+                fields: fields.into_iter().collect(),
+            },
+        ) {
+            Ok(_) => (),
+            Err(err) => {
+                log::error!("input request failed: emit failed: {err}");
+                return None;
             }
         }
-        Err(err) => {
-            log::error!("input request failed: {err}");
-            None
+
+        // wait for the response
+        match rx.recv() {
+            Ok(response) => {
+                if response.cancel {
+                    log::error!("input request failed: input cancelled");
+                    None
+                } else {
+                    Some(response.fields)
+                }
+            }
+            Err(err) => {
+                log::error!("input request failed: {err}");
+                None
+            }
         }
     }
 }

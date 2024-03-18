@@ -49,7 +49,7 @@ impl LogQueryState {
 }
 
 /// live instance of a query
-pub struct LogQuery<'a, 'b: 'a> {
+pub struct QuerySession<'a, 'b: 'a> {
     pub ws: &'a WorkspaceSession<'b>,
     iter: Peekable<
         Skip<
@@ -61,17 +61,17 @@ pub struct LogQuery<'a, 'b: 'a> {
     pub state: LogQueryState,
 }
 
-impl<'a, 'b> LogQuery<'a, 'b> {
+impl<'a, 'b> QuerySession<'a, 'b> {
     pub fn new(
         ws: &'a WorkspaceSession<'b>,
         revset: &'a dyn Revset,
         state: LogQueryState,
-    ) -> LogQuery<'a, 'b> {
+    ) -> QuerySession<'a, 'b> {
         let iter = TopoGroupedRevsetGraphIterator::new(revset.iter_graph())
             .skip(state.next_row)
             .peekable();
 
-        LogQuery { ws, iter, state }
+        QuerySession { ws, iter, state }
     }
 
     pub fn get_page(&mut self) -> Result<LogPage> {

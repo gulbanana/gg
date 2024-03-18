@@ -32,6 +32,8 @@ use messages::{
 };
 use worker::{Mutation, Session, SessionEvent};
 
+use crate::callbacks::FrontendCallbacks;
+
 #[derive(Default)]
 struct AppState(Mutex<HashMap<String, WindowState>>);
 
@@ -138,15 +140,11 @@ fn main() -> Result<()> {
                 .ok_or(anyhow!("preconfigured window not found"))?;
             let (sender, receiver) = channel();
 
-            callbacks::UI_WINDOW
-                .set(window.clone())
-                .expect("init UI_WINDOW");
-
             let handle = window.clone();
             let window_worker = thread::spawn(move || {
                 log::info!("start worker");
 
-                while let Err(err) = WorkerSession::default()
+                while let Err(err) = WorkerSession::new(FrontendCallbacks(handle.clone()))
                     .handle_events(&receiver)
                     .context("worker")
                 {

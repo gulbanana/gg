@@ -21,7 +21,6 @@ use jj_lib::{
 };
 
 use crate::{
-    callbacks,
     gui_util::WorkspaceSession,
     messages::{
         AbandonRevisions, CheckoutRevision, CopyChanges, CreateRevision, DescribeRevision,
@@ -639,8 +638,15 @@ impl Mutation for PushRemote {
             branch_updates,
             force_pushed_branches,
         };
-        callbacks::with_git(|cb| {
-            git::push_branches(tx.mut_repo(), &git_repo, &self.remote_name, &targets, cb)
+
+        ws.session.callbacks.with_git(tx.mut_repo(), &|repo, cb| {
+            Ok(git::push_branches(
+                repo,
+                &git_repo,
+                &self.remote_name,
+                &targets,
+                cb,
+            )?)
         })?;
 
         match ws.finish_transaction(
@@ -672,15 +678,16 @@ impl Mutation for FetchRemote {
         //     .map(|b| StringPattern::Exact(b.0.to_owned()))
         //     .collect_vec();
 
-        callbacks::with_git(|cb| {
+        ws.session.callbacks.with_git(tx.mut_repo(), &|repo, cb| {
             git::fetch(
-                tx.mut_repo(),
+                repo,
                 &git_repo,
                 &self.remote_name,
                 &[StringPattern::everything()],
                 cb,
                 &ws.settings.git_settings(),
-            )
+            )?;
+            Ok(())
         })?;
 
         match ws.finish_transaction(tx, format!("fetch from git remote(s) {}", self.remote_name))? {

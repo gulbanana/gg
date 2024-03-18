@@ -243,7 +243,7 @@ impl Session for WorkspaceSession<'_> {
     }
 }
 
-impl Session for queries::LogQuery<'_, '_> {
+impl Session for queries::QuerySession<'_, '_> {
     type Transition = QueryResult;
 
     fn handle_events(mut self, rx: &Receiver<SessionEvent>) -> Result<Self::Transition> {
@@ -309,7 +309,7 @@ fn handle_query(
         }
     };
 
-    let mut query = queries::LogQuery::new(ws, &*revset, query_state);
+    let mut query = queries::QuerySession::new(ws, &*revset, query_state);
     let page = query.get_page();
     tx.send(page)?;
 
