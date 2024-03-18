@@ -70,7 +70,7 @@ impl FrontendCallbacks {
         match self.0.emit(
             "gg://input",
             InputRequest {
-                title: String::from("Git login"),
+                title: String::from("Git Login"),
                 detail,
                 fields: fields.into_iter().collect(),
             },
