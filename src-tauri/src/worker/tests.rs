@@ -60,13 +60,11 @@ mod session {
     use anyhow::Result;
 
     use crate::{
-        gui_util::WorkerSession,
         messages::{LogPage, RepoConfig, RevResult},
-        tests::{mkid, revs},
-        worker::{Session, SessionEvent},
+        worker::{Session, SessionEvent, WorkerSession},
     };
 
-    use super::mkrepo;
+    use super::{mkid, mkrepo, revs};
 
     #[test]
     fn start_and_stop() -> Result<()> {
@@ -400,16 +398,14 @@ mod mutation {
     use jj_lib::{backend::TreeValue, repo_path::RepoPath};
 
     use crate::{
-        gui_util::WorkerSession,
         messages::{
             CheckoutRevision, CreateRevision, DescribeRevision, MoveChanges, MutationResult,
             RevResult, TreePath,
         },
-        tests::revs,
-        worker::{queries, Mutation},
+        worker::{queries, Mutation, WorkerSession},
     };
 
-    use super::mkrepo;
+    use super::{mkrepo, revs};
 
     #[test]
     fn wc_path_is_visible() -> Result<()> {

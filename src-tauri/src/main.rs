@@ -2,12 +2,9 @@
 
 mod callbacks;
 mod config;
-mod gui_util;
 mod handler;
 mod menu;
 mod messages;
-#[cfg(all(test, not(feature = "ts-rs")))]
-mod tests;
 mod worker;
 
 use std::collections::HashMap;
@@ -23,14 +20,13 @@ use tauri::{ipc::InvokeError, Manager};
 use tauri::{State, WebviewWindow, Window, WindowEvent, Wry};
 use tauri_plugin_window_state::StateFlags;
 
-use gui_util::WorkerSession;
 use messages::{
     AbandonRevisions, CheckoutRevision, CopyChanges, CreateRevision, DescribeRevision,
     DuplicateRevisions, FetchRemote, InputResponse, InsertRevision, MoveBranch, MoveChanges,
     MoveRevision, MoveSource, MutationResult, PushRemote, RevId, TrackBranch, UndoOperation,
     UntrackBranch,
 };
-use worker::{Mutation, Session, SessionEvent};
+use worker::{Mutation, Session, SessionEvent, WorkerSession};
 
 use crate::callbacks::FrontendCallbacks;
 

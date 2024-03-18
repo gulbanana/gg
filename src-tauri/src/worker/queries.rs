@@ -29,7 +29,7 @@ struct LogStem {
 }
 
 /// state used for init or restart of a query
-pub struct LogQueryState {
+pub struct QueryState {
     /// max number of rows per page
     page_size: usize,
     /// number of rows already yielded
@@ -38,9 +38,9 @@ pub struct LogQueryState {
     stems: Vec<Option<LogStem>>,
 }
 
-impl LogQueryState {
-    pub fn new(page_size: usize) -> LogQueryState {
-        LogQueryState {
+impl QueryState {
+    pub fn new(page_size: usize) -> QueryState {
+        QueryState {
             page_size,
             next_row: 0,
             stems: Vec::new(),
@@ -58,14 +58,14 @@ pub struct QuerySession<'a, 'b: 'a> {
             >,
         >,
     >,
-    pub state: LogQueryState,
+    pub state: QueryState,
 }
 
 impl<'a, 'b> QuerySession<'a, 'b> {
     pub fn new(
         ws: &'a WorkspaceSession<'b>,
         revset: &'a dyn Revset,
-        state: LogQueryState,
+        state: QueryState,
     ) -> QuerySession<'a, 'b> {
         let iter = TopoGroupedRevsetGraphIterator::new(revset.iter_graph())
             .skip(state.next_row)

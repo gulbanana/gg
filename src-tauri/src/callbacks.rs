@@ -11,7 +11,7 @@ use anyhow::Result;
 use jj_lib::{git::RemoteCallbacks, repo::MutableRepo};
 use tauri::{Manager, WebviewWindow};
 
-use crate::{gui_util::WorkerCallbacks, messages::InputRequest, AppState};
+use crate::{messages::InputRequest, worker::WorkerCallbacks, AppState};
 
 pub struct FrontendCallbacks(pub WebviewWindow);
 

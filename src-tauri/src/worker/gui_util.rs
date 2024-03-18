@@ -12,7 +12,7 @@ use jj_cli::{
     config::LayeredConfigs,
     git_util::is_colocated_git_workspace,
 };
-use jj_lib::{backend::BackendError, default_index::{AsCompositeIndex, DefaultReadonlyIndex}, file_util::relative_path, git::RemoteCallbacks, gitignore::GitIgnoreFile, op_store::WorkspaceId, repo::{MutableRepo, RepoLoaderError}, repo_path::RepoPath, revset::{RevsetEvaluationError, RevsetIteratorExt, RevsetResolutionError}, rewrite, view::View, working_copy::{CheckoutStats, SnapshotOptions}};
+use jj_lib::{backend::BackendError, default_index::{AsCompositeIndex, DefaultReadonlyIndex}, file_util::relative_path, gitignore::GitIgnoreFile, op_store::WorkspaceId, repo::RepoLoaderError, repo_path::RepoPath, revset::{RevsetEvaluationError, RevsetIteratorExt, RevsetResolutionError}, rewrite, view::View, working_copy::{CheckoutStats, SnapshotOptions}};
 use jj_lib::{
     backend::{ChangeId, CommitId},
     commit::Commit,
@@ -35,44 +35,7 @@ use jj_lib::{
 use thiserror::Error;
 
 use crate::{config::GGSettings, messages::{self, RevId}};
-
-pub trait WorkerCallbacks {
-    fn with_git(&self, repo: &mut MutableRepo, f: &dyn Fn(&mut MutableRepo, RemoteCallbacks<'_>) -> Result<()>) -> Result<()>;
-}
-
-struct NoCallbacks;
-
-impl WorkerCallbacks for NoCallbacks {
-    fn with_git(&self, repo: &mut MutableRepo, f: &dyn Fn(&mut MutableRepo, RemoteCallbacks<'_>) -> Result<()>) -> Result<()> {
-        f(repo, RemoteCallbacks::default())
-    }
-}
-
-/// state that doesn't depend on jj-lib borrowings
-pub struct WorkerSession {
-    pub force_log_page_size: Option<usize>,
-    pub latest_query: Option<String>,
-    pub callbacks: Box<dyn WorkerCallbacks>
-}
-
-impl WorkerSession {
-    pub fn new<T: WorkerCallbacks + 'static>(callbacks: T) -> Self {
-        WorkerSession {
-            callbacks: Box::new(callbacks),
-            ..Default::default()
-        }
-    }
-}
-
-impl Default for WorkerSession {
-    fn default() -> Self {
-        WorkerSession {
-            force_log_page_size: None,
-            latest_query: None,
-            callbacks: Box::new(NoCallbacks)
-        }
-    }    
-}
+use super::WorkerSession;
 
 /// jj-dependent state, available when a workspace is open
 pub struct WorkspaceSession<'a> {
@@ -120,7 +83,7 @@ impl WorkerSession {
 
         let defaults = Config::builder()
             .add_source(jj_cli::config::default_config())
-            .add_source(config::File::from_str(include_str!("config/gg.toml"), config::FileFormat::Toml))
+            .add_source(config::File::from_str(include_str!("../config/gg.toml"), config::FileFormat::Toml))
             .build()?;
 
         let mut configs = LayeredConfigs::from_environment(defaults);

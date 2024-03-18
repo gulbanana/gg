@@ -1,31 +1,21 @@
 //! Worker per window, owning repo data (jj-lib is not thread-safe)
 //! The worker thread is a state machine, running different handle functions based on loaded data
 
-use std::{
-    fmt::Debug,
-    panic::{catch_unwind, AssertUnwindSafe},
-    path::PathBuf,
-    sync::mpsc::{Receiver, Sender},
-};
+mod gui_util;
+mod mutations;
+mod queries;
+mod session;
+#[cfg(all(test, not(feature = "ts-rs")))]
+mod tests;
 
-use anyhow::{anyhow, Context, Result};
+use std::fmt::Debug;
 
-use crate::messages::{self, RevId};
-use crate::{
-    gui_util::{WorkerSession, WorkspaceSession},
-    messages::LogPage,
-};
+use anyhow::Result;
+use jj_lib::{git::RemoteCallbacks, repo::MutableRepo};
 
-use self::queries::LogQueryState;
-
-pub mod mutations;
-pub mod queries;
-
-/// implemented by states of the event loop
-pub trait Session {
-    type Transition;
-    fn handle_events(self, rx: &Receiver<SessionEvent>) -> Result<Self::Transition>;
-}
+use crate::messages;
+use gui_util::WorkspaceSession;
+pub use session::{Session, SessionEvent};
 
 /// implemented by structured-change commands
 pub trait Mutation: Debug {
@@ -43,279 +33,49 @@ pub trait Mutation: Debug {
     }
 }
 
-/// messages sent to a worker from other threads. most come with a channel allowing a response
-#[derive(Debug)]
-pub enum SessionEvent {
-    #[allow(dead_code)]
-    EndSession,
-    OpenWorkspace {
-        tx: Sender<Result<messages::RepoConfig>>,
-        wd: Option<PathBuf>,
-    },
-    QueryLog {
-        tx: Sender<Result<messages::LogPage>>,
-        query: String,
-    },
-    QueryLogNextPage {
-        tx: Sender<Result<messages::LogPage>>,
-    },
-    QueryRevision {
-        tx: Sender<Result<messages::RevResult>>,
-        id: RevId,
-    },
-    ExecuteSnapshot {
-        tx: Sender<Option<messages::RepoStatus>>,
-    },
-    ExecuteMutation {
-        tx: Sender<messages::MutationResult>,
-        mutation: Box<dyn Mutation + Send + Sync>,
-    },
+/// implemented by UI layers to request user input and receive progress
+pub trait WorkerCallbacks {
+    fn with_git(
+        &self,
+        repo: &mut MutableRepo,
+        f: &dyn Fn(&mut MutableRepo, RemoteCallbacks<'_>) -> Result<()>,
+    ) -> Result<()>;
 }
 
-/// transitions for a workspace session
-pub enum WorkspaceResult {
-    Reopen(Sender<Result<messages::RepoConfig>>, Option<PathBuf>), // workspace -> workspace
-    SessionComplete,                                               // workspace -> worker
+struct NoCallbacks;
+
+impl WorkerCallbacks for NoCallbacks {
+    fn with_git(
+        &self,
+        repo: &mut MutableRepo,
+        f: &dyn Fn(&mut MutableRepo, RemoteCallbacks<'_>) -> Result<()>,
+    ) -> Result<()> {
+        f(repo, RemoteCallbacks::default())
+    }
 }
 
-/// transition for a query session
-pub struct QueryResult(SessionEvent, LogQueryState); // query -> workspace
-
-/// event loop state for a workspace session
-#[derive(Default)]
-struct WorkspaceState {
-    pub unhandled_event: Option<SessionEvent>,
-    pub unpaged_query: Option<LogQueryState>,
+/// state that doesn't depend on jj-lib borrowings
+pub struct WorkerSession {
+    pub force_log_page_size: Option<usize>,
+    pub latest_query: Option<String>,
+    pub callbacks: Box<dyn WorkerCallbacks>,
 }
 
-impl Session for WorkerSession {
-    type Transition = ();
-
-    fn handle_events(mut self, rx: &Receiver<SessionEvent>) -> Result<()> {
-        let mut latest_wd: Option<PathBuf> = None;
-
-        loop {
-            let evt = rx.recv();
-            log::debug!("WorkerSession handling {evt:?}");
-            match evt {
-                Ok(SessionEvent::EndSession) => return Ok(()),
-                Ok(SessionEvent::ExecuteSnapshot { .. }) => (),
-                Ok(SessionEvent::OpenWorkspace { mut tx, mut wd }) => loop {
-                    let resolved_wd = match wd.clone().or(latest_wd) {
-                        Some(wd) => wd,
-                        None => match std::env::current_dir().context("current_dir") {
-                            Ok(wd) => wd,
-                            Err(err) => {
-                                latest_wd = None;
-                                tx.send(Ok(messages::RepoConfig::LoadError {
-                                    absolute_path: PathBuf::new().into(),
-                                    message: format!("{err:#}"),
-                                }))?;
-                                break;
-                            }
-                        },
-                    };
-
-                    let mut ws = match self.load_directory(&resolved_wd) {
-                        Ok(ws) => ws,
-                        Err(err) => {
-                            latest_wd = None;
-                            tx.send(Ok(messages::RepoConfig::LoadError {
-                                absolute_path: resolved_wd.into(),
-                                message: format!("{err:#}"),
-                            }))?;
-                            break;
-                        }
-                    };
-
-                    latest_wd = Some(resolved_wd);
-
-                    ws.import_and_snapshot(false)?;
-
-                    tx.send(ws.format_config())?;
-
-                    match ws.handle_events(rx).context("WorkspaceSession")? {
-                        WorkspaceResult::Reopen(new_tx, new_cwd) => (tx, wd) = (new_tx, new_cwd),
-                        WorkspaceResult::SessionComplete => return Ok(()),
-                    }
-                },
-                Ok(evt) => {
-                    log::error!(
-                        "WorkerSession::handle_events(): repo not loaded when receiving {evt:?}"
-                    );
-                    return Err(anyhow::anyhow!(
-                        "A repo must be loaded before any other operations"
-                    ));
-                }
-                Err(err) => {
-                    log::error!("WorkerSession::handle_events(): {err}");
-                    return Err(anyhow!(err));
-                }
-            };
+impl WorkerSession {
+    pub fn new<T: WorkerCallbacks + 'static>(callbacks: T) -> Self {
+        WorkerSession {
+            callbacks: Box::new(callbacks),
+            ..Default::default()
         }
     }
 }
 
-impl Session for WorkspaceSession<'_> {
-    type Transition = WorkspaceResult;
-
-    fn handle_events(mut self, rx: &Receiver<SessionEvent>) -> Result<WorkspaceResult> {
-        let mut state = WorkspaceState::default();
-
-        loop {
-            let next_event = if state.unhandled_event.is_some() {
-                state.unhandled_event.take().unwrap()
-            } else {
-                let evt = rx.recv();
-                log::debug!("WorkspaceSession handling {evt:?}");
-                evt?
-            };
-
-            match next_event {
-                SessionEvent::EndSession => return Ok(WorkspaceResult::SessionComplete),
-                SessionEvent::OpenWorkspace { tx, wd: cwd } => {
-                    return Ok(WorkspaceResult::Reopen(tx, cwd));
-                }
-                SessionEvent::QueryRevision { tx, id } => {
-                    tx.send(queries::query_revision(&self, id))?
-                }
-                SessionEvent::QueryLog {
-                    tx,
-                    query: revset_string,
-                } => {
-                    let log_page_size = self.session.force_log_page_size.unwrap_or(1000);
-                    handle_query(
-                        &mut state,
-                        &self,
-                        tx,
-                        rx,
-                        Some(&revset_string),
-                        Some(LogQueryState::new(log_page_size)),
-                    )?;
-
-                    self.session.latest_query = Some(revset_string);
-                }
-                SessionEvent::QueryLogNextPage { tx } => {
-                    let revset_string = self.session.latest_query.as_ref().map(|x| x.as_str());
-
-                    handle_query(&mut state, &self, tx, rx, revset_string, None)?;
-                }
-                SessionEvent::ExecuteSnapshot { tx } => {
-                    if self.import_and_snapshot(false).is_ok_and(|updated| updated) {
-                        tx.send(Some(self.format_status()))?;
-                    } else {
-                        tx.send(None)?;
-                    }
-                }
-                SessionEvent::ExecuteMutation { tx, mutation } => {
-                    let name = mutation.as_ref().describe();
-                    match catch_unwind(AssertUnwindSafe(|| {
-                        mutation.execute(&mut self).with_context(|| name.clone())
-                    })) {
-                        Ok(result) => {
-                            tx.send(match result {
-                                Ok(result) => result,
-                                Err(err) => {
-                                    log::error!("{err:?}");
-                                    messages::MutationResult::InternalError {
-                                        message: (&*format!("{err:?}")).into(),
-                                    }
-                                }
-                            })?;
-                        }
-                        Err(panic) => {
-                            let mut message = match panic.downcast::<&str>() {
-                                Ok(v) => *v,
-                                _ => "panic!()",
-                            }
-                            .to_owned();
-                            message.insert_str(0, ": ");
-                            message.insert_str(0, &name);
-                            log::error!("{message}");
-                            tx.send(messages::MutationResult::InternalError {
-                                message: (&*message).into(),
-                            })?;
-                        }
-                    }
-                }
-            };
+impl Default for WorkerSession {
+    fn default() -> Self {
+        WorkerSession {
+            force_log_page_size: None,
+            latest_query: None,
+            callbacks: Box::new(NoCallbacks),
         }
     }
-}
-
-impl Session for queries::QuerySession<'_, '_> {
-    type Transition = QueryResult;
-
-    fn handle_events(mut self, rx: &Receiver<SessionEvent>) -> Result<Self::Transition> {
-        loop {
-            let evt = rx.recv();
-            log::debug!("LogQuery handling {evt:?}");
-            match evt {
-                Ok(SessionEvent::QueryRevision { tx, id }) => {
-                    tx.send(queries::query_revision(&self.ws, id))?
-                }
-                Ok(SessionEvent::QueryLogNextPage { tx }) => tx.send(self.get_page())?,
-                Ok(unhandled) => return Ok(QueryResult(unhandled, self.state)),
-                Err(err) => return Err(anyhow!(err)),
-            };
-        }
-    }
-}
-
-/// helper function for transitioning from workspace state to query state
-fn handle_query(
-    state: &mut WorkspaceState,
-    ws: &WorkspaceSession,
-    tx: Sender<Result<LogPage>>,
-    rx: &Receiver<SessionEvent>,
-    revset_str: Option<&str>,
-    query_state: Option<LogQueryState>,
-) -> Result<()> {
-    let query_state = match query_state.or_else(|| state.unpaged_query.take()) {
-        Some(x) => x,
-        None => {
-            tx.send(Err(anyhow!(
-                "page requested without query in progress or new query"
-            )))?;
-
-            state.unhandled_event = None;
-            state.unpaged_query = None;
-            return Ok(());
-        }
-    };
-
-    let revset_str = match revset_str {
-        Some(x) => x,
-        None => {
-            tx.send(Err(anyhow!("page requested without query in progress")))?;
-
-            state.unhandled_event = None;
-            state.unpaged_query = None;
-            return Ok(());
-        }
-    };
-
-    let revset = match ws
-        .evaluate_revset_str(revset_str)
-        .context("evaluate revset")
-    {
-        Ok(x) => x,
-        Err(err) => {
-            tx.send(Err(err))?;
-
-            state.unhandled_event = None;
-            state.unpaged_query = None;
-            return Ok(());
-        }
-    };
-
-    let mut query = queries::QuerySession::new(ws, &*revset, query_state);
-    let page = query.get_page();
-    tx.send(page)?;
-
-    let QueryResult(next_event, next_query) = query.handle_events(rx).context("LogQuery")?;
-
-    state.unhandled_event = Some(next_event);
-    state.unpaged_query = Some(next_query);
-    Ok(())
 }

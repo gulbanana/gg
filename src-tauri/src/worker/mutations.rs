@@ -20,17 +20,13 @@ use jj_lib::{
     str_util::StringPattern,
 };
 
-use crate::{
-    gui_util::WorkspaceSession,
-    messages::{
-        AbandonRevisions, CheckoutRevision, CopyChanges, CreateRevision, DescribeRevision,
-        DuplicateRevisions, FetchRemote, InsertRevision, MoveBranch, MoveChanges, MoveRevision,
-        MoveSource, MutationResult, PushRemote, RefName, TrackBranch, TreePath, UndoOperation,
-        UntrackBranch,
-    },
+use super::{gui_util::WorkspaceSession, Mutation};
+use crate::messages::{
+    AbandonRevisions, CheckoutRevision, CopyChanges, CreateRevision, DescribeRevision,
+    DuplicateRevisions, FetchRemote, InsertRevision, MoveBranch, MoveChanges, MoveRevision,
+    MoveSource, MutationResult, PushRemote, RefName, TrackBranch, TreePath, UndoOperation,
+    UntrackBranch,
 };
-
-use super::Mutation;
 
 macro_rules! precondition {
     ($($args:tt)*) => {
