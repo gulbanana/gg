@@ -79,7 +79,7 @@ impl Session for WorkerSession {
                 Ok(SessionEvent::OpenWorkspace { mut tx, mut wd }) => loop {
                     let resolved_wd = match wd.clone().or(latest_wd) {
                         Some(wd) => wd,
-                        None => match std::env::current_dir().context("current_dir") {
+                        None => match self.get_cwd() {
                             Ok(wd) => wd,
                             Err(err) => {
                                 latest_wd = None;

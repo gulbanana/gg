@@ -8,9 +8,13 @@ mod session;
 #[cfg(all(test, not(feature = "ts-rs")))]
 mod tests;
 
-use std::fmt::Debug;
+use std::{
+    env::{self, VarError},
+    fmt::Debug,
+    path::PathBuf,
+};
 
-use anyhow::Result;
+use anyhow::{anyhow, Error, Result};
 use jj_lib::{git::RemoteCallbacks, repo::MutableRepo};
 
 use crate::messages;
@@ -59,14 +63,29 @@ pub struct WorkerSession {
     pub force_log_page_size: Option<usize>,
     pub latest_query: Option<String>,
     pub callbacks: Box<dyn WorkerCallbacks>,
+    pub working_directory: Option<PathBuf>,
 }
 
 impl WorkerSession {
-    pub fn new<T: WorkerCallbacks + 'static>(callbacks: T) -> Self {
+    pub fn new<T: WorkerCallbacks + 'static>(callbacks: T, workspace: Option<PathBuf>) -> Self {
         WorkerSession {
             callbacks: Box::new(callbacks),
+            working_directory: workspace,
             ..Default::default()
         }
+    }
+
+    // AppImage runs the executable from somewhere weird, but sets OWD=cwd() first.
+    pub fn get_cwd(&self) -> Result<PathBuf> {
+        self.working_directory
+            .as_ref()
+            .map(|cwd| Ok(cwd.clone()))
+            .or_else(|| match env::var("OWD") {
+                Ok(var) => Some(Ok(PathBuf::from(var))),
+                Err(VarError::NotPresent) => None,
+                Err(err) => Some(Err(anyhow!(err))),
+            })
+            .unwrap_or_else(|| env::current_dir().map_err(Error::new))
     }
 }
 
@@ -76,6 +95,7 @@ impl Default for WorkerSession {
             force_log_page_size: None,
             latest_query: None,
             callbacks: Box::new(NoCallbacks),
+            working_directory: None,
         }
     }
 }

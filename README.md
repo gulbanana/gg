@@ -8,10 +8,10 @@ GG is an experimental GUI for [Jujutsu](https://github.com/martinvonz/jj). The i
 GG is a desktop application with a keyboard & mouse interface, written in [Tauri](https://tauri.app/). Binaries are available for several platforms on the [releases page](https://github.com/gulbanana/gg/releases). Use the `.dmg` or `.app.tar.gz` on MacOS, and the `.msi` or `.exe` on Windows. To build from source, run `npm install` followed by `npm run tauri build`.
 
 ### Setup 
-Put `gg` on your path and run it from a Jujutsu workspace, or launch it separately and use the Repository->Open menu item to select a workspace directory. Tips:
+Put `gg` on your path and run it from a Jujutsu workspace, pass the workspace directory as an argument or launch it separately and use the Repository->Open menu item. Tips:
 - On MacOS, try adding `/Applications/gg.app/Contents/MacOS/` to your PATH environment variable. On Windows, add `C:\Program Files\gg\`.
 - Using `gg &` on MacOS/Linux or `start gg` on Windows will run in the background without blocking your shell.
-- You can pass the argument `--debug` for a bunch of extra logging to stdout.
+- Pass `--help` to see a few command line arguments you can use.
 
 ### Configuration
 GG uses `jj config`; `revset-aliases.immutable_heads()` is particularly important, as it determines how much history you can edit. GG has some additional settings of its own, with defaults and documentation [here](src-tauri/src/config/gg.toml).
@@ -24,6 +24,7 @@ GG doesn't require [JJ](https://martinvonz.github.io/jj/latest/install-and-setup
 - Drag files around to squash them into new revisions or throw away changes (restoring from parents).
 - Drag branches around to set their pointers.
 - Right click on any of the above for more actions.
+- Push and fetch git changes using the bottom bar.
 - Undo anything with ⟲ in the bottom right corner.
 
 More detail is available in [the changelog](CHANGELOG.md).

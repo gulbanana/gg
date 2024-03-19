@@ -14,6 +14,7 @@ use std::sync::Mutex;
 use std::thread::{self, JoinHandle};
 
 use anyhow::{anyhow, Context, Result};
+use clap::Parser;
 use log::LevelFilter;
 use tauri::menu::Menu;
 use tauri::{ipc::InvokeError, Manager};
@@ -29,6 +30,18 @@ use messages::{
 use worker::{Mutation, Session, SessionEvent, WorkerSession};
 
 use crate::callbacks::FrontendCallbacks;
+
+#[derive(Parser, Debug)]
+#[command(version, author)]
+struct Args {
+    #[arg(
+        index(1),
+        help = "Open this directory (instead of the current working directory)."
+    )]
+    workspace: Option<PathBuf>,
+    #[arg(short, long, help = "Enable debug logging.")]
+    debug: bool,
+}
 
 #[derive(Default)]
 struct AppState(Mutex<HashMap<String, WindowState>>);
@@ -74,9 +87,7 @@ impl AppState {
 }
 
 fn main() -> Result<()> {
-    let debug = std::env::args()
-        .find(|arg| arg.as_str() == "--debug")
-        .is_some();
+    let args = Args::parse();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
@@ -96,7 +107,7 @@ fn main() -> Result<()> {
                 .level(LevelFilter::Warn)
                 .level_for(
                     "gg",
-                    if debug {
+                    if args.debug {
                         LevelFilter::Debug
                     } else {
                         LevelFilter::Warn
@@ -142,9 +153,10 @@ fn main() -> Result<()> {
             let window_worker = thread::spawn(move || {
                 log::info!("start worker");
 
-                while let Err(err) = WorkerSession::new(FrontendCallbacks(handle.clone()))
-                    .handle_events(&receiver)
-                    .context("worker")
+                while let Err(err) =
+                    WorkerSession::new(FrontendCallbacks(handle.clone()), args.workspace.clone())
+                        .handle_events(&receiver)
+                        .context("worker")
                 {
                     log::info!("restart worker: {err:#}");
 

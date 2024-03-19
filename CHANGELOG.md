@@ -7,14 +7,16 @@
 - "Create branch" command on revisions. 
 - Display edges to commits that aren't in the queried revset, by drawing a line to nowhere.
 - Detect changes made by other Jujutsu clients and merge the operation log automatically.
-- Window title includes the repository path.
-- New config option gg.queries.log-page-size.
+- Window title includes the workspace path (when one is open).
+- New config option gg.queries.log-page-size for tuning performance on large repositories.
 - Miscellaneous design improvements.
 
 ### Fixed 
 - GG now understands divergent changes, and can act on commits that have a shared change id. 
   Note that if you do anything to such commits other than abandoning them, you're likely to 
   create even more divergent commits!
+- The AppImage build wasn't picking up the working directory correctly. This is fixed, and 
+  you can also specify a workspace to open on the commandline as an alternative.
 
 ## [0.15.2](releases/tag/v0.15.2)
 
