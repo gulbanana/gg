@@ -5,6 +5,7 @@
 ### Added
 - Git remotes in the status bar, with push & fetch commands.
 - "Create branch" command on revisions. 
+- Display Git tags (readonly; they aren't really a Jujutsu concept).
 - Display edges to commits that aren't in the queried revset, by drawing a line to nowhere.
 - Detect changes made by other Jujutsu clients and merge the operation log automatically.
 - Window title includes the workspace path (when one is open).

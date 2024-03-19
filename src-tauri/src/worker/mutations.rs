@@ -22,9 +22,9 @@ use jj_lib::{
 
 use super::{gui_util::WorkspaceSession, Mutation};
 use crate::messages::{
-    AbandonRevisions, CheckoutRevision, CopyChanges, CreateBranch, CreateRevision, DeleteBranch,
-    DescribeRevision, DuplicateRevisions, FetchRemote, InsertRevision, MoveBranch, MoveChanges,
-    MoveRevision, MoveSource, MutationResult, PushRemote, RefName, TrackBranch, TreePath,
+    AbandonRevisions, CheckoutRevision, CopyChanges, CreateRef, CreateRevision, DeleteRef,
+    DescribeRevision, DuplicateRevisions, FetchRemote, InsertRevision, MoveChanges, MoveRef,
+    MoveRevision, MoveSource, MutationResult, PushRemote, StoreRef, TrackBranch, TreePath,
     UndoOperation, UntrackBranch,
 };
 
@@ -422,11 +422,14 @@ impl Mutation for CopyChanges {
 
 impl Mutation for TrackBranch {
     fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
-        match self.name {
-            RefName::LocalBranch { branch_name, .. } => {
+        match self.r#ref {
+            StoreRef::Tag { tag_name } => {
+                precondition!("{} is a tag and cannot be tracked", tag_name);
+            }
+            StoreRef::LocalBranch { branch_name, .. } => {
                 precondition!("{} is a local branch and cannot be tracked", branch_name);
             }
-            RefName::RemoteBranch {
+            StoreRef::RemoteBranch {
                 branch_name,
                 remote_name,
                 ..
@@ -457,8 +460,11 @@ impl Mutation for UntrackBranch {
         let mut tx = ws.start_transaction()?;
 
         let mut untracked = Vec::new();
-        match self.name {
-            RefName::LocalBranch { branch_name, .. } => {
+        match self.r#ref {
+            StoreRef::Tag { tag_name } => {
+                precondition!("{} is a tag and cannot be untracked", tag_name);
+            }
+            StoreRef::LocalBranch { branch_name, .. } => {
                 // untrack all remotes
                 for ((name, remote), remote_ref) in ws.view().remote_branches_matching(
                     &StringPattern::exact(branch_name),
@@ -470,7 +476,7 @@ impl Mutation for UntrackBranch {
                     }
                 }
             }
-            RefName::RemoteBranch {
+            StoreRef::RemoteBranch {
                 branch_name,
                 remote_name,
                 ..
@@ -498,37 +504,74 @@ impl Mutation for UntrackBranch {
     }
 }
 
-impl Mutation for CreateBranch {
+impl Mutation for CreateRef {
     fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction()?;
 
-        let existing_branch = ws.view().get_local_branch(&self.name);
-        if existing_branch.is_present() {
-            precondition!("{} already exists", self.name);
-        }
-
         let commit = ws.resolve_single_change(&self.id)?;
-        tx.mut_repo()
-            .set_local_branch_target(&self.name, RefTarget::normal(commit.id().clone()));
 
-        match ws.finish_transaction(
-            tx,
-            format!(
-                "create {} pointing to commit {}",
-                self.name,
-                ws.format_commit_id(commit.id()).hex
-            ),
-        )? {
-            Some(new_status) => Ok(MutationResult::Updated { new_status }),
-            None => Ok(MutationResult::Unchanged),
+        match self.r#ref {
+            StoreRef::RemoteBranch {
+                branch_name,
+                remote_name,
+                ..
+            } => {
+                precondition!(
+                    "{}@{} is a remote branch and cannot be created",
+                    branch_name,
+                    remote_name
+                );
+            }
+            StoreRef::LocalBranch { branch_name, .. } => {
+                let existing_branch = ws.view().get_local_branch(&branch_name);
+                if existing_branch.is_present() {
+                    precondition!("{} already exists", branch_name);
+                }
+
+                tx.mut_repo()
+                    .set_local_branch_target(&branch_name, RefTarget::normal(commit.id().clone()));
+
+                match ws.finish_transaction(
+                    tx,
+                    format!(
+                        "create {} pointing to commit {}",
+                        branch_name,
+                        ws.format_commit_id(commit.id()).hex
+                    ),
+                )? {
+                    Some(new_status) => Ok(MutationResult::Updated { new_status }),
+                    None => Ok(MutationResult::Unchanged),
+                }
+            }
+            StoreRef::Tag { tag_name, .. } => {
+                let existing_tag = ws.view().get_tag(&tag_name);
+                if existing_tag.is_present() {
+                    precondition!("{} already exists", tag_name);
+                }
+
+                tx.mut_repo()
+                    .set_tag_target(&tag_name, RefTarget::normal(commit.id().clone()));
+
+                match ws.finish_transaction(
+                    tx,
+                    format!(
+                        "create {} pointing to commit {}",
+                        tag_name,
+                        ws.format_commit_id(commit.id()).hex
+                    ),
+                )? {
+                    Some(new_status) => Ok(MutationResult::Updated { new_status }),
+                    None => Ok(MutationResult::Unchanged),
+                }
+            }
         }
     }
 }
 
-impl Mutation for DeleteBranch {
+impl Mutation for DeleteRef {
     fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
-        match self.name {
-            RefName::RemoteBranch {
+        match self.r#ref {
+            StoreRef::RemoteBranch {
                 branch_name,
                 remote_name,
                 ..
@@ -539,7 +582,7 @@ impl Mutation for DeleteBranch {
                     remote_name
                 );
             }
-            RefName::LocalBranch { branch_name, .. } => {
+            StoreRef::LocalBranch { branch_name, .. } => {
                 let mut tx = ws.start_transaction()?;
 
                 tx.mut_repo().remove_branch(&branch_name);
@@ -549,37 +592,64 @@ impl Mutation for DeleteBranch {
                     None => Ok(MutationResult::Unchanged),
                 }
             }
+            StoreRef::Tag { tag_name } => {
+                let mut tx = ws.start_transaction()?;
+
+                tx.mut_repo().set_tag_target(&tag_name, RefTarget::absent());
+
+                match ws.finish_transaction(tx, format!("forget {}", tag_name))? {
+                    Some(new_status) => Ok(MutationResult::Updated { new_status }),
+                    None => Ok(MutationResult::Unchanged),
+                }
+            }
         }
     }
 }
 
 // does not currently enforce fast-forwards
-impl Mutation for MoveBranch {
+impl Mutation for MoveRef {
     fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction()?;
 
-        match self.name {
-            RefName::RemoteBranch {
+        let commit = ws.resolve_single_change(&self.to_id)?;
+
+        match self.r#ref {
+            StoreRef::RemoteBranch {
                 branch_name,
                 remote_name,
                 ..
             } => {
                 precondition!("Branch is remote: {branch_name}@{remote_name}")
             }
-            RefName::LocalBranch { branch_name, .. } => {
-                let to = ws.resolve_single_change(&self.to_id)?;
-
+            StoreRef::LocalBranch { branch_name, .. } => {
                 let old_target = ws.view().get_local_branch(&branch_name);
                 if old_target.is_absent() {
                     precondition!("No such branch: {branch_name}");
                 }
 
                 tx.mut_repo()
-                    .set_local_branch_target(&branch_name, RefTarget::normal(to.id().clone()));
+                    .set_local_branch_target(&branch_name, RefTarget::normal(commit.id().clone()));
 
                 match ws.finish_transaction(
                     tx,
-                    format!("point {} to commit {}", branch_name, to.id().hex()),
+                    format!("point {} to commit {}", branch_name, commit.id().hex()),
+                )? {
+                    Some(new_status) => Ok(MutationResult::Updated { new_status }),
+                    None => Ok(MutationResult::Unchanged),
+                }
+            }
+            StoreRef::Tag { tag_name } => {
+                let old_target = ws.view().get_tag(&tag_name);
+                if old_target.is_absent() {
+                    precondition!("No such tag: {tag_name}");
+                }
+
+                tx.mut_repo()
+                    .set_tag_target(&tag_name, RefTarget::normal(commit.id().clone()));
+
+                match ws.finish_transaction(
+                    tx,
+                    format!("point {} to commit {}", tag_name, commit.id().hex()),
                 )? {
                     Some(new_status) => Ok(MutationResult::Updated { new_status }),
                     None => Ok(MutationResult::Unchanged),

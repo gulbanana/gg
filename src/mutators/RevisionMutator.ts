@@ -6,8 +6,9 @@ import type { CreateRevision } from "../messages/CreateRevision";
 import type { DescribeRevision } from "../messages/DescribeRevision";
 import type { DuplicateRevisions } from "../messages/DuplicateRevisions";
 import type { MoveChanges } from "../messages/MoveChanges";
-import type { CreateBranch } from "../messages/CreateBranch";
+import type { CreateRef } from "../messages/CreateRef";
 import { getInput, mutate } from "../ipc";
+import type { StoreRef } from "../messages/StoreRef";
 
 export default class RevisionMutator {
     #revision: RevHeader;
@@ -118,8 +119,14 @@ export default class RevisionMutator {
     onBranch = async () => {
         let response = await getInput("Create Branch", "", ["Branch Name"]);
         if (response) {
-            let name = response["Branch Name"];
-            mutate<CreateBranch>("create_branch", { name, id: this.#revision.id })
+            let ref: StoreRef = {
+                type: "LocalBranch",
+                branch_name: response["Branch Name"],
+                has_conflict: false,
+                is_synced: false,
+                is_tracking: false,
+            };
+            mutate<CreateRef>("create_ref", { ref, id: this.#revision.id })
         }
     }
 }

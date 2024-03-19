@@ -10,6 +10,7 @@
     import Object from "./Object.svelte";
     import Zone from "./Zone.svelte";
     import RevisionMutator from "../mutators/RevisionMutator";
+    import TagObject from "./TagObject.svelte";
 
     export let header: RevHeader;
     export let child: RevHeader | null = null;
@@ -52,10 +53,18 @@
             <span class="text email truncate">{header.author.email}</span>
 
             <span class="refs">
-                {#each header.branches.filter((b) => b.type == "LocalBranch" || !b.is_synced || !b.is_tracked) as ref}
-                    <div>
-                        <BranchObject {header} name={ref} />
-                    </div>
+                {#each header.refs as ref}
+                    {#if ref.type != "Tag"}
+                        {#if ref.type == "LocalBranch" || !ref.is_synced || !ref.is_tracked}
+                            <div>
+                                <BranchObject {header} {ref} />
+                            </div>
+                        {/if}
+                    {:else}
+                        <div>
+                            <TagObject {header} {ref} />
+                        </div>
+                    {/if}
                 {/each}
             </span>
         </div>
@@ -73,10 +82,18 @@
                 <span class="text email truncate">{header.author.email}</span>
 
                 <span class="refs">
-                    {#each header.branches.filter((b) => b.type == "LocalBranch" || !b.is_synced || !b.is_tracked) as ref}
-                        <div>
-                            <BranchObject {header} name={ref} />
-                        </div>
+                    {#each header.refs as ref}
+                        {#if ref.type != "Tag"}
+                            {#if ref.type == "LocalBranch" || !ref.is_synced || !ref.is_tracked}
+                                <div>
+                                    <BranchObject {header} {ref} />
+                                </div>
+                            {/if}
+                        {:else}
+                            <div>
+                                <TagObject {header} {ref} />
+                            </div>
+                        {/if}
                     {/each}
                 </span>
             </div>

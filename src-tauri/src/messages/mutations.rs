@@ -146,7 +146,7 @@ pub struct CopyChanges {
     ts(export, export_to = "../src/messages/")
 )]
 pub struct TrackBranch {
-    pub name: RefName,
+    pub r#ref: StoreRef,
 }
 
 #[derive(Deserialize, Debug)]
@@ -156,7 +156,7 @@ pub struct TrackBranch {
     ts(export, export_to = "../src/messages/")
 )]
 pub struct UntrackBranch {
-    pub name: RefName,
+    pub r#ref: StoreRef,
 }
 
 #[derive(Deserialize, Debug)]
@@ -165,9 +165,9 @@ pub struct UntrackBranch {
     derive(TS),
     ts(export, export_to = "../src/messages/")
 )]
-pub struct CreateBranch {
+pub struct CreateRef {
     pub id: RevId,
-    pub name: String,
+    pub r#ref: StoreRef,
 }
 
 #[derive(Deserialize, Debug)]
@@ -176,8 +176,8 @@ pub struct CreateBranch {
     derive(TS),
     ts(export, export_to = "../src/messages/")
 )]
-pub struct DeleteBranch {
-    pub name: RefName,
+pub struct DeleteRef {
+    pub r#ref: StoreRef,
 }
 
 #[derive(Deserialize, Debug)]
@@ -186,8 +186,8 @@ pub struct DeleteBranch {
     derive(TS),
     ts(export, export_to = "../src/messages/")
 )]
-pub struct MoveBranch {
-    pub name: RefName,
+pub struct MoveRef {
+    pub r#ref: StoreRef,
     pub to_id: RevId,
 }
 

@@ -1,16 +1,14 @@
-import type { RevHeader } from "../messages/RevHeader";
-import type { RefName } from "../messages/RefName";
+import type { StoreRef } from "../messages/StoreRef";
 import type { TrackBranch } from "../messages/TrackBranch";
 import type { UntrackBranch } from "../messages/UntrackBranch";
 import { mutate } from "../ipc";
+import type { DeleteRef } from "../messages/DeleteRef";
 
 export default class BranchMutator {
-    #revision: RevHeader;
-    #name: RefName;
+    ref: StoreRef;
 
-    constructor(rev: RevHeader, name: RefName) {
-        this.#revision = rev;
-        this.#name = name;
+    constructor(name: StoreRef) {
+        this.ref = name;
     }
 
     handle(event: string | undefined) {
@@ -34,13 +32,19 @@ export default class BranchMutator {
 
     onTrack = () => {
         mutate<TrackBranch>("track_branch", {
-            name: this.#name
+            ref: this.ref
         });
     };
 
     onUntrack = () => {
         mutate<UntrackBranch>("untrack_branch", {
-            name: this.#name
+            ref: this.ref
+        });
+    };
+
+    onDelete = () => {
+        mutate<DeleteRef>("delete_ref", {
+            ref: this.ref
         });
     };
 }

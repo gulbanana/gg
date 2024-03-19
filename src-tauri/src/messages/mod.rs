@@ -115,7 +115,7 @@ pub struct RepoStatus {
     derive(TS),
     ts(export, export_to = "../src/messages/")
 )]
-pub enum RefName {
+pub enum StoreRef {
     LocalBranch {
         branch_name: String,
         has_conflict: bool,
@@ -126,6 +126,7 @@ pub enum RefName {
     },
     RemoteBranch {
         branch_name: String,
+        remote_name: String,
         has_conflict: bool,
         /// Tracking remote ref is synchronized with local ref
         is_synced: bool,
@@ -133,7 +134,9 @@ pub enum RefName {
         is_tracked: bool,
         /// Local ref has been deleted
         is_deleted: bool,
-        remote_name: String,
+    },
+    Tag {
+        tag_name: String,
     },
 }
 
@@ -161,9 +164,9 @@ pub enum Operand {
         header: RevHeader,
         path: TreePath, // someday: hunks
     },
-    Branch {
+    Ref {
         header: RevHeader,
-        name: RefName,
+        r#ref: StoreRef,
     },
 }
 

@@ -83,7 +83,7 @@ pub struct RevHeader {
     pub has_conflict: bool,
     pub is_working_copy: bool,
     pub is_immutable: bool,
-    pub branches: Vec<RefName>,
+    pub refs: Vec<StoreRef>,
     pub parent_ids: Vec<CommitId>,
 }
 

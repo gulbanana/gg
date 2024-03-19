@@ -9,7 +9,7 @@ use tauri_plugin_dialog::DialogExt;
 
 use crate::{
     handler,
-    messages::{Operand, RefName, RevHeader},
+    messages::{Operand, RevHeader, StoreRef},
     AppState,
 };
 
@@ -310,7 +310,7 @@ pub fn handle_context(window: Window, ctx: Operand) -> Result<()> {
 
             window.popup_menu(context_menu)?;
         }
-        Operand::Branch { name, .. } => {
+        Operand::Ref { r#ref: name, .. } => {
             let context_menu = &guard
                 .get(window.label())
                 .expect("session not found")
@@ -320,7 +320,7 @@ pub fn handle_context(window: Window, ctx: Operand) -> Result<()> {
                 "branch_track",
                 matches!(
                     name,
-                    RefName::RemoteBranch {
+                    StoreRef::RemoteBranch {
                         is_tracked: false,
                         ..
                     }
@@ -330,10 +330,10 @@ pub fn handle_context(window: Window, ctx: Operand) -> Result<()> {
                 "branch_untrack",
                 matches!(
                     name,
-                    RefName::RemoteBranch {
+                    StoreRef::RemoteBranch {
                         is_tracked: true,
                         ..
-                    } | RefName::LocalBranch {
+                    } | StoreRef::LocalBranch {
                         is_tracking: true,
                         ..
                     }

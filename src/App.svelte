@@ -11,7 +11,7 @@
         revisionSelectEvent,
         currentInput,
     } from "./stores.js";
-    import BranchMutator from "./mutators/BranchMutator";
+    import RefMutator from "./mutators/RefMutator";
     import ChangeMutator from "./mutators/ChangeMutator";
     import RevisionMutator from "./mutators/RevisionMutator";
     import Pane from "./shell/Pane.svelte";
@@ -55,7 +55,7 @@
 
     onEvent("gg://context/revision", mutateRevision);
     onEvent("gg://context/tree", mutateTree);
-    onEvent("gg://context/branch", mutateBranch);
+    onEvent("gg://context/branch", mutateRef);
     onEvent("gg://input", requestInput);
 
     $: if ($repoConfigEvent) loadRepo($repoConfigEvent);
@@ -94,7 +94,6 @@
     }
 
     function mutateRevision(event: string) {
-        console.log(`mutateRevision(${event})`, $currentContext);
         if ($currentContext?.type == "Revision") {
             new RevisionMutator($currentContext.header).handle(event);
         }
@@ -102,17 +101,15 @@
     }
 
     function mutateTree(event: string) {
-        console.log(`mutateTree(${event})`, $currentContext);
         if ($currentContext?.type == "Change") {
             new ChangeMutator($currentContext.header, $currentContext.path).handle(event);
         }
         $currentContext = null;
     }
 
-    function mutateBranch(event: string) {
-        console.log(`mutateBranch(${event})`, $currentContext);
-        if ($currentContext?.type == "Branch") {
-            new BranchMutator($currentContext.header, $currentContext.name).handle(event);
+    function mutateRef(event: string) {
+        if ($currentContext?.type == "Ref") {
+            new RefMutator($currentContext.ref).handle(event);
         }
         $currentContext = null;
     }

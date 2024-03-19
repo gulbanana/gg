@@ -56,7 +56,7 @@ pub struct WorkspaceSession<'a> {
 pub struct SessionOperation {
     pub repo: Arc<ReadonlyRepo>,
     pub wc_id: CommitId,
-    branches_index: OnceCell<Rc<BranchIndex>>,
+    ref_index: OnceCell<Rc<RefIndex>>,
     prefix_context: OnceCell<Rc<IdPrefixContext>>,
     immutable_revisions: OnceCell<Rc<RevsetExpression>>
 }
@@ -318,9 +318,9 @@ impl WorkspaceSession<'_> {
         self.operation.immutable_revisions.get_or_init(|| build_immutable_revisions(&self.operation.repo, &self.aliases_map, &self.parse_context()).expect("init immutable heads"))
     }
 
-    pub fn branches_index(&self) -> &Rc<BranchIndex> {
-        self.operation.branches_index
-            .get_or_init(|| Rc::new(build_branches_index(self.operation.repo.as_ref())))
+    pub fn ref_index(&self) -> &Rc<RefIndex> {
+        self.operation.ref_index
+            .get_or_init(|| Rc::new(build_ref_index(self.operation.repo.as_ref())))
     }
 
     /************************************
@@ -398,7 +398,7 @@ impl WorkspaceSession<'_> {
     }
 
     pub fn format_header(&self, commit: &Commit, known_immutable: Option<bool>) -> Result<messages::RevHeader> {
-        let index = self.branches_index();
+        let index = self.ref_index();
         let branches = index.get(commit.id()).iter().cloned().collect();
 
         let is_immutable = known_immutable
@@ -412,7 +412,7 @@ impl WorkspaceSession<'_> {
             has_conflict: commit.has_conflict()?,
             is_working_copy: *commit.id() == self.operation.wc_id,
             is_immutable,
-            branches,
+            refs: branches,
             parent_ids: commit.parent_ids().iter().map(|commit_id| self.format_commit_id(commit_id)).collect()
         })
     }
@@ -748,7 +748,7 @@ impl SessionOperation {
         SessionOperation {
             repo, 
             wc_id,
-            branches_index: OnceCell::default(),
+            ref_index: OnceCell::default(),
             prefix_context: OnceCell::default(),
             immutable_revisions: OnceCell::default()
         }
@@ -892,19 +892,19 @@ fn parse_revset(
 /*************************/
 
 #[derive(Default)]
-pub struct BranchIndex {
-    index: HashMap<CommitId, Vec<messages::RefName>>,
+pub struct RefIndex {
+    index: HashMap<CommitId, Vec<messages::StoreRef>>,
 }
 
-impl BranchIndex {
-    fn insert<'a>(&mut self, ids: impl IntoIterator<Item = &'a CommitId>, name: messages::RefName) {
+impl RefIndex {
+    fn insert<'a>(&mut self, ids: impl IntoIterator<Item = &'a CommitId>, r#ref: messages::StoreRef) {
         for id in ids {
             let ref_names = self.index.entry(id.clone()).or_default();
-            ref_names.push(name.clone());
+            ref_names.push(r#ref.clone());
         }
     }
 
-    fn get(&self, id: &CommitId) -> &[messages::RefName] {
+    fn get(&self, id: &CommitId) -> &[messages::StoreRef] {
         if let Some(names) = self.index.get(id) {
             names
         } else {
@@ -913,13 +913,14 @@ impl BranchIndex {
     }
 }
 
-fn build_branches_index(repo: &ReadonlyRepo) -> BranchIndex {
-    let mut index = BranchIndex::default();
+fn build_ref_index(repo: &ReadonlyRepo) -> RefIndex {
+    let mut index = RefIndex::default();
+
     for (branch_name, branch_target) in repo.view().branches() {
         let local_target = branch_target.local_target;
         let remote_refs = branch_target.remote_refs;
         if local_target.is_present() {
-            index.insert(local_target.added_ids(), messages::RefName::LocalBranch {
+            index.insert(local_target.added_ids(), messages::StoreRef::LocalBranch {
                 branch_name: branch_name.to_owned(),
                 has_conflict: local_target.has_conflict(),
                 is_synced: remote_refs.iter().all(|&(_, remote_ref)| {
@@ -929,7 +930,7 @@ fn build_branches_index(repo: &ReadonlyRepo) -> BranchIndex {
             });
         }
         for &(remote_name, remote_ref) in &remote_refs {
-            index.insert(remote_ref.target.added_ids(), messages::RefName::RemoteBranch {
+            index.insert(remote_ref.target.added_ids(), messages::StoreRef::RemoteBranch {
                 branch_name: branch_name.to_owned(),
                 remote_name: remote_name.to_owned(),
                 has_conflict: remote_ref.target.has_conflict(),
@@ -939,6 +940,11 @@ fn build_branches_index(repo: &ReadonlyRepo) -> BranchIndex {
             });
         }
     }
+
+    for (tag_name, tag_target) in repo.view().tags() {
+        index.insert(tag_target.added_ids(), messages::StoreRef::Tag { tag_name: tag_name.clone() });
+    }
+
     index
 }
 

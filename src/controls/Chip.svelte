@@ -2,9 +2,10 @@
     export let context: boolean;
     export let target: boolean;
     export let disconnected: boolean = false;
+    export let immobile: boolean = false;
 </script>
 
-<div class="chip" class:context class:target class:disconnected>
+<div class="chip" class:context class:target class:disconnected class:immobile>
     <slot />
 </div>
 
@@ -38,5 +39,9 @@
 
     .disconnected {
         border-style: dashed;
+    }
+
+    .immobile {
+        border-style: none;
     }
 </style>

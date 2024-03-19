@@ -1,6 +1,6 @@
 <script lang="ts">
     import type { RevHeader } from "../messages/RevHeader";
-    import type { RefName } from "../messages/RefName";
+    import type { StoreRef } from "../messages/StoreRef";
     import type { Operand } from "../messages/Operand";
     import Icon from "../controls/Icon.svelte";
     import Chip from "../controls/Chip.svelte";
@@ -8,28 +8,28 @@
     import Zone from "./Zone.svelte";
 
     export let header: RevHeader;
-    export let name: RefName;
+    export let ref: Extract<StoreRef, { type: "LocalBranch" | "RemoteBranch" }>;
 
     let label: string;
     let state: "add" | "change" | "remove";
     let disconnected: boolean;
-    switch (name.type) {
+    switch (ref.type) {
         case "LocalBranch":
-            label = name.branch_name;
-            state = name.is_synced ? "change" : "add";
-            disconnected = !name.is_tracking;
+            label = ref.branch_name;
+            state = ref.is_synced ? "change" : "add";
+            disconnected = !ref.is_tracking;
             break;
         case "RemoteBranch":
-            label = `${name.branch_name}@${name.remote_name}`;
-            state = name.is_tracked ? "remove" : "change";
-            disconnected = name.is_deleted;
+            label = `${ref.branch_name}@${ref.remote_name}`;
+            state = ref.is_tracked ? "remove" : "change";
+            disconnected = ref.is_deleted;
             break;
     }
 
-    let operand: Operand = { type: "Branch", header, name };
+    let operand: Operand = { type: "Ref", header, ref };
 </script>
 
-<Object {operand} {label} conflicted={name.has_conflict} let:context let:hint>
+<Object {operand} {label} conflicted={ref.has_conflict} let:context let:hint>
     <Zone {operand} let:target>
         <Chip {context} {target} {disconnected}>
             <Icon name="git-branch" state={context ? null : state} />

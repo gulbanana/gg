@@ -22,9 +22,9 @@ use tauri::{State, Window, WindowEvent, Wry};
 use tauri_plugin_window_state::StateFlags;
 
 use messages::{
-    AbandonRevisions, CheckoutRevision, CopyChanges, CreateBranch, CreateRevision, DeleteBranch,
-    DescribeRevision, DuplicateRevisions, FetchRemote, InputResponse, InsertRevision, MoveBranch,
-    MoveChanges, MoveRevision, MoveSource, MutationResult, PushRemote, RevId, TrackBranch,
+    AbandonRevisions, CheckoutRevision, CopyChanges, CreateRef, CreateRevision, DeleteRef,
+    DescribeRevision, DuplicateRevisions, FetchRemote, InputResponse, InsertRevision, MoveChanges,
+    MoveRef, MoveRevision, MoveSource, MutationResult, PushRemote, RevId, TrackBranch,
     UndoOperation, UntrackBranch,
 };
 use worker::{Mutation, Session, SessionEvent, WorkerSession};
@@ -135,9 +135,9 @@ fn main() -> Result<()> {
             copy_changes,
             track_branch,
             untrack_branch,
-            create_branch,
-            delete_branch,
-            move_branch,
+            create_ref,
+            delete_ref,
+            move_ref,
             push_remote,
             fetch_remote,
             undo_operation
@@ -407,28 +407,28 @@ fn untrack_branch(
 }
 
 #[tauri::command(async)]
-fn create_branch(
+fn create_ref(
     window: Window,
     app_state: State<AppState>,
-    mutation: CreateBranch,
+    mutation: CreateRef,
 ) -> Result<MutationResult, InvokeError> {
     try_mutate(window, app_state, mutation)
 }
 
 #[tauri::command(async)]
-fn delete_branch(
+fn delete_ref(
     window: Window,
     app_state: State<AppState>,
-    mutation: DeleteBranch,
+    mutation: DeleteRef,
 ) -> Result<MutationResult, InvokeError> {
     try_mutate(window, app_state, mutation)
 }
 
 #[tauri::command(async)]
-fn move_branch(
+fn move_ref(
     window: Window,
     app_state: State<AppState>,
-    mutation: MoveBranch,
+    mutation: MoveRef,
 ) -> Result<MutationResult, InvokeError> {
     try_mutate(window, app_state, mutation)
 }

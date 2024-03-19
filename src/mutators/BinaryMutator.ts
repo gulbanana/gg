@@ -1,10 +1,7 @@
 import { mutate } from "../ipc";
 import type { Operand } from "../messages/Operand";
-import type { RevId } from "../messages/RevId";
-import type { AbandonRevisions } from "../messages/AbandonRevisions";
 import type { MoveChanges } from "../messages/MoveChanges";
-import type { CopyChanges } from "../messages/CopyChanges";
-import type { MoveBranch } from "../messages/MoveBranch";
+import type { MoveRef } from "../messages/MoveRef";
 import type { InsertRevision } from "../messages/InsertRevision";
 import type { MoveRevision } from "../messages/MoveRevision";
 import type { MoveSource } from "../messages/MoveSource";
@@ -39,7 +36,7 @@ export default class BinaryMutator {
         }
 
         // can't change our view of remote branches 
-        if (from.type == "Branch" && from.name.type == "RemoteBranch") {
+        if (from.type == "Ref" && from.ref.type == "RemoteBranch") {
             return { type: "maybe", hint: "(branch is remote)" };
         }
 
@@ -50,8 +47,8 @@ export default class BinaryMutator {
             return { type: "yes", hint: ["Removing parent from revision ", from.child.id.change] };
         } else if (from.type == "Change") {
             return { type: "yes", hint: [`Squashing changes at ${from.path.relative_path}`] };
-        } else if (from.type == "Branch") {
-            return { type: "yes", hint: [`Moving branch ${from.name.branch_name}`] };
+        } else if (from.type == "Ref" && from.ref.type != "Tag") {
+            return { type: "yes", hint: [`Moving branch ${from.ref.branch_name}`] };
         }
 
         return { type: "no" };
@@ -111,11 +108,11 @@ export default class BinaryMutator {
             }
         }
 
-        if (this.#from.type == "Branch") {
+        if (this.#from.type == "Ref" && this.#from.ref.type != "Tag") {
             if (this.#to.type == "Revision") {
-                return { type: "yes", hint: [`Moving branch ${this.#from.name.branch_name} to `, this.#to.header.id.change] };
-            } else if (this.#to.type == "Branch" && this.#from.name.branch_name == this.#to.name.branch_name) {
-                return { type: "yes", hint: [`Resetting branch ${this.#from.name.branch_name} to remote`] };
+                return { type: "yes", hint: [`Moving branch ${this.#from.ref.branch_name} to `, this.#to.header.id.change] };
+            } else if (this.#to.type == "Ref" && this.#to.ref.type != "Tag" && this.#from.ref.branch_name == this.#to.ref.branch_name) {
+                return { type: "yes", hint: [`Resetting branch ${this.#from.ref.branch_name} to remote`] };
             }
         }
 
@@ -166,12 +163,9 @@ export default class BinaryMutator {
             }
         }
 
-        if (this.#from.type == "Branch") {
-            if (this.#to.type == "Revision") {
-                mutate<MoveBranch>("move_branch", { to_id: this.#to.header.id, name: this.#from.name });
-                return;
-            } else if (this.#to.type == "Branch") {
-                mutate<MoveBranch>("move_branch", { to_id: this.#to.header.id, name: this.#from.name });
+        if (this.#from.type == "Ref") {
+            if (this.#to.type == "Revision" || (this.#to.type == "Ref" && this.#to.ref.type != "Tag")) {
+                mutate<MoveRef>("move_ref", { to_id: this.#to.header.id, ref: this.#from.ref });
                 return;
             }
         }

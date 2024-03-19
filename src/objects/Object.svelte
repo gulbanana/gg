@@ -39,7 +39,7 @@ Core component for direct-manipulation objects. A drag&drop source.
     }
 
     function onMenu(event: Event) {
-        if (operand.type == "Branch" || operand.type == "Change" || operand.type == "Revision") {
+        if (operand.type == "Ref" || operand.type == "Change" || operand.type == "Revision") {
             event.preventDefault();
             event.stopPropagation();
 
