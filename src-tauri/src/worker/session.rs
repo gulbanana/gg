@@ -177,7 +177,8 @@ impl Session for WorkspaceSession<'_> {
                     handle_query(&mut state, &self, tx, rx, revset_string, None)?;
                 }
                 SessionEvent::ExecuteSnapshot { tx } => {
-                    if self.import_and_snapshot(false).is_ok_and(|updated| updated) {
+                    let updated_head = self.load_at_head()?;
+                    if self.import_and_snapshot(false)? || updated_head {
                         tx.send(Some(self.format_status()))?;
                     } else {
                         tx.send(None)?;

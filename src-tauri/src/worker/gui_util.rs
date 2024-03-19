@@ -98,7 +98,7 @@ impl WorkerSession {
             &workspace::default_working_copy_factories(),
         )?;
 
-        let operation = Self::load_at_head(&settings, &workspace)?;
+        let operation = load_at_head(&settings, &workspace)?;
 
         let index_store = workspace.repo_loader().index_store();
         let index = index_store
@@ -124,40 +124,6 @@ impl WorkerSession {
             is_colocated
         })
     }
-
-        fn load_at_head(
-        settings: &UserSettings,
-        workspace: &Workspace,
-    ) -> Result<SessionOperation> {
-        let loader = workspace.repo_loader();
-
-        let op = op_heads_store::resolve_op_heads(
-            loader.op_heads_store().as_ref(),
-            loader.op_store(),
-            |op_heads| {
-                let base_repo = loader.load_at(&op_heads[0])?;
-                // might want to set some tags
-                let mut tx = base_repo.start_transaction(settings);
-                for other_op_head in op_heads.into_iter().skip(1) {
-                    tx.merge_operation(other_op_head)?;
-                    tx.mut_repo().rebase_descendants(settings)?;
-                }
-                Ok::<Operation, RepoLoaderError>(
-                    tx.write("resolve concurrent operations")
-                        .leave_unpublished()
-                        .operation()
-                        .clone(),
-                )
-            },
-        )?;
-
-        let repo: Arc<ReadonlyRepo> = workspace
-            .repo_loader()
-            .load_at(&op)
-            .context("load op head")?;
-
-        Ok(SessionOperation::new(repo, workspace.workspace_id()))
-    }
 }
 
 impl WorkspaceSession<'_> {
@@ -168,6 +134,11 @@ impl WorkspaceSession<'_> {
     pub fn wc_id(&self) -> &CommitId {
         &self.operation.wc_id
     }
+    
+    // XXX maybe: hunt down uses and make nonpub
+    pub fn repo(&self) -> &ReadonlyRepo {
+        self.operation.repo.as_ref()
+    }
 
     pub fn view(&self) -> &View {
         self.operation.repo.view()
@@ -176,11 +147,6 @@ impl WorkspaceSession<'_> {
     pub fn get_commit(&self, id: &CommitId) -> Result<Commit> {
         Ok(self.operation.repo.store().get_commit(&id)?)
     } 
-
-    // XXX maybe: hunt down uses and make nonpub
-    pub fn repo(&self) -> &ReadonlyRepo {
-        self.operation.repo.as_ref()
-    }
     
     pub fn git_repo(&self) -> Result<Option<Repository>> {
         match self.operation.git_backend() {
@@ -191,6 +157,16 @@ impl WorkspaceSession<'_> {
 
     pub fn should_check_immutable(&self) -> bool {
         self.settings.query_check_immutable().unwrap_or(!self.is_large)
+    }
+
+    pub fn load_at_head(&mut self) -> Result<bool> {
+        let head = load_at_head(&self.settings, &self.workspace)?;
+        if head.repo.op_id() != self.operation.repo.op_id() {
+            self.operation = head;
+            Ok(true)
+        } else {
+            Ok(false)
+        }
     }
 
     /***********************************************************/
@@ -964,4 +940,39 @@ fn build_branches_index(repo: &ReadonlyRepo) -> BranchIndex {
         }
     }
     index
+}
+
+
+fn load_at_head(
+    settings: &UserSettings,
+    workspace: &Workspace,
+) -> Result<SessionOperation> {
+    let loader = workspace.repo_loader();
+
+    let op = op_heads_store::resolve_op_heads(
+        loader.op_heads_store().as_ref(),
+        loader.op_store(),
+        |op_heads| {
+            let base_repo = loader.load_at(&op_heads[0])?;
+            // might want to set some tags
+            let mut tx = base_repo.start_transaction(settings);
+            for other_op_head in op_heads.into_iter().skip(1) {
+                tx.merge_operation(other_op_head)?;
+                tx.mut_repo().rebase_descendants(settings)?;
+            }
+            Ok::<Operation, RepoLoaderError>(
+                tx.write("resolve concurrent operations")
+                    .leave_unpublished()
+                    .operation()
+                    .clone(),
+            )
+        },
+    )?;
+
+    let repo: Arc<ReadonlyRepo> = workspace
+        .repo_loader()
+        .load_at(&op)
+        .context("load op head")?;
+
+    Ok(SessionOperation::new(repo, workspace.workspace_id()))
 }

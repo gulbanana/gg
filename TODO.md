@@ -6,7 +6,6 @@ These changes may or may not be implemented in the future.
 * bug: open menu command sometimes opens multiple dialogues
 * bug: does not work when core.fsmonitor is true (watchman support not compiled in?)
 * bug: appimage breaks cwd(). look at the OWD envar
-* edge case: what happens when we snapshot after the CLI does? when there's nothing *to* snapshot, we don't refresh the ui...
 * edge case: mutations can fail due to ambiguity due to other writers; this should update the UI. maybe use a special From on resolve_change
 * perf: optimise revdetail loads - we already have the header
 * perf: better solution to slow immutability check - jj-lib will have a revset contains cache soon
