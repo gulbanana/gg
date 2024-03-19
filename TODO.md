@@ -4,7 +4,6 @@ Desirable things
 These changes may or may not be implemented in the future.
 * bug: proper fix for https://github.com/tauri-apps/tauri/issues/9127 (currently worked-around via fork; fix may be in beta12, or it might not work)
 * bug: open menu command sometimes opens multiple dialogues
-* bug: no CLI output on windows
 * edge case: mutations can fail due to ambiguity due to other writers; this should update the UI. maybe use a special From on resolve_change
 * perf: optimise revdetail loads - we already have the header
 * perf: better solution to slow immutability check - jj-lib will have a revset contains cache soon

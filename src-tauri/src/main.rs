@@ -87,6 +87,13 @@ impl AppState {
 }
 
 fn main() -> Result<()> {
+    // before parsing args, attach a console on windows - will fail if not started from a shell, but that's fine
+    #[cfg(windows)]
+    {
+        use windows::Win32::System::Console::{AttachConsole, ATTACH_PARENT_PROCESS};
+        let _ = unsafe { AttachConsole(ATTACH_PARENT_PROCESS) };
+    }
+
     let args = Args::parse();
 
     tauri::Builder::default()

@@ -11,6 +11,7 @@ mod tests;
 use std::{
     env::{self, VarError},
     fmt::Debug,
+    fs,
     path::PathBuf,
 };
 
@@ -79,7 +80,7 @@ impl WorkerSession {
     pub fn get_cwd(&self) -> Result<PathBuf> {
         self.working_directory
             .as_ref()
-            .map(|cwd| Ok(cwd.clone()))
+            .map(|cwd| Ok(fs::canonicalize(cwd.clone())?))
             .or_else(|| match env::var("OWD") {
                 Ok(var) => Some(Ok(PathBuf::from(var))),
                 Err(VarError::NotPresent) => None,

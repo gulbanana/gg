@@ -47,3 +47,6 @@ clap = { version = "4.5.3", features = ["derive"] }
 
 [patch.crates-io]
 muda = { git = "https://github.com/gulbanana/muda.git", branch = "tauri-9127" }
+
+[target."cfg(windows)".dependencies]
+windows = { version = "0.54.0", features = ["Win32_System_Console", "Win32_Foundation"] }
