@@ -267,12 +267,66 @@ pub fn handle_context(window: Window, ctx: Operand) -> Result<()> {
     let state = window.state::<AppState>();
     let guard = state.0.lock().expect("state mutex poisoned");
 
+    let app_handle = window.app_handle();
+
     match ctx {
         Operand::Revision { header } => {
-            let context_menu = &guard
-                .get(window.label())
-                .expect("session not found")
-                .revision_menu;
+            let context_menu = Menu::with_items(
+                app_handle,
+                &[
+                    &MenuItem::with_id(
+                        app_handle,
+                        "revision_new",
+                        "New child",
+                        true,
+                        None::<&str>,
+                    )?,
+                    &MenuItem::with_id(
+                        app_handle,
+                        "revision_edit",
+                        "Edit as working copy",
+                        true,
+                        None::<&str>,
+                    )?,
+                    &MenuItem::with_id(
+                        app_handle,
+                        "revision_duplicate",
+                        "Duplicate",
+                        true,
+                        None::<&str>,
+                    )?,
+                    &MenuItem::with_id(
+                        app_handle,
+                        "revision_abandon",
+                        "Abandon",
+                        true,
+                        None::<&str>,
+                    )?,
+                    &PredefinedMenuItem::separator(app_handle)?,
+                    &MenuItem::with_id(
+                        app_handle,
+                        "revision_squash",
+                        "Squash into parent",
+                        true,
+                        None::<&str>,
+                    )?,
+                    &MenuItem::with_id(
+                        app_handle,
+                        "revision_restore",
+                        "Restore from parent",
+                        true,
+                        None::<&str>,
+                    )?,
+                    &PredefinedMenuItem::separator(app_handle)?,
+                    &MenuItem::with_id(
+                        app_handle,
+                        "revision_branch",
+                        "Create branch",
+                        true,
+                        None::<&str>,
+                    )?,
+                ],
+            )?;
 
             context_menu.enable("revision_new", true)?;
             context_menu.enable(
@@ -291,13 +345,28 @@ pub fn handle_context(window: Window, ctx: Operand) -> Result<()> {
             )?;
             context_menu.enable("revision_branch", true)?;
 
-            window.popup_menu(context_menu)?;
+            window.popup_menu(&context_menu)?;
         }
         Operand::Change { header, .. } => {
-            let context_menu = &guard
-                .get(window.label())
-                .expect("session not found")
-                .tree_menu;
+            let context_menu = Menu::with_items(
+                app_handle,
+                &[
+                    &MenuItem::with_id(
+                        app_handle,
+                        "tree_squash",
+                        "Squash into parent",
+                        true,
+                        None::<&str>,
+                    )?,
+                    &MenuItem::with_id(
+                        app_handle,
+                        "tree_restore",
+                        "Restore from parent",
+                        true,
+                        None::<&str>,
+                    )?,
+                ],
+            )?;
 
             context_menu.enable(
                 "tree_squash",
@@ -308,13 +377,22 @@ pub fn handle_context(window: Window, ctx: Operand) -> Result<()> {
                 !header.is_immutable && header.parent_ids.len() == 1,
             )?;
 
-            window.popup_menu(context_menu)?;
+            window.popup_menu(&context_menu)?;
         }
         Operand::Ref { r#ref: name, .. } => {
-            let context_menu = &guard
-                .get(window.label())
-                .expect("session not found")
-                .ref_menu;
+            let context_menu = Menu::with_items(
+                app_handle,
+                &[
+                    &MenuItem::with_id(app_handle, "branch_track", "Track", true, None::<&str>)?,
+                    &MenuItem::with_id(
+                        app_handle,
+                        "branch_untrack",
+                        "Untrack",
+                        true,
+                        None::<&str>,
+                    )?,
+                ],
+            )?;
 
             context_menu.enable(
                 "branch_track",
@@ -340,7 +418,7 @@ pub fn handle_context(window: Window, ctx: Operand) -> Result<()> {
                 ),
             )?;
 
-            window.popup_menu(context_menu)?;
+            window.popup_menu(&context_menu)?;
         }
         _ => (), // no popup required
     };
