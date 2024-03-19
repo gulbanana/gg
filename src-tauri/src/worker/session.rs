@@ -177,7 +177,7 @@ impl Session for WorkspaceSession<'_> {
                     handle_query(&mut state, &self, tx, rx, revset_string, None)?;
                 }
                 SessionEvent::ExecuteSnapshot { tx } => {
-                    let updated_head = self.load_at_head()?;
+                    let updated_head = self.load_at_head()?; // alternatively, this could be folded into snapshot so that it's done by all mutations
                     if self.import_and_snapshot(false)? || updated_head {
                         tx.send(Some(self.format_status()))?;
                     } else {
