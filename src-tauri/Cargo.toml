@@ -19,7 +19,7 @@ tauri-plugin-shell = "2.0.0-beta"
 tauri-plugin-window-state = "2.0.0-beta"
 tauri-plugin-log = "2.0.0-beta"
 
-jj-lib = { version = "0.15.1", features = ["vendored-openssl"] }
+jj-lib = { version = "0.15.1", features = ["vendored-openssl", "watchman"] }
 jj-cli = { version = "0.15.1", default-features = false, features = [
     "vendored-openssl",
 ] }

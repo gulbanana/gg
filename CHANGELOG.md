@@ -17,6 +17,7 @@
   create even more divergent commits!
 - The AppImage build wasn't picking up the working directory correctly. This is fixed, and 
   you can also specify a workspace to open on the commandline as an alternative.
+- Watchman support (core.fsmonitor) was not enabled.
 
 ## [0.15.2](releases/tag/v0.15.2)
 
