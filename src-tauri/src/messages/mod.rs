@@ -43,7 +43,7 @@ where
     derive(TS),
     ts(export, export_to = "../src/messages/")
 )]
-pub struct DisplayPath(String);
+pub struct DisplayPath(pub String);
 
 impl<T: AsRef<Path>> From<T> for DisplayPath {
     fn from(value: T) -> Self {

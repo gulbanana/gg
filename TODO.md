@@ -24,7 +24,6 @@ These changes may or may not be implemented in the future.
 * feat: view commit ids in log (configurable?)
 * feat: view repo at different ops (slider? entire pane?) 
 * feat: progress display (probably in statusbar); useful for git & snapshot
-* feat: repo in title
 * feat: finish branch management
 * feat: structured op descs - want to be able to present them more nicely, extracting ids etc. tags? 
     - there's a request for this to be part of jj

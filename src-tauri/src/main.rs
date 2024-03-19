@@ -463,10 +463,20 @@ fn try_open_repository(window: &Window, cwd: Option<PathBuf>) -> Result<()> {
     match call_rx.recv()? {
         Ok(config) => {
             log::debug!("load workspace succeeded");
+            match &config {
+                messages::RepoConfig::Workspace { absolute_path, .. } => {
+                    window
+                        .set_title((String::from("GG - ") + absolute_path.0.as_str()).as_str())?;
+                }
+                _ => {
+                    window.set_title("GG - Gui for JJ")?;
+                }
+            }
             window.emit("gg://repo/config", config)?;
         }
         Err(err) => {
             log::warn!("load workspace failed: {err}");
+            window.set_title("GG - Gui for JJ")?;
             window.emit(
                 "gg://repo/config",
                 messages::RepoConfig::LoadError {
