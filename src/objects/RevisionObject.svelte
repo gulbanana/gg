@@ -9,6 +9,7 @@
     import BranchObject from "./BranchObject.svelte";
     import Object from "./Object.svelte";
     import Zone from "./Zone.svelte";
+    import RevisionMutator from "../mutators/RevisionMutator";
 
     export let header: RevHeader;
     export let child: RevHeader | null = null;
@@ -21,19 +22,7 @@
     }
 
     function onEdit() {
-        if (header.is_working_copy) {
-            return;
-        }
-
-        if (header.is_immutable) {
-            mutate<CreateRevision>("create_revision", {
-                parent_ids: [header.id],
-            });
-        } else {
-            mutate<CheckoutRevision>("checkout_revision", {
-                id: header.id,
-            });
-        }
+        new RevisionMutator(header).onEdit();
     }
 </script>
 

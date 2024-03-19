@@ -8,6 +8,7 @@
     import { type EnhancedRow, default as GraphLog, type EnhancedLine } from "./GraphLog.svelte";
     import RevisionSummary from "./objects/RevisionObject.svelte";
     import SelectWidget from "./controls/SelectWidget.svelte";
+    import RevisionMutator from "./mutators/RevisionMutator.js";
 
     export let default_query: string;
     export let latest_query: string;
@@ -210,6 +211,11 @@
                 event.preventDefault();
                 selectRow(graphRows.length - 1);
                 break;
+
+            case "Enter":
+                if ($revisionSelectEvent) {
+                    new RevisionMutator($revisionSelectEvent).onEdit();
+                }
         }
     }
 

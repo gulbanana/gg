@@ -9,7 +9,7 @@
 - Detect changes made by other Jujutsu clients and merge the operation log automatically.
 - Window title includes the workspace path (when one is open).
 - New config option gg.queries.log-page-size for tuning performance on large repositories.
-- Miscellaneous design improvements.
+- Improved keyboard support and focus behaviour.
 
 ### Fixed 
 - GG now understands divergent changes, and can act on commits that have a shared change id. 

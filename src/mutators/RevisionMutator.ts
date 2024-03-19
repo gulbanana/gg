@@ -64,9 +64,19 @@ export default class RevisionMutator {
     };
 
     onEdit = () => {
-        mutate<CheckoutRevision>("checkout_revision", {
-            id: this.#revision.id,
-        });
+        if (this.#revision.is_working_copy) {
+            return;
+        }
+
+        if (this.#revision.is_immutable) {
+            mutate<CreateRevision>("create_revision", {
+                parent_ids: [this.#revision.id],
+            });
+        } else {
+            mutate<CheckoutRevision>("checkout_revision", {
+                id: this.#revision.id,
+            });
+        }
     };
 
     onDuplicate = () => {

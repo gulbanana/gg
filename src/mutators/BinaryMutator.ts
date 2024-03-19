@@ -10,6 +10,8 @@ import type { MoveRevision } from "../messages/MoveRevision";
 import type { MoveSource } from "../messages/MoveSource";
 import type { ChangeId } from "../messages/ChangeId";
 import type { CommitId } from "../messages/CommitId";
+import RevisionMutator from "./RevisionMutator";
+import ChangeMutator from "./ChangeMutator";
 
 export type RichHint = (string | ChangeId | CommitId)[];
 export type Eligibility = { type: "yes", hint: RichHint } | { type: "maybe", hint: string } | { type: "no" };
@@ -137,7 +139,7 @@ export default class BinaryMutator {
                 return;
             } else if (this.#to.type == "Repository") {
                 // abandon source
-                mutate<AbandonRevisions>("abandon_revisions", { ids: [this.#from.header.id.commit] });
+                new RevisionMutator(this.#from.header).onAbandon();
                 return;
             }
         }
@@ -159,7 +161,7 @@ export default class BinaryMutator {
                 return;
             } else if (this.#to.type == "Repository") {
                 // restore path from source parent to source
-                mutate<CopyChanges>("copy_changes", { from_id: this.#from.header.parent_ids[0], to_id: this.#from.header.id, paths: [this.#from.path] });
+                new ChangeMutator(this.#from.header, this.#from.path).onRestore();
                 return;
             }
         }
