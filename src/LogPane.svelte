@@ -130,7 +130,7 @@
                 let enhancedLine = line as EnhancedLine;
                 enhancedLine.key = lineKey++;
 
-                if (line.type == "ToIntersection") {
+                if (line.type == "ToIntersection" || line.type == "ToMissing") {
                     // ToIntersection lines begin at their owning row, so they run from this row to the next one that we read (which may not be on the same page)
                     enhancedLine.child = row.revision;
                     enhancedRow.passingLines.push(enhancedLine);

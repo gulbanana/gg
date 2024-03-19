@@ -12,6 +12,7 @@ These changes may or may not be implemented in the future.
 * perf: better solution to slow immutability check - jj-lib will have a revset contains cache soon
 * feat: alternate drag modes for copy/duplicate, maybe for rebase-all-descendants
 * feat: log multiselect
+* feat: log enter key
 * feat: log filters (find commits that change path etc)
 * feat: file select/multiselect? large moves could be tedious otherwise. maybe file menu?
 * feat: redo/undo stack
@@ -19,10 +20,12 @@ These changes may or may not be implemented in the future.
 * feat: sub-file hunk changes
 * feat: diffs and/or difftool
 * feat: resolve workflow 
-* feat: tags display & management
+* feat: tags display (readonly, perhaps - look at jj support)
 * feat: view commit ids in log (configurable?)
 * feat: view repo at different ops (slider? entire pane?) 
 * feat: progress display (probably in statusbar); useful for git & snapshot
+* feat: repo in title
+* feat: finish branch management
 * feat: structured op descs - want to be able to present them more nicely, extracting ids etc. tags? 
     - there's a request for this to be part of jj
 * feat: more mutations
@@ -33,7 +36,6 @@ These changes may or may not be implemented in the future.
 * feat: more settings
     - log revsets
 * design: decide whether to remove edit menu and maybe add others
-* design: draw missing (edge-to-nowhere) graph nodes?
 * design: consider common signature control
 * epic: categorical expansion - trays, modals, pinned commits etc
 * chore: windows codesigning will break in august 2024; needs a new approach

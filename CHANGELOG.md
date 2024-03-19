@@ -5,6 +5,7 @@
 ### Added
 - Git remotes in the status bar, with push & fetch commands.
 - "Create branch" command on revisions. 
+- Display edges to commits that aren't in the queried revset, by drawing a line to nowhere.
 - New config option gg.queries.log-page-size.
 - Miscellaneous design improvements.
 

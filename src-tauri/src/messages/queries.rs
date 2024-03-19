@@ -185,6 +185,11 @@ pub enum LogLine {
         target: LogCoordinates,
         indirect: bool,
     },
+    ToMissing {
+        source: LogCoordinates,
+        target: LogCoordinates,
+        indirect: bool,
+    },
 }
 
 #[derive(Serialize, Debug)]

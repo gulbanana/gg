@@ -7,6 +7,7 @@ use jj_lib::{
     backend::{BackendError, CommitId},
     matchers::EverythingMatcher,
     merged_tree::TreeDiffStream,
+    repo::Repo,
     revset::Revset,
     revset_graph::{RevsetGraphEdge, RevsetGraphEdgeType, TopoGroupedRevsetGraphIterator},
     rewrite,
@@ -78,6 +79,7 @@ impl<'a, 'b> QuerySession<'a, 'b> {
         let mut rows: Vec<LogRow> = Vec::with_capacity(self.state.page_size); // output rows to draw
         let mut row = self.state.next_row;
         let max = row + self.state.page_size;
+        let root_id = self.ws.repo().store().root_commit_id().clone();
 
         while let Some((commit_id, commit_edges)) = self.iter.next() {
             // output lines to draw for the current row
@@ -88,14 +90,9 @@ impl<'a, 'b> QuerySession<'a, 'b> {
             let mut stem_known_immutable = false;
             let mut padding = 0; // used to offset the commit summary past some edges
 
-            for (slot, stem) in self.state.stems.iter().enumerate() {
-                if let Some(LogStem { target, .. }) = stem {
-                    if *target == commit_id {
-                        column = slot;
-                        padding = self.state.stems.len() - column - 1;
-                        break;
-                    }
-                }
+            if let Some(slot) = self.find_stem_for_commit(&commit_id) {
+                column = slot;
+                padding = self.state.stems.len() - column - 1;
             }
 
             // terminate any existing stem, removing it from the end or leaving a gap
@@ -154,16 +151,23 @@ impl<'a, 'b> QuerySession<'a, 'b> {
                 .truncate(self.state.stems.len() - empty_stems);
 
             // merge edges into existing stems or add new ones to the right
+            let mut next_missing: Option<CommitId> = None;
             'edges: for edge in commit_edges.iter() {
                 if edge.edge_type == RevsetGraphEdgeType::Missing {
-                    continue;
+                    if edge.target == root_id {
+                        continue;
+                    } else {
+                        next_missing = Some(edge.target.clone());
+                    }
                 }
+
+                let indirect = edge.edge_type != RevsetGraphEdgeType::Direct;
 
                 for (slot, stem) in self.state.stems.iter().enumerate() {
                     if let Some(stem) = stem {
                         if stem.target == edge.target {
                             lines.push(LogLine::ToIntersection {
-                                indirect: edge.edge_type == RevsetGraphEdgeType::Indirect,
+                                indirect,
                                 source: LogCoordinates(column, row),
                                 target: LogCoordinates(slot, row + 1),
                             });
@@ -177,7 +181,7 @@ impl<'a, 'b> QuerySession<'a, 'b> {
                         *stem = Some(LogStem {
                             source: LogCoordinates(column, row),
                             target: edge.target.clone(),
-                            indirect: edge.edge_type == RevsetGraphEdgeType::Indirect,
+                            indirect,
                             was_inserted: true,
                             known_immutable: header.is_immutable,
                         });
@@ -188,7 +192,7 @@ impl<'a, 'b> QuerySession<'a, 'b> {
                 self.state.stems.push(Some(LogStem {
                     source: LogCoordinates(column, row),
                     target: edge.target.clone(),
-                    indirect: edge.edge_type == RevsetGraphEdgeType::Indirect,
+                    indirect,
                     was_inserted: false,
                     known_immutable: header.is_immutable,
                 }));
@@ -200,8 +204,27 @@ impl<'a, 'b> QuerySession<'a, 'b> {
                 padding,
                 lines,
             });
-
             row = row + 1;
+
+            // terminate any temporary stems created for missing edges
+            match next_missing
+                .take()
+                .and_then(|id| self.find_stem_for_commit(&id))
+            {
+                Some(slot) => {
+                    if let Some(terminated_stem) = &self.state.stems[slot] {
+                        rows.last_mut().unwrap().lines.push(LogLine::ToMissing {
+                            indirect: terminated_stem.indirect,
+                            source: LogCoordinates(column, row - 1),
+                            target: LogCoordinates(slot, row),
+                        });
+                    }
+                    self.state.stems[slot] = None;
+                    row = row + 1;
+                }
+                None => (),
+            };
+
             if row == max {
                 break;
             }
@@ -212,6 +235,18 @@ impl<'a, 'b> QuerySession<'a, 'b> {
             rows,
             has_more: self.iter.peek().is_some(),
         })
+    }
+
+    fn find_stem_for_commit(&self, id: &CommitId) -> Option<usize> {
+        for (slot, stem) in self.state.stems.iter().enumerate() {
+            if let Some(LogStem { target, .. }) = stem {
+                if target == id {
+                    return Some(slot);
+                }
+            }
+        }
+
+        None
     }
 }
 
