@@ -6,7 +6,7 @@ authors = ["Thomas Castiglione"]
 edition = "2021"
 
 [build-dependencies]
-tauri-build = { version = "=2.0.0-beta.9", features = [] }
+tauri-build = { version = "2.0.0-beta", features = [] }
 
 [dev-dependencies]
 tempfile = "3.10.1"
@@ -14,17 +14,17 @@ zip = "0.6"
 assert_matches = "1.5"
 
 [dependencies]
-tauri = { version = "=2.0.0-beta.11", features = [] }
-tauri-codegen = "=2.0.0-beta.9"
-tauri-macros = "=2.0.0-beta.9"
-tauri-plugin = "=2.0.0-beta.9"
-tauri-runtime = "=2.0.0-beta.9"
-tauri-runtime-wry = "=2.0.0-beta.9"
-tauri-utils = "=2.0.0-beta.9"
-tauri-plugin-dialog = "=2.0.0-beta.2"
-tauri-plugin-shell = "=2.0.0-beta.2"
-tauri-plugin-window-state = "=2.0.0-beta.2"
-tauri-plugin-log = "=2.0.0-beta.2"
+tauri = { version = "2.0.0-beta", features = [] }
+tauri-codegen = "2.0.0-beta"
+tauri-macros = "2.0.0-beta"
+tauri-plugin = "2.0.0-beta"
+tauri-runtime = "2.0.0-beta"
+tauri-runtime-wry = "2.0.0-beta"
+tauri-utils = "2.0.0-beta"
+tauri-plugin-dialog = "2.0.0-beta"
+tauri-plugin-shell = "2.0.0-beta"
+tauri-plugin-window-state = "2.0.0-beta"
+tauri-plugin-log = "2.0.0-beta"
 
 jj-lib = { version = "0.15.1", features = ["vendored-openssl", "watchman"] }
 jj-cli = { version = "0.15.1", default-features = false, features = [
@@ -52,17 +52,12 @@ thiserror = "1.0.57"
 ts-rs = { version = "7.1.1", features = ["chrono-impl"], optional = true }
 clap = { version = "4.5.3", features = ["derive"] }
 
-[patch.crates-io]
-muda = { git = "https://github.com/gulbanana/muda.git", branch = "tauri-9127" }
-
 [target."cfg(windows)".dependencies]
 windows = { version = "0.54.0", features = [
     "Win32_Foundation",
-    # "Win32_Security",
     "Win32_System_Com",
     "Win32_System_Com_StructuredStorage",
     "Win32_System_Console",
-    # "Win32_System_Registry",
     "Win32_UI_Shell",
     "Win32_UI_Shell_Common",
     "Win32_UI_Shell_PropertiesSystem",
