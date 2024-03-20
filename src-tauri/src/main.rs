@@ -120,6 +120,14 @@ fn main() -> Result<()> {
                         LevelFilter::Warn
                     },
                 )
+                .level_for(
+                    "tao",
+                    if args.debug {
+                        LevelFilter::Info
+                    } else {
+                        LevelFilter::Error
+                    },
+                )
                 .build(),
         )
         .invoke_handler(tauri::generate_handler![
