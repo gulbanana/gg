@@ -10,7 +10,7 @@ use itertools::Itertools;
 use jj_cli::{
     cli_util::{check_stale_working_copy, short_operation_hash, WorkingCopyFreshness},
     config::LayeredConfigs,
-    git_util::is_colocated_git_workspace,
+    git_util::{self, is_colocated_git_workspace},
 };
 use jj_lib::{backend::BackendError, default_index::{AsCompositeIndex, DefaultReadonlyIndex}, file_util::relative_path, gitignore::GitIgnoreFile, op_store::WorkspaceId, repo::RepoLoaderError, repo_path::RepoPath, revset::{RevsetEvaluationError, RevsetIteratorExt, RevsetResolutionError}, rewrite, view::View, working_copy::{CheckoutStats, SnapshotOptions}};
 use jj_lib::{
@@ -914,8 +914,10 @@ impl RefIndex {
 }
 
 fn build_ref_index(repo: &ReadonlyRepo) -> RefIndex {
-    let mut index = RefIndex::default();
+    let potential_remotes = git_util::get_git_repo(repo.store()).ok().and_then(|git_repo| git_repo.remotes().ok()).map(|remotes| remotes.len()).unwrap_or(0);
 
+    let mut index = RefIndex::default();
+    
     for (branch_name, branch_target) in repo.view().branches() {
         let local_target = branch_target.local_target;
         let remote_refs = branch_target.remote_refs;
@@ -926,7 +928,9 @@ fn build_ref_index(repo: &ReadonlyRepo) -> RefIndex {
                 is_synced: remote_refs.iter().all(|&(_, remote_ref)| {
                     !remote_ref.is_tracking() || remote_ref.target == *local_target
                 }),
-                is_tracking: remote_refs.iter().any(|&(_, remote_ref)| remote_ref.is_tracking())
+                tracking_remotes: remote_refs.iter().filter(|&(_, remote_ref)| remote_ref.is_tracking()).map(|&(remote_name, _)| remote_name.to_owned()).collect(),
+                available_remotes: remote_refs.len(),
+                potential_remotes
             });
         }
         for &(remote_name, remote_ref) in &remote_refs {
@@ -934,9 +938,9 @@ fn build_ref_index(repo: &ReadonlyRepo) -> RefIndex {
                 branch_name: branch_name.to_owned(),
                 remote_name: remote_name.to_owned(),
                 has_conflict: remote_ref.target.has_conflict(),
-                is_synced: remote_ref.is_tracking() && remote_ref.target == *local_target,
+                is_synced: remote_ref.target == *local_target,
                 is_tracked: remote_ref.is_tracking(),
-                is_deleted: local_target.is_absent()
+                is_absent: local_target.is_absent()
             });
         }
     }

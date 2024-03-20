@@ -24,8 +24,8 @@ use super::{gui_util::WorkspaceSession, Mutation};
 use crate::messages::{
     AbandonRevisions, CheckoutRevision, CopyChanges, CreateRef, CreateRevision, DeleteRef,
     DescribeRevision, DuplicateRevisions, FetchRemote, InsertRevision, MoveChanges, MoveRef,
-    MoveRevision, MoveSource, MutationResult, PushRemote, StoreRef, TrackBranch, TreePath,
-    UndoOperation, UntrackBranch,
+    MoveRevision, MoveSource, MutationResult, PushRemote, RenameBranch, StoreRef, TrackBranch,
+    TreePath, UndoOperation, UntrackBranch,
 };
 
 macro_rules! precondition {
@@ -504,6 +504,12 @@ impl Mutation for UntrackBranch {
     }
 }
 
+impl Mutation for RenameBranch {
+    fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
+        todo!();
+    }
+}
+
 impl Mutation for CreateRef {
     fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction()?;
@@ -570,6 +576,8 @@ impl Mutation for CreateRef {
 
 impl Mutation for DeleteRef {
     fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
+        todo!("implementation looks complete, but is not. for example, we need to untrack local branches first, and remote branches have to be absented and then pushed.");
+
         match self.r#ref {
             StoreRef::RemoteBranch {
                 branch_name,
@@ -661,6 +669,10 @@ impl Mutation for MoveRef {
 
 impl Mutation for PushRemote {
     fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
+        if self.r#ref.is_some() {
+            todo!("PushRemote.ref");
+        }
+
         let mut tx = ws.start_transaction()?;
 
         let git_repo = match ws.git_repo()? {
@@ -785,6 +797,10 @@ impl Mutation for PushRemote {
 
 impl Mutation for FetchRemote {
     fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
+        if self.r#ref.is_some() {
+            todo!("FetchRemote.ref");
+        }
+
         let mut tx = ws.start_transaction()?;
 
         let git_repo = match ws.git_repo()? {

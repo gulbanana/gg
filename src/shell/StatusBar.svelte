@@ -50,12 +50,14 @@
     function onPush(remote: string) {
         mutate<PushRemote>("push_remote", {
             remote_name: remote,
+            ref: null,
         });
     }
 
     function onFetch(remote: string) {
         mutate<FetchRemote>("fetch_remote", {
             remote_name: remote,
+            ref: null,
         });
     }
 </script>

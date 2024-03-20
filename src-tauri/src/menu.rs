@@ -220,6 +220,26 @@ pub fn build_context(
         &[
             &MenuItem::with_id(app_handle, "branch_track", "Track", true, None::<&str>)?,
             &MenuItem::with_id(app_handle, "branch_untrack", "Untrack", true, None::<&str>)?,
+            &PredefinedMenuItem::separator(app_handle)?,
+            &MenuItem::with_id(app_handle, "branch_push_all", "Push", true, None::<&str>)?,
+            &MenuItem::with_id(
+                app_handle,
+                "branch_push_single",
+                "Push to remote...",
+                true,
+                None::<&str>,
+            )?,
+            &MenuItem::with_id(app_handle, "branch_fetch_all", "Fetch", true, None::<&str>)?,
+            &MenuItem::with_id(
+                app_handle,
+                "branch_fetch_single",
+                "Fetch from remote...",
+                true,
+                None::<&str>,
+            )?,
+            &PredefinedMenuItem::separator(app_handle)?,
+            &MenuItem::with_id(app_handle, "branch_rename", "Rename...", true, None::<&str>)?,
+            &MenuItem::with_id(app_handle, "branch_delete", "Delete", true, None::<&str>)?,
         ],
     )?;
 
@@ -310,35 +330,73 @@ pub fn handle_context(window: Window, ctx: Operand) -> Result<()> {
 
             window.popup_menu(context_menu)?;
         }
-        Operand::Ref { r#ref: name, .. } => {
+        Operand::Ref { r#ref, .. } => {
             let context_menu = &guard
                 .get(window.label())
                 .expect("session not found")
                 .ref_menu;
 
+            // give remotes a local, or undelete them
             context_menu.enable(
                 "branch_track",
                 matches!(
-                    name,
+                    r#ref,
                     StoreRef::RemoteBranch {
                         is_tracked: false,
                         ..
+                    } | StoreRef::RemoteBranch {
+                        is_absent: true,
+                        ..
                     }
                 ),
             )?;
+
+            // remove a local's remotes, or a remote from its local
             context_menu.enable(
                 "branch_untrack",
                 matches!(
-                    name,
-                    StoreRef::RemoteBranch {
-                        is_tracked: true,
+                    r#ref,
+                    StoreRef::LocalBranch {
+                        ref tracking_remotes,
                         ..
-                    } | StoreRef::LocalBranch {
-                        is_tracking: true,
+                    } if !tracking_remotes.is_empty()
+                ) || matches!(
+                    r#ref,
+                    StoreRef::RemoteBranch {
+                        is_synced: false, // we can *see* the remote ref, and
+                        is_tracked: true, // it has a local, and
+                        is_absent: false, // that local is somewhere else
                         ..
                     }
                 ),
             )?;
+
+            // push a local to its remotes, or finish a CLI delete
+            context_menu.enable("branch_push_all", 
+                matches!(r#ref, StoreRef::LocalBranch { ref tracking_remotes, .. } if !tracking_remotes.is_empty()) || 
+                matches!(r#ref, StoreRef::RemoteBranch { is_tracked: true, is_absent: true, .. }))?;
+
+            // push a local to a selected remote, tracking first if necessary
+            context_menu.enable("branch_push_single", 
+                matches!(r#ref, StoreRef::LocalBranch { potential_remotes, .. } if potential_remotes > 0))?;
+
+            // fetch a local's remotes, or just a remote (unless we're deleting it; that would be silly)
+            context_menu.enable("branch_fetch_all", 
+                matches!(r#ref, StoreRef::LocalBranch { ref tracking_remotes, .. } if !tracking_remotes.is_empty()) || 
+                matches!(r#ref, StoreRef::RemoteBranch { is_tracked, is_absent, .. } if (!is_tracked || !is_absent)))?;
+
+            // fetch a local, tracking first if necessary
+            context_menu.enable("branch_fetch_single", 
+                matches!(r#ref, StoreRef::LocalBranch { available_remotes, .. } if available_remotes > 0))?;
+
+            // rename a local, which also untracks remotes
+            context_menu.enable(
+                "branch_rename",
+                matches!(r#ref, StoreRef::LocalBranch { .. }),
+            )?;
+
+            // (untrack and) remove a local, or make a remote absent and push it
+            context_menu.enable("branch_delete", true)?;
 
             window.popup_menu(context_menu)?;
         }
@@ -372,6 +430,12 @@ pub fn handle_event(window: &Window, event: MenuEvent) -> Result<()> {
         "tree_restore" => window.emit("gg://context/tree", "restore")?,
         "branch_track" => window.emit("gg://context/branch", "track")?,
         "branch_untrack" => window.emit("gg://context/branch", "untrack")?,
+        "branch_push_all" => window.emit("gg://context/branch", "push-all")?,
+        "branch_push_single" => window.emit("gg://context/branch", "push-single")?,
+        "branch_fetch_all" => window.emit("gg://context/branch", "fetch-all")?,
+        "branch_fetch_single" => window.emit("gg://context/branch", "fetch-single")?,
+        "branch_rename" => window.emit("gg://context/branch", "rename")?,
+        "branch_delete" => window.emit("gg://context/branch", "delete")?,
         _ => (),
     };
 

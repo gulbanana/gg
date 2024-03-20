@@ -91,33 +91,33 @@ export function trigger(command: string, request?: InvokeArgs) {
 /**
  * call an IPC which, if successful, modifies the repo
  */
-export function mutate<T>(command: string, mutation: T) {
-    (async () => {
-        try {
-            let fetch = invoke<MutationResult>(command, { mutation });
-            let result = await Promise.race([fetch.then(r => Promise.resolve<Query<MutationResult>>({ type: "data", value: r })), delay<MutationResult>()]);
-            currentMutation.set(result);
-            let value = await fetch;
+export async function mutate<T>(command: string, mutation: T): Promise<boolean> {
+    try {
+        let fetch = invoke<MutationResult>(command, { mutation });
+        let result = await Promise.race([fetch.then(r => Promise.resolve<Query<MutationResult>>({ type: "data", value: r })), delay<MutationResult>()]);
+        currentMutation.set(result);
+        let value = await fetch;
 
-            // succeeded; dismiss modals
-            if (value.type == "Updated" || value.type == "UpdatedSelection" || value.type == "Unchanged") {
-                if (value.type != "Unchanged") {
-                    repoStatusEvent.set(value.new_status);
-                    if (value.type == "UpdatedSelection") {
-                        revisionSelectEvent.set(value.new_selection);
-                    }
+        // succeeded; dismiss modals
+        if (value.type == "Updated" || value.type == "UpdatedSelection" || value.type == "Unchanged") {
+            if (value.type != "Unchanged") {
+                repoStatusEvent.set(value.new_status);
+                if (value.type == "UpdatedSelection") {
+                    revisionSelectEvent.set(value.new_selection);
                 }
-                currentMutation.set(null);
-
-                // failed; transition from overlay or delay to error
-            } else {
-                currentMutation.set({ type: "data", value });
             }
-        } catch (error: any) {
-            console.log(error);
-            currentMutation.set({ type: "error", message: error.toString() });
+            currentMutation.set(null);
+
+            // failed; transition from overlay or delay to error
+        } else {
+            currentMutation.set({ type: "data", value });
         }
-    })();
+        return true;
+    } catch (error: any) {
+        console.log(error);
+        currentMutation.set({ type: "error", message: error.toString() });
+        return false;
+    }
 }
 
 /**

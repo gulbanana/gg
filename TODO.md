@@ -18,15 +18,16 @@ These changes may or may not be implemented in the future.
 * feat: view commit ids in log (configurable?)
 * feat: view repo at different ops (slider? entire pane?) 
 * feat: progress display (probably in statusbar); useful for git & snapshot
-* feat: finish branch management
 * feat: structured op descs - want to be able to present them more nicely, extracting ids etc. tags? 
     - there's a request for this to be part of jj
-* feat: more mutations
-    - make track available to recreate deleting remotes
-    - delete branch
-    - push branch 
-    - fetch branch?
-    - create/delete tags? even moving them is implemented, but may be a bad idea
+* feat: all branch mutations
+    - track (including the add-remote drag-drop version)
+    - untrack
+    - push all/single
+    - fetch all/single
+    - rename
+    - delete
+* feat: create/delete tags? even moving them is implemented in the backend, but may be a bad idea
 * feat: more settings
     - log revsets
 * design: decide whether to remove edit menu and maybe add others

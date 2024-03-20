@@ -121,8 +121,10 @@ pub enum StoreRef {
         has_conflict: bool,
         /// Synchronized with all tracking remotes
         is_synced: bool,
-        /// Has tracking remotes
-        is_tracking: bool,
+        /// Actual and potential remotes
+        tracking_remotes: Vec<String>,
+        available_remotes: usize,
+        potential_remotes: usize,
     },
     RemoteBranch {
         branch_name: String,
@@ -133,7 +135,7 @@ pub enum StoreRef {
         /// Has local ref
         is_tracked: bool,
         /// Local ref has been deleted
-        is_deleted: bool,
+        is_absent: bool,
     },
     Tag {
         tag_name: String,

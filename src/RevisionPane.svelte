@@ -50,7 +50,7 @@
             <ActionWidget tip="create a child" onClick={mutator.onNew}>
                 <Icon name="edit" /> New
             </ActionWidget>
-            <ActionWidget tip="create a subling" onClick={mutator.onDuplicate}>
+            <ActionWidget tip="create a sibling" onClick={mutator.onDuplicate}>
                 <Icon name="copy" /> Duplicate
             </ActionWidget>
         </div>

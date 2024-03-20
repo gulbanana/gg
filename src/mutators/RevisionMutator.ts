@@ -124,7 +124,9 @@ export default class RevisionMutator {
                 branch_name: response["Branch Name"],
                 has_conflict: false,
                 is_synced: false,
-                is_tracking: false,
+                potential_remotes: 0,
+                available_remotes: 0,
+                tracking_remotes: []
             };
             mutate<CreateRef>("create_ref", { ref, id: this.#revision.id })
         }

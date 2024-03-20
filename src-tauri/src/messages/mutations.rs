@@ -165,6 +165,17 @@ pub struct UntrackBranch {
     derive(TS),
     ts(export, export_to = "../src/messages/")
 )]
+pub struct RenameBranch {
+    pub r#ref: StoreRef,
+    pub new_name: String,
+}
+
+#[derive(Deserialize, Debug)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(TS),
+    ts(export, export_to = "../src/messages/")
+)]
 pub struct CreateRef {
     pub id: RevId,
     pub r#ref: StoreRef,
@@ -199,6 +210,7 @@ pub struct MoveRef {
 )]
 pub struct PushRemote {
     pub remote_name: String,
+    pub r#ref: Option<StoreRef>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -209,6 +221,7 @@ pub struct PushRemote {
 )]
 pub struct FetchRemote {
     pub remote_name: String,
+    pub r#ref: Option<StoreRef>,
 }
 
 #[derive(Deserialize, Debug)]
