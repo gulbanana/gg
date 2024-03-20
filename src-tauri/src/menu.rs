@@ -395,8 +395,18 @@ pub fn handle_context(window: Window, ctx: Operand) -> Result<()> {
                 matches!(r#ref, StoreRef::LocalBranch { .. }),
             )?;
 
-            // (untrack and) remove a local, or make a remote absent and push it
-            context_menu.enable("branch_delete", true)?;
+            // remove a local, or make a remote absent
+            context_menu.enable(
+                "branch_delete",
+                !matches!(
+                    r#ref,
+                    StoreRef::RemoteBranch {
+                        is_absent: true,
+                        is_tracked: true,
+                        ..
+                    }
+                ),
+            )?;
 
             window.popup_menu(context_menu)?;
         }

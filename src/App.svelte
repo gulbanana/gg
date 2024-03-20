@@ -27,6 +27,7 @@
     import InputDialog from "./shell/InputDialog.svelte";
     import type { InputRequest } from "./messages/InputRequest";
     import type { InputResponse } from "./messages/InputResponse";
+    import type Settings from "./shell/Settings";
 
     let selection: Query<RevResult> = {
         type: "wait",
@@ -53,8 +54,10 @@
         }
     });
 
-    let theme = { indicate_disconnected_branches: true };
-    setContext("theme", theme);
+    let settings: Settings = {
+        markUnpushedBranches: true,
+    };
+    setContext<Settings>("settings", settings);
 
     onEvent("gg://context/revision", mutateRevision);
     onEvent("gg://context/tree", mutateTree);
@@ -72,7 +75,7 @@
 
         $revisionSelectEvent = undefined;
         if (config.type == "Workspace") {
-            theme.indicate_disconnected_branches = config.indicate_disconnected_branches;
+            settings.markUnpushedBranches = config.mark_unpushed_branches;
             $repoStatusEvent = config.status;
         }
     }
@@ -129,7 +132,7 @@
 </script>
 
 <Zone operand={{ type: "Repository" }} alwaysTarget let:target>
-    <div id="shell" class={$repoConfigEvent?.type == "Workspace" ? $repoConfigEvent.theme : ""}>
+    <div id="shell" class={$repoConfigEvent?.type == "Workspace" ? $repoConfigEvent.theme_override : ""}>
         {#if $repoConfigEvent.type == "Initial"}
             <Pane>
                 <h2 slot="header">Loading...</h2>

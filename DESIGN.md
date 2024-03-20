@@ -67,9 +67,9 @@ Consequently, the commands available for a branch as displayed in the UI have po
   - For a *nontracking local branch*, just renames.
   - For a *tracking/combined branch*, untracks first.
 8) "Delete": Applies to a user-visible object, not combined objects.
-   - For a *local/combined branch*, untracks all remotes and then deletes the local ref. 
-   - For an *untracked remote branch*, creates an absent local ref and then pushes to the remote.
-   - For an *unsynced remote branch*, untracks the remote, then creates and pushes the absent ref.
+   - For a *local/combined branch*, deletes the local ref. 
+   - For an *untracked remote branch*, creates an absent local ref.
+   - For an *unsynced remote branch*, untracks the remote, then creates an absent ref.
 
 Multiple-dispatch commands:
 1) "Move": Drop local branch onto revision. Sets the ref to a commit, potentially de- or re-syncing it.
@@ -86,6 +86,6 @@ the fact that many branch states are "normal"; the mental shorthand is that add/
 cause a remote to set this ref, and remove/red means the remote will no longer contain this ref (at this pointer).
 
 Additionally, a dashed border (like the dashed lines used for elided commits) has a special meaning, also
-fuzzy: this ref is "disconnected" from any remote, usually meaning it's a local branch that does not but
-*could* have tracked remote branches; it's also used for the cli-only state where the remote contains a 
-branch but your local view *of* that remote intends to, on push, delete it.
+fuzzy: this ref is "disconnected", either local-only or remote-only. Disconnected local branches are ones 
+which have no remotes (in a repo that does have remotes); disconnected remote branches are ones which will
+be deleted on push (with an absent local ref).

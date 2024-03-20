@@ -1,13 +1,13 @@
 <script lang="ts">
+    import { getContext } from "svelte";
     import type { RevHeader } from "../messages/RevHeader";
     import type { StoreRef } from "../messages/StoreRef";
     import type { Operand } from "../messages/Operand";
+    import type Settings from "../shell/Settings";
     import Icon from "../controls/Icon.svelte";
     import Chip from "../controls/Chip.svelte";
     import Object from "./Object.svelte";
     import Zone from "./Zone.svelte";
-    import { getContext } from "svelte";
-    import { repoConfigEvent } from "../stores";
 
     export let header: RevHeader;
     export let ref: Extract<StoreRef, { type: "LocalBranch" | "RemoteBranch" }>;
@@ -63,7 +63,7 @@
             break;
     }
 
-    if (!getContext<any>("theme").indicate_disconnected_branches) {
+    if (!getContext<Settings>("settings").markUnpushedBranches) {
         disconnected = false;
     }
 </script>
