@@ -38,7 +38,7 @@ mod revs {
     use super::mkid;
 
     pub fn working_copy() -> RevId {
-        mkid("kppkuplp", "a625ed5aa71d7c68b98b1d1521b2e1cbd0c54a0d")
+        mkid("nnloouly", "56018b94eb61a9acddc58ad7974aa51c3368eadd")
     }
 
     pub fn main_branch() -> RevId {
@@ -216,7 +216,7 @@ mod session {
         tx.send(SessionEvent::EndSession)?;
 
         WorkerSession {
-            force_log_page_size: Some(6),
+            force_log_page_size: Some(7),
             ..Default::default()
         }
         .handle_events(&rx)?;
@@ -224,7 +224,7 @@ mod session {
         rx_load.recv()??;
 
         let page1 = rx_page1.recv()??;
-        assert_eq!(6, page1.rows.len());
+        assert_eq!(7, page1.rows.len());
         assert_eq!(true, page1.has_more);
 
         let page2 = rx_page2.recv()??;
@@ -259,7 +259,7 @@ mod session {
         tx.send(SessionEvent::EndSession)?;
 
         WorkerSession {
-            force_log_page_size: Some(6),
+            force_log_page_size: Some(7),
             ..Default::default()
         }
         .handle_events(&rx)?;
@@ -267,11 +267,11 @@ mod session {
         rx_load.recv()??;
 
         let page1 = rx_page1.recv()??;
-        assert_eq!(6, page1.rows.len());
+        assert_eq!(7, page1.rows.len());
         assert_eq!(true, page1.has_more);
 
         let page1b = rx_page1b.recv()??;
-        assert_eq!(6, page1b.rows.len());
+        assert_eq!(7, page1b.rows.len());
         assert_eq!(true, page1b.has_more);
 
         let page2 = rx_page2.recv()??;
@@ -306,7 +306,7 @@ mod session {
         tx.send(SessionEvent::EndSession)?;
 
         WorkerSession {
-            force_log_page_size: Some(6),
+            force_log_page_size: Some(7),
             ..Default::default()
         }
         .handle_events(&rx)?;
@@ -314,7 +314,7 @@ mod session {
         rx_load.recv()??;
 
         let page1 = rx_page1.recv()??;
-        assert_eq!(6, page1.rows.len());
+        assert_eq!(7, page1.rows.len());
         assert_eq!(true, page1.has_more);
 
         let rev = rx_rev.recv()??;
