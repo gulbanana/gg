@@ -4,6 +4,7 @@ A drop target for direct-manipulation objects.
 -->
 
 <script lang="ts">
+    import deepEqual from "deep-equal";
     import type { Operand } from "../messages/Operand";
     import BinaryMutator from "../mutators/BinaryMutator";
     import { currentSource, currentTarget } from "../stores";
@@ -16,6 +17,12 @@ A drop target for direct-manipulation objects.
     export let alwaysTarget: boolean = false;
 
     let dropHint: string | null = null;
+    let target = false;
+    $: target = match($currentTarget);
+
+    function match(target: Operand | null): boolean {
+        return target == operand || (operand.type == "Merge" && deepEqual(target, operand, { strict: true }));
+    }
 
     function onDragOver(event: DragEvent) {
         event.stopPropagation();
@@ -23,13 +30,13 @@ A drop target for direct-manipulation objects.
         let canDrop = new BinaryMutator($currentSource!, operand).canDrop();
         if (canDrop.type == "yes") {
             event.preventDefault();
-            if ($currentTarget != operand) {
+            if (!match($currentTarget)) {
                 $currentTarget = operand;
             }
         } else if (canDrop.type == "maybe") {
             event.preventDefault();
             dropHint = canDrop.hint;
-            if (alwaysTarget && $currentTarget != operand) {
+            if (alwaysTarget && !match($currentTarget)) {
                 $currentTarget = operand;
             }
         }
@@ -61,7 +68,7 @@ A drop target for direct-manipulation objects.
     on:dragover={onDragOver}
     on:dragleave={onDragLeave}
     on:drop={onDrop}>
-    <slot target={$currentTarget == operand} hint={dropHint} />
+    <slot {target} hint={dropHint} />
 </div>
 
 <style>
