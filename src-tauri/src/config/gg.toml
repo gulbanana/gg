@@ -14,5 +14,8 @@ large-repo-heuristic = 100000
 # auto-snapshot = 
 
 [gg.ui]
+# When set, branches that aren't pushed anywhere will be visually marked.
+indicate-disconnected-branches = true
+
 # "light" or "dark". If not set, your OS settings will be used.
 # theme-override =

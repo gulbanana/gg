@@ -350,7 +350,8 @@ impl WorkspaceSession<'_> {
             default_query,
             latest_query,
             status: self.format_status(),
-            theme: self.settings.ui_theme_override()
+            theme: self.settings.ui_theme_override(),
+            indicate_disconnected_branches: self.settings.ui_indicate_disconnected_branches()
         })
     }
 

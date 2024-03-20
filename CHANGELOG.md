@@ -3,16 +3,18 @@
 ## [0.15.3](releases/tag/v0.15.3)
 
 ### Added
-- Git remotes in the status bar, with push & fetch commands.
-- Display Git tags (readonly; they aren't really a Jujutsu concept).
 - Relatively comprehensive branch management support - create them, delete them, push
   and fetch them. Delete doesn't work quite the same way as in `jj`; removing local and
   remote branches are separate gestures, rather than deleting the remote on a later push.
+- Show Git remotes in the status bar, with push & fetch commands.
+- Display Git tags (readonly; they aren't really a Jujutsu concept).
 - Display edges to commits that aren't in the queried revset, by drawing a line to nowhere.
 - Detect changes made by other Jujutsu clients and merge the operation log automatically.
 - Window title includes the workspace path (when one is open).
-- New config option gg.queries.log-page-size for tuning performance on large repositories.
 - Improved keyboard support and focus behaviour.
+- New config options:
+  * `gg.queries.log-page-size` for tuning performance on large repositories.
+  * `gg.ui.indicate-disconnected-branches` to control whether local-only branches are marked.
 
 ### Fixed 
 - GG now understands divergent changes, and can act on commits that have a shared change id. 

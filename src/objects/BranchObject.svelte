@@ -6,9 +6,13 @@
     import Chip from "../controls/Chip.svelte";
     import Object from "./Object.svelte";
     import Zone from "./Zone.svelte";
+    import { getContext } from "svelte";
+    import { repoConfigEvent } from "../stores";
 
     export let header: RevHeader;
     export let ref: Extract<StoreRef, { type: "LocalBranch" | "RemoteBranch" }>;
+
+    let operand: Operand = { type: "Ref", header, ref };
 
     let label: string;
     let state: "add" | "change" | "remove";
@@ -59,7 +63,9 @@
             break;
     }
 
-    let operand: Operand = { type: "Ref", header, ref };
+    if (!getContext<any>("theme").indicate_disconnected_branches) {
+        disconnected = false;
+    }
 </script>
 
 <Object {operand} {label} {tip} conflicted={ref.has_conflict} let:context let:hint>

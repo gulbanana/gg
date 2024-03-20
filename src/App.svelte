@@ -22,7 +22,7 @@
     import StatusBar from "./shell/StatusBar.svelte";
     import ModalOverlay from "./shell/ModalOverlay.svelte";
     import ErrorDialog from "./shell/ErrorDialog.svelte";
-    import { onMount } from "svelte";
+    import { onMount, setContext } from "svelte";
     import IdSpan from "./controls/IdSpan.svelte";
     import InputDialog from "./shell/InputDialog.svelte";
     import type { InputRequest } from "./messages/InputRequest";
@@ -53,6 +53,9 @@
         }
     });
 
+    let theme = { indicate_disconnected_branches: true };
+    setContext("theme", theme);
+
     onEvent("gg://context/revision", mutateRevision);
     onEvent("gg://context/tree", mutateTree);
     onEvent("gg://context/branch", mutateRef);
@@ -69,6 +72,7 @@
 
         $revisionSelectEvent = undefined;
         if (config.type == "Workspace") {
+            theme.indicate_disconnected_branches = config.indicate_disconnected_branches;
             $repoStatusEvent = config.status;
         }
     }

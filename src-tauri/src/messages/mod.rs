@@ -84,6 +84,7 @@ pub enum RepoConfig {
         latest_query: String,
         status: RepoStatus,
         theme: Option<String>,
+        indicate_disconnected_branches: bool,
     },
     #[allow(dead_code)]
     TimeoutError,
