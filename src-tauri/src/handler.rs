@@ -22,5 +22,19 @@ macro_rules! nonfatal {
     };
 }
 
+#[allow(dead_code, unused_macros)]
+macro_rules! optional {
+    ($result:expr) => {
+        match $result {
+            Ok(_) => (),
+            Err(err) => {
+                log::warn!("{}: {:#}", stringify!($result), err);
+            }
+        }
+    };
+}
+
 pub(crate) use fatal;
 pub(crate) use nonfatal;
+#[allow(unused_imports)]
+pub(crate) use optional;

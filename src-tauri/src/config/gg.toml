@@ -14,6 +14,9 @@ large-repo-heuristic = 100000
 # auto-snapshot = 
 
 [gg.ui]
+# Stores a list of recently opened directories for shell integration
+recent-workspaces = []
+
 # When set, branches that are local-only or remote-only will be visually indicated.
 mark-unpushed-branches = true
 

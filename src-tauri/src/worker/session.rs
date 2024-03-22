@@ -5,13 +5,14 @@ use std::{
 };
 
 use anyhow::{anyhow, Context, Result};
+use jj_cli::{cli_util, config::ConfigSource};
 
 use super::{
     gui_util::WorkspaceSession,
     queries::{self, QueryState},
     Mutation, WorkerSession,
 };
-use crate::messages;
+use crate::{handler, messages};
 
 /// implemented by states of the event loop
 pub trait Session {
@@ -45,6 +46,15 @@ pub enum SessionEvent {
     ExecuteMutation {
         tx: Sender<messages::MutationResult>,
         mutation: Box<dyn Mutation + Send + Sync>,
+    },
+    ReadConfigArray {
+        tx: Sender<Result<Vec<String>>>,
+        key: String,
+    },
+    WriteConfigArray {
+        scope: ConfigSource,
+        key: String,
+        values: Vec<String>,
     },
 }
 
@@ -214,6 +224,43 @@ impl Session for WorkspaceSession<'_> {
                             })?;
                         }
                     }
+                }
+                SessionEvent::ReadConfigArray { key, tx } => {
+                    tx.send(
+                        self.settings
+                            .config()
+                            .get_array(&key)
+                            .and_then(|values| {
+                                values
+                                    .into_iter()
+                                    .map(|value| value.into_string())
+                                    .collect()
+                            })
+                            .context("read config"),
+                        //.map_err(|err| anyhow!(err)),
+                    )?;
+                }
+                SessionEvent::WriteConfigArray { scope, key, values } => {
+                    let path = match scope {
+                        ConfigSource::User => jj_cli::config::new_config_path()
+                            .map_err(|err| anyhow!(err))
+                            .and_then(|path| {
+                                path.ok_or(anyhow!("No repo config path found to edit"))
+                            }),
+                        ConfigSource::Repo => {
+                            Ok(self.repo().loader().repo_path().join("config.toml"))
+                        }
+                        _ => Err(anyhow!("Can't get path for config source {scope:?}")),
+                    }
+                    .and_then(|path| {
+                        let mut parseable_value = String::from("['");
+                        parseable_value.push_str(&values.join("','"));
+                        parseable_value.push_str("']");
+                        cli_util::write_config_value_to_file(&key, &parseable_value, &path)
+                            .map_err(|err| anyhow!("{err:?}"))
+                    });
+
+                    handler::optional!(path);
                 }
             };
         }

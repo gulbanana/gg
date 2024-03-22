@@ -1,3 +1,4 @@
+use config::ConfigError;
 use jj_lib::settings::UserSettings;
 
 pub trait GGSettings {
@@ -7,6 +8,7 @@ pub trait GGSettings {
     fn query_check_immutable(&self) -> Option<bool>;
     fn ui_theme_override(&self) -> Option<String>;
     fn ui_mark_unpushed_branches(&self) -> bool;
+    fn ui_recent_workspaces(&self) -> Vec<String>;
 }
 
 impl GGSettings for UserSettings {
@@ -38,5 +40,16 @@ impl GGSettings for UserSettings {
         self.config()
             .get_bool("gg.ui.mark-unpushed-branches")
             .unwrap_or(true)
+    }
+
+    fn ui_recent_workspaces(&self) -> Vec<String> {
+        let paths: Result<Vec<String>, ConfigError> = self
+            .config()
+            .get_array("gg.ui.recent-workspaces")
+            .unwrap_or(vec![])
+            .into_iter()
+            .map(|value| value.into_string())
+            .collect();
+        paths.unwrap_or(vec![])
     }
 }

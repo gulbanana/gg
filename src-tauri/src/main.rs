@@ -5,6 +5,8 @@ mod config;
 mod handler;
 mod menu;
 mod messages;
+#[cfg(windows)]
+mod windows;
 mod worker;
 
 use std::collections::HashMap;
@@ -15,6 +17,7 @@ use std::thread::{self, JoinHandle};
 
 use anyhow::{anyhow, Context, Result};
 use clap::Parser;
+use jj_cli::config::ConfigSource;
 use log::LevelFilter;
 use tauri::menu::Menu;
 use tauri::{ipc::InvokeError, Manager};
@@ -90,8 +93,7 @@ fn main() -> Result<()> {
     // before parsing args, attach a console on windows - will fail if not started from a shell, but that's fine
     #[cfg(windows)]
     {
-        use windows::Win32::System::Console::{AttachConsole, ATTACH_PARENT_PROCESS};
-        let _ = unsafe { AttachConsole(ATTACH_PARENT_PROCESS) };
+        windows::reattach_console();
     }
 
     let args = Args::parse();
@@ -502,8 +504,19 @@ fn try_open_repository(window: &Window, cwd: Option<PathBuf>) -> Result<()> {
             log::debug!("load workspace succeeded");
             match &config {
                 messages::RepoConfig::Workspace { absolute_path, .. } => {
-                    window
-                        .set_title((String::from("GG - ") + absolute_path.0.as_str()).as_str())?;
+                    let repo_path = absolute_path.0.clone();
+                    window.set_title((String::from("GG - ") + repo_path.as_str()).as_str())?;
+
+                    // on windows, update the shell jumplist; this can be slow
+                    #[cfg(windows)]
+                    {
+                        let window = window.clone();
+                        thread::spawn(move || {
+                            handler::nonfatal!(with_recent_workspaces(window, |recent| {
+                                windows::update_jump_list(recent, &repo_path)
+                            }));
+                        });
+                    }
                 }
                 _ => {
                     window.set_title("GG - Gui for JJ")?;
@@ -567,4 +580,29 @@ fn handle_window_event(window: &Window, event: &WindowEvent) {
         }
         _ => (),
     }
+}
+
+fn with_recent_workspaces(
+    window: Window,
+    f: impl FnOnce(&mut Vec<String>) -> Result<()>,
+) -> Result<()> {
+    let app_state = window.state::<AppState>();
+    let session_tx: Sender<SessionEvent> = app_state.get_session(window.label());
+
+    let (read_tx, read_rx) = channel();
+    session_tx.send(SessionEvent::ReadConfigArray {
+        key: String::from("gg.ui.recent-workspaces"),
+        tx: read_tx,
+    })?;
+    let mut recent = read_rx.recv()??;
+
+    f(&mut recent)?;
+
+    session_tx.send(SessionEvent::WriteConfigArray {
+        key: String::from("gg.ui.recent-workspaces"),
+        scope: ConfigSource::User,
+        values: recent,
+    })?;
+
+    Ok(())
 }

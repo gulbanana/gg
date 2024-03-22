@@ -8,8 +8,9 @@
 - Display Git tags (readonly; they aren't really a Jujutsu concept).
 - Display edges to commits that aren't in the queried revset, by drawing a line to nowhere.
 - Detect changes made by other Jujutsu clients and merge the operation log automatically.
-- Window title includes the workspace path (when one is open).
 - Improved keyboard support and focus behaviour.
+- Window title includes the workspace path (when one is open).
+- On Windows, the taskbar icon has a jump list.
 - New config options:
   * `gg.queries.log-page-size` for tuning performance on large repositories.
   * `gg.ui.mark-unpushed-branches` to control whether local-only branches are called out.
