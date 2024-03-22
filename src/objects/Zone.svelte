@@ -63,6 +63,7 @@ A drop target for direct-manipulation objects.
 
 <div
     role="presentation"
+    class="zone"
     class:hint={dropHint}
     on:dragenter={onDragOver}
     on:dragover={onDragOver}
@@ -72,9 +73,9 @@ A drop target for direct-manipulation objects.
 </div>
 
 <style>
-    div {
+    .zone {
         width: 100%;
-        pointer-events: all;
+        pointer-events: auto;
     }
 
     .hint {

@@ -68,9 +68,9 @@
     }
 </script>
 
-<Object {operand} {label} {tip} conflicted={ref.has_conflict} let:context let:hint>
+<Object {operand} {label} conflicted={ref.has_conflict} let:context let:hint>
     <Zone {operand} let:target>
-        <Chip {context} {target} {disconnected}>
+        <Chip {context} {target} {disconnected} {tip}>
             <Icon name="git-branch" state={context ? null : state} />
             <span>{hint ?? label}</span>
         </Chip>

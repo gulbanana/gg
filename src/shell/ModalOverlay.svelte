@@ -24,7 +24,7 @@
         left: 0;
 
         background: rgb(var(--ctp-overlay1-rgb) / 40%);
-        pointer-events: all;
+        pointer-events: auto;
 
         display: grid;
         grid-template-columns: minmax(16.6%, 1fr) auto minmax(16.6%, 1fr);

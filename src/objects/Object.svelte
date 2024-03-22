@@ -20,7 +20,6 @@ Core component for direct-manipulation objects. A drag&drop source.
     }
 
     export let id: string = "";
-    export let tip: string = "";
     export let label: string;
     export let selected: boolean = false;
     export let conflicted: boolean;
@@ -86,7 +85,6 @@ Core component for direct-manipulation objects. A drag&drop source.
     tabindex="-1"
     draggable="true"
     role="option"
-    title={tip}
     aria-label={label}
     aria-selected={selected}
     on:click={onClick}

@@ -14,7 +14,7 @@
 
 <style>
     .id {
-        pointer-events: all;
+        pointer-events: auto;
         user-select: text;
         color: var(--ctp-subtext1);
         font-family: var(--stack-code);

@@ -3,14 +3,17 @@
     export let target: boolean;
     export let disconnected: boolean = false;
     export let immobile: boolean = false;
+    export let tip: string = "";
 </script>
 
-<div class="chip" class:context class:target class:disconnected class:immobile>
+<div class="chip" class:context class:target class:disconnected class:immobile title={tip}>
     <slot />
 </div>
 
 <style>
     .chip {
+        pointer-events: auto;
+
         font-family: var(--stack-code);
         font-size: smaller;
 

@@ -110,7 +110,11 @@ export default class BinaryMutator {
 
         if (this.#from.type == "Ref" && this.#from.ref.type != "Tag") {
             if (this.#to.type == "Revision") {
-                return { type: "yes", hint: [`Moving branch ${this.#from.ref.branch_name} to `, this.#to.header.id.change] };
+                if (this.#to.header.id.change.hex == this.#from.header.id.change.hex) {
+                    return { type: "no" };
+                } else {
+                    return { type: "yes", hint: [`Moving branch ${this.#from.ref.branch_name} to `, this.#to.header.id.change] };
+                }
             } else if (this.#to.type == "Ref" && this.#to.ref.type != "Tag" && this.#from.ref.branch_name == this.#to.ref.branch_name) {
                 return { type: "yes", hint: [`Resetting branch ${this.#from.ref.branch_name} to remote`] };
             }

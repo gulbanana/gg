@@ -10,6 +10,6 @@
     let operand: Operand = { type: "Ref", header, ref };
 </script>
 
-<Chip context={false} target={false} immobile>
+<Chip context={false} target={false} immobile tip="tag">
     <span>{ref.tag_name}</span>
 </Chip>
