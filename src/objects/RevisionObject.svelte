@@ -1,10 +1,7 @@
 <script lang="ts">
     import type { RevHeader } from "../messages/RevHeader";
-    import type { CheckoutRevision } from "../messages/CheckoutRevision";
-    import type { CreateRevision } from "../messages/CreateRevision";
     import type { Operand } from "../messages/Operand";
     import { currentTarget, revisionSelectEvent } from "../stores.js";
-    import { mutate } from "../ipc";
     import IdSpan from "../controls/IdSpan.svelte";
     import BranchObject from "./BranchObject.svelte";
     import Object from "./Object.svelte";

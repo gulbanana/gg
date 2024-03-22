@@ -74,7 +74,7 @@ Consequently, the commands available for a branch as displayed in the UI have po
 Multiple-dispatch commands:
 1) "Move": Drop local branch onto revision. Sets the ref to a commit, potentially de- or re-syncing it.
 2) "Track": Drop remote branch onto local of the same name. 
-3) "Delete": Drag any branch out, with polymorphic effect (see above).
+3) "Delete": Drag almost any branch out, with polymorphic effect (see above).
 
 Displaying the branch state is a bit fuzzy. The idea is to convey the most useful bits of information at 
 a glance, and leave the rest to tooltips or context menus. Most branches display in the 

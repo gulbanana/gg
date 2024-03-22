@@ -9,6 +9,7 @@ import type { ChangeId } from "../messages/ChangeId";
 import type { CommitId } from "../messages/CommitId";
 import RevisionMutator from "./RevisionMutator";
 import ChangeMutator from "./ChangeMutator";
+import BranchMutator from "./RefMutator";
 
 export type RichHint = (string | ChangeId | CommitId)[];
 export type Eligibility = { type: "yes", hint: RichHint } | { type: "maybe", hint: string } | { type: "no" };
@@ -37,7 +38,13 @@ export default class BinaryMutator {
 
         // can't change our view of remote branches 
         if (from.type == "Ref" && from.ref.type == "RemoteBranch") {
-            return { type: "maybe", hint: "(branch is remote)" };
+            if (from.ref.is_tracked && from.ref.is_absent) {
+                return { type: "maybe", hint: "(branch is deleted)" };
+            }
+            // we allow deleting of all other branch types, which might be a good enough reason to move them
+            // else {
+            //     return { type: "maybe", hint: "(branch is remote)" };
+            // }
         }
 
         // can change these listed things (XXX add modes?)
@@ -103,20 +110,40 @@ export default class BinaryMutator {
                 if (this.#from.header.parent_ids.length == 1) {
                     return { type: "yes", hint: [`Restoring changes at ${this.#from.path.relative_path} from parent `, this.#from.header.parent_ids[0]] };
                 } else {
-                    return { type: "maybe", hint: "Can't restore: revision has multiple parents." };
+                    return { type: "maybe", hint: "Can't restore (revision has multiple parents)" };
                 }
             }
         }
 
         if (this.#from.type == "Ref" && this.#from.ref.type != "Tag") {
-            if (this.#to.type == "Revision") {
+            // local -> rev: set
+            if (this.#to.type == "Revision" && this.#from.ref.type == "LocalBranch") {
                 if (this.#to.header.id.change.hex == this.#from.header.id.change.hex) {
                     return { type: "no" };
                 } else {
                     return { type: "yes", hint: [`Moving branch ${this.#from.ref.branch_name} to `, this.#to.header.id.change] };
                 }
-            } else if (this.#to.type == "Ref" && this.#to.ref.type != "Tag" && this.#from.ref.branch_name == this.#to.ref.branch_name) {
-                return { type: "yes", hint: [`Resetting branch ${this.#from.ref.branch_name} to remote`] };
+            }
+
+            // remote -> local: track
+            else if (this.#to.type == "Ref" && this.#to.ref.type == "LocalBranch" &&
+                this.#from.ref.type == "RemoteBranch" && this.#from.ref.branch_name == this.#to.ref.branch_name) {
+                if (this.#from.ref.is_tracked) {
+                    return { type: "maybe", hint: "(already tracked)" };
+                } else {
+                    return { type: "yes", hint: [`Tracking remote branch ${this.#from.ref.branch_name}`] };
+                }
+            }
+
+            // anything -> anywhere: delete
+            else if (this.#to.type == "Repository") {
+                if (this.#from.ref.type == "LocalBranch") {
+                    return { type: "yes", hint: [`Deleting branch ${this.#from.ref.branch_name}`] };
+                } else {
+                    return {
+                        type: "yes", hint: [`Deleting remote branch ${this.#from.ref.branch_name}@${this.#from.ref.remote_name}`]
+                    };
+                }
             }
         }
 
@@ -168,9 +195,16 @@ export default class BinaryMutator {
         }
 
         if (this.#from.type == "Ref") {
-            if (this.#to.type == "Revision" || (this.#to.type == "Ref" && this.#to.ref.type != "Tag")) {
+            if (this.#to.type == "Revision") {
+                // point ref to revision
                 mutate<MoveRef>("move_ref", { to_id: this.#to.header.id, ref: this.#from.ref });
                 return;
+            } else if (this.#to.type == "Ref" && this.#from.ref.type == "RemoteBranch") {
+                // track remote branch with existing local
+                new BranchMutator(this.#from.ref).onTrack();
+            } else if (this.#to.type == "Repository") {
+                // various kinds of total or partial deletion
+                new BranchMutator(this.#from.ref).onDelete();
             }
         }
 
