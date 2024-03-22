@@ -141,6 +141,7 @@
         align-self: center;
         display: flex;
         justify-content: end;
+        gap: 3px;
         color: var(--ctp-text);
     }
 

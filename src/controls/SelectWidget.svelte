@@ -1,4 +1,4 @@
-<script lang="ts" generics="T extends {selected: boolean, value: string}">
+<script lang="ts" generics="T extends {value: string}">
     import { createEventDispatcher } from "svelte";
     import Icon from "./Icon.svelte";
 
@@ -10,6 +10,7 @@
         change: CustomEvent<Event>;
     }
 
+    export let id: string | null = null;
     export let options: T[];
     export let value: string;
 
@@ -17,10 +18,10 @@
 </script>
 
 <div class="wrapper">
-    <select bind:value on:change={(event) => dispatch("change", event)}>
+    <select {id} bind:value on:change={(event) => dispatch("change", event)}>
         {#each options as option}
-            <option selected={option.selected} value={option.value}>
-                <slot {option} />
+            <option selected={value == option.value} value={option.value}>
+                <slot {option}>{option.value}</slot>
             </option>
         {/each}
     </select>

@@ -26,8 +26,8 @@ use tauri_plugin_window_state::StateFlags;
 
 use messages::{
     AbandonRevisions, CheckoutRevision, CopyChanges, CreateRef, CreateRevision, DeleteRef,
-    DescribeRevision, DuplicateRevisions, FetchRemote, InputResponse, InsertRevision, MoveChanges,
-    MoveRef, MoveRevision, MoveSource, MutationResult, PushRemote, RenameBranch, RevId,
+    DescribeRevision, DuplicateRevisions, GitFetch, GitPush, InputResponse, InsertRevision,
+    MoveChanges, MoveRef, MoveRevision, MoveSource, MutationResult, RenameBranch, RevId,
     TrackBranch, UndoOperation, UntrackBranch,
 };
 use worker::{Mutation, Session, SessionEvent, WorkerSession};
@@ -140,6 +140,7 @@ fn main() -> Result<()> {
             query_log,
             query_log_next_page,
             query_revision,
+            query_remotes,
             checkout_revision,
             create_revision,
             insert_revision,
@@ -156,8 +157,8 @@ fn main() -> Result<()> {
             create_ref,
             delete_ref,
             move_ref,
-            push_remote,
-            fetch_remote,
+            git_push,
+            git_fetch,
             undo_operation
         ])
         .menu(menu::build_main)
@@ -317,6 +318,27 @@ fn query_revision(
 }
 
 #[tauri::command(async)]
+fn query_remotes(
+    window: Window,
+    app_state: State<AppState>,
+    tracking_branch: Option<String>,
+) -> Result<Vec<String>, InvokeError> {
+    let session_tx: Sender<SessionEvent> = app_state.get_session(window.label());
+    let (call_tx, call_rx) = channel();
+
+    session_tx
+        .send(SessionEvent::QueryRemotes {
+            tx: call_tx,
+            tracking_branch,
+        })
+        .map_err(InvokeError::from_error)?;
+    call_rx
+        .recv()
+        .map_err(InvokeError::from_error)?
+        .map_err(InvokeError::from_anyhow)
+}
+
+#[tauri::command(async)]
 fn checkout_revision(
     window: Window,
     app_state: State<AppState>,
@@ -461,19 +483,19 @@ fn move_ref(
 }
 
 #[tauri::command(async)]
-fn push_remote(
+fn git_push(
     window: Window,
     app_state: State<AppState>,
-    mutation: PushRemote,
+    mutation: GitPush,
 ) -> Result<MutationResult, InvokeError> {
     try_mutate(window, app_state, mutation)
 }
 
 #[tauri::command(async)]
-fn fetch_remote(
+fn git_fetch(
     window: Window,
     app_state: State<AppState>,
-    mutation: FetchRemote,
+    mutation: GitFetch,
 ) -> Result<MutationResult, InvokeError> {
     try_mutate(window, app_state, mutation)
 }

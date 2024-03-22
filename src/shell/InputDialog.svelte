@@ -1,8 +1,10 @@
 <script lang="ts">
     import { createEventDispatcher, onMount } from "svelte";
     import type { InputResponse } from "../messages/InputResponse";
+    import type { InputField } from "../messages/InputField";
     import ActionWidget from "../controls/ActionWidget.svelte";
     import ModalDialog from "./ModalDialog.svelte";
+    import SelectWidget from "../controls/SelectWidget.svelte";
 
     interface $$Events {
         response: CustomEvent<InputResponse>;
@@ -10,7 +12,7 @@
 
     export let title: string;
     export let detail: String;
-    export let fields: string[];
+    export let fields: InputField[];
 
     let dispatch = createEventDispatcher();
 
@@ -29,8 +31,13 @@
         let responseFields: Record<string, string> = {};
         for (let field of fields) {
             // XXX maybe use databinding instead
-            let input = document.getElementById(`field-${field}`) as HTMLInputElement;
-            responseFields[field] = input.value;
+            if (field.choices.length == 0) {
+                let input = document.getElementById(`field-${field.label}`) as HTMLInputElement;
+                responseFields[field.label] = input.value;
+            } else {
+                let input = document.getElementById(`field-${field.label}`) as HTMLSelectElement;
+                responseFields[field.label] = input.value;
+            }
         }
 
         dispatch("response", {
@@ -45,8 +52,19 @@
         <p>{detail}</p>
     {/if}
     {#each fields as field}
-        <label for={field}>{field}:</label>
-        <input id="field-{field}" type={field == "Password" ? "password" : "text"} />
+        <label for="field-{field.label}">{field.label}:</label>
+        {#if field.choices.length > 0}
+            <SelectWidget
+                id="field-{field.label}"
+                options={field.choices.map((c) => {
+                    return { label: c, value: c };
+                })}
+                value={field.choices[0]} />
+        {:else if field.label == "Password"}
+            <input id="field-{field.label}" type="password" />
+        {:else}
+            <input id="field-{field.label}" type="text" />
+        {/if}
     {/each}
     <svelte:fragment slot="commands">
         <ActionWidget safe onClick={onEnter}>Enter</ActionWidget>

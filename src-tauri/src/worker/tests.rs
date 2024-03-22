@@ -391,7 +391,44 @@ mod session {
     }
 }
 
-mod mutation {
+mod queries {
+    use super::mkrepo;
+    use crate::worker::{queries, WorkerSession};
+    use anyhow::Result;
+
+    #[test]
+    fn all_remotes() -> Result<()> {
+        let repo = mkrepo();
+
+        let mut session = WorkerSession::default();
+        let ws = session.load_directory(repo.path())?;
+
+        let remotes = queries::query_remotes(&ws, None)?;
+
+        assert_eq!(2, remotes.len());
+        assert!(remotes.contains(&String::from("origin")));
+        assert!(remotes.contains(&String::from("second")));
+
+        Ok(())
+    }
+
+    #[test]
+    fn remotes_tracking_branch() -> Result<()> {
+        let repo = mkrepo();
+
+        let mut session = WorkerSession::default();
+        let ws = session.load_directory(repo.path())?;
+
+        let remotes = queries::query_remotes(&ws, Some(String::from("main")))?;
+
+        assert_eq!(1, remotes.len());
+        assert!(remotes.contains(&String::from("origin")));
+
+        Ok(())
+    }
+}
+
+mod mutations {
     use std::fs;
 
     use anyhow::Result;

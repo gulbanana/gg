@@ -3,9 +3,9 @@
     import Icon from "../controls/Icon.svelte";
     import IdSpan from "../controls/IdSpan.svelte";
     import { mutate } from "../ipc";
-    import type { FetchRemote } from "../messages/FetchRemote";
     import type { Operand } from "../messages/Operand";
-    import type { PushRemote } from "../messages/PushRemote";
+    import type { GitFetch } from "../messages/GitFetch";
+    import type { GitPush } from "../messages/GitPush";
     import type { UndoOperation } from "../messages/UndoOperation";
     import type { RichHint } from "../mutators/BinaryMutator";
     import BinaryMutator from "../mutators/BinaryMutator";
@@ -48,17 +48,11 @@
     }
 
     function onPush(remote: string) {
-        mutate<PushRemote>("push_remote", {
-            remote_name: remote,
-            ref: null,
-        });
+        mutate<GitPush>("git_push", { type: "AllBranches", remote_name: remote });
     }
 
     function onFetch(remote: string) {
-        mutate<FetchRemote>("fetch_remote", {
-            remote_name: remote,
-            ref: null,
-        });
+        mutate<GitFetch>("git_fetch", { type: "AllBranches", remote_name: remote });
     }
 </script>
 

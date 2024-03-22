@@ -2,7 +2,7 @@
     import type { RevId } from "./messages/RevId";
     import type { RevResult } from "./messages/RevResult";
     import type { RepoConfig } from "./messages/RepoConfig";
-    import { type Query, query, trigger, mutate, delay, onEvent } from "./ipc.js";
+    import { type Query, query, trigger, onEvent } from "./ipc.js";
     import {
         currentMutation,
         currentContext,
@@ -81,14 +81,7 @@
     }
 
     async function loadChange(id: RevId) {
-        let fetch = await query<RevResult>("query_revision", { id });
-
-        let rev = await Promise.race([fetch, delay<RevResult>()]);
-
-        if (rev.type == "wait") {
-            selection = rev;
-            rev = await fetch;
-        }
+        let rev = await query<RevResult>("query_revision", { id }, (q) => (selection = q));
 
         if (rev.type == "data" && rev.value.type == "NotFound" && id.commit.hex != $repoStatusEvent?.working_copy.hex) {
             return loadChange({

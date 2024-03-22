@@ -8,6 +8,7 @@ pub use queries::*;
 
 use std::{collections::HashMap, path::Path};
 
+use anyhow::{anyhow, Result};
 use chrono::{DateTime, FixedOffset, Local, LocalResult, TimeZone, Utc};
 use jj_lib::backend::{Signature, Timestamp};
 use serde::{Deserialize, Serialize};
@@ -143,6 +144,16 @@ pub enum StoreRef {
     },
 }
 
+impl StoreRef {
+    pub fn as_branch(&self) -> Result<&str> {
+        match self {
+            StoreRef::LocalBranch { branch_name, .. } => Ok(&branch_name),
+            StoreRef::RemoteBranch { branch_name, .. } => Ok(&branch_name),
+            _ => Err(anyhow!("not a local branch")),
+        }
+    }
+}
+
 /// Refers to one of the repository's manipulatable objects
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(tag = "type")]
@@ -182,7 +193,7 @@ pub enum Operand {
 pub struct InputRequest {
     pub title: String,
     pub detail: String,
-    pub fields: Vec<String>,
+    pub fields: Vec<InputField>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -194,4 +205,24 @@ pub struct InputRequest {
 pub struct InputResponse {
     pub cancel: bool,
     pub fields: HashMap<String, String>,
+}
+
+#[derive(Serialize, Debug, Clone)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(TS),
+    ts(export, export_to = "../src/messages/")
+)]
+pub struct InputField {
+    pub label: String,
+    pub choices: Vec<String>,
+}
+
+impl From<&str> for InputField {
+    fn from(label: &str) -> Self {
+        InputField {
+            label: label.to_owned(),
+            choices: vec![],
+        }
+    }
 }

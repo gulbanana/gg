@@ -9,7 +9,7 @@ import type { ChangeId } from "../messages/ChangeId";
 import type { CommitId } from "../messages/CommitId";
 import RevisionMutator from "./RevisionMutator";
 import ChangeMutator from "./ChangeMutator";
-import BranchMutator from "./RefMutator";
+import RefMutator from "./RefMutator";
 
 export type RichHint = (string | ChangeId | CommitId)[];
 export type Eligibility = { type: "yes", hint: RichHint } | { type: "maybe", hint: string } | { type: "no" };
@@ -201,10 +201,10 @@ export default class BinaryMutator {
                 return;
             } else if (this.#to.type == "Ref" && this.#from.ref.type == "RemoteBranch") {
                 // track remote branch with existing local
-                new BranchMutator(this.#from.ref).onTrack();
+                new RefMutator(this.#from.ref).onTrack();
             } else if (this.#to.type == "Repository") {
                 // various kinds of total or partial deletion
-                new BranchMutator(this.#from.ref).onDelete();
+                new RefMutator(this.#from.ref).onDelete();
             }
         }
 

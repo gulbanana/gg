@@ -2,13 +2,13 @@
     import { onMount } from "svelte";
     import type { LogPage } from "./messages/LogPage.js";
     import type { LogRow } from "./messages/LogRow.js";
-    import { query, delay } from "./ipc.js";
+    import { query } from "./ipc.js";
     import { repoStatusEvent, revisionSelectEvent } from "./stores.js";
     import Pane from "./shell/Pane.svelte";
-    import { type EnhancedRow, default as GraphLog, type EnhancedLine } from "./GraphLog.svelte";
     import RevisionSummary from "./objects/RevisionObject.svelte";
     import SelectWidget from "./controls/SelectWidget.svelte";
     import RevisionMutator from "./mutators/RevisionMutator.js";
+    import { type EnhancedRow, default as GraphLog, type EnhancedLine } from "./GraphLog.svelte";
 
     export let default_query: string;
     export let latest_query: string;
@@ -42,30 +42,26 @@
     $: if ($repoStatusEvent) reloadLog();
 
     function getChoices() {
-        let choices = presets.map((p) => ({ ...p, selected: false }));
+        let choices = presets;
         for (let choice of choices) {
             if (entered_query == choice.value) {
-                choice.selected = true;
                 return choices;
             }
         }
 
-        choices = [{ label: "Custom", value: entered_query, selected: true }, ...choices];
+        choices = [{ label: "Custom", value: entered_query }, ...presets];
 
         return choices;
     }
 
     async function loadLog() {
-        let fetch = query<LogPage>("query_log", {
-            revset: entered_query == "" ? "all()" : entered_query,
-        });
-
-        let page = await Promise.race([fetch, delay<LogPage>()]);
-
-        if (page.type == "wait") {
-            graphRows = undefined;
-            page = await fetch;
-        }
+        let page = await query<LogPage>(
+            "query_log",
+            {
+                revset: entered_query == "" ? "all()" : entered_query,
+            },
+            () => (graphRows = undefined),
+        );
 
         if (page.type == "data") {
             graphRows = [];
@@ -76,7 +72,7 @@
             }
 
             while (page.value.has_more) {
-                let next_page = await query<LogPage>("query_log_next_page");
+                let next_page = await query<LogPage>("query_log_next_page", null);
                 if (next_page.type == "data") {
                     graphRows = addPageToGraph(graphRows, next_page.value.rows);
                     page = next_page;
@@ -88,23 +84,20 @@
     }
 
     async function reloadLog() {
-        let fetch = query<LogPage>("query_log", {
-            revset: entered_query == "" ? "all()" : entered_query,
-        });
-
-        let page = await Promise.race([fetch, delay<LogPage>()]);
-
-        if (page.type == "wait") {
-            graphRows = undefined;
-            page = await fetch;
-        }
+        let page = await query<LogPage>(
+            "query_log",
+            {
+                revset: entered_query == "" ? "all()" : entered_query,
+            },
+            () => (graphRows = undefined),
+        );
 
         if (page.type == "data") {
             graphRows = [];
             graphRows = addPageToGraph(graphRows, page.value.rows);
 
             while (page.value.has_more) {
-                let next_page = await query<LogPage>("query_log_next_page");
+                let next_page = await query<LogPage>("query_log_next_page", null);
                 if (next_page.type == "data") {
                     graphRows = addPageToGraph(graphRows, next_page.value.rows);
                     page = next_page;

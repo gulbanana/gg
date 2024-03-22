@@ -2,16 +2,16 @@ import type { StoreRef } from "../messages/StoreRef";
 import type { TrackBranch } from "../messages/TrackBranch";
 import type { UntrackBranch } from "../messages/UntrackBranch";
 import type { RenameBranch } from "../messages/RenameBranch";
-import type { PushRemote } from "../messages/PushRemote";
-import type { FetchRemote } from "../messages/FetchRemote";
+import type { GitPush } from "../messages/GitPush";
+import type { GitFetch } from "../messages/GitFetch";
 import type { DeleteRef } from "../messages/DeleteRef";
-import { getInput, mutate } from "../ipc";
+import { getInput, mutate, query } from "../ipc";
 
-export default class BranchMutator {
-    ref: StoreRef;
+export default class RefMutator {
+    #ref: StoreRef;
 
     constructor(name: StoreRef) {
-        this.ref = name;
+        this.#ref = name;
     }
 
     handle(event: string | undefined) {
@@ -59,13 +59,13 @@ export default class BranchMutator {
 
     onTrack = () => {
         mutate<TrackBranch>("track_branch", {
-            ref: this.ref
+            ref: this.#ref
         });
     };
 
     onUntrack = () => {
         mutate<UntrackBranch>("untrack_branch", {
-            ref: this.ref
+            ref: this.#ref
         });
     };
 
@@ -74,7 +74,7 @@ export default class BranchMutator {
         if (response) {
             let new_name = response["Branch Name"];
             mutate<RenameBranch>("rename_branch", {
-                ref: this.ref,
+                ref: this.#ref,
                 new_name
             })
         }
@@ -82,51 +82,54 @@ export default class BranchMutator {
 
     onDelete = () => {
         mutate<DeleteRef>("delete_ref", {
-            ref: this.ref
+            ref: this.#ref
         });
     };
 
     onPushAll = () => {
-        switch (this.ref.type) {
+        switch (this.#ref.type) {
             case "Tag":
                 console.log("error: Can't push tag");
                 break;
 
             case "RemoteBranch":
-                mutate<PushRemote>("push_remote", {
-                    remote_name: this.ref.remote_name,
-                    ref: this.ref
+                mutate<GitPush>("git_push", {
+                    type: "RemoteBranch",
+                    remote_name: this.#ref.remote_name,
+                    branch_ref: this.#ref
                 });
                 break;
 
             case "LocalBranch":
-                for (let remote_name of this.ref.tracking_remotes) {
-                    if (!mutate<PushRemote>("push_remote", {
-                        remote_name,
-                        ref: this.ref
-                    })) {
-                        return;
-                    }
-                }
+                mutate<GitPush>("git_push", {
+                    type: "AllRemotes",
+                    branch_ref: this.#ref
+                });
                 break;
         }
     };
 
     onPushSingle = async () => {
-        switch (this.ref.type) {
+        switch (this.#ref.type) {
             case "Tag":
             case "RemoteBranch":
                 console.log("error: Can't push tag/tracking branch to a specific remote");
                 break;
 
             case "LocalBranch":
-                // XXX this should be a dropdown, picking any of the remotes available in $repoConfig
-                let response = await getInput("Select Remote", "", ["Remote Name"]);
+                let allRemotes = await query<string[]>("query_remotes", { tracking_branch: null });
+                if (allRemotes.type == "error") {
+                    console.log("error loading remotes: " + allRemotes.message);
+                    return;
+                }
+
+                let response = await getInput("Select Remote", "", [{ label: "Remote Name", choices: allRemotes.value }]);
                 if (response) {
                     let remote_name = response["Remote Name"];
-                    mutate<PushRemote>("push_remote", {
+                    mutate<GitPush>("git_push", {
+                        type: "RemoteBranch",
                         remote_name,
-                        ref: this.ref
+                        branch_ref: this.#ref
                     })
                 }
                 break;
@@ -134,46 +137,48 @@ export default class BranchMutator {
     };
 
     onFetchAll = () => {
-        switch (this.ref.type) {
+        switch (this.#ref.type) {
             case "Tag":
                 console.log("error: Can't fetch tag");
                 break;
 
             case "RemoteBranch":
-                mutate<FetchRemote>("fetch_remote", {
-                    remote_name: this.ref.remote_name,
-                    ref: this.ref
+                mutate<GitFetch>("git_fetch", {
+                    type: "AllRemotes",
+                    branch_ref: this.#ref
                 });
                 break;
 
             case "LocalBranch":
-                for (let remote_name of this.ref.tracking_remotes) {
-                    if (!mutate<FetchRemote>("fetch_remote", {
-                        remote_name,
-                        ref: this.ref
-                    })) {
-                        return;
-                    }
-                }
+                mutate<GitFetch>("git_fetch", {
+                    type: "AllRemotes",
+                    branch_ref: this.#ref
+                });
                 break;
         }
     };
 
     onFetchSingle = async () => {
-        switch (this.ref.type) {
+        switch (this.#ref.type) {
             case "Tag":
             case "RemoteBranch":
                 console.log("error: Can't fetch tag/tracking branch to a specific remote");
                 break;
 
             case "LocalBranch":
-                // XXX this should be a dropdown, picking any of the remotes that have a branch of the right name
-                let response = await getInput("Select Remote", "", ["Remote Name"]);
+                let trackedRemotes = await query<string[]>("query_remotes", { tracking_branch: this.#ref.branch_name });
+                if (trackedRemotes.type == "error") {
+                    console.log("error loading remotes: " + trackedRemotes.message);
+                    return;
+                }
+
+                let response = await getInput("Select Remote", "", [{ label: "Remote Name", choices: trackedRemotes.value }]);
                 if (response) {
                     let remote_name = response["Remote Name"];
-                    mutate<FetchRemote>("fetch_remote", {
+                    mutate<GitFetch>("git_fetch", {
+                        type: "RemoteBranch",
                         remote_name,
-                        ref: this.ref
+                        branch_ref: this.#ref
                     })
                 }
                 break;

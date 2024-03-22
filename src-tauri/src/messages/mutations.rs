@@ -202,26 +202,45 @@ pub struct MoveRef {
     pub to_id: RevId,
 }
 
+/// XXX pushes all branches of a remote, all remotes of a branch, or one remotes of a branch - split up?
 #[derive(Deserialize, Debug)]
+#[serde(tag = "type")]
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
     ts(export, export_to = "../src/messages/")
 )]
-pub struct PushRemote {
-    pub remote_name: String,
-    pub r#ref: Option<StoreRef>,
+pub enum GitPush {
+    AllBranches {
+        remote_name: String,
+    },
+    AllRemotes {
+        branch_ref: StoreRef,
+    },
+    RemoteBranch {
+        remote_name: String,
+        branch_ref: StoreRef,
+    },
 }
 
 #[derive(Deserialize, Debug)]
+#[serde(tag = "type")]
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
     ts(export, export_to = "../src/messages/")
 )]
-pub struct FetchRemote {
-    pub remote_name: String,
-    pub r#ref: Option<StoreRef>,
+pub enum GitFetch {
+    AllBranches {
+        remote_name: String,
+    },
+    AllRemotes {
+        branch_ref: StoreRef,
+    },
+    RemoteBranch {
+        remote_name: String,
+        branch_ref: StoreRef,
+    },
 }
 
 #[derive(Deserialize, Debug)]

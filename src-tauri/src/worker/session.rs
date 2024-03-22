@@ -29,16 +29,20 @@ pub enum SessionEvent {
         tx: Sender<Result<messages::RepoConfig>>,
         wd: Option<PathBuf>,
     },
+    QueryRevision {
+        tx: Sender<Result<messages::RevResult>>,
+        id: messages::RevId,
+    },
+    QueryRemotes {
+        tx: Sender<Result<Vec<String>>>,
+        tracking_branch: Option<String>,
+    },
     QueryLog {
         tx: Sender<Result<messages::LogPage>>,
         query: String,
     },
     QueryLogNextPage {
         tx: Sender<Result<messages::LogPage>>,
-    },
-    QueryRevision {
-        tx: Sender<Result<messages::RevResult>>,
-        id: messages::RevId,
     },
     ExecuteSnapshot {
         tx: Sender<Option<messages::RepoStatus>>,
@@ -165,6 +169,10 @@ impl Session for WorkspaceSession<'_> {
                 SessionEvent::QueryRevision { tx, id } => {
                     tx.send(queries::query_revision(&self, id))?
                 }
+                SessionEvent::QueryRemotes {
+                    tx,
+                    tracking_branch,
+                } => tx.send(queries::query_remotes(&self, tracking_branch))?,
                 SessionEvent::QueryLog {
                     tx,
                     query: revset_string,
@@ -183,7 +191,6 @@ impl Session for WorkspaceSession<'_> {
                 }
                 SessionEvent::QueryLogNextPage { tx } => {
                     let revset_string = self.session.latest_query.as_ref().map(|x| x.as_str());
-
                     handle_query(&mut state, &self, tx, rx, revset_string, None)?;
                 }
                 SessionEvent::ExecuteSnapshot { tx } => {
@@ -278,6 +285,10 @@ impl Session for queries::QuerySession<'_, '_> {
                 Ok(SessionEvent::QueryRevision { tx, id }) => {
                     tx.send(queries::query_revision(&self.ws, id))?
                 }
+                Ok(SessionEvent::QueryRemotes {
+                    tx,
+                    tracking_branch,
+                }) => tx.send(queries::query_remotes(&self.ws, tracking_branch))?,
                 Ok(SessionEvent::QueryLogNextPage { tx }) => tx.send(self.get_page())?,
                 Ok(unhandled) => return Ok(QueryResult(unhandled, self.state)),
                 Err(err) => return Err(anyhow!(err)),

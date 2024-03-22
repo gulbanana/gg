@@ -69,6 +69,14 @@
         gap: 3px 6px;
     }
 
+    #dialog-content :global(select),
+    #dialog-content :global(input) {
+        min-height: 30px;
+        min-width: 180px;
+        font-family: var(--stack-code);
+        font-size: 14px;
+    }
+
     #dialog-commands {
         margin-right: 3px;
         grid-area: 3/1/3/4;

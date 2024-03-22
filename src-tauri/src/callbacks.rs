@@ -11,7 +11,11 @@ use anyhow::Result;
 use jj_lib::{git::RemoteCallbacks, repo::MutableRepo};
 use tauri::{Manager, Window};
 
-use crate::{messages::InputRequest, worker::WorkerCallbacks, AppState};
+use crate::{
+    messages::{InputField, InputRequest},
+    worker::WorkerCallbacks,
+    AppState,
+};
 
 pub struct FrontendCallbacks(pub Window);
 
@@ -29,7 +33,7 @@ impl WorkerCallbacks for FrontendCallbacks {
         let get_password = &mut |url: &str, username: &str| {
             self.request_input(
                 format!("Please enter a password for {} at {}", username, url),
-                ["Password".into()],
+                ["Password"],
             )
             .and_then(|mut fields| fields.remove("Password"))
         };
@@ -38,7 +42,7 @@ impl WorkerCallbacks for FrontendCallbacks {
         let get_username_password = &mut |url: &str| {
             self.request_input(
                 format!("Please enter a username and password for {}", url),
-                ["Username".into(), "Password".into()],
+                ["Username", "Password"],
             )
             .and_then(|mut fields| {
                 fields.remove("Username").and_then(|username| {
@@ -52,10 +56,22 @@ impl WorkerCallbacks for FrontendCallbacks {
 
         f(repo, cb)
     }
+
+    fn select_remote(&self, choices: &[&str]) -> Option<String> {
+        let response = self.request_input(
+            format!("Select a remote"),
+            [InputField {
+                label: "Select Remote".into(),
+                choices: choices.iter().map(|choice| choice.to_string()).collect(),
+            }],
+        );
+
+        response.and_then(|mut fields| fields.remove("Select Remote").to_owned())
+    }
 }
 
 impl FrontendCallbacks {
-    fn request_input<T: IntoIterator<Item = String>>(
+    fn request_input<T: IntoIterator<Item = U>, U: Into<InputField>>(
         &self,
         detail: String,
         fields: T,
@@ -72,7 +88,7 @@ impl FrontendCallbacks {
             InputRequest {
                 title: String::from("Git Login"),
                 detail,
-                fields: fields.into_iter().collect(),
+                fields: fields.into_iter().map(|field| field.into()).collect(),
             },
         ) {
             Ok(_) => (),

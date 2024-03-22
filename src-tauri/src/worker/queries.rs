@@ -1,6 +1,6 @@
 use std::iter::{Peekable, Skip};
 
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 
 use futures_util::StreamExt;
 use jj_lib::{
@@ -295,6 +295,35 @@ pub fn query_revision(ws: &WorkspaceSession, id: RevId) -> Result<RevResult> {
         changes,
         conflicts,
     })
+}
+
+pub fn query_remotes(
+    ws: &WorkspaceSession,
+    tracking_branch: Option<String>,
+) -> Result<Vec<String>> {
+    let git_repo = match ws.git_repo()? {
+        Some(git_repo) => git_repo,
+        None => return Err(anyhow!("No git backend")),
+    };
+
+    let all_remotes: Vec<String> = git_repo
+        .remotes()?
+        .into_iter()
+        .filter_map(|remote| remote.map(|remote| remote.to_owned()))
+        .collect();
+
+    let matching_remotes = match tracking_branch {
+        Some(branch_name) => all_remotes
+            .into_iter()
+            .filter(|remote_name| {
+                let remote_ref = ws.view().get_remote_branch(&branch_name, &remote_name);
+                !remote_ref.is_absent() && remote_ref.is_tracking()
+            })
+            .collect(),
+        None => all_remotes,
+    };
+
+    Ok(matching_remotes)
 }
 
 async fn format_tree_changes(
