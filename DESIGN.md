@@ -52,11 +52,11 @@ local branch and the tracked remote branches with which it is currently synced a
 a single UI object. Remote branches are displayed separately if they're unsynced, untracked or absent.
 
 Consequently, the commands available for a branch as displayed in the UI have polymorphic effect:
-1) "Track": Applies to any remote branch that is not unsynced (and therefore already tracked); 
-    in the CLI-only "tracking ref absent" state, this will effectively cancel its pending deletion. 
+1) "Track": Applies to any remote branch that is not already tracked. 
 2) "Untrack": 
     - For a *tracking local/combined branch*, untracks all remotes.
     - For an *unsynced remote branch*, untracks one remote.
+    - For a *deleting remote branch*, clears the pending delete (it was tracking absence).
 3) "Push": Applies to local branches tracking any remotes. 
 4) "Push to remote...": Applies to local branches when any remotes exist.
 5) "Fetch": Downloads for a specific branch only. 
