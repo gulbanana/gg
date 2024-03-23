@@ -576,14 +576,13 @@ impl Mutation for CreateRef {
 
 impl Mutation for DeleteRef {
     fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
-        todo!("implementation looks complete, but is not. for example, we need to untrack local branches first, and remote branches have to be absented and then pushed.");
-
         match self.r#ref {
             StoreRef::RemoteBranch {
                 branch_name,
                 remote_name,
                 ..
             } => {
+                todo!("need to track-as-absent");
                 precondition!(
                     "{}@{} is a remote branch and cannot be deleted",
                     branch_name,
@@ -593,7 +592,8 @@ impl Mutation for DeleteRef {
             StoreRef::LocalBranch { branch_name, .. } => {
                 let mut tx = ws.start_transaction()?;
 
-                tx.mut_repo().remove_branch(&branch_name);
+                tx.mut_repo()
+                    .set_local_branch_target(&branch_name, RefTarget::absent());
 
                 match ws.finish_transaction(tx, format!("forget {}", branch_name))? {
                     Some(new_status) => Ok(MutationResult::Updated { new_status }),
