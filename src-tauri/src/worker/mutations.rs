@@ -506,7 +506,28 @@ impl Mutation for UntrackBranch {
 
 impl Mutation for RenameBranch {
     fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
-        todo!();
+        let old_name = self.r#ref.as_branch()?;
+
+        let ref_target = ws.view().get_local_branch(old_name).clone();
+        if ref_target.is_absent() {
+            precondition!("No such branch: {}", old_name);
+        }
+
+        if ws.view().get_local_branch(&self.new_name).is_present() {
+            precondition!("Branch already exists: {}", &self.new_name);
+        }
+
+        let mut tx = ws.start_transaction()?;
+
+        tx.mut_repo()
+            .set_local_branch_target(&self.new_name, ref_target);
+        tx.mut_repo()
+            .set_local_branch_target(old_name, RefTarget::absent());
+
+        match ws.finish_transaction(tx, format!("rename {} to {}", old_name, self.new_name))? {
+            Some(new_status) => Ok(MutationResult::Updated { new_status }),
+            None => Ok(MutationResult::Unchanged),
+        }
     }
 }
 
