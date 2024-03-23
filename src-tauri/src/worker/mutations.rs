@@ -9,7 +9,7 @@ use jj_lib::{
     git::{self, GitBranchPushTargets, REMOTE_NAME_FOR_LOCAL_GIT_REPO},
     matchers::{EverythingMatcher, FilesMatcher, Matcher},
     object_id::ObjectId,
-    op_store::RefTarget,
+    op_store::{RefTarget, RemoteRef, RemoteRefState},
     op_walk,
     refs::{self, BranchPushAction, BranchPushUpdate, LocalAndRemoteRef},
     repo::Repo,
@@ -582,12 +582,23 @@ impl Mutation for DeleteRef {
                 remote_name,
                 ..
             } => {
-                todo!("need to track-as-absent");
-                precondition!(
-                    "{}@{} is a remote branch and cannot be deleted",
-                    branch_name,
-                    remote_name
-                );
+                let mut tx = ws.start_transaction()?;
+
+                // forget the branch entirely - when target is absent, it's removed from the view
+                let remote_ref = RemoteRef {
+                    target: RefTarget::absent(),
+                    state: RemoteRefState::New,
+                };
+
+                tx.mut_repo()
+                    .set_remote_branch(&branch_name, &remote_name, remote_ref);
+
+                match ws
+                    .finish_transaction(tx, format!("forget {}@{}", branch_name, remote_name))?
+                {
+                    Some(new_status) => Ok(MutationResult::Updated { new_status }),
+                    None => Ok(MutationResult::Unchanged),
+                }
             }
             StoreRef::LocalBranch { branch_name, .. } => {
                 let mut tx = ws.start_transaction()?;
@@ -605,7 +616,7 @@ impl Mutation for DeleteRef {
 
                 tx.mut_repo().set_tag_target(&tag_name, RefTarget::absent());
 
-                match ws.finish_transaction(tx, format!("forget {}", tag_name))? {
+                match ws.finish_transaction(tx, format!("forget tag {}", tag_name))? {
                     Some(new_status) => Ok(MutationResult::Updated { new_status }),
                     None => Ok(MutationResult::Unchanged),
                 }

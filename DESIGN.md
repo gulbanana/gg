@@ -56,7 +56,6 @@ Consequently, the commands available for a branch as displayed in the UI have po
 2) "Untrack": 
     - For a *tracking local/combined branch*, untracks all remotes.
     - For an *unsynced remote branch*, untracks one remote.
-    - For a *deleting remote branch*, clears the pending delete (it was tracking absence).
 3) "Push": Applies to local branches tracking any remotes. 
 4) "Push to remote...": Applies to local branches when any remotes exist.
 5) "Fetch": Downloads for a specific branch only. 
@@ -68,8 +67,7 @@ Consequently, the commands available for a branch as displayed in the UI have po
   - For a *tracking/combined branch*, untracks first.
 8) "Delete": Applies to a user-visible object, not combined objects.
    - For a *local/combined branch*, deletes the local ref. 
-   - For an *untracked remote branch*, creates an absent local ref.
-   - For an *unsynced remote branch*, untracks the remote, then creates an absent ref.
+   - For a *remote branch*, forgets the remote ref (which also clears pending deletes.)
 
 Multiple-dispatch commands:
 1) "Move": Drop local branch onto revision. Sets the ref to a commit, potentially de- or re-syncing it.

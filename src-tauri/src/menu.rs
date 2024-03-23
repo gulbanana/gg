@@ -361,7 +361,8 @@ pub fn handle_context(window: Window, ctx: Operand) -> Result<()> {
                     r#ref,
                     StoreRef::RemoteBranch {
                         is_synced: false, // we can *see* the remote ref, and
-                        is_tracked: true, // it has a local (regardless of absence)
+                        is_tracked: true, // it has a local, and
+                        is_absent: false, // that local is somewhere else
                         ..
                     }
                 ),

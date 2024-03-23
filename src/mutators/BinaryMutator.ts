@@ -10,8 +10,9 @@ import type { CommitId } from "../messages/CommitId";
 import RevisionMutator from "./RevisionMutator";
 import ChangeMutator from "./ChangeMutator";
 import RefMutator from "./RefMutator";
+import type { StoreRef } from "../messages/StoreRef";
 
-export type RichHint = (string | ChangeId | CommitId)[];
+export type RichHint = (string | ChangeId | CommitId | Extract<StoreRef, { type: "LocalBranch" } | { type: "RemoteBranch" }>)[];
 export type Eligibility = { type: "yes", hint: RichHint } | { type: "maybe", hint: string } | { type: "no" };
 
 export default class BinaryMutator {
@@ -36,17 +37,6 @@ export default class BinaryMutator {
             return { type: "maybe", hint: "(child has only one parent)" };
         }
 
-        // can't change our view of remote branches 
-        if (from.type == "Ref" && from.ref.type == "RemoteBranch") {
-            if (from.ref.is_tracked && from.ref.is_absent) {
-                return { type: "maybe", hint: "(branch is deleted)" };
-            }
-            // we allow deleting of all other branch types, which might be a good enough reason to move them
-            // else {
-            //     return { type: "maybe", hint: "(branch is remote)" };
-            // }
-        }
-
         // can change these listed things (XXX add modes?)
         if (from.type == "Revision") {
             return { type: "yes", hint: ["Rebasing revision ", from.header.id.change] };
@@ -55,7 +45,7 @@ export default class BinaryMutator {
         } else if (from.type == "Change") {
             return { type: "yes", hint: [`Squashing changes at ${from.path.relative_path}`] };
         } else if (from.type == "Ref" && from.ref.type != "Tag") {
-            return { type: "yes", hint: [`Moving branch ${from.ref.branch_name}`] };
+            return { type: "yes", hint: ["Moving branch ", from.ref] };
         }
 
         return { type: "no" };
@@ -121,7 +111,7 @@ export default class BinaryMutator {
                 if (this.#to.header.id.change.hex == this.#from.header.id.change.hex) {
                     return { type: "no" };
                 } else {
-                    return { type: "yes", hint: [`Moving branch ${this.#from.ref.branch_name} to `, this.#to.header.id.change] };
+                    return { type: "yes", hint: ["Moving branch ", this.#from.ref, " to ", this.#to.header.id.change] };
                 }
             }
 
@@ -131,17 +121,17 @@ export default class BinaryMutator {
                 if (this.#from.ref.is_tracked) {
                     return { type: "maybe", hint: "(already tracked)" };
                 } else {
-                    return { type: "yes", hint: [`Tracking remote branch ${this.#from.ref.branch_name}`] };
+                    return { type: "yes", hint: ["Tracking remote branch ", this.#from.ref] };
                 }
             }
 
             // anything -> anywhere: delete
             else if (this.#to.type == "Repository") {
                 if (this.#from.ref.type == "LocalBranch") {
-                    return { type: "yes", hint: [`Deleting branch ${this.#from.ref.branch_name}`] };
+                    return { type: "yes", hint: ["Deleting branch ", this.#from.ref] };
                 } else {
                     return {
-                        type: "yes", hint: [`Deleting remote branch ${this.#from.ref.branch_name}@${this.#from.ref.remote_name}`]
+                        type: "yes", hint: ["Forgetting remote branch ", this.#from.ref]
                     };
                 }
             }

@@ -17,7 +17,7 @@
     let dispatch = createEventDispatcher();
 
     onMount(() => {
-        document.getElementById(`field-${fields[0]}`)?.focus();
+        document.getElementById(`field-${fields[0].label}`)?.focus();
     });
 
     function onCancel() {
