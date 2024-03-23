@@ -3,14 +3,14 @@
 ## [0.15.3](releases/tag/v0.15.3)
 
 ### Added
-- Relatively comprehensive branch management support - create, delete, push and fetch.
-- Display Git remotes in the status bar, with all-branches push & fetch commands.
+- Relatively comprehensive branch management - create, delete, rename, forget, push and fetch.
+- Display Git remotes in the status bar, with commands to push or fetch all their branches.
 - Display Git tags (readonly; they aren't really a Jujutsu concept).
 - Display edges to commits that aren't in the queried revset, by drawing a line to nowhere.
 - Detect changes made by other Jujutsu clients and merge the operation log automatically.
 - Improved keyboard support and focus behaviour.
 - Window title includes the workspace path (when one is open).
-- On Windows, the taskbar icon has a jump list.
+- On Windows, the taskbar icon has a jump list with links to recent workspaces.
 - New config options:
   * `gg.queries.log-page-size` for tuning performance on large repositories.
   * `gg.ui.mark-unpushed-branches` to control whether local-only branches are called out.
@@ -22,6 +22,7 @@
 - The AppImage build wasn't picking up the working directory correctly. This is fixed, and 
   you can also specify a workspace to open on the commandline as an alternative.
 - Watchman support (core.fsmonitor) was not enabled.
+- Various design improvements.
 
 ## [0.15.2](releases/tag/v0.15.2)
 
