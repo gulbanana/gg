@@ -28,17 +28,17 @@ jobs:
         RUST_BACKTRACE: "1"
     steps:
       - uses: actions/checkout@v4
+
+      - uses: awalsh128/cache-apt-pkgs-action@v1
+        with:
+          packages: libgtk-3-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+          version: 1.0
             
       - uses: dtolnay/rust-toolchain@stable
 
       - uses: Swatinem/rust-cache@v2
         with:
             workspaces: "src-tauri"
-
-      - name: install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
 
       - name: run tests
         run: cd src-tauri && cargo test
