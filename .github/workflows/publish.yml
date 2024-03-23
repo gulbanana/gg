@@ -50,7 +50,7 @@ jobs:
           Import-PfxCertificate -FilePath certificate/certificate.pfx -CertStoreLocation Cert:\CurrentUser\My -Password (ConvertTo-SecureString -String $env:WINDOWS_CERTIFICATE_PASSWORD -Force -AsPlainText)  
           
       - name: install frontend dependencies
-        run: npm install
+        run: npm install --package-lock=false 
 
       - uses: tauri-apps/tauri-action@v0
         env:
