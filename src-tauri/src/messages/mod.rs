@@ -98,7 +98,7 @@ pub enum RepoConfig {
     },
 }
 
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Clone, Debug)]
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),

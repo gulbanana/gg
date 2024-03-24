@@ -1,7 +1,7 @@
 use super::*;
 
 /// Common result type for mutating commands
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Clone, Debug)]
 #[serde(tag = "type")]
 #[cfg_attr(
     feature = "ts-rs",

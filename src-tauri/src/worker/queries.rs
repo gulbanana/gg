@@ -250,6 +250,14 @@ impl<'a, 'b> QuerySession<'a, 'b> {
     }
 }
 
+#[allow(dead_code)]
+pub fn query_log(ws: &WorkspaceSession, revset_str: &str, max_results: usize) -> Result<LogPage> {
+    let state = QueryState::new(max_results);
+    let revset = ws.evaluate_revset_str(revset_str)?;
+    let mut session = QuerySession::new(ws, &*revset, state);
+    session.get_page()
+}
+
 // XXX this is reloading the header, which the client already has
 pub fn query_revision(ws: &WorkspaceSession, id: RevId) -> Result<RevResult> {
     let commit = match ws.resolve_optional_id(&id)? {

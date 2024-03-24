@@ -11,6 +11,7 @@ tauri-build = { version = "=2.0.0-beta.9", features = [] }
 [dev-dependencies]
 tempfile = "3.10.1"
 zip = "0.6"
+assert_matches = "1.5"
 
 [dependencies]
 tauri = { version = "=2.0.0-beta.11", features = [] }

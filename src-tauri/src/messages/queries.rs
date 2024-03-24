@@ -111,7 +111,7 @@ impl From<&Signature> for RevAuthor {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
@@ -123,7 +123,7 @@ pub struct RevChange {
     pub has_conflict: bool,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
@@ -135,7 +135,7 @@ pub enum ChangeKind {
     Modified,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 #[serde(tag = "type")]
 #[cfg_attr(
     feature = "ts-rs",
