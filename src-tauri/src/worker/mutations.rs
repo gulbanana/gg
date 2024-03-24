@@ -200,19 +200,12 @@ impl Mutation for DuplicateRevisions {
     fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction()?;
 
-        let clonees = ws.resolve_multiple_changes(self.ids)?;
+        let clonees = ws.resolve_multiple_changes(self.ids)?; // in reverse topological order
+        let num_clonees = clonees.len();
         let mut clones: IndexMap<Commit, Commit> = IndexMap::new();
 
-        let base_repo = tx.base_repo().clone();
-        let store = base_repo.store();
-        let mut_repo = tx.mut_repo();
-
-        for clonee_id in base_repo
-            .index()
-            .topo_order(&mut clonees.iter().map(|c| c.id())) // ensures that parents are duplicated first
-            .into_iter()
-        {
-            let clonee = store.get_commit(&clonee_id)?;
+        // toposort ensures that parents are duplicated first
+        for clonee in clonees.into_iter().rev() {
             let clone_parents = clonee
                 .parents()
                 .iter()
@@ -226,7 +219,8 @@ impl Mutation for DuplicateRevisions {
                     .clone()
                 })
                 .collect();
-            let clone = mut_repo
+            let clone = tx
+                .mut_repo()
                 .rewrite_commit(&ws.settings, &clonee)
                 .generate_new_change_id()
                 .set_parents(clone_parents)
@@ -234,9 +228,9 @@ impl Mutation for DuplicateRevisions {
             clones.insert(clonee, clone);
         }
 
-        match ws.finish_transaction(tx, format!("duplicating {} commit(s)", clonees.len()))? {
+        match ws.finish_transaction(tx, format!("duplicating {} commit(s)", num_clonees))? {
             Some(new_status) => {
-                if clonees.len() == 1 {
+                if num_clonees == 1 {
                     let new_commit = clones
                         .get_index(0)
                         .ok_or(anyhow!("single source should have single copy"))?
