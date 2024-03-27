@@ -13,7 +13,7 @@
 {:else}
     <circle class:context cx="9" cy="15" r="6" class="mutable" />
     {#if header.is_working_copy}
-        <circle class:context cx="9" cy="15" r="3" />
+        <circle class="wc" class:context cx="9" cy="15" r="3" />
     {/if}
 {/if}
 
@@ -22,6 +22,11 @@
         pointer-events: none;
         stroke: var(--ctp-blue);
         fill: var(--ctp-blue);
+    }
+
+    .wc {
+        stroke: var(--ctp-green);
+        fill: var(--ctp-green);
     }
 
     .context {
