@@ -59,35 +59,45 @@ impl QueryState {
 }
 
 /// live instance of a query
-pub struct QuerySession<'a, 'b: 'a> {
-    pub ws: &'a WorkspaceSession<'b>,
+pub struct QuerySession<'q, 'w: 'q> {
+    pub ws: &'q WorkspaceSession<'w>,
+    pub state: QueryState,
     iter: Peekable<
         Skip<
             TopoGroupedRevsetGraphIterator<
-                Box<dyn Iterator<Item = (CommitId, Vec<RevsetGraphEdge>)> + 'a>,
+                Box<dyn Iterator<Item = (CommitId, Vec<RevsetGraphEdge>)> + 'q>,
             >,
         >,
     >,
-    pub state: QueryState,
+    is_immutable: Box<dyn Fn(&CommitId) -> bool + 'q>,
 }
 
-impl<'a, 'b> QuerySession<'a, 'b> {
+impl<'q, 'w> QuerySession<'q, 'w> {
     pub fn new(
-        ws: &'a WorkspaceSession<'b>,
-        revset: &'a dyn Revset,
+        ws: &'q WorkspaceSession<'w>,
+        revset: &'q dyn Revset,
         state: QueryState,
-    ) -> QuerySession<'a, 'b> {
+    ) -> QuerySession<'q, 'w> {
         let iter = TopoGroupedRevsetGraphIterator::new(revset.iter_graph())
             .skip(state.next_row)
             .peekable();
 
-        QuerySession { ws, iter, state }
+        let immutable_revset = ws.evaluate_immutable().unwrap();
+        let is_immutable = immutable_revset.containing_fn();
+
+        QuerySession {
+            ws,
+            iter,
+            state,
+            is_immutable,
+        }
     }
 
     pub fn get_page(&mut self) -> Result<LogPage> {
         let mut rows: Vec<LogRow> = Vec::with_capacity(self.state.page_size); // output rows to draw
         let mut row = self.state.next_row;
         let max = row + self.state.page_size;
+
         let root_id = self.ws.repo().store().root_commit_id().clone();
 
         while let Some((commit_id, commit_edges)) = self.iter.next() {
@@ -137,10 +147,8 @@ impl<'a, 'b> QuerySession<'a, 'b> {
 
             let known_immutable = if stem_known_immutable {
                 Some(true)
-            } else if !self.ws.should_check_immutable() {
-                Some(false)
             } else {
-                None
+                Some((self.is_immutable)(&commit_id))
             };
 
             let header = self

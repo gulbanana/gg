@@ -18,6 +18,7 @@ use jj_cli::{
     cli_util::{check_stale_working_copy, short_operation_hash, WorkingCopyFreshness},
     config::LayeredConfigs,
     git_util::{self, is_colocated_git_workspace},
+    revset_util,
 };
 use jj_lib::{
     backend::{BackendError, ChangeId, CommitId},
@@ -76,7 +77,6 @@ pub struct SessionOperation {
     pub wc_id: CommitId,
     ref_index: OnceCell<Rc<RefIndex>>,
     prefix_context: OnceCell<Rc<IdPrefixContext>>,
-    immutable_revisions: OnceCell<Rc<RevsetExpression>>,
 }
 
 #[derive(Debug, Error)]
@@ -177,12 +177,6 @@ impl WorkspaceSession<'_> {
         }
     }
 
-    pub fn should_check_immutable(&self) -> bool {
-        self.settings
-            .query_check_immutable()
-            .unwrap_or(!self.is_large)
-    }
-
     pub fn load_at_head(&mut self) -> Result<bool> {
         let head = load_at_head(&self.settings, &self.workspace)?;
         if head.repo.op_id() != self.operation.repo.op_id() {
@@ -237,6 +231,12 @@ impl WorkspaceSession<'_> {
             expr = expr.union(&RevsetExpression::symbol(id.hex.clone()))
         }
         self.evaluate_revset_expr(expr)
+    }
+
+    pub fn evaluate_immutable(&self) -> Result<Box<dyn Revset + '_>> {
+        let expr = revset_util::parse_immutable_expression(&self.parse_context())?;
+        let revset = self.evaluate_revset_expr(expr)?;
+        Ok(revset)
     }
 
     fn resolve_optional<'op, 'set: 'op, T: AsRef<dyn Revset + 'set>>(
@@ -407,17 +407,6 @@ impl WorkspaceSession<'_> {
             .with_change_id_resolver(change_id_resolver)
     }
 
-    fn immutable_revisions(&self) -> &Rc<RevsetExpression> {
-        self.operation.immutable_revisions.get_or_init(|| {
-            build_immutable_revisions(
-                &self.operation.repo,
-                &self.aliases_map,
-                &self.parse_context(),
-            )
-            .expect("init immutable heads")
-        })
-    }
-
     pub fn ref_index(&self) -> &Rc<RefIndex> {
         self.operation
             .ref_index
@@ -544,12 +533,11 @@ impl WorkspaceSession<'_> {
     pub fn check_immutable(&self, ids: impl IntoIterator<Item = CommitId>) -> Result<bool> {
         let check_revset = RevsetExpression::commits(ids.into_iter().collect());
 
-        let immutable_revset = self.immutable_revisions();
+        let immutable_revset = revset_util::parse_immutable_expression(&self.parse_context())?;
         let intersection_revset = check_revset.intersection(&immutable_revset);
 
-        // note: slow! jj may add a caching contains() API in future, in which case we'd be able
-        // to materialise the immutable revset statefully and use it here; for now, avoid calling
-        // this function unnecessarily
+        // note: slow! jj has added a caching contains_fn to revsets, but this codepath is used in one-offs where
+        // nothing is cached. this should be checked at some point to ensure we aren't calling it unnecessarily
         let immutable_revs = self.evaluate_revset_expr(intersection_revset)?;
         let first = immutable_revs.iter().next();
 
@@ -671,9 +659,9 @@ impl WorkspaceSession<'_> {
                 (repo, wc_commit)
             }
             WorkingCopyFreshness::WorkingCopyStale => {
-                return Err(anyhow!(     
+                return Err(anyhow!(
                     "The working copy is stale (not updated since operation {}). Run `jj workspace update-stale` to update it.",
-                    short_operation_hash(&old_op_id)                                      
+                    short_operation_hash(&old_op_id)
                 ));
             }
             WorkingCopyFreshness::SiblingOperation => {
@@ -872,7 +860,6 @@ impl SessionOperation {
             wc_id,
             ref_index: OnceCell::default(),
             prefix_context: OnceCell::default(),
-            immutable_revisions: OnceCell::default(),
         }
     }
 
@@ -984,28 +971,6 @@ fn build_prefix_context(
     };
 
     Ok(prefix_context)
-}
-
-fn build_immutable_revisions(
-    repo: &ReadonlyRepo,
-    aliases_map: &RevsetAliasesMap,
-    parse_context: &RevsetParseContext,
-) -> Result<Rc<RevsetExpression>> {
-    let (params, immutable_heads_str) = aliases_map.get_function("immutable_heads").ok_or(
-        anyhow!(r#"The `revset-aliases.immutable_heads()` function was not found."#),
-    )?;
-
-    if !params.is_empty() {
-        return Err(anyhow!(
-            r#"The `revset-aliases.immutable_heads()` function must be declared without arguments."#
-        ));
-    }
-
-    let immutable_heads = parse_revset(parse_context, immutable_heads_str)?;
-
-    Ok(immutable_heads.ancestors().union(&RevsetExpression::commit(
-        repo.store().root_commit_id().clone(),
-    )))
 }
 
 fn parse_revset(

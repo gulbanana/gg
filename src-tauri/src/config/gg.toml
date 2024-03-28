@@ -2,12 +2,8 @@
 # Number of commits to load per call
 log-page-size = 1000
 
-# Other query settings will default to false instead of true if a repo has this many commits.
+# Some query settings will default to false instead of true if a repo has this many commits.
 large-repo-heuristic = 100000
-
-# Check whether revisions are immutable when loading them; slow in large repositories. 
-# When disabled, immutability checks will still be done if you attempt to rewrite history.
-# check-immutable =
 
 # Take a snapshot when the window gains focus; slow in large checkouts. 
 # When disabled, snapshots will still be created if you run commands. 
