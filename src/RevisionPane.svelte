@@ -187,6 +187,7 @@
     }
 
     .objects {
+        pointer-events: auto;
         flex: 1;
         overflow: auto;
         scrollbar-color: var(--ctp-text) var(--ctp-mantle);

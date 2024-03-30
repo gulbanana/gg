@@ -1,5 +1,11 @@
 # GG Changelog
 
+## Unreleased 
+
+### Fixed
+- Right-pane scrollbark wasn't responding to clicks.
+- Various design improvements. 
+
 ## [0.15.3](releases/tag/v0.15.3)
 
 ### Added
