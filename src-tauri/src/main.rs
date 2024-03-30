@@ -25,10 +25,10 @@ use tauri::{State, Window, WindowEvent, Wry};
 use tauri_plugin_window_state::StateFlags;
 
 use messages::{
-    AbandonRevisions, CheckoutRevision, CopyChanges, CreateRef, CreateRevision, DeleteRef,
-    DescribeRevision, DuplicateRevisions, GitFetch, GitPush, InputResponse, InsertRevision,
-    MoveChanges, MoveRef, MoveRevision, MoveSource, MutationResult, RenameBranch, RevId,
-    TrackBranch, UndoOperation, UntrackBranch,
+    AbandonRevisions, BackoutRevisions, CheckoutRevision, CopyChanges, CreateRef, CreateRevision,
+    DeleteRef, DescribeRevision, DuplicateRevisions, GitFetch, GitPush, InputResponse,
+    InsertRevision, MoveChanges, MoveRef, MoveRevision, MoveSource, MutationResult, RenameBranch,
+    RevId, TrackBranch, UndoOperation, UntrackBranch,
 };
 use worker::{Mutation, Session, SessionEvent, WorkerSession};
 
@@ -141,12 +141,13 @@ fn main() -> Result<()> {
             query_log_next_page,
             query_revision,
             query_remotes,
+            abandon_revisions,
+            backout_revisions,
             checkout_revision,
             create_revision,
-            insert_revision,
             describe_revision,
             duplicate_revisions,
-            abandon_revisions,
+            insert_revision,
             move_revision,
             move_source,
             move_changes,
@@ -339,6 +340,24 @@ fn query_remotes(
 }
 
 #[tauri::command(async)]
+fn abandon_revisions(
+    window: Window,
+    app_state: State<AppState>,
+    mutation: AbandonRevisions,
+) -> Result<MutationResult, InvokeError> {
+    try_mutate(window, app_state, mutation)
+}
+
+#[tauri::command(async)]
+fn backout_revisions(
+    window: Window,
+    app_state: State<AppState>,
+    mutation: BackoutRevisions,
+) -> Result<MutationResult, InvokeError> {
+    try_mutate(window, app_state, mutation)
+}
+
+#[tauri::command(async)]
 fn checkout_revision(
     window: Window,
     app_state: State<AppState>,
@@ -379,15 +398,6 @@ fn duplicate_revisions(
     window: Window,
     app_state: State<AppState>,
     mutation: DuplicateRevisions,
-) -> Result<MutationResult, InvokeError> {
-    try_mutate(window, app_state, mutation)
-}
-
-#[tauri::command(async)]
-fn abandon_revisions(
-    window: Window,
-    app_state: State<AppState>,
-    mutation: AbandonRevisions,
 ) -> Result<MutationResult, InvokeError> {
     try_mutate(window, app_state, mutation)
 }

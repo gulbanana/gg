@@ -94,7 +94,7 @@ pub struct DescribeRevision {
     pub reset_author: bool,
 }
 
-/// Creates a copy of the revision with the same parents and content
+/// Creates a copy of the selected revisions with the same parents and content
 #[derive(Deserialize, Debug)]
 #[cfg_attr(
     feature = "ts-rs",
@@ -113,6 +113,17 @@ pub struct DuplicateRevisions {
 )]
 pub struct AbandonRevisions {
     pub ids: Vec<CommitId>,
+}
+
+/// Adds changes to the working copy which reverse the effect of the selected revisions
+#[derive(Deserialize, Debug)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(TS),
+    ts(export, export_to = "../src/messages/")
+)]
+pub struct BackoutRevisions {
+    pub ids: Vec<RevId>,
 }
 
 #[derive(Deserialize, Debug)]

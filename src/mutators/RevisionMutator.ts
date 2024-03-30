@@ -1,5 +1,6 @@
 import type { RevHeader } from "../messages/RevHeader";
 import type { AbandonRevisions } from "../messages/AbandonRevisions";
+import type { BackoutRevisions } from "../messages/BackoutRevisions";
 import type { CheckoutRevision } from "../messages/CheckoutRevision";
 import type { CopyChanges } from "../messages/CopyChanges";
 import type { CreateRevision } from "../messages/CreateRevision";
@@ -31,6 +32,9 @@ export default class RevisionMutator {
                 if (!this.#revision.is_immutable) {
                     this.onEdit();
                 }
+                break;
+            case "backout":
+                this.onBackout();
                 break;
             case "duplicate":
                 this.onDuplicate();
@@ -78,6 +82,12 @@ export default class RevisionMutator {
                 id: this.#revision.id,
             });
         }
+    };
+
+    onBackout = () => {
+        mutate<BackoutRevisions>("backout_revisions", {
+            ids: [this.#revision.id],
+        });
     };
 
     onDuplicate = () => {

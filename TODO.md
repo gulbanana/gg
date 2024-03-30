@@ -19,7 +19,6 @@ These changes may or may not be implemented in the future.
 * feat: structured op descs - want to be able to present them more nicely, extracting ids etc. tags? 
     - there's a request for this to be part of jj
 * feat: create/delete tags? even moving them is implemented in the backend, but may be a bad idea
-* feat: backout rev[s]
 * feat: obslog stuff - maybe just "show historical versions" in the log? they should be immutable, and we'd want to be able to reinstate one (as a copy)
 * feat: more settings
     - log revsets

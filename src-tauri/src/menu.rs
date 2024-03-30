@@ -34,55 +34,68 @@ pub fn build_main(app_handle: &AppHandle) -> tauri::Result<Menu<Wry>> {
         &[
             &MenuItem::with_id(
                 app_handle,
-                "repo_open",
+                "menu_repo_open",
                 "Open...",
                 true,
                 Some("cmdorctrl+o"),
             )?,
-            &MenuItem::with_id(app_handle, "repo_reopen", "Reopen", true, Some("f5"))?,
+            &MenuItem::with_id(app_handle, "menu_repo_reopen", "Reopen", true, Some("f5"))?,
             &PredefinedMenuItem::close_window(app_handle, Some("Close"))?,
         ],
     )?;
 
-    let commit_menu = Submenu::with_id_and_items(
+    let revision_menu = Submenu::with_id_and_items(
         app_handle,
-        "commit",
-        "Commit",
+        "revision",
+        "Revision",
         true,
         &[
             &MenuItem::with_id(
                 app_handle,
-                "commit_new",
+                "menu_revision_new",
                 "New child",
                 true,
                 Some("cmdorctrl+n"),
             )?,
             &MenuItem::with_id(
                 app_handle,
-                "commit_edit",
+                "menu_revision_edit",
                 "Edit as working copy",
                 true,
                 None::<&str>,
             )?,
             &MenuItem::with_id(
                 app_handle,
-                "commit_duplicate",
+                "menu_revision_backout",
+                "Backout into working copy",
+                true,
+                None::<&str>,
+            )?,
+            &MenuItem::with_id(
+                app_handle,
+                "menu_revision_duplicate",
                 "Duplicate",
                 true,
                 None::<&str>,
             )?,
-            &MenuItem::with_id(app_handle, "commit_abandon", "Abandon", true, None::<&str>)?,
+            &MenuItem::with_id(
+                app_handle,
+                "menu_revision_abandon",
+                "Abandon",
+                true,
+                None::<&str>,
+            )?,
             &PredefinedMenuItem::separator(app_handle)?,
             &MenuItem::with_id(
                 app_handle,
-                "commit_squash",
+                "menu_revision_squash",
                 "Squash into parent",
                 true,
                 None::<&str>,
             )?,
             &MenuItem::with_id(
                 app_handle,
-                "commit_restore",
+                "menu_revision_restore",
                 "Restore from parent",
                 true,
                 None::<&str>,
@@ -90,7 +103,7 @@ pub fn build_main(app_handle: &AppHandle) -> tauri::Result<Menu<Wry>> {
             &PredefinedMenuItem::separator(app_handle)?,
             &MenuItem::with_id(
                 app_handle,
-                "commit_branch",
+                "menu_revision_branch",
                 "Create branch",
                 true,
                 None::<&str>,
@@ -133,7 +146,7 @@ pub fn build_main(app_handle: &AppHandle) -> tauri::Result<Menu<Wry>> {
                 ],
             )?,
             &repo_menu,
-            &commit_menu,
+            &revision_menu,
             &edit_menu,
         ],
     )?;
@@ -152,6 +165,13 @@ pub fn build_context(
                 app_handle,
                 "revision_edit",
                 "Edit as working copy",
+                true,
+                None::<&str>,
+            )?,
+            &MenuItem::with_id(
+                app_handle,
+                "revision_backout",
+                "Backout into working copy",
                 true,
                 None::<&str>,
             )?,
@@ -248,32 +268,38 @@ pub fn build_context(
 
 // enables global menu items based on currently selected revision
 pub fn handle_selection(menu: Menu<Wry>, selection: Option<RevHeader>) -> Result<()> {
-    let commit_submenu = menu.get("commit").ok_or(anyhow!("Commit menu not found"))?;
-    let commit_submenu = commit_submenu.as_submenu_unchecked();
+    let revision_submenu = menu
+        .get("revision")
+        .ok_or(anyhow!("Revision menu not found"))?;
+    let revision_submenu = revision_submenu.as_submenu_unchecked();
 
     match selection {
         None => {
-            commit_submenu.enable("commit_new", false)?;
-            commit_submenu.enable("commit_edit", false)?;
-            commit_submenu.enable("commit_duplicate", false)?;
-            commit_submenu.enable("commit_abandon", false)?;
-            commit_submenu.enable("commit_squash", false)?;
-            commit_submenu.enable("commit_restore", false)?;
+            revision_submenu.enable("menu_revision_new", false)?;
+            revision_submenu.enable("menu_revision_edit", false)?;
+            revision_submenu.enable("menu_revision_duplicate", false)?;
+            revision_submenu.enable("menu_revision_abandon", false)?;
+            revision_submenu.enable("menu_revision_squash", false)?;
+            revision_submenu.enable("menu_revision_restore", false)?;
         }
         Some(rev) => {
-            commit_submenu.enable("commit_new", true)?;
-            commit_submenu.enable("commit_edit", !rev.is_immutable && !rev.is_working_copy)?;
-            commit_submenu.enable("commit_duplicate", true)?;
-            commit_submenu.enable("commit_abandon", !rev.is_immutable)?;
-            commit_submenu.enable(
-                "commit_squash",
+            revision_submenu.enable("menu_revision_new", true)?;
+            revision_submenu.enable(
+                "menu_revision_edit",
+                !rev.is_immutable && !rev.is_working_copy,
+            )?;
+            revision_submenu.enable("menu_revision_backout", true)?;
+            revision_submenu.enable("menu_revision_duplicate", true)?;
+            revision_submenu.enable("menu_revision_abandon", !rev.is_immutable)?;
+            revision_submenu.enable(
+                "menu_revision_squash",
                 !rev.is_immutable && rev.parent_ids.len() == 1,
             )?;
-            commit_submenu.enable(
-                "commit_restore",
+            revision_submenu.enable(
+                "menu_revision_restore",
                 !rev.is_immutable && rev.parent_ids.len() == 1,
             )?;
-            commit_submenu.enable("commit_branch", true)?;
+            revision_submenu.enable("menu_revision_branch", true)?;
         }
     };
 
@@ -299,6 +325,7 @@ pub fn handle_context(window: Window, ctx: Operand) -> Result<()> {
                 "revision_edit",
                 !header.is_immutable && !header.is_working_copy,
             )?;
+            context_menu.enable("revision_backout", true)?;
             context_menu.enable("revision_duplicate", true)?;
             context_menu.enable("revision_abandon", !header.is_immutable)?;
             context_menu.enable(
@@ -417,17 +444,19 @@ pub fn handle_event(window: &Window, event: MenuEvent) -> Result<()> {
     log::debug!("handling event {event:?}");
 
     match event.id.0.as_str() {
-        "repo_open" => repo_open(window),
-        "repo_reopen" => repo_reopen(window),
-        "commit_new" => window.emit("gg://menu/commit", "new")?,
-        "commit_edit" => window.emit("gg://menu/commit", "edit")?,
-        "commit_duplicate" => window.emit("gg://menu/commit", "duplicate")?,
-        "commit_abandon" => window.emit("gg://menu/commit", "abandon")?,
-        "commit_squash" => window.emit("gg://menu/commit", "squash")?,
-        "commit_restore" => window.emit("gg://menu/commit", "restore")?,
-        "commit_branch" => window.emit("gg://menu/commit", "branch")?,
+        "menu_repo_open" => repo_open(window),
+        "menu_repo_reopen" => repo_reopen(window),
+        "menu_revision_new" => window.emit("gg://menu/revision", "new")?,
+        "menu_revision_edit" => window.emit("gg://menu/revision", "edit")?,
+        "menu_revision_backout" => window.emit("gg://menu/revision", "backout")?,
+        "menu_revision_duplicate" => window.emit("gg://menu/revision", "duplicate")?,
+        "menu_revision_abandon" => window.emit("gg://menu/revision", "abandon")?,
+        "menu_revision_squash" => window.emit("gg://menu/revision", "squash")?,
+        "menu_revision_restore" => window.emit("gg://menu/revision", "restore")?,
+        "menu_revision_branch" => window.emit("gg://menu/revision", "branch")?,
         "revision_new" => window.emit("gg://context/revision", "new")?,
         "revision_edit" => window.emit("gg://context/revision", "edit")?,
+        "revision_backout" => window.emit("gg://context/revision", "backout")?,
         "revision_duplicate" => window.emit("gg://context/revision", "duplicate")?,
         "revision_abandon" => window.emit("gg://context/revision", "abandon")?,
         "revision_squash" => window.emit("gg://context/revision", "squash")?,

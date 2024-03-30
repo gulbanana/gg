@@ -22,15 +22,79 @@ use jj_lib::{
 
 use super::{gui_util::WorkspaceSession, Mutation};
 use crate::messages::{
-    AbandonRevisions, CheckoutRevision, CopyChanges, CreateRef, CreateRevision, DeleteRef,
-    DescribeRevision, DuplicateRevisions, GitFetch, GitPush, InsertRevision, MoveChanges, MoveRef,
-    MoveRevision, MoveSource, MutationResult, RenameBranch, StoreRef, TrackBranch, TreePath,
-    UndoOperation, UntrackBranch,
+    AbandonRevisions, BackoutRevisions, CheckoutRevision, CopyChanges, CreateRef, CreateRevision,
+    DeleteRef, DescribeRevision, DuplicateRevisions, GitFetch, GitPush, InsertRevision,
+    MoveChanges, MoveRef, MoveRevision, MoveSource, MutationResult, RenameBranch, StoreRef,
+    TrackBranch, TreePath, UndoOperation, UntrackBranch,
 };
 
 macro_rules! precondition {
     ($($args:tt)*) => {
         return Ok(MutationResult::PreconditionError { message: format!($($args)*) })
+    }
+}
+
+impl Mutation for AbandonRevisions {
+    fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
+        let mut tx = ws.start_transaction()?;
+
+        let abandoned_ids = self
+            .ids
+            .into_iter()
+            .map(|id| CommitId::try_from_hex(&id.hex).expect("frontend-validated id"))
+            .collect_vec();
+
+        if ws.check_immutable(abandoned_ids.clone())? {
+            precondition!("Some revisions are immutable");
+        }
+
+        for id in &abandoned_ids {
+            tx.mut_repo().record_abandoned_commit(id.clone());
+        }
+        tx.mut_repo().rebase_descendants(&ws.settings)?;
+
+        let transaction_description = if abandoned_ids.len() == 1 {
+            format!("abandon commit {}", abandoned_ids[0].hex())
+        } else {
+            format!(
+                "abandon commit {} and {} more",
+                abandoned_ids[0].hex(),
+                abandoned_ids.len() - 1
+            )
+        };
+
+        match ws.finish_transaction(tx, transaction_description)? {
+            Some(new_status) => Ok(MutationResult::Updated { new_status }),
+            None => Ok(MutationResult::Unchanged),
+        }
+    }
+}
+
+impl Mutation for BackoutRevisions {
+    fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
+        if self.ids.len() != 1 {
+            precondition!("Not implemented for >1 rev");
+        }
+
+        let mut tx = ws.start_transaction()?;
+
+        let working_copy = ws.get_commit(ws.wc_id())?;
+        let reverted = ws.resolve_multiple_changes(self.ids)?;
+
+        let old_base_tree = rewrite::merge_commit_trees(tx.mut_repo(), &reverted[0].parents())?;
+        let new_base_tree = working_copy.tree()?;
+        let old_tree = reverted[0].tree()?;
+        let new_tree = new_base_tree.merge(&old_tree, &old_base_tree)?;
+
+        tx.mut_repo()
+            .rewrite_commit(&ws.settings, &&working_copy)
+            .set_tree_id(new_tree.id())
+            .write()?;
+
+        match ws.finish_transaction(tx, format!("back out commit {}", reverted[0].id().hex()))? {
+            Some(new_status) => Ok(MutationResult::Updated { new_status }),
+            None => Ok(MutationResult::Unchanged),
+        }
     }
 }
 
@@ -52,7 +116,7 @@ impl Mutation for CheckoutRevision {
 
         match ws.finish_transaction(tx, format!("edit commit {}", edited.id().hex()))? {
             Some(new_status) => {
-                let new_selection = ws.format_header(&edited, None)?;
+                let new_selection = ws.format_header(&edited, Some(false))?;
                 Ok(MutationResult::UpdatedSelection {
                     new_status,
                     new_selection,
@@ -88,52 +152,12 @@ impl Mutation for CreateRevision {
 
         match ws.finish_transaction(tx, "new empty commit")? {
             Some(new_status) => {
-                let new_selection = ws.format_header(&new_commit, None)?;
+                let new_selection = ws.format_header(&new_commit, Some(false))?;
                 Ok(MutationResult::UpdatedSelection {
                     new_status,
                     new_selection,
                 })
             }
-            None => Ok(MutationResult::Unchanged),
-        }
-    }
-}
-
-impl Mutation for InsertRevision {
-    fn execute<'a>(self: Box<Self>, ws: &'a mut WorkspaceSession) -> Result<MutationResult> {
-        let mut tx = ws.start_transaction()?;
-
-        let target = ws
-            .resolve_single_change(&self.id)
-            .context("resolve change_id")?;
-        let before = ws
-            .resolve_single_change(&self.before_id)
-            .context("resolve before_id")?;
-        let after = ws
-            .resolve_single_change(&self.after_id)
-            .context("resolve after_id")?;
-
-        if ws.check_immutable(vec![target.id().clone(), before.id().clone()])? {
-            precondition!("Some revisions are immutable");
-        }
-
-        // rebase the target's children
-        let rebased_children = ws.disinherit_children(&mut tx, &target)?;
-
-        // update after, which may have been a descendant of target
-        let after = rebased_children
-            .get(after.id())
-            .map_or(Ok(after.clone()), |rebased_before_id| {
-                tx.repo().store().get_commit(rebased_before_id)
-            })?;
-
-        // rebase the target (which now has no children), then the new post-target tree atop it
-        let rebased_id = target.id().hex();
-        let target = rewrite::rebase_commit(&ws.settings, tx.mut_repo(), &target, &[after])?;
-        rewrite::rebase_commit(&ws.settings, tx.mut_repo(), &before, &[target])?;
-
-        match ws.finish_transaction(tx, format!("rebase commit {}", rebased_id))? {
-            Some(new_status) => Ok(MutationResult::Updated { new_status }),
             None => Ok(MutationResult::Unchanged),
         }
     }
@@ -231,36 +255,40 @@ impl Mutation for DuplicateRevisions {
     }
 }
 
-impl Mutation for AbandonRevisions {
-    fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
+impl Mutation for InsertRevision {
+    fn execute<'a>(self: Box<Self>, ws: &'a mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction()?;
 
-        let abandoned_ids = self
-            .ids
-            .into_iter()
-            .map(|id| CommitId::try_from_hex(&id.hex).expect("frontend-validated id"))
-            .collect_vec();
+        let target = ws
+            .resolve_single_change(&self.id)
+            .context("resolve change_id")?;
+        let before = ws
+            .resolve_single_change(&self.before_id)
+            .context("resolve before_id")?;
+        let after = ws
+            .resolve_single_change(&self.after_id)
+            .context("resolve after_id")?;
 
-        if ws.check_immutable(abandoned_ids.clone())? {
+        if ws.check_immutable(vec![target.id().clone(), before.id().clone()])? {
             precondition!("Some revisions are immutable");
         }
 
-        for id in &abandoned_ids {
-            tx.mut_repo().record_abandoned_commit(id.clone());
-        }
-        tx.mut_repo().rebase_descendants(&ws.settings)?;
+        // rebase the target's children
+        let rebased_children = ws.disinherit_children(&mut tx, &target)?;
 
-        let transaction_description = if abandoned_ids.len() == 1 {
-            format!("abandon commit {}", abandoned_ids[0].hex())
-        } else {
-            format!(
-                "abandon commit {} and {} more",
-                abandoned_ids[0].hex(),
-                abandoned_ids.len() - 1
-            )
-        };
+        // update after, which may have been a descendant of target
+        let after = rebased_children
+            .get(after.id())
+            .map_or(Ok(after.clone()), |rebased_before_id| {
+                tx.repo().store().get_commit(rebased_before_id)
+            })?;
 
-        match ws.finish_transaction(tx, transaction_description)? {
+        // rebase the target (which now has no children), then the new post-target tree atop it
+        let rebased_id = target.id().hex();
+        let target = rewrite::rebase_commit(&ws.settings, tx.mut_repo(), &target, &[after])?;
+        rewrite::rebase_commit(&ws.settings, tx.mut_repo(), &before, &[target])?;
+
+        match ws.finish_transaction(tx, format!("rebase commit {}", rebased_id))? {
             Some(new_status) => Ok(MutationResult::Updated { new_status }),
             None => Ok(MutationResult::Unchanged),
         }

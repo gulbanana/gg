@@ -3,6 +3,7 @@
 ## Unreleased 
 
 ### Added
+- Backout command, which creates the changes necessary to undo some revision in the working copy.
 - Consistent author/timestamp formatting, with tooltips for more detail.
 
 ### Fixed

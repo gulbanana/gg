@@ -26,7 +26,7 @@
             -1,
     );
 
-    onEvent<string>("gg://menu/commit", (event) => mutator.handle(event));
+    onEvent<string>("gg://menu/revision", (event) => mutator.handle(event));
 </script>
 
 <Pane>
@@ -50,9 +50,6 @@
             </ActionWidget>
             <ActionWidget tip="create a child" onClick={mutator.onNew}>
                 <Icon name="edit" /> New
-            </ActionWidget>
-            <ActionWidget tip="create a sibling" onClick={mutator.onDuplicate}>
-                <Icon name="copy" /> Duplicate
             </ActionWidget>
         </div>
     </h2>
