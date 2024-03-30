@@ -8,6 +8,7 @@
     import Zone from "./Zone.svelte";
     import RevisionMutator from "../mutators/RevisionMutator";
     import TagObject from "./TagObject.svelte";
+    import AuthorSpan from "../controls/AuthorSpan.svelte";
 
     export let header: RevHeader;
     export let child: RevHeader | null = null;
@@ -47,7 +48,7 @@
                 {dragHint ?? (header.description.lines[0] == "" ? "(no description set)" : header.description.lines[0])}
             </span>
 
-            <span class="text email truncate">{header.author.email}</span>
+            <span class="email"><AuthorSpan author={header.author} /></span>
 
             <span class="refs">
                 {#each header.refs as ref}
@@ -76,7 +77,7 @@
                         (header.description.lines[0] == "" ? "(no description set)" : header.description.lines[0])}
                 </span>
 
-                <span class="text email truncate">{header.author.email}</span>
+                <span class="email"><AuthorSpan author={header.author} /></span>
 
                 <span class="refs">
                     {#each header.refs as ref}
@@ -101,6 +102,7 @@
 <style>
     .layout {
         /* layout summary components along a text line */
+        width: 100%;
         height: 30px;
         display: grid;
         grid-template-areas: ". desc refs";
@@ -132,7 +134,6 @@
     .email {
         display: none;
         grid-area: email;
-        color: var(--ctp-surface2);
         text-align: right;
     }
 

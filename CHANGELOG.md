@@ -2,6 +2,9 @@
 
 ## Unreleased 
 
+### Added
+- Consistent author/timestamp formatting, with tooltips for more detail.
+
 ### Fixed
 - Right-pane scrollbark wasn't responding to clicks.
 - Various design improvements. 

@@ -9,8 +9,6 @@ pub use queries::*;
 use std::{collections::HashMap, path::Path};
 
 use anyhow::{anyhow, Result};
-use chrono::{DateTime, FixedOffset, Local, LocalResult, TimeZone, Utc};
-use jj_lib::backend::{Signature, Timestamp};
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "ts-rs")]
 use ts_rs::TS;

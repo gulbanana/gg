@@ -1,3 +1,6 @@
+use chrono::{offset::LocalResult, DateTime, FixedOffset, Local, TimeZone, Utc};
+use jj_lib::backend::{Signature, Timestamp};
+
 use super::*;
 
 /// A change or commit id with a disambiguated prefix
@@ -99,15 +102,15 @@ pub struct RevAuthor {
     pub timestamp: chrono::DateTime<Local>,
 }
 
-impl From<&Signature> for RevAuthor {
-    fn from(value: &Signature) -> Self {
-        RevAuthor {
+impl TryFrom<&Signature> for RevAuthor {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &Signature) -> Result<RevAuthor> {
+        Ok(RevAuthor {
             name: value.name.clone(),
             email: value.email.clone(),
-            timestamp: datetime_from_timestamp(&value.timestamp)
-                .expect("convert timestamp to datetime")
-                .with_timezone(&Local),
-        }
+            timestamp: format_timestamp(&value.timestamp)?.with_timezone(&Local),
+        })
     }
 }
 
@@ -216,24 +219,22 @@ pub struct LogPage {
     pub has_more: bool,
 }
 
-// from time_util, which is not pub
-fn datetime_from_timestamp(context: &Timestamp) -> Option<DateTime<FixedOffset>> {
+// similar to time_util::datetime_from_timestamp, which is not pub
+fn format_timestamp(context: &Timestamp) -> Result<DateTime<FixedOffset>> {
     let utc = match Utc.timestamp_opt(
         context.timestamp.0.div_euclid(1000),
         (context.timestamp.0.rem_euclid(1000)) as u32 * 1000000,
     ) {
         LocalResult::None => {
-            return None;
+            return Err(anyhow!("no UTC instant exists for timestamp"));
         }
         LocalResult::Single(x) => x,
         LocalResult::Ambiguous(y, _z) => y,
     };
 
-    Some(
-        utc.with_timezone(
-            &FixedOffset::east_opt(context.tz_offset * 60).unwrap_or_else(|| {
-                FixedOffset::east_opt(0).expect("timezone offset out of bounds")
-            }),
-        ),
-    )
+    let tz = FixedOffset::east_opt(context.tz_offset * 60)
+        .or_else(|| FixedOffset::east_opt(0))
+        .ok_or(anyhow!("timezone offset out of bounds"))?;
+
+    Ok(utc.with_timezone(&tz))
 }

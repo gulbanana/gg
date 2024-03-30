@@ -1,7 +1,14 @@
 //! Analogous to cli_util from jj-cli
 //! We reuse a bit of jj-cli code, but many of its modules include TUI concerns or are not suitable for a long-running server
 
-use std::{cell::OnceCell, collections::HashMap, env::VarError, path::{Path, PathBuf}, rc::Rc, sync::Arc};
+use std::{
+    cell::OnceCell,
+    collections::HashMap,
+    env::VarError,
+    path::{Path, PathBuf},
+    rc::Rc,
+    sync::Arc,
+};
 
 use anyhow::{anyhow, Context, Result};
 use config::Config;
@@ -12,44 +19,55 @@ use jj_cli::{
     config::LayeredConfigs,
     git_util::{self, is_colocated_git_workspace},
 };
-use jj_lib::{backend::BackendError, default_index::{AsCompositeIndex, DefaultReadonlyIndex}, file_util::relative_path, gitignore::GitIgnoreFile, op_store::WorkspaceId, repo::RepoLoaderError, repo_path::RepoPath, revset::{RevsetEvaluationError, RevsetIteratorExt, RevsetResolutionError}, rewrite, view::View, working_copy::{CheckoutStats, SnapshotOptions}};
 use jj_lib::{
-    backend::{ChangeId, CommitId},
+    backend::{BackendError, ChangeId, CommitId},
     commit::Commit,
+    default_index::{AsCompositeIndex, DefaultReadonlyIndex},
+    file_util::relative_path,
     git,
     git_backend::GitBackend,
+    gitignore::GitIgnoreFile,
     hex_util::to_reverse_hex,
     id_prefix::IdPrefixContext,
     object_id::ObjectId,
     op_heads_store,
+    op_store::WorkspaceId,
     operation::Operation,
-    repo::{ReadonlyRepo, Repo, StoreFactories},
+    repo::{ReadonlyRepo, Repo, RepoLoaderError, StoreFactories},
+    repo_path::RepoPath,
     revset::{
-        self, DefaultSymbolResolver, Revset, RevsetAliasesMap, RevsetExpression,
-        RevsetParseContext, RevsetWorkspaceContext,
+        self, DefaultSymbolResolver, Revset, RevsetAliasesMap, RevsetEvaluationError,
+        RevsetExpression, RevsetIteratorExt, RevsetParseContext, RevsetResolutionError,
+        RevsetWorkspaceContext,
     },
+    rewrite,
     settings::{ConfigResultExt, UserSettings},
     transaction::Transaction,
+    view::View,
+    working_copy::{CheckoutStats, SnapshotOptions},
     workspace::{self, Workspace, WorkspaceLoader},
 };
 use thiserror::Error;
 
-use crate::{config::GGSettings, messages::{self, RevId}};
 use super::WorkerSession;
+use crate::{
+    config::GGSettings,
+    messages::{self, RevId},
+};
 
 /// jj-dependent state, available when a workspace is open
 pub struct WorkspaceSession<'a> {
     pub(crate) session: &'a mut WorkerSession,
 
-    // workspace-level data, initialised once    
+    // workspace-level data, initialised once
     pub settings: UserSettings,
     workspace: Workspace,
-    aliases_map: RevsetAliasesMap,    
+    aliases_map: RevsetAliasesMap,
     is_large: bool,
 
     // operation-specific data, containing a repo view and derived extras
     operation: SessionOperation,
-    is_colocated: bool
+    is_colocated: bool,
 }
 
 /// state derived from a specific operation
@@ -58,7 +76,7 @@ pub struct SessionOperation {
     pub wc_id: CommitId,
     ref_index: OnceCell<Rc<RefIndex>>,
     prefix_context: OnceCell<Rc<IdPrefixContext>>,
-    immutable_revisions: OnceCell<Rc<RevsetExpression>>
+    immutable_revisions: OnceCell<Rc<RevsetExpression>>,
 }
 
 #[derive(Debug, Error)]
@@ -83,7 +101,10 @@ impl WorkerSession {
 
         let defaults = Config::builder()
             .add_source(jj_cli::config::default_config())
-            .add_source(config::File::from_str(include_str!("../config/gg.toml"), config::FileFormat::Toml))
+            .add_source(config::File::from_str(
+                include_str!("../config/gg.toml"),
+                config::FileFormat::Toml,
+            ))
             .build()?;
 
         let mut configs = LayeredConfigs::from_environment(defaults);
@@ -103,12 +124,13 @@ impl WorkerSession {
         let index_store = workspace.repo_loader().index_store();
         let index = index_store
             .get_index_at_op(&operation.repo.operation(), workspace.repo_loader().store())?;
-        let is_large = if let Some(default_index) = index.as_any().downcast_ref::<DefaultReadonlyIndex>() {
-            let stats = default_index.as_composite().stats();
-            stats.num_commits as i64 >= settings.query_large_repo_heuristic()
-        } else {
-            true
-        };
+        let is_large =
+            if let Some(default_index) = index.as_any().downcast_ref::<DefaultReadonlyIndex>() {
+                let stats = default_index.as_composite().stats();
+                stats.num_commits as i64 >= settings.query_large_repo_heuristic()
+            } else {
+                true
+            };
 
         let aliases_map = build_aliases_map(&configs)?;
 
@@ -121,7 +143,7 @@ impl WorkerSession {
             workspace,
             aliases_map,
             operation,
-            is_colocated
+            is_colocated,
         })
     }
 }
@@ -134,7 +156,7 @@ impl WorkspaceSession<'_> {
     pub fn wc_id(&self) -> &CommitId {
         &self.operation.wc_id
     }
-    
+
     // XXX maybe: hunt down uses and make nonpub
     pub fn repo(&self) -> &ReadonlyRepo {
         self.operation.repo.as_ref()
@@ -146,17 +168,19 @@ impl WorkspaceSession<'_> {
 
     pub fn get_commit(&self, id: &CommitId) -> Result<Commit> {
         Ok(self.operation.repo.store().get_commit(&id)?)
-    } 
-    
+    }
+
     pub fn git_repo(&self) -> Result<Option<Repository>> {
         match self.operation.git_backend() {
             Some(backend) => Ok(Some(backend.open_git_repo()?)),
-            None => Ok(None)
+            None => Ok(None),
         }
     }
 
     pub fn should_check_immutable(&self) -> bool {
-        self.settings.query_check_immutable().unwrap_or(!self.is_large)
+        self.settings
+            .query_check_immutable()
+            .unwrap_or(!self.is_large)
     }
 
     pub fn load_at_head(&mut self) -> Result<bool> {
@@ -174,26 +198,40 @@ impl WorkspaceSession<'_> {
     /* unfortunately parse_context and resolver are not cached */
     /***********************************************************/
 
-    pub fn evaluate_revset_expr<'op>(&'op self, revset_expr: Rc<RevsetExpression>) -> Result<Box<dyn Revset + 'op>, RevsetError> {
+    pub fn evaluate_revset_expr<'op>(
+        &'op self,
+        revset_expr: Rc<RevsetExpression>,
+    ) -> Result<Box<dyn Revset + 'op>, RevsetError> {
         let resolved_expression =
             revset_expr.resolve_user_expression(self.operation.repo.as_ref(), &self.resolver())?;
         let revset = resolved_expression.evaluate(self.operation.repo.as_ref())?;
         Ok(revset)
     }
 
-    pub fn evaluate_revset_str<'op>(&'op self, revset_str: &str) -> Result<Box<dyn Revset + 'op>, RevsetError> {
+    pub fn evaluate_revset_str<'op>(
+        &'op self,
+        revset_str: &str,
+    ) -> Result<Box<dyn Revset + 'op>, RevsetError> {
         let revset_expr = parse_revset(&self.parse_context(), revset_str)?;
         self.evaluate_revset_expr(revset_expr)
     }
 
-    pub fn evaluate_revset_commits<'op>(&'op self, ids: &[messages::CommitId]) -> Result<Box<dyn Revset + 'op>, RevsetError> {
+    pub fn evaluate_revset_commits<'op>(
+        &'op self,
+        ids: &[messages::CommitId],
+    ) -> Result<Box<dyn Revset + 'op>, RevsetError> {
         let expr = RevsetExpression::commits(
-        ids.iter().map(|id| CommitId::try_from_hex(id.hex.as_str()).expect("frontend-validated id")).collect()
+            ids.iter()
+                .map(|id| CommitId::try_from_hex(id.hex.as_str()).expect("frontend-validated id"))
+                .collect(),
         );
         self.evaluate_revset_expr(expr)
     }
 
-    pub fn evaluate_revset_changes<'op>(&'op self, ids: &[messages::ChangeId]) -> Result<Box<dyn Revset + 'op>, RevsetError> {
+    pub fn evaluate_revset_changes<'op>(
+        &'op self,
+        ids: &[messages::ChangeId],
+    ) -> Result<Box<dyn Revset + 'op>, RevsetError> {
         let mut expr = RevsetExpression::none();
         for id in ids.iter() {
             expr = expr.union(&RevsetExpression::symbol(id.hex.clone()))
@@ -201,40 +239,63 @@ impl WorkspaceSession<'_> {
         self.evaluate_revset_expr(expr)
     }
 
-    fn resolve_optional<'op, 'set: 'op, T: AsRef<dyn Revset + 'set>>(&'op self, revset: T) -> Result<Option<Commit>, RevsetError> {
-        let mut iter = revset.as_ref().iter().commits(self.operation.repo.store()).fuse();
+    fn resolve_optional<'op, 'set: 'op, T: AsRef<dyn Revset + 'set>>(
+        &'op self,
+        revset: T,
+    ) -> Result<Option<Commit>, RevsetError> {
+        let mut iter = revset
+            .as_ref()
+            .iter()
+            .commits(self.operation.repo.store())
+            .fuse();
         match (iter.next(), iter.next()) {
             (Some(commit), None) => Ok(Some(commit?)),
             (None, _) => Ok(None),
-            (Some(_), Some(_)) => {
-                Err(RevsetError::Other(anyhow!(r#"Revset "{:?}" resolved to more than one revision"#, revset.as_ref())))
-            }
+            (Some(_), Some(_)) => Err(RevsetError::Other(anyhow!(
+                r#"Revset "{:?}" resolved to more than one revision"#,
+                revset.as_ref()
+            ))),
         }
     }
 
-    fn resolve_single<'op, 'set: 'op, T: AsRef<dyn Revset + 'set>>(&'op self, revset: T) -> Result<Commit, RevsetError> {
+    fn resolve_single<'op, 'set: 'op, T: AsRef<dyn Revset + 'set>>(
+        &'op self,
+        revset: T,
+    ) -> Result<Commit, RevsetError> {
         match self.resolve_optional(revset)? {
             Some(commit) => Ok(commit),
-            None => Err(RevsetError::Other(anyhow!("Revset didn't resolve to any revisions")))
+            None => Err(RevsetError::Other(anyhow!(
+                "Revset didn't resolve to any revisions"
+            ))),
         }
     }
 
-    // policy: some commands try to operate on a change in order to preserve visual identity, but 
+    // policy: some commands try to operate on a change in order to preserve visual identity, but
     // can fall back to operating on the commit described by the change at the time of the gesture
     pub fn resolve_optional_id(&self, id: &RevId) -> Result<Option<Commit>, RevsetError> {
         let change_revset = match self.evaluate_revset_str(&id.change.hex) {
             Ok(revset) => revset,
-            Err(RevsetError::Resolution(RevsetResolutionError::NoSuchRevision { .. })) => return Ok(None),
-            Err(err) => return Err(err)
+            Err(RevsetError::Resolution(RevsetResolutionError::NoSuchRevision { .. })) => {
+                return Ok(None)
+            }
+            Err(err) => return Err(err),
         };
 
-        let mut change_iter = change_revset.as_ref().iter().commits(self.operation.repo.store()).fuse();
+        let mut change_iter = change_revset
+            .as_ref()
+            .iter()
+            .commits(self.operation.repo.store())
+            .fuse();
         match (change_iter.next(), change_iter.next()) {
             (Some(commit), None) => Ok(Some(commit?)),
             (None, _) => Ok(None),
-            (Some(_), Some(_)) => {            
+            (Some(_), Some(_)) => {
                 let commit_revset = self.evaluate_revset_commits(&[id.commit.clone()])?;
-                let mut commit_iter = commit_revset.as_ref().iter().commits(self.operation.repo.store()).fuse();
+                let mut commit_iter = commit_revset
+                    .as_ref()
+                    .iter()
+                    .commits(self.operation.repo.store())
+                    .fuse();
                 match commit_iter.next() {
                     Some(commit) => Ok(Some(commit?)),
                     None => Ok(None),
@@ -243,15 +304,19 @@ impl WorkspaceSession<'_> {
         }
     }
 
-    // policy: most commands prefer to operate on a change and will fail if the change has been evolved; however, 
+    // policy: most commands prefer to operate on a change and will fail if the change has been evolved; however,
     // if it's become divergent, they will fall back to the known commit so that divergences can be resolved
     pub fn resolve_single_change(&self, id: &RevId) -> Result<Commit, RevsetError> {
         let revset = self.evaluate_revset_str(&id.change.hex)?;
-        let mut iter = revset.as_ref().iter().commits(self.operation.repo.store()).fuse();
+        let mut iter = revset
+            .as_ref()
+            .iter()
+            .commits(self.operation.repo.store())
+            .fuse();
         let optional_change = match (iter.next(), iter.next()) {
             (Some(commit), None) => Some(commit?),
             (None, _) => None,
-            (Some(_), Some(_)) => Some(self.resolve_single_commit(&id.commit)?)            
+            (Some(_), Some(_)) => Some(self.resolve_single_commit(&id.commit)?),
         };
 
         match optional_change {
@@ -260,34 +325,57 @@ impl WorkspaceSession<'_> {
                 if resolved_id == self.wc_id() || resolved_id.hex().starts_with(&id.commit.prefix) {
                     Ok(commit)
                 } else {
-                    Err(RevsetError::Other(anyhow!(r#""{}" didn't resolve to the expected commit {}"#, id.change.prefix, id.commit.prefix)))
+                    Err(RevsetError::Other(anyhow!(
+                        r#""{}" didn't resolve to the expected commit {}"#,
+                        id.change.prefix,
+                        id.commit.prefix
+                    )))
                 }
             }
-            None => Err(RevsetError::Other(anyhow!(r#""{}" didn't resolve to any revisions"#, id.change.prefix)))
+            None => Err(RevsetError::Other(anyhow!(
+                r#""{}" didn't resolve to any revisions"#,
+                id.change.prefix
+            ))),
         }
     }
 
     // not-really-policy: sometimes we only have a commit, not a change. this is a compromise and will ideally be eliminated
     pub fn resolve_single_commit(&self, id: &messages::CommitId) -> Result<Commit, RevsetError> {
-        let expr = RevsetExpression::commit(CommitId::try_from_hex(&id.hex).expect("frontend-validated id"));
+        let expr = RevsetExpression::commit(
+            CommitId::try_from_hex(&id.hex).expect("frontend-validated id"),
+        );
         let revset = self.evaluate_revset_expr(expr)?;
         self.resolve_single(revset)
     }
 
-    pub fn resolve_multiple<'op, 'set: 'op, T: AsRef<dyn Revset + 'set>>(&'op self, revset: T) -> Result<Vec<Commit>, RevsetError> {
-        let commits = revset.as_ref().iter().commits(self.operation.repo.store()).collect::<Result<Vec<Commit>, BackendError>>()?;
+    pub fn resolve_multiple<'op, 'set: 'op, T: AsRef<dyn Revset + 'set>>(
+        &'op self,
+        revset: T,
+    ) -> Result<Vec<Commit>, RevsetError> {
+        let commits = revset
+            .as_ref()
+            .iter()
+            .commits(self.operation.repo.store())
+            .collect::<Result<Vec<Commit>, BackendError>>()?;
         Ok(commits)
     }
 
-    pub fn resolve_multiple_commits(&self, ids: &[messages::CommitId]) -> Result<Vec<Commit>, RevsetError> {
+    pub fn resolve_multiple_commits(
+        &self,
+        ids: &[messages::CommitId],
+    ) -> Result<Vec<Commit>, RevsetError> {
         let revset = self.evaluate_revset_commits(ids)?;
         let commits = self.resolve_multiple(revset)?;
         Ok(commits)
     }
 
     // XXX ideally this would apply the same policy as resolve_single_change
-    pub fn resolve_multiple_changes(&self, ids: impl IntoIterator<Item=RevId>) -> Result<Vec<Commit>, RevsetError> {
-        let revset = self.evaluate_revset_changes(&ids.into_iter().map(|id| id.change).collect_vec())?;
+    pub fn resolve_multiple_changes(
+        &self,
+        ids: impl IntoIterator<Item = RevId>,
+    ) -> Result<Vec<Commit>, RevsetError> {
+        let revset =
+            self.evaluate_revset_changes(&ids.into_iter().map(|id| id.change).collect_vec())?;
         let commits = self.resolve_multiple(revset)?;
         Ok(commits)
     }
@@ -301,7 +389,12 @@ impl WorkspaceSession<'_> {
     }
 
     fn prefix_context(&self) -> &Rc<IdPrefixContext> {
-        self.operation.prefix_context.get_or_init(|| Rc::new(build_prefix_context(&self.settings, &self.workspace, &self.aliases_map).expect("init prefix context")))
+        self.operation.prefix_context.get_or_init(|| {
+            Rc::new(
+                build_prefix_context(&self.settings, &self.workspace, &self.aliases_map)
+                    .expect("init prefix context"),
+            )
+        })
     }
 
     fn resolver(&self) -> DefaultSymbolResolver {
@@ -315,11 +408,19 @@ impl WorkspaceSession<'_> {
     }
 
     fn immutable_revisions(&self) -> &Rc<RevsetExpression> {
-        self.operation.immutable_revisions.get_or_init(|| build_immutable_revisions(&self.operation.repo, &self.aliases_map, &self.parse_context()).expect("init immutable heads"))
+        self.operation.immutable_revisions.get_or_init(|| {
+            build_immutable_revisions(
+                &self.operation.repo,
+                &self.aliases_map,
+                &self.parse_context(),
+            )
+            .expect("init immutable heads")
+        })
     }
 
     pub fn ref_index(&self) -> &Rc<RefIndex> {
-        self.operation.ref_index
+        self.operation
+            .ref_index
             .get_or_init(|| Rc::new(build_ref_index(self.operation.repo.as_ref())))
     }
 
@@ -331,12 +432,17 @@ impl WorkspaceSession<'_> {
         let absolute_path = self.workspace.workspace_root().into();
 
         let git_remotes = match self.git_repo()? {
-            Some(repo) => repo.remotes()?.iter().flatten().map(|s| s.to_owned()).collect(),
-            None => vec![]
+            Some(repo) => repo
+                .remotes()?
+                .iter()
+                .flatten()
+                .map(|s| s.to_owned())
+                .collect(),
+            None => vec![],
         };
 
         let default_query = self.settings.default_revset();
-        
+
         let latest_query = self
             .session
             .latest_query
@@ -351,7 +457,7 @@ impl WorkspaceSession<'_> {
             latest_query,
             status: self.format_status(),
             theme_override: self.settings.ui_theme_override(),
-            mark_unpushed_branches: self.settings.ui_mark_unpushed_branches()
+            mark_unpushed_branches: self.settings.ui_mark_unpushed_branches(),
         })
     }
 
@@ -392,13 +498,17 @@ impl WorkspaceSession<'_> {
     }
 
     pub fn format_id(&self, commit: &Commit) -> RevId {
-        RevId { 
+        RevId {
             commit: self.format_commit_id(commit.id()),
-            change: self.format_change_id(commit.change_id())
+            change: self.format_change_id(commit.change_id()),
         }
     }
 
-    pub fn format_header(&self, commit: &Commit, known_immutable: Option<bool>) -> Result<messages::RevHeader> {
+    pub fn format_header(
+        &self,
+        commit: &Commit,
+        known_immutable: Option<bool>,
+    ) -> Result<messages::RevHeader> {
         let index = self.ref_index();
         let branches = index.get(commit.id()).iter().cloned().collect();
 
@@ -409,15 +519,19 @@ impl WorkspaceSession<'_> {
         Ok(messages::RevHeader {
             id: self.format_id(commit),
             description: commit.description().into(),
-            author: commit.author().into(),
+            author: commit.author().try_into()?,
             has_conflict: commit.has_conflict()?,
             is_working_copy: *commit.id() == self.operation.wc_id,
             is_immutable,
             refs: branches,
-            parent_ids: commit.parent_ids().iter().map(|commit_id| self.format_commit_id(commit_id)).collect()
+            parent_ids: commit
+                .parent_ids()
+                .iter()
+                .map(|commit_id| self.format_commit_id(commit_id))
+                .collect(),
         })
     }
-    
+
     pub fn format_path<T: AsRef<RepoPath>>(&self, repo_path: T) -> messages::TreePath {
         let base_path = self.workspace.workspace_root();
         let relative_path = relative_path(base_path, &repo_path.as_ref().to_fs_path(base_path));
@@ -428,19 +542,15 @@ impl WorkspaceSession<'_> {
     }
 
     pub fn check_immutable(&self, ids: impl IntoIterator<Item = CommitId>) -> Result<bool> {
-        let check_revset = RevsetExpression::commits(
-            ids
-                .into_iter()
-                .collect(),
-        );
+        let check_revset = RevsetExpression::commits(ids.into_iter().collect());
 
         let immutable_revset = self.immutable_revisions();
         let intersection_revset = check_revset.intersection(&immutable_revset);
-        
-        // note: slow! jj may add a caching contains() API in future, in which case we'd be able 
+
+        // note: slow! jj may add a caching contains() API in future, in which case we'd be able
         // to materialise the immutable revset statefully and use it here; for now, avoid calling
         // this function unnecessarily
-        let immutable_revs = self.evaluate_revset_expr(intersection_revset)?; 
+        let immutable_revs = self.evaluate_revset_expr(intersection_revset)?;
         let first = immutable_revs.iter().next();
 
         Ok(first.is_some())
@@ -492,10 +602,11 @@ impl WorkspaceSession<'_> {
             git::export_refs(tx.mut_repo())?;
         }
 
-        self.operation = SessionOperation::new(tx.commit(description), self.workspace.workspace_id());
+        self.operation =
+            SessionOperation::new(tx.commit(description), self.workspace.workspace_id());
 
         // XXX do this only if loaded at head, which is currently always true, but won't be once we have undo-redo
-        if let Some(new_commit) = &maybe_new_wc_commit {            
+        if let Some(new_commit) = &maybe_new_wc_commit {
             self.update_working_copy(maybe_old_wc_commit.as_ref(), new_commit)?;
         }
 
@@ -504,8 +615,13 @@ impl WorkspaceSession<'_> {
 
     // XXX does this need to do any operation merging in case of other writers?
     pub fn import_and_snapshot(&mut self, force: bool) -> Result<bool> {
-        if !(force || self.settings.query_auto_snapshot().unwrap_or(!self.is_large)) {
-            return Ok(false)
+        if !(force
+            || self
+                .settings
+                .query_auto_snapshot()
+                .unwrap_or(!self.is_large))
+        {
+            return Ok(false);
         }
 
         if self.is_colocated {
@@ -550,7 +666,7 @@ impl WorkspaceSession<'_> {
                 let wc_commit = if let Some(wc_commit) = get_wc_commit(&repo)? {
                     wc_commit
                 } else {
-                    return Ok(false); 
+                    return Ok(false);
                 };
                 (repo, wc_commit)
             }
@@ -568,7 +684,7 @@ impl WorkspaceSession<'_> {
                 ));
             }
         };
-        
+
         let new_tree_id = locked_ws.locked_wc().snapshot(SnapshotOptions {
             base_ignores,
             fsmonitor_kind: self.settings.fsmonitor_kind()?,
@@ -579,8 +695,7 @@ impl WorkspaceSession<'_> {
         let did_anything = new_tree_id != *wc_commit.tree_id();
 
         if did_anything {
-            let mut tx =
-                repo.start_transaction(&self.settings);
+            let mut tx = repo.start_transaction(&self.settings);
             let mut_repo = tx.mut_repo();
             let commit = mut_repo
                 .rewrite_commit(&self.settings, &wc_commit)
@@ -593,10 +708,11 @@ impl WorkspaceSession<'_> {
             if self.is_colocated {
                 git::export_refs(mut_repo)?;
             }
-    
-            self.operation = SessionOperation::new(tx.commit("snapshot working copy"), &workspace_id);
+
+            self.operation =
+                SessionOperation::new(tx.commit("snapshot working copy"), &workspace_id);
         }
-        
+
         locked_ws.finish(self.operation.repo.op_id().clone())?;
 
         Ok(did_anything)
@@ -632,8 +748,10 @@ impl WorkspaceSession<'_> {
         let new_git_head = tx.mut_repo().view().git_head().clone();
         if let Some(new_git_head_id) = new_git_head.as_normal() {
             let workspace_id = self.workspace.workspace_id().to_owned();
-            
-            if let Some(old_wc_commit_id) = self.operation.repo.view().get_wc_commit_id(&workspace_id) {
+
+            if let Some(old_wc_commit_id) =
+                self.operation.repo.view().get_wc_commit_id(&workspace_id)
+            {
                 tx.mut_repo()
                     .record_abandoned_commit(old_wc_commit_id.clone());
             }
@@ -648,7 +766,7 @@ impl WorkspaceSession<'_> {
             tx.mut_repo().rebase_descendants(&self.settings)?;
 
             self.operation = SessionOperation::new(tx.commit("import git head"), &workspace_id);
-            
+
             locked_ws.finish(self.operation.repo.op_id().clone())?;
         } else {
             self.finish_transaction(tx, "import git head")?;
@@ -668,7 +786,7 @@ impl WorkspaceSession<'_> {
         }
 
         tx.mut_repo().rebase_descendants(&self.settings)?;
-            
+
         self.finish_transaction(tx, "import git refs")?;
         Ok(())
     }
@@ -687,7 +805,7 @@ impl WorkspaceSession<'_> {
         // find all children of target
         let children_expr = RevsetExpression::commit(target.id().clone()).children();
         let children: Vec<_> = children_expr
-            .evaluate_programmatic(self.operation.repo.as_ref())?            
+            .evaluate_programmatic(self.operation.repo.as_ref())?
             .iter()
             .commits(self.operation.repo.store())
             .try_collect()?;
@@ -708,8 +826,8 @@ impl WorkspaceSession<'_> {
                 .collect();
 
             // some of the new parents may be ancestors of others
-            let new_child_parents_expression = RevsetExpression::commits(new_child_parent_ids.clone())
-                .minus(
+            let new_child_parents_expression =
+                RevsetExpression::commits(new_child_parent_ids.clone()).minus(
                     &RevsetExpression::commits(new_child_parent_ids.clone())
                         .parents()
                         .ancestors(),
@@ -732,7 +850,10 @@ impl WorkspaceSession<'_> {
                 .clone(),
             );
         }
-        rebased_commit_ids.extend(tx.mut_repo().rebase_descendants_return_map(&self.settings)?);
+        rebased_commit_ids.extend(
+            tx.mut_repo()
+                .rebase_descendants_return_map(&self.settings)?,
+        );
 
         Ok(rebased_commit_ids)
     }
@@ -747,11 +868,11 @@ impl SessionOperation {
             .clone();
 
         SessionOperation {
-            repo, 
+            repo,
             wc_id,
             ref_index: OnceCell::default(),
             prefix_context: OnceCell::default(),
-            immutable_revisions: OnceCell::default()
+            immutable_revisions: OnceCell::default(),
         }
     }
 
@@ -842,14 +963,18 @@ fn build_parse_context<'a>(
     }
 }
 
-fn build_prefix_context(settings: &UserSettings, workspace: &Workspace, aliases_map: &RevsetAliasesMap) -> Result<IdPrefixContext> {
+fn build_prefix_context(
+    settings: &UserSettings,
+    workspace: &Workspace,
+    aliases_map: &RevsetAliasesMap,
+) -> Result<IdPrefixContext> {
     let mut prefix_context = IdPrefixContext::default();
-    
+
     let revset_string: String = settings
         .config()
         .get_string("revsets.short-prefixes")
         .unwrap_or_else(|_| settings.default_revset());
-    
+
     if !revset_string.is_empty() {
         let disambiguation_revset: Rc<RevsetExpression> = parse_revset(
             &build_parse_context(&settings, &workspace, &aliases_map),
@@ -861,22 +986,26 @@ fn build_prefix_context(settings: &UserSettings, workspace: &Workspace, aliases_
     Ok(prefix_context)
 }
 
-fn build_immutable_revisions(repo: &ReadonlyRepo, aliases_map: &RevsetAliasesMap, parse_context: &RevsetParseContext) -> Result<Rc<RevsetExpression>> {
-    let (params, immutable_heads_str) = aliases_map
-        .get_function("immutable_heads")
-        .ok_or(anyhow!(r#"The `revset-aliases.immutable_heads()` function was not found."#))?;
+fn build_immutable_revisions(
+    repo: &ReadonlyRepo,
+    aliases_map: &RevsetAliasesMap,
+    parse_context: &RevsetParseContext,
+) -> Result<Rc<RevsetExpression>> {
+    let (params, immutable_heads_str) = aliases_map.get_function("immutable_heads").ok_or(
+        anyhow!(r#"The `revset-aliases.immutable_heads()` function was not found."#),
+    )?;
 
     if !params.is_empty() {
-        return Err(anyhow!(r#"The `revset-aliases.immutable_heads()` function must be declared without arguments."#));
+        return Err(anyhow!(
+            r#"The `revset-aliases.immutable_heads()` function must be declared without arguments."#
+        ));
     }
 
     let immutable_heads = parse_revset(parse_context, immutable_heads_str)?;
 
-    Ok(immutable_heads
-        .ancestors()
-        .union(&RevsetExpression::commit(
-            repo.store().root_commit_id().clone(),
-        )))
+    Ok(immutable_heads.ancestors().union(&RevsetExpression::commit(
+        repo.store().root_commit_id().clone(),
+    )))
 }
 
 fn parse_revset(
@@ -898,7 +1027,11 @@ pub struct RefIndex {
 }
 
 impl RefIndex {
-    fn insert<'a>(&mut self, ids: impl IntoIterator<Item = &'a CommitId>, r#ref: messages::StoreRef) {
+    fn insert<'a>(
+        &mut self,
+        ids: impl IntoIterator<Item = &'a CommitId>,
+        r#ref: messages::StoreRef,
+    ) {
         for id in ids {
             let ref_names = self.index.entry(id.clone()).or_default();
             ref_names.push(r#ref.clone());
@@ -915,49 +1048,64 @@ impl RefIndex {
 }
 
 fn build_ref_index(repo: &ReadonlyRepo) -> RefIndex {
-    let potential_remotes = git_util::get_git_repo(repo.store()).ok().and_then(|git_repo| git_repo.remotes().ok()).map(|remotes| remotes.len()).unwrap_or(0);
+    let potential_remotes = git_util::get_git_repo(repo.store())
+        .ok()
+        .and_then(|git_repo| git_repo.remotes().ok())
+        .map(|remotes| remotes.len())
+        .unwrap_or(0);
 
     let mut index = RefIndex::default();
-    
+
     for (branch_name, branch_target) in repo.view().branches() {
         let local_target = branch_target.local_target;
         let remote_refs = branch_target.remote_refs;
         if local_target.is_present() {
-            index.insert(local_target.added_ids(), messages::StoreRef::LocalBranch {
-                branch_name: branch_name.to_owned(),
-                has_conflict: local_target.has_conflict(),
-                is_synced: remote_refs.iter().all(|&(_, remote_ref)| {
-                    !remote_ref.is_tracking() || remote_ref.target == *local_target
-                }),
-                tracking_remotes: remote_refs.iter().filter(|&(_, remote_ref)| remote_ref.is_tracking()).map(|&(remote_name, _)| remote_name.to_owned()).collect(),
-                available_remotes: remote_refs.len(),
-                potential_remotes
-            });
+            index.insert(
+                local_target.added_ids(),
+                messages::StoreRef::LocalBranch {
+                    branch_name: branch_name.to_owned(),
+                    has_conflict: local_target.has_conflict(),
+                    is_synced: remote_refs.iter().all(|&(_, remote_ref)| {
+                        !remote_ref.is_tracking() || remote_ref.target == *local_target
+                    }),
+                    tracking_remotes: remote_refs
+                        .iter()
+                        .filter(|&(_, remote_ref)| remote_ref.is_tracking())
+                        .map(|&(remote_name, _)| remote_name.to_owned())
+                        .collect(),
+                    available_remotes: remote_refs.len(),
+                    potential_remotes,
+                },
+            );
         }
         for &(remote_name, remote_ref) in &remote_refs {
-            index.insert(remote_ref.target.added_ids(), messages::StoreRef::RemoteBranch {
-                branch_name: branch_name.to_owned(),
-                remote_name: remote_name.to_owned(),
-                has_conflict: remote_ref.target.has_conflict(),
-                is_synced: remote_ref.target == *local_target,
-                is_tracked: remote_ref.is_tracking(),
-                is_absent: local_target.is_absent()
-            });
+            index.insert(
+                remote_ref.target.added_ids(),
+                messages::StoreRef::RemoteBranch {
+                    branch_name: branch_name.to_owned(),
+                    remote_name: remote_name.to_owned(),
+                    has_conflict: remote_ref.target.has_conflict(),
+                    is_synced: remote_ref.target == *local_target,
+                    is_tracked: remote_ref.is_tracking(),
+                    is_absent: local_target.is_absent(),
+                },
+            );
         }
     }
 
     for (tag_name, tag_target) in repo.view().tags() {
-        index.insert(tag_target.added_ids(), messages::StoreRef::Tag { tag_name: tag_name.clone() });
+        index.insert(
+            tag_target.added_ids(),
+            messages::StoreRef::Tag {
+                tag_name: tag_name.clone(),
+            },
+        );
     }
 
     index
 }
 
-
-fn load_at_head(
-    settings: &UserSettings,
-    workspace: &Workspace,
-) -> Result<SessionOperation> {
+fn load_at_head(settings: &UserSettings, workspace: &Workspace) -> Result<SessionOperation> {
     let loader = workspace.repo_loader();
 
     let op = op_heads_store::resolve_op_heads(

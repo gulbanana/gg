@@ -76,6 +76,6 @@
 
     button:disabled {
         background: var(--ctp-mantle);
-        color: var(--ctp-subtext0);
+        color: var(--ctp-subtext1);
     }
 </style>

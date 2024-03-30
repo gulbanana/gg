@@ -12,6 +12,7 @@
     import GraphNode from "./GraphNode.svelte";
     import Zone from "./objects/Zone.svelte";
     import { onEvent } from "./ipc";
+    import AuthorSpan from "./controls/AuthorSpan.svelte";
 
     export let rev: Extract<RevResult, { type: "Detail" }>;
 
@@ -66,10 +67,7 @@
             on:dragover={dragOverWidget} />
 
         <div class="signature-commands">
-            <span>
-                {rev.header.author.name},
-                {new Date(rev.header.author.timestamp).toLocaleTimeString()}
-            </span>
+            <AuthorSpan author={rev.header.author} includeTimestamp />
             <CheckWidget bind:checked={resetAuthor}>Reset</CheckWidget>
             <span></span>
             <ActionWidget
