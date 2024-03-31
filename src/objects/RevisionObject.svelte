@@ -27,7 +27,7 @@
 
 <Object
     {operand}
-    id="{child ? 'parent' : 'log'}-{header.id.commit.prefix}"
+    suffix={header.id.commit.prefix}
     conflicted={header.has_conflict}
     {selected}
     label={header.description.lines[0]}

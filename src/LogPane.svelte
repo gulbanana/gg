@@ -9,6 +9,7 @@
     import SelectWidget from "./controls/SelectWidget.svelte";
     import RevisionMutator from "./mutators/RevisionMutator.js";
     import { type EnhancedRow, default as GraphLog, type EnhancedLine } from "./GraphLog.svelte";
+    import ListWidget, { type List } from "./controls/ListWidget.svelte";
 
     export let default_query: string;
     export let latest_query: string;
@@ -27,15 +28,32 @@
     let entered_query = latest_query;
     let graphRows: EnhancedRow[] | undefined;
 
-    let log: HTMLElement;
     let logHeight = 0;
     let logWidth = 0;
     let logScrollTop = 0;
-    let pollFrame;
+
+    // all these calculations are not efficient. probably doesn't matter
+    let list: List = {
+        getSize() {
+            return graphRows?.length ?? 0;
+        },
+        getSelection() {
+            return (
+                graphRows?.findIndex((row) => row.revision.id.commit.hex == $revisionSelectEvent?.id.commit.hex) ?? -1
+            );
+        },
+        selectRow(row: number) {
+            $revisionSelectEvent = graphRows![row].revision;
+        },
+        editRow(row: number) {
+            if (row != -1) {
+                new RevisionMutator(graphRows![row].revision).onEdit();
+            }
+        },
+    };
 
     onMount(() => {
         loadLog();
-        pollFrame = requestAnimationFrame(pollScroll);
     });
 
     $: if (entered_query) choices = getChoices();
@@ -145,91 +163,6 @@
 
         return graph;
     }
-
-    function pollScroll() {
-        if (log && log.scrollTop !== logScrollTop) {
-            logScrollTop = log.scrollTop;
-        }
-
-        pollFrame = requestAnimationFrame(pollScroll);
-    }
-
-    // all these findIndex and calculations are not efficient. probably doesn't matter
-    function onKeyDown(event: KeyboardEvent) {
-        if (!graphRows || graphRows.length == 0) {
-            return;
-        }
-
-        let index: number;
-        let pageRows: number;
-        switch (event.key) {
-            case "ArrowUp":
-                event.preventDefault();
-                index = graphRows.findIndex((row) => row.revision.id.commit.hex == $revisionSelectEvent?.id.commit.hex);
-                if (index > 0) {
-                    selectRow(index - 1);
-                }
-                break;
-
-            case "ArrowDown":
-                event.preventDefault();
-                index = graphRows.findIndex((row) => row.revision.id.commit.hex == $revisionSelectEvent?.id.commit.hex);
-                if (index != -1 && graphRows.length > index + 1) {
-                    selectRow(index + 1);
-                }
-                break;
-
-            case "PageUp":
-                event.preventDefault();
-                index = graphRows.findIndex((row) => row.revision.id.commit.hex == $revisionSelectEvent?.id.commit.hex);
-                pageRows = log.clientHeight / 30;
-                index = Math.max(index - pageRows, 0);
-                selectRow(index);
-                break;
-
-            case "PageDown":
-                event.preventDefault();
-                index = graphRows.findIndex((row) => row.revision.id.commit.hex == $revisionSelectEvent?.id.commit.hex);
-                pageRows = log.clientHeight / 30;
-                index = Math.min(index + pageRows, graphRows.length - 1);
-                selectRow(index);
-                break;
-
-            case "Home":
-                event.preventDefault();
-                selectRow(0);
-                break;
-
-            case "End":
-                event.preventDefault();
-                selectRow(graphRows.length - 1);
-                break;
-
-            case "Enter":
-                if ($revisionSelectEvent) {
-                    new RevisionMutator($revisionSelectEvent).onEdit();
-                }
-        }
-    }
-
-    function selectRow(row: number) {
-        log.focus();
-        $revisionSelectEvent = graphRows![row].revision;
-        let y = row * 30;
-        if (log.scrollTop + log.clientHeight < y + 30) {
-            log.scrollTo({
-                left: 0,
-                top: y - log.clientHeight + 30,
-                behavior: "smooth",
-            });
-        } else if (log.scrollTop > y) {
-            log.scrollTo({
-                left: 0,
-                top: y,
-                behavior: "smooth",
-            });
-        }
-    }
 </script>
 
 <Pane>
@@ -240,18 +173,14 @@
         <input type="text" bind:value={entered_query} on:change={reloadLog} />
     </div>
 
-    <ol
+    <ListWidget
         slot="body"
-        class="log-commits"
-        role="listbox"
-        aria-label="log"
-        aria-multiselectable="false"
-        aria-activedescendant="log-{$revisionSelectEvent?.id.commit.prefix}"
-        tabindex="0"
-        bind:this={log}
+        type="Revision"
+        descendant={$revisionSelectEvent?.id.commit.prefix}
+        {list}
         bind:clientHeight={logHeight}
         bind:clientWidth={logWidth}
-        on:keydown={onKeyDown}>
+        bind:scrollTop={logScrollTop}>
         {#if graphRows}
             <GraphLog
                 containerHeight={logHeight}
@@ -268,7 +197,7 @@
         {:else}
             <div>Loading changes...</div>
         {/if}
-    </ol>
+    </ListWidget>
 </Pane>
 
 <style>
@@ -282,31 +211,5 @@
     input {
         font-family: var(--stack-code);
         font-size: 14px;
-    }
-
-    .log-commits {
-        overflow-x: hidden;
-        overflow-y: scroll;
-        scrollbar-color: var(--ctp-text) var(--ctp-crust);
-        display: grid;
-        outline: none;
-    }
-
-    .log-commits:focus-visible {
-        outline: 2px solid var(--ctp-lavender);
-        border-radius: 3px;
-    }
-
-    .log-commits::-webkit-scrollbar {
-        width: 6px;
-    }
-
-    .log-commits::-webkit-scrollbar-thumb {
-        background-color: var(--ctp-text);
-        border-radius: 6px;
-    }
-
-    .log-commits::-webkit-scrollbar-track {
-        background-color: var(--ctp-crust);
     }
 </style>

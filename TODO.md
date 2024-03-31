@@ -3,6 +3,7 @@ Desirable things
 
 These changes may or may not be implemented in the future.
 * bug: open menu command sometimes opens multiple dialogues
+* bug: check whether everything uses webkit-scrollbar
 * edge case: mutations can fail due to ambiguity due to other writers; this should update the UI. maybe use a special From on resolve_change
 * perf: optimise revdetail loads - we already have the header
 * feat: alternate drag modes for copy/duplicate, maybe for rebase-all-descendants

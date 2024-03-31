@@ -19,7 +19,7 @@ Core component for direct-manipulation objects. A drag&drop source.
         dblclick: CustomEvent<MouseEvent>;
     }
 
-    export let id: string = "";
+    export let suffix: string | null = null;
     export let label: string;
     export let selected: boolean = false;
     export let conflicted: boolean;
@@ -27,6 +27,7 @@ Core component for direct-manipulation objects. A drag&drop source.
 
     let dispatch = createEventDispatcher();
 
+    let id = suffix == null ? null : `${operand.type}-${suffix}`;
     let dragging: boolean;
     let dragHint: string | null = null;
 
