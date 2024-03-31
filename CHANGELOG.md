@@ -3,11 +3,12 @@
 ## Unreleased 
 
 ### Added
+- The right pane can now show file diffs, initially in a rather raw format. 
 - Backout command, which creates the changes necessary to undo some revision in the working copy.
 - Consistent author/timestamp formatting, with tooltips for more detail.
 
 ### Fixed
-- Right-pane scrollbark wasn't responding to clicks.
+- Right-pane scrollbar wasn't responding to clicks.
 - Various design improvements. 
 
 ## [0.15.3](releases/tag/v0.15.3)

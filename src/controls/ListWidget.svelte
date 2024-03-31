@@ -19,9 +19,9 @@
     export let list: List;
     export let type: Operand["type"];
     export let descendant: string | undefined;
-    export let clientHeight: number;
-    export let clientWidth: number;
-    export let scrollTop: number;
+    export let clientHeight = 0;
+    export let clientWidth = 0;
+    export let scrollTop = 0;
 
     let activedescendant = `${type}-${descendant}`;
     let box: HTMLElement;

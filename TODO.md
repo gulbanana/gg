@@ -6,14 +6,16 @@ These changes may or may not be implemented in the future.
 * bug: check whether everything uses webkit-scrollbar
 * edge case: mutations can fail due to ambiguity due to other writers; this should update the UI. maybe use a special From on resolve_change
 * perf: optimise revdetail loads - we already have the header
+* feat: improve hunk display - right now it's patch text, but it was built from structured data
+* feat: hunk selection/operations
+* design: change/hunk menu?
 * feat: alternate drag modes for copy/duplicate, maybe for rebase-all-descendants
 * feat: log multiselect
 * feat: file select/multiselect? large moves could be tedious otherwise. maybe file menu?
 * feat: redo/undo stack
 * feat: operation menu - restores or views?
-* feat: sub-file hunk changes
-* feat: diffs and/or difftool
-* feat: resolve workflow 
+* feat: resolve workflow (mergetool)
+* feat: difftool?
 * feat: view commit ids in log (configurable?)
 * feat: view repo at different ops (slider? entire pane?) 
 * feat: progress display (probably in statusbar); useful for git & snapshot

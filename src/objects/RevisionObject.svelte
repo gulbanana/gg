@@ -13,6 +13,7 @@
     export let header: RevHeader;
     export let child: RevHeader | null = null;
     export let selected: boolean; // same as the imported event, but parent may want to force a value
+    export let noBranches: boolean = false;
 
     let operand: Operand = child ? { type: "Parent", header, child } : { type: "Revision", header };
 
@@ -53,7 +54,7 @@
             <span class="refs">
                 {#each header.refs as ref}
                     {#if ref.type != "Tag"}
-                        {#if ref.type == "LocalBranch" || !ref.is_synced || !ref.is_tracked}
+                        {#if !noBranches && (ref.type == "LocalBranch" || !ref.is_synced || !ref.is_tracked)}
                             <div>
                                 <BranchObject {header} {ref} />
                             </div>

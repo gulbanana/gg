@@ -124,6 +124,18 @@ pub struct RevChange {
     pub kind: ChangeKind,
     pub path: TreePath,
     pub has_conflict: bool,
+    pub hunks: Vec<MultilineString>,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(TS),
+    ts(export, export_to = "../src/messages/")
+)]
+pub struct RevConflict {
+    pub path: TreePath,
+    pub hunk: MultilineString,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -133,6 +145,7 @@ pub struct RevChange {
     ts(export, export_to = "../src/messages/")
 )]
 pub enum ChangeKind {
+    None,
     Added,
     Deleted,
     Modified,
@@ -153,7 +166,7 @@ pub enum RevResult {
         header: RevHeader,
         parents: Vec<RevHeader>,
         changes: Vec<RevChange>,
-        conflicts: Vec<TreePath>,
+        conflicts: Vec<RevConflict>,
     },
 }
 

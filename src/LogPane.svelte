@@ -5,7 +5,7 @@
     import { query } from "./ipc.js";
     import { repoStatusEvent, revisionSelectEvent } from "./stores.js";
     import Pane from "./shell/Pane.svelte";
-    import RevisionSummary from "./objects/RevisionObject.svelte";
+    import RevisionObject from "./objects/RevisionObject.svelte";
     import SelectWidget from "./controls/SelectWidget.svelte";
     import RevisionMutator from "./mutators/RevisionMutator.js";
     import { type EnhancedRow, default as GraphLog, type EnhancedLine } from "./GraphLog.svelte";
@@ -189,7 +189,7 @@
                 rows={graphRows}
                 let:row>
                 {#if row}
-                    <RevisionSummary
+                    <RevisionObject
                         header={row.revision}
                         selected={$revisionSelectEvent?.id.commit.hex == row.revision.id.commit.hex} />
                 {/if}

@@ -1,6 +1,6 @@
 <script lang="ts">
     import type { RevResult } from "./messages/RevResult";
-    import { dragOverWidget } from "./stores";
+    import { changeSelectEvent, dragOverWidget } from "./stores";
     import ChangeObject from "./objects/ChangeObject.svelte";
     import RevisionObject from "./objects/RevisionObject.svelte";
     import RevisionMutator from "./mutators/RevisionMutator";
@@ -9,10 +9,10 @@
     import IdSpan from "./controls/IdSpan.svelte";
     import Pane from "./shell/Pane.svelte";
     import CheckWidget from "./controls/CheckWidget.svelte";
-    import GraphNode from "./GraphNode.svelte";
     import Zone from "./objects/Zone.svelte";
     import { onEvent } from "./ipc";
     import AuthorSpan from "./controls/AuthorSpan.svelte";
+    import ListWidget, { type List } from "./controls/ListWidget.svelte";
 
     export let rev: Extract<RevResult, { type: "Detail" }>;
 
@@ -22,9 +22,45 @@
 
     let unresolvedConflicts = rev.conflicts.filter(
         (conflict) =>
-            rev.changes.findIndex((change) => !change.has_conflict && change.path.repo_path == conflict.repo_path) ==
-            -1,
+            rev.changes.findIndex(
+                (change) => !change.has_conflict && change.path.repo_path == conflict.path.repo_path,
+            ) == -1,
     );
+
+    let syntheticChanges = rev.changes
+        .concat(
+            unresolvedConflicts.map((conflict) => ({
+                kind: "None",
+                path: conflict.path,
+                has_conflict: true,
+                hunks: [conflict.hunk],
+            })),
+        )
+        .sort((a, b) => a.path.relative_path.localeCompare(b.path.relative_path));
+
+    let unset = true;
+    let selectedChange = $changeSelectEvent;
+    for (let change of syntheticChanges) {
+        if (selectedChange?.path?.repo_path === change.path.repo_path) {
+            unset = false;
+        }
+    }
+    if (unset) {
+        changeSelectEvent.set(syntheticChanges[0]);
+    }
+
+    let list: List = {
+        getSize() {
+            return syntheticChanges.length;
+        },
+        getSelection() {
+            return syntheticChanges.findIndex((row) => row.path.repo_path == $changeSelectEvent?.path.repo_path) ?? -1;
+        },
+        selectRow(row: number) {
+            $changeSelectEvent = syntheticChanges[row];
+        },
+        editRow(row: number) {},
+    };
 
     onEvent<string>("gg://menu/revision", (event) => mutator.handle(event));
 </script>
@@ -56,7 +92,7 @@
 
     <div slot="body" class="body">
         <textarea
-            class="desc"
+            class="description"
             spellcheck="false"
             disabled={rev.header.is_immutable}
             bind:value={fullDescription}
@@ -64,6 +100,7 @@
             on:dragover={dragOverWidget} />
 
         <div class="signature-commands">
+            <span>Author:</span>
             <AuthorSpan author={rev.header.author} includeTimestamp />
             <CheckWidget bind:checked={resetAuthor}>Reset</CheckWidget>
             <span></span>
@@ -75,60 +112,55 @@
             </ActionWidget>
         </div>
 
-        <div class="objects">
-            {#if rev.parents.length > 0}
-                <Zone operand={{ type: "Merge", header: rev.header }} let:target>
-                    <section class:target>
-                        <h3>Parent revisions</h3>
-                        {#each rev.parents as parent}
-                            <div class="row">
-                                <svg>
-                                    <foreignObject x="0" y="0" width="100%" height="30">
-                                        <RevisionObject header={parent} child={rev.header} selected={false} />
-                                    </foreignObject>
-                                    <GraphNode header={parent} />
-                                </svg>
-                            </div>
-                        {/each}
-                    </section>
-                </Zone>
-            {/if}
-
-            {#if rev.changes.length > 0}
-                <div class="move-commands">
-                    <ActionWidget
-                        tip="move all changes to parent"
-                        onClick={mutator.onSquash}
-                        disabled={rev.header.is_immutable || rev.header.parent_ids.length != 1}>
-                        <Icon name="upload" /> Squash
-                    </ActionWidget>
-                    <ActionWidget
-                        tip="copy all changes from parent"
-                        onClick={mutator.onRestore}
-                        disabled={rev.header.is_immutable || rev.header.parent_ids.length != 1}>
-                        <Icon name="download" /> Restore
-                    </ActionWidget>
-                </div>
-
-                <section>
-                    <h3>Changed files</h3>
-                    {#each rev.changes as change}
-                        <ChangeObject header={rev.header} {change} />
-                    {/each}
-                </section>
-            {/if}
-
-            {#if unresolvedConflicts.length > 0}
-                <section class="conflict">
-                    <h3>Unresolved conflicts</h3>
-                    {#each unresolvedConflicts as conflict}
-                        <div class="row">
-                            {conflict.relative_path}
+        {#if rev.parents.length > 0}
+            <Zone operand={{ type: "Merge", header: rev.header }} let:target>
+                <div class="parents" class:target>
+                    {#each rev.parents as parent}
+                        <div class="parent">
+                            <span>Parent:</span>
+                            <RevisionObject header={parent} child={rev.header} selected={false} noBranches />
                         </div>
                     {/each}
-                </section>
-            {/if}
-        </div>
+                </div>
+            </Zone>
+        {/if}
+
+        {#if syntheticChanges.length > 0}
+            <div class="move-commands">
+                <span>Changes:</span>
+                <ActionWidget
+                    tip="move all changes to parent"
+                    onClick={mutator.onSquash}
+                    disabled={rev.header.is_immutable || rev.header.parent_ids.length != 1}>
+                    <Icon name="upload" /> Squash
+                </ActionWidget>
+                <ActionWidget
+                    tip="copy all changes from parent"
+                    onClick={mutator.onRestore}
+                    disabled={rev.header.is_immutable || rev.header.parent_ids.length != 1}>
+                    <Icon name="download" /> Restore
+                </ActionWidget>
+            </div>
+
+            <ListWidget {list} type="Change" descendant={$changeSelectEvent?.path.repo_path}>
+                <div class="changes">
+                    {#each syntheticChanges as change}
+                        <ChangeObject
+                            {change}
+                            header={rev.header}
+                            selected={$changeSelectEvent?.path?.repo_path === change.path.repo_path} />
+                        {#if $changeSelectEvent?.path?.repo_path === change.path.repo_path}
+                            <pre
+                                class="change"
+                                style="--lines: {Math.min(
+                                    change.hunks[0].lines.length,
+                                    6,
+                                )}">{#each change.hunks[0].lines as line, ix}{line}{#if ix != change.hunks[0].lines.length - 1}<br />{/if}{/each}</pre>
+                        {/if}
+                    {/each}
+                </div>
+            </ListWidget>
+        {/if}
     </div>
 </Pane>
 
@@ -157,98 +189,77 @@
     }
 
     .body {
-        display: flex;
-        flex-direction: column;
-        align-items: stretch;
-        gap: 3px;
+        height: 100%;
         overflow: hidden;
-    }
-
-    .desc {
-        border-radius: 6px;
-        width: 100%;
-        height: 5em;
+        display: grid;
+        grid-template-rows: 90px 30px auto 30px 1fr;
+        margin: 0 -6px -3px -6px;
+        padding: 0 6px 3px 6px;
     }
 
     .signature-commands {
         height: 30px;
         width: 100%;
         display: grid;
-        grid-template-columns: auto auto 1fr auto;
+        grid-template-columns: 60px auto auto 1fr auto;
         align-items: center;
         gap: 6px;
-        padding-right: 3px;
-        color: var(--ctp-subtext0);
+        padding: 0 3px;
     }
 
-    .objects {
-        pointer-events: auto;
-        flex: 1;
-        overflow: auto;
-        scrollbar-color: var(--ctp-text) var(--ctp-mantle);
+    .parents {
+        border-top: 1px solid var(--ctp-overlay0);
+        padding: 0 3px;
     }
 
-    section {
-        background: var(--ctp-mantle);
-        color: var(--ctp-text);
-        border-radius: 6px;
-        padding: 3px;
-        display: flex;
-        flex-direction: column;
-        margin: 3px 0;
-    }
-
-    section > :global(*):not(:first-child) {
-        height: 30px;
-    }
-
-    section.conflict {
-        background: repeating-linear-gradient(
-            120deg,
-            var(--ctp-mantle) 0px,
-            var(--ctp-mantle) 12px,
-            var(--ctp-surface0) 12px,
-            var(--ctp-surface0) 15px
-        );
-    }
-
-    section.conflict > :global(*):not(:first-child) {
-        margin-left: 24px;
-    }
-
-    section.target {
-        color: black;
-        background: var(--ctp-flamingo);
+    .parent {
+        display: grid;
+        grid-template-columns: 60px 1fr;
+        align-items: baseline;
+        gap: 6px;
     }
 
     .move-commands {
+        border-top: 1px solid var(--ctp-overlay0);
         height: 30px;
         width: 100%;
         padding: 0 3px;
-        display: flex;
+        display: grid;
+        grid-template-columns: 1fr auto auto;
         align-items: center;
-        justify-content: space-between;
+        gap: 6px;
     }
 
-    h3 {
-        font-size: 1rem;
-        border-bottom: 1px solid var(--ctp-surface0);
+    .move-commands > :global(button) {
+        margin-top: -1px;
     }
 
-    .row {
+    .changes {
+        border-top: 1px solid var(--ctp-overlay0);
         display: flex;
-        align-items: center;
-        --leftpad: 24px;
+        flex-direction: column;
+        pointer-events: auto;
+        overflow-x: hidden;
+        overflow-y: auto;
+        scrollbar-color: var(--ctp-text) var(--ctp-crust);
     }
 
-    svg {
-        width: 100%;
-        height: 27px;
+    .change {
+        font-family: var(--stack-code);
+        font-size: small;
+        min-height: calc(var(--lines) * 1em);
+        margin: 0;
+        padding: 0 3px;
+        user-select: text;
+        pointer-events: auto;
+        overflow-x: auto;
+        overflow-y: scroll;
+        background: var(--ctp-base);
+        scrollbar-color: var(--ctp-text) var(--ctp-base);
     }
 
-    foreignObject {
-        width: 100%;
-        height: 30px;
-        padding-right: 3px;
+    .target {
+        color: black;
+        background: var(--ctp-flamingo);
     }
 </style>

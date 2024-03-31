@@ -5,14 +5,16 @@
     import Icon from "../controls/Icon.svelte";
     import Object from "./Object.svelte";
     import Zone from "./Zone.svelte";
+    import { changeSelectEvent } from "../stores";
 
     export let header: RevHeader;
     export let change: RevChange;
+    export let selected: boolean;
 
     let operand: Operand = { type: "Change", header, path: change.path };
 
-    let icon: string;
-    let state: "add" | "change" | "remove";
+    let icon = "file";
+    let state: "add" | "change" | "remove" | null = null;
     switch (change.kind) {
         case "Added":
             icon = "file-plus";
@@ -27,9 +29,21 @@
             state = "change";
             break;
     }
+
+    function onSelect() {
+        changeSelectEvent.set(change);
+    }
 </script>
 
-<Object {operand} conflicted={change.has_conflict} label={change.path.relative_path} let:context let:hint>
+<Object
+    {operand}
+    {selected}
+    suffix={change.path.repo_path}
+    conflicted={change.has_conflict}
+    label={change.path.relative_path}
+    on:click={onSelect}
+    let:context
+    let:hint>
     <Zone {operand} let:target>
         <div class="layout" class:target>
             <Icon name={icon} state={context ? null : state} />
