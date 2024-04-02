@@ -19,7 +19,7 @@ GG uses `jj config`; `revset-aliases.immutable_heads()` is particularly importan
 ## Features
 GG doesn't require [JJ](https://martinvonz.github.io/jj/latest/install-and-setup/) to run, but you'll need it for tasks GG doesn't cover. What it *can* do:
 - Use the left pane to query and browse the log. Click to select revisions, double-click to edit (if mutable) or create a new child (if immutable).
-- Use the right pane to inspect and edit revisions - set descriptions, issue commands, view their changes and parents. 
+- Use the right pane to inspect and edit revisions - set descriptions, issue commands, view their parents and changes.
 - Drag revisions around to rebase them; move them into or out of a revision's parents to add merges and move entire subtrees. Or just abandon them entirely.
 - Drag files around to squash them into new revisions or throw away changes (restoring from parents).
 - Drag branches around to set or delete them. 

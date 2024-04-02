@@ -3,8 +3,8 @@
 ## Unreleased 
 
 ### Added
-- The right pane can now show file diffs, initially in a rather raw format. 
-- Backout command, which creates the changes necessary to undo some revision in the working copy.
+- File diffs displayed in the revision pane; also, the file list is now keyboard-selectable.
+- Backout command, which creates the changes necessary to undo a revision in the working copy.
 - Consistent author/timestamp formatting, with tooltips for more detail.
 
 ### Fixed

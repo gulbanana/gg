@@ -1,31 +1,29 @@
-Desirable things
-----------------
+Known Issues
+------------
+* "Open..." menu command sometimes opens multiple dialogues.
+* Some scrollbars may not be coloured properly in WebKit.
+* Mutations can fail due to ambiguity when there are other writers; this should update the UI. Maybe a special From impl for resolve_change.
+* Windows codesigning will break in August 2024; the CI needs a new approach.
 
-These changes may or may not be implemented in the future.
-* bug: open menu command sometimes opens multiple dialogues
-* bug: check whether everything uses webkit-scrollbar
-* edge case: mutations can fail due to ambiguity due to other writers; this should update the UI. maybe use a special From on resolve_change
-* perf: optimise revdetail loads - we already have the header
-* feat: improve hunk display - right now it's patch text, but it was built from structured data
-* feat: hunk selection/operations
-* design: change/hunk menu?
-* feat: alternate drag modes for copy/duplicate, maybe for rebase-all-descendants
-* feat: log multiselect
-* feat: file select/multiselect? large moves could be tedious otherwise. maybe file menu?
-* feat: redo/undo stack
-* feat: operation menu - restores or views?
-* feat: resolve workflow (mergetool)
-* feat: difftool?
-* feat: view commit ids in log (configurable?)
-* feat: view repo at different ops (slider? entire pane?) 
-* feat: progress display (probably in statusbar); useful for git & snapshot
-* feat: structured op descs - want to be able to present them more nicely, extracting ids etc. tags? 
-    - there's a request for this to be part of jj
-* feat: create/delete tags? even moving them is implemented in the backend, but may be a bad idea
-* feat: obslog stuff - maybe just "show historical versions" in the log? they should be immutable, and we'd want to be able to reinstate one (as a copy)
-* feat: more settings
-    - log revsets
-* design: decide whether to remove edit menu and maybe add others
-* epic: categorical expansion - trays, modals, pinned commits etc
-* epic: config editor UI (for core stuff, as well as gg's own settings)
-* chore: windows codesigning will break in august 2024; needs a new approach
+Planned Features
+----------------
+> The best laid schemes o' mice an' men / Gang aft a-gley.
+
+* Hunk selection/operations. Maybe a change/hunk menu.
+* Alternate drag modes for copy/duplicate, perhaps  rebase-all-descendants.
+* Optimise revdetail loads - we already have the header available.
+* Multiselection, viewing and operating on revsets or changesets.
+* Undo/redo stack, possibly with a menu of recent ops.
+* Some way to access the resolve (mergetool) workflow. Difftools too, although this is less useful.
+* More stuff in the log - timestamps, commit ids... this might have to be configurable. 
+* Progress bar, particularly for git and snapshot operations.
+* Structured op descriptions - extracted ids etc, maybe via tags. This would benefit from being in JJ core.
+
+UI Expansion
+------------
+With some dynamic way to show extra panes, replace content, open new windows &c, more useful features would be possible:
+
+* View the repo at past ops.
+* View a revision at past evolutions (possibly this could be folded into the log).
+* Config UI, both for core stuff and gg's own settings.
+* Revision pinning for split/comparison workflows.

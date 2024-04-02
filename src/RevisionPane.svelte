@@ -68,11 +68,16 @@
     onEvent<string>("gg://menu/revision", (event) => mutator.handle(event));
 
     function minLines(change: RevChange): number {
-        let total = 0;
+        // let total = 0;
+        // for (let hunk of change.hunks) {
+        //     total += Math.min(hunk.lines.lines.length, CONTEXT * 2 + 1) + 1;
+        // }
+        // return total;
+        let max = 0;
         for (let hunk of change.hunks) {
-            total += Math.min(hunk.lines.lines.length, CONTEXT * 2 + 1) + 1;
+            max = Math.max(hunk.lines.lines.length, max);
         }
-        return total;
+        return Math.min(max, CONTEXT * 2 + 1);
     }
 
     function lineColour(line: string): string | null {
