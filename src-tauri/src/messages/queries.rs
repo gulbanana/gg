@@ -124,7 +124,7 @@ pub struct RevChange {
     pub kind: ChangeKind,
     pub path: TreePath,
     pub has_conflict: bool,
-    pub hunks: Vec<MultilineString>,
+    pub hunks: Vec<ChangeHunk>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -135,7 +135,7 @@ pub struct RevChange {
 )]
 pub struct RevConflict {
     pub path: TreePath,
-    pub hunk: MultilineString,
+    pub hunk: ChangeHunk,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -149,6 +149,39 @@ pub enum ChangeKind {
     Added,
     Deleted,
     Modified,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(TS),
+    ts(export, export_to = "../src/messages/")
+)]
+pub struct ChangeHunk {
+    pub location: HunkLocation,
+    pub lines: MultilineString,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(TS),
+    ts(export, export_to = "../src/messages/")
+)]
+pub struct HunkLocation {
+    pub from_file: FileRange,
+    pub to_file: FileRange,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(TS),
+    ts(export, export_to = "../src/messages/")
+)]
+pub struct FileRange {
+    pub start: usize,
+    pub len: usize,
 }
 
 #[derive(Serialize, Debug)]

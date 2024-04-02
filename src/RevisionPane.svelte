@@ -13,8 +13,11 @@
     import { onEvent } from "./ipc";
     import AuthorSpan from "./controls/AuthorSpan.svelte";
     import ListWidget, { type List } from "./controls/ListWidget.svelte";
+    import type { RevChange } from "./messages/RevChange";
 
     export let rev: Extract<RevResult, { type: "Detail" }>;
+
+    const CONTEXT = 3;
 
     let mutator = new RevisionMutator(rev.header);
     let fullDescription = rev.header.description.lines.join("\n");
@@ -63,6 +66,24 @@
     };
 
     onEvent<string>("gg://menu/revision", (event) => mutator.handle(event));
+
+    function minLines(change: RevChange): number {
+        let total = 0;
+        for (let hunk of change.hunks) {
+            total += Math.min(hunk.lines.lines.length, CONTEXT * 2 + 1) + 1;
+        }
+        return total;
+    }
+
+    function lineColour(line: string): string | null {
+        if (line.startsWith("+")) {
+            return "add";
+        } else if (line.startsWith("-")) {
+            return "remove";
+        } else {
+            return null;
+        }
+    }
 </script>
 
 <Pane>
@@ -150,12 +171,17 @@
                             header={rev.header}
                             selected={$changeSelectEvent?.path?.repo_path === change.path.repo_path} />
                         {#if $changeSelectEvent?.path?.repo_path === change.path.repo_path}
-                            <pre
-                                class="change"
-                                style="--lines: {Math.min(
-                                    change.hunks[0].lines.length,
-                                    6,
-                                )}">{#each change.hunks[0].lines as line, ix}{line}{#if ix != change.hunks[0].lines.length - 1}<br />{/if}{/each}</pre>
+                            <div class="change" style="--lines: {minLines(change)}">
+                                {#each change.hunks as hunk}
+                                    <div class="hunk">
+                                        @@ -{hunk.location.from_file.start},{hunk.location.from_file.len} +{hunk
+                                            .location.to_file.start},{hunk.location.to_file.len} @@
+                                    </div>
+                                    <pre class="diff">{#each hunk.lines.lines as line}<span class={lineColour(line)}
+                                                >{line}</span
+                                            >{/each}</pre>
+                                {/each}
+                            </div>
                         {/if}
                     {/each}
                 </div>
@@ -253,17 +279,33 @@
     }
 
     .change {
-        font-family: var(--stack-code);
         font-size: small;
-        min-height: calc(var(--lines) * 1em);
         margin: 0;
-        padding: 0 3px;
-        user-select: text;
         pointer-events: auto;
         overflow-x: auto;
         overflow-y: scroll;
-        background: var(--ctp-base);
         scrollbar-color: var(--ctp-text) var(--ctp-base);
+        min-height: calc(var(--lines) * 1em);
+    }
+
+    .hunk {
+        margin: 0;
+        text-align: center;
+        background: var(--ctp-mantle);
+    }
+
+    .diff {
+        margin: 0;
+        background: var(--ctp-base);
+        user-select: text;
+    }
+
+    .add {
+        color: var(--ctp-green);
+    }
+
+    .remove {
+        color: var(--ctp-red);
     }
 
     .target {

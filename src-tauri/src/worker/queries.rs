@@ -7,6 +7,7 @@ use std::{
 use anyhow::{anyhow, Result};
 
 use futures_util::{try_join, StreamExt};
+use gix::bstr::ByteVec;
 use itertools::Itertools;
 use jj_lib::{
     backend::CommitId,
@@ -14,7 +15,6 @@ use jj_lib::{
     diff::{self, Diff, DiffHunk},
     matchers::EverythingMatcher,
     merged_tree::TreeDiffStream,
-    object_id::ObjectId,
     repo::Repo,
     repo_path::RepoPath,
     revset::Revset,
@@ -24,8 +24,8 @@ use jj_lib::{
 use pollster::FutureExt;
 
 use crate::messages::{
-    ChangeKind, LogCoordinates, LogLine, LogPage, LogRow, MultilineString, RevChange, RevConflict,
-    RevHeader, RevId, RevResult,
+    ChangeHunk, ChangeKind, FileRange, HunkLocation, LogCoordinates, LogLine, LogPage, LogRow,
+    MultilineString, RevChange, RevConflict, RevHeader, RevId, RevResult,
 };
 
 use super::WorkspaceSession;
@@ -282,26 +282,11 @@ pub fn query_revision(ws: &WorkspaceSession, id: RevId) -> Result<RevResult> {
         if !entry.is_resolved() {
             match conflicts::materialize_tree_value(ws.repo().store(), &path, entry).block_on()? {
                 MaterializedTreeValue::Conflict { contents, .. } => {
-                    let left_part = GitDiffPart {
-                        mode: "100644".to_string(),
-                        hash: "0000000000".to_string(),
-                        content: contents,
-                    };
-
-                    let mut formatter: Vec<u8> = Vec::new();
-                    let path_string = path.as_internal_file_string();
-
-                    writeln!(formatter, "diff --git a/{path_string} b/{path_string}")?;
-                    writeln!(formatter, "deleted file mode {}", &left_part.mode)?;
-                    writeln!(formatter, "index {}..0000000000", &left_part.hash)?;
-                    writeln!(formatter, "--- a/{path_string}")?;
-                    writeln!(formatter, "+++ /dev/null")?;
-
-                    get_unified_diff_hunks(&mut formatter, &left_part.content, &[], 3)?;
+                    let mut hunks = get_unified_hunks(3, &contents, &[])?;
 
                     conflicts.push(RevConflict {
                         path: ws.format_path(path),
-                        hunk: std::str::from_utf8(&formatter)?.into(),
+                        hunk: hunks.pop().unwrap(),
                     });
                 }
                 _ => {
@@ -394,30 +379,121 @@ async fn format_tree_changes(
         let after_future = conflicts::materialize_tree_value(store, &path, after);
         let (before_value, after_value) = try_join!(before_future, after_future)?;
 
-        let content: MultilineString = get_git_diff(3, &path, before_value, after_value)?
-            .as_str()
-            .into();
+        let hunks = get_value_hunks(3, &path, before_value, after_value)?;
 
         changes.push(RevChange {
             path: ws.format_path(path),
             kind,
             has_conflict,
-            hunks: vec![content],
+            hunks,
         });
     }
     Ok(())
 }
 
-/**************************************************************/
-/* the following is temporary code from jj-cli. it works,     */
-/* but doesn't produce a format that the UI can render nicely */
-/**************************************************************/
-
-struct GitDiffPart {
-    mode: String,
-    hash: String,
-    content: Vec<u8>,
+fn get_value_hunks(
+    num_context_lines: usize,
+    path: &RepoPath,
+    left_value: MaterializedTreeValue,
+    right_value: MaterializedTreeValue,
+) -> Result<Vec<ChangeHunk>> {
+    if left_value.is_absent() {
+        let right_part = get_value_contents(path, right_value)?;
+        get_unified_hunks(num_context_lines, &[], &right_part)
+    } else if right_value.is_present() {
+        let left_part = get_value_contents(&path, left_value)?;
+        let right_part = get_value_contents(&path, right_value)?;
+        get_unified_hunks(num_context_lines, &left_part, &right_part)
+    } else {
+        let left_part = get_value_contents(&path, left_value)?;
+        get_unified_hunks(num_context_lines, &left_part, &[])
+    }
 }
+
+fn get_value_contents(path: &RepoPath, value: MaterializedTreeValue) -> Result<Vec<u8>> {
+    let mut contents: Vec<u8>;
+    match value {
+        MaterializedTreeValue::Absent => {
+            panic!("Absent path {path:?} in diff should have been handled by caller");
+        }
+        MaterializedTreeValue::File { mut reader, .. } => {
+            contents = vec![];
+            reader.read_to_end(&mut contents)?;
+
+            let start = &contents[..8000.min(contents.len())]; // same heuristic git uses
+            let is_binary = start.contains(&b'\0');
+            if is_binary {
+                contents.clear();
+                contents.push_str("(binary)");
+            }
+        }
+        MaterializedTreeValue::Symlink { target, .. } => {
+            contents = target.into_bytes();
+        }
+        MaterializedTreeValue::GitSubmodule(_) => {
+            contents = vec![];
+            contents.push_str("(submodule)");
+        }
+        MaterializedTreeValue::Conflict {
+            id: _,
+            contents: conflict_data,
+        } => contents = conflict_data,
+        MaterializedTreeValue::Tree(_) => {
+            panic!("Unexpected tree in diff at path {path:?}");
+        }
+    }
+    Ok(contents)
+}
+
+fn get_unified_hunks(
+    num_context_lines: usize,
+    left_content: &[u8],
+    right_content: &[u8],
+) -> Result<Vec<ChangeHunk>> {
+    let mut hunks = Vec::new();
+
+    for hunk in unified_diff_hunks(left_content, right_content, num_context_lines) {
+        let location = HunkLocation {
+            from_file: FileRange {
+                start: hunk.left_line_range.start,
+                len: hunk.left_line_range.len(),
+            },
+            to_file: FileRange {
+                start: hunk.right_line_range.start,
+                len: hunk.right_line_range.len(),
+            },
+        };
+
+        let mut lines = Vec::new();
+        for (line_type, content) in hunk.lines {
+            let mut formatter: Vec<u8> = vec![];
+            match line_type {
+                DiffLineType::Context => {
+                    write!(formatter, " ")?;
+                }
+                DiffLineType::Removed => {
+                    write!(formatter, "-")?;
+                }
+                DiffLineType::Added => {
+                    write!(formatter, "+")?;
+                }
+            }
+            formatter.write(content)?;
+            lines.push(std::str::from_utf8(&formatter)?.into());
+        }
+
+        hunks.push(ChangeHunk {
+            location,
+            lines: MultilineString { lines },
+        });
+    }
+
+    Ok(hunks)
+}
+
+/**************************/
+/* from jj_cli::diff_util */
+/**************************/
 
 #[derive(PartialEq)]
 enum DiffLineType {
@@ -430,163 +506,6 @@ struct UnifiedDiffHunk<'content> {
     left_line_range: Range<usize>,
     right_line_range: Range<usize>,
     lines: Vec<(DiffLineType, &'content [u8])>,
-}
-
-// in jj-cli, show_git_diff
-fn get_git_diff(
-    num_context_lines: usize,
-    path: &RepoPath,
-    left_value: MaterializedTreeValue,
-    right_value: MaterializedTreeValue,
-) -> Result<String> {
-    let mut formatter: Vec<u8> = Vec::new();
-
-    let path_string = path.as_internal_file_string();
-    if left_value.is_absent() {
-        let right_part = git_diff_part(path, right_value)?;
-
-        writeln!(formatter, "diff --git a/{path_string} b/{path_string}")?;
-        writeln!(formatter, "new file mode {}", &right_part.mode)?;
-        writeln!(formatter, "index 0000000000..{}", &right_part.hash)?;
-        writeln!(formatter, "--- /dev/null")?;
-        writeln!(formatter, "+++ b/{path_string}")?;
-
-        get_unified_diff_hunks(&mut formatter, &[], &right_part.content, num_context_lines)?;
-    } else if right_value.is_present() {
-        let left_part = git_diff_part(&path, left_value)?;
-        let right_part = git_diff_part(&path, right_value)?;
-
-        writeln!(formatter, "diff --git a/{path_string} b/{path_string}")?;
-        if left_part.mode != right_part.mode {
-            writeln!(formatter, "old mode {}", &left_part.mode)?;
-            writeln!(formatter, "new mode {}", &right_part.mode)?;
-            if left_part.hash != right_part.hash {
-                writeln!(formatter, "index {}...{}", &left_part.hash, right_part.hash)?;
-            }
-        } else if left_part.hash != right_part.hash {
-            writeln!(
-                formatter,
-                "index {}...{} {}",
-                &left_part.hash, right_part.hash, left_part.mode
-            )?;
-        }
-        if left_part.content != right_part.content {
-            writeln!(formatter, "--- a/{path_string}")?;
-            writeln!(formatter, "+++ b/{path_string}")?;
-        }
-
-        get_unified_diff_hunks(
-            &mut formatter,
-            &left_part.content,
-            &right_part.content,
-            num_context_lines,
-        )?;
-    } else {
-        let left_part = git_diff_part(&path, left_value)?;
-
-        writeln!(formatter, "diff --git a/{path_string} b/{path_string}")?;
-        writeln!(formatter, "deleted file mode {}", &left_part.mode)?;
-        writeln!(formatter, "index {}..0000000000", &left_part.hash)?;
-        writeln!(formatter, "--- a/{path_string}")?;
-        writeln!(formatter, "+++ /dev/null")?;
-
-        get_unified_diff_hunks(&mut formatter, &left_part.content, &[], num_context_lines)?;
-    }
-
-    Ok(std::str::from_utf8(&formatter)?.to_owned())
-}
-
-fn git_diff_part(path: &RepoPath, value: MaterializedTreeValue) -> Result<GitDiffPart> {
-    let mode;
-    let hash;
-    let mut contents: Vec<u8>;
-    match value {
-        MaterializedTreeValue::Absent => {
-            panic!("Absent path {path:?} in diff should have been handled by caller");
-        }
-        MaterializedTreeValue::File {
-            id,
-            executable,
-            mut reader,
-        } => {
-            mode = if executable {
-                "100755".to_string()
-            } else {
-                "100644".to_string()
-            };
-            hash = id.hex();
-            // TODO: use `file_content_for_diff` instead of showing binary
-            contents = vec![];
-            reader.read_to_end(&mut contents)?;
-        }
-        MaterializedTreeValue::Symlink { id, target } => {
-            mode = "120000".to_string();
-            hash = id.hex();
-            contents = target.into_bytes();
-        }
-        MaterializedTreeValue::GitSubmodule(id) => {
-            // TODO: What should we actually do here?
-            mode = "040000".to_string();
-            hash = id.hex();
-            contents = vec![];
-        }
-        MaterializedTreeValue::Conflict {
-            id: _,
-            contents: conflict_data,
-        } => {
-            mode = "100644".to_string();
-            hash = "0000000000".to_string();
-            contents = conflict_data
-        }
-        MaterializedTreeValue::Tree(_) => {
-            panic!("Unexpected tree in diff at path {path:?}");
-        }
-    }
-    let hash = hash[0..10].to_string();
-    Ok(GitDiffPart {
-        mode,
-        hash,
-        content: contents,
-    })
-}
-
-// in jj-cli, show_unified_diff_hunks
-fn get_unified_diff_hunks(
-    formatter: &mut Vec<u8>,
-    left_content: &[u8],
-    right_content: &[u8],
-    num_context_lines: usize,
-) -> Result<()> {
-    for hunk in unified_diff_hunks(left_content, right_content, num_context_lines) {
-        writeln!(
-            formatter,
-            "@@ -{},{} +{},{} @@",
-            hunk.left_line_range.start,
-            hunk.left_line_range.len(),
-            hunk.right_line_range.start,
-            hunk.right_line_range.len()
-        )?;
-        for (line_type, content) in hunk.lines {
-            match line_type {
-                DiffLineType::Context => {
-                    write!(formatter, " ")?;
-                    formatter.write_all(content)?;
-                }
-                DiffLineType::Removed => {
-                    write!(formatter, "-")?;
-                    formatter.write_all(content)?;
-                }
-                DiffLineType::Added => {
-                    write!(formatter, "+")?;
-                    formatter.write_all(content)?;
-                }
-            }
-            if !content.ends_with(b"\n") {
-                write!(formatter, "\n\\ No newline at end of file\n")?;
-            }
-        }
-    }
-    Ok(())
 }
 
 fn unified_diff_hunks<'content>(
