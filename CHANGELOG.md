@@ -1,6 +1,7 @@
 # GG Changelog
 
-## Unreleased 
+## [0.16.0](releases/tag/v0.16.0) 
+This version is compatible with Jujutsu 0.16.
 
 ### Added
 - File diffs displayed in the revision pane; also, the file list is now keyboard-selectable.

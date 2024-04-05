@@ -1,6 +1,6 @@
 [package]
 name = "gg"
-version = "0.15.3"
+version = "0.16.0"
 description = "GG - Gui for JJ"
 authors = ["Thomas Castiglione"]
 edition = "2021"
