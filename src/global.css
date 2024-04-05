@@ -153,6 +153,19 @@ input {
   &:disabled {
     background-color: transparent;
   }
+
+  &::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background-color: var(--ctp-text);
+    border-radius: 6px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background-color: var(--ctp-base);
+  }
 }
 
 h1,

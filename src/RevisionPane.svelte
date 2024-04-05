@@ -283,6 +283,19 @@
         scrollbar-color: var(--ctp-text) var(--ctp-crust);
     }
 
+    .changes::-webkit-scrollbar {
+        width: 6px;
+    }
+
+    .changes::-webkit-scrollbar-thumb {
+        background-color: var(--ctp-text);
+        border-radius: 6px;
+    }
+
+    .changes::-webkit-scrollbar-track {
+        background-color: var(--ctp-crust);
+    }
+
     .change {
         font-size: small;
         margin: 0;
@@ -291,6 +304,19 @@
         overflow-y: scroll;
         scrollbar-color: var(--ctp-text) var(--ctp-base);
         min-height: calc(var(--lines) * 1em);
+    }
+
+    .change::-webkit-scrollbar {
+        width: 6px;
+    }
+
+    .change::-webkit-scrollbar-thumb {
+        background-color: var(--ctp-text);
+        border-radius: 6px;
+    }
+
+    .change::-webkit-scrollbar-track {
+        background-color: var(--ctp-base);
     }
 
     .hunk {
