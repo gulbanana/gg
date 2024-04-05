@@ -19,7 +19,7 @@
         "width": 1280,
         "height": 720,
         "visible": false,
-        "fileDropEnabled": false
+        "dragDropEnabled": false
       }
     ],
     "security": {
