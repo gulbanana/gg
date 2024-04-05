@@ -4,7 +4,6 @@ A drop target for direct-manipulation objects.
 -->
 
 <script lang="ts">
-    import deepEqual from "deep-equal";
     import type { Operand } from "../messages/Operand";
     import BinaryMutator from "../mutators/BinaryMutator";
     import { currentSource, currentTarget } from "../stores";
@@ -21,7 +20,10 @@ A drop target for direct-manipulation objects.
     $: target = match($currentTarget);
 
     function match(target: Operand | null): boolean {
-        return target == operand || (operand.type == "Merge" && deepEqual(target, operand, { strict: true }));
+        return (
+            target == operand ||
+            (operand.type == "Merge" && target?.type == "Merge" && operand.header.id.commit == target.header.id.commit)
+        );
     }
 
     function onDragOver(event: DragEvent) {
