@@ -1,6 +1,6 @@
 {
   "productName": "gg",
-  "version": "0.16.0",
+  "version": "0.17.0",
   "identifier": "au.gulbanana.gg",
   "build": {
     "beforeDevCommand": "npm run dev",

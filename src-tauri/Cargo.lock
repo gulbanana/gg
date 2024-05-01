@@ -1921,7 +1921,7 @@ dependencies = [
 
 [[package]]
 name = "gg"
-version = "0.16.0"
+version = "0.17.0"
 dependencies = [
  "anyhow",
  "assert_matches",
@@ -3230,8 +3230,9 @@ dependencies = [
 
 [[package]]
 name = "jj-cli"
-version = "0.16.0"
-source = "git+https://github.com/martinvonz/jj.git#52e494dcf2653012da6d64984c7e0496b5a0f856"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "57a82bf7079fbc2dcdc83cbe27c714498634d5cc11de2af138bd30cf44f64eb6"
 dependencies = [
  "cargo_metadata 0.17.0",
  "chrono",
@@ -3277,8 +3278,9 @@ dependencies = [
 
 [[package]]
 name = "jj-lib"
-version = "0.16.0"
-source = "git+https://github.com/martinvonz/jj.git#52e494dcf2653012da6d64984c7e0496b5a0f856"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ee2d2ae137ac5c6c81219ff538631365a9e66f232ec3833ffe36de5f5cb34eab"
 dependencies = [
  "async-trait",
  "backoff",
@@ -3325,8 +3327,9 @@ dependencies = [
 
 [[package]]
 name = "jj-lib-proc-macros"
-version = "0.16.0"
-source = "git+https://github.com/martinvonz/jj.git#52e494dcf2653012da6d64984c7e0496b5a0f856"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7215a7eddbb6ec5f1895fa5f09f3a4b766cd4e3117a7c300db46a3be236c5a2a"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -4067,9 +4070,9 @@ checksum = "e3148f5046208a5d56bcfc03053e3ca6334e51da8dfb19b6cdc8b306fae3283e"
 
 [[package]]
 name = "pest"
-version = "2.7.9"
+version = "2.7.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "311fb059dee1a7b802f036316d790138c613a4e8b180c822e3925a662e9f0c95"
+checksum = "560131c633294438da9f7c4b08189194b20946c8274c6b9e38881a7874dc8ee8"
 dependencies = [
  "memchr",
  "thiserror",
@@ -4078,9 +4081,9 @@ dependencies = [
 
 [[package]]
 name = "pest_derive"
-version = "2.7.9"
+version = "2.7.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f73541b156d32197eecda1a4014d7f868fd2bcb3c550d5386087cfba442bf69c"
+checksum = "26293c9193fbca7b1a3bf9b79dc1e388e927e6cacaa78b4a3ab705a1d3d41459"
 dependencies = [
  "pest",
  "pest_generator",
@@ -4088,9 +4091,9 @@ dependencies = [
 
 [[package]]
 name = "pest_generator"
-version = "2.7.9"
+version = "2.7.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c35eeed0a3fab112f75165fdc026b3913f4183133f19b49be773ac9ea966e8bd"
+checksum = "3ec22af7d3fb470a85dd2ca96b7c577a1eb4ef6f1683a9fe9a8c16e136c04687"
 dependencies = [
  "pest",
  "pest_meta",
@@ -4101,9 +4104,9 @@ dependencies = [
 
 [[package]]
 name = "pest_meta"
-version = "2.7.9"
+version = "2.7.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2adbf29bb9776f28caece835398781ab24435585fe0d4dc1374a61db5accedca"
+checksum = "d7a240022f37c361ec1878d646fc5b7d7c4d28d5946e1a80ad5a7a4f4ca0bdcd"
 dependencies = [
  "once_cell",
  "pest",
