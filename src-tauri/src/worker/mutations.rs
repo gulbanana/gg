@@ -271,16 +271,20 @@ impl Mutation for InsertRevision {
         let rebased_children = ws.disinherit_children(&mut tx, &target)?;
 
         // update after, which may have been a descendant of target
-        let after = rebased_children
+        let after_id = rebased_children
             .get(after.id())
-            .map_or(Ok(after.clone()), |rebased_before_id| {
-                tx.repo().store().get_commit(rebased_before_id)
-            })?;
+            .unwrap_or(after.id())
+            .clone();
 
         // rebase the target (which now has no children), then the new post-target tree atop it
         let rebased_id = target.id().hex();
-        let target = rewrite::rebase_commit(&ws.settings, tx.mut_repo(), &target, &[after])?;
-        rewrite::rebase_commit(&ws.settings, tx.mut_repo(), &before, &[target])?;
+        let target = rewrite::rebase_commit(&ws.settings, tx.mut_repo(), target, vec![after_id])?;
+        rewrite::rebase_commit(
+            &ws.settings,
+            tx.mut_repo(),
+            before,
+            vec![target.id().clone()],
+        )?;
 
         match ws.finish_transaction(tx, format!("rebase commit {}", rebased_id))? {
             Some(new_status) => Ok(MutationResult::Updated { new_status }),
@@ -304,20 +308,19 @@ impl Mutation for MoveRevision {
         let rebased_children = ws.disinherit_children(&mut tx, &target)?;
 
         // update parents, which may have been descendants of the target
-        let parents: Vec<_> = parents
+        let parent_ids: Vec<_> = parents
             .iter()
             .map(|new_parent| {
                 rebased_children
                     .get(new_parent.id())
-                    .map_or(Ok(new_parent.clone()), |rebased_new_parent_id| {
-                        tx.repo().store().get_commit(rebased_new_parent_id)
-                    })
+                    .unwrap_or(new_parent.id())
+                    .clone()
             })
-            .try_collect()?;
+            .collect();
 
         // rebase the target itself
         let rebased_id = target.id().hex();
-        rewrite::rebase_commit(&ws.settings, tx.mut_repo(), &target, &parents)?;
+        rewrite::rebase_commit(&ws.settings, tx.mut_repo(), target, parent_ids)?;
 
         match ws.finish_transaction(tx, format!("rebase commit {}", rebased_id))? {
             Some(new_status) => Ok(MutationResult::Updated { new_status }),
@@ -331,7 +334,11 @@ impl Mutation for MoveSource {
         let mut tx = ws.start_transaction()?;
 
         let target = ws.resolve_single_change(&self.id)?;
-        let parents = ws.resolve_multiple_commits(&self.parent_ids)?;
+        let parent_ids = ws
+            .resolve_multiple_commits(&self.parent_ids)?
+            .into_iter()
+            .map(|commit| commit.id().clone())
+            .collect();
 
         if ws.check_immutable(vec![target.id().clone()])? {
             precondition!("Revision {} is immutable", self.id.change.prefix);
@@ -339,7 +346,7 @@ impl Mutation for MoveSource {
 
         // just rebase the target, which will also rebase its descendants
         let rebased_id = target.id().hex();
-        rewrite::rebase_commit(&ws.settings, tx.mut_repo(), &target, &parents)?;
+        rewrite::rebase_commit(&ws.settings, tx.mut_repo(), target, parent_ids)?;
 
         match ws.finish_transaction(tx, format!("rebase commit {}", rebased_id))? {
             Some(new_status) => Ok(MutationResult::Updated { new_status }),

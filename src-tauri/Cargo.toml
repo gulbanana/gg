@@ -26,14 +26,14 @@ tauri-plugin-shell = "2.0.0-beta"
 tauri-plugin-window-state = "2.0.0-beta"
 tauri-plugin-log = "2.0.0-beta"
 
-jj-lib = { version = "0.16.0", features = ["vendored-openssl", "watchman"] }
-jj-cli = { version = "0.16.0", default-features = false, features = [
+jj-lib = { version = "0.17.0", features = ["vendored-openssl", "watchman"] }
+jj-cli = { version = "0.17.0", default-features = false, features = [
     "vendored-openssl",
 ] }
 
 anyhow = "1.0.81"
 clap = { version = "4.5.3", features = ["derive"] }
-chrono = { version = "0.4.34", features = ["serde"] }
+chrono = { version = "0.4.38", features = ["serde"] }
 config = { version = "0.13.4", default-features = false, features = ["toml"] }
 dirs = "5.0.1"
 dunce = "1.0.4"

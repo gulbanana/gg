@@ -287,18 +287,20 @@ pub fn query_revision(ws: &WorkspaceSession, id: RevId) -> Result<RevResult> {
 
     let mut conflicts = Vec::new();
     for (path, entry) in parent_tree.entries() {
-        if !entry.is_resolved() {
-            match conflicts::materialize_tree_value(ws.repo().store(), &path, entry).block_on()? {
-                MaterializedTreeValue::Conflict { contents, .. } => {
-                    let mut hunks = get_unified_hunks(3, &contents, &[])?;
+        if let Ok(entry) = entry {
+            if !entry.is_resolved() {
+                match conflicts::materialize_tree_value(ws.repo().store(), &path, entry).block_on()? {
+                    MaterializedTreeValue::Conflict { contents, .. } => {
+                        let mut hunks = get_unified_hunks(3, &contents, &[])?;
 
-                    conflicts.push(RevConflict {
-                        path: ws.format_path(path),
-                        hunk: hunks.pop().unwrap(),
-                    });
-                }
-                _ => {
-                    log::warn!("nonresolved tree entry did not materialise as conflict");
+                        conflicts.push(RevConflict {
+                            path: ws.format_path(path),
+                            hunk: hunks.pop().unwrap(),
+                        });
+                    }
+                    _ => {
+                        log::warn!("nonresolved tree entry did not materialise as conflict");
+                    }
                 }
             }
         }

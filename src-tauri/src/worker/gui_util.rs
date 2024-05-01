@@ -37,9 +37,7 @@ use jj_lib::{
     repo::{ReadonlyRepo, Repo, RepoLoaderError, StoreFactories},
     repo_path::RepoPath,
     revset::{
-        self, DefaultSymbolResolver, Revset, RevsetAliasesMap, RevsetEvaluationError,
-        RevsetExpression, RevsetIteratorExt, RevsetParseContext, RevsetResolutionError,
-        RevsetWorkspaceContext,
+        self, DefaultSymbolResolver, Revset, RevsetAliasesMap, RevsetEvaluationError, RevsetExpression, RevsetExtensions, RevsetIteratorExt, RevsetParseContext, RevsetResolutionError, RevsetWorkspaceContext, SymbolResolverExtension
     },
     rewrite,
     settings::{ConfigResultExt, UserSettings},
@@ -64,6 +62,7 @@ pub struct WorkspaceSession<'a> {
     pub settings: UserSettings,
     workspace: Workspace,
     aliases_map: RevsetAliasesMap,
+    extensions: RevsetExtensions,
     is_large: bool,
 
     // operation-specific data, containing a repo view and derived extras
@@ -142,6 +141,7 @@ impl WorkerSession {
             settings,
             workspace,
             aliases_map,
+            extensions: Default::default(),
             operation,
             is_colocated,
         })
@@ -385,26 +385,21 @@ impl WorkspaceSession<'_> {
      *************************************************************/
 
     fn parse_context(&self) -> RevsetParseContext {
-        build_parse_context(&self.settings, &self.workspace, &self.aliases_map)
+        build_parse_context(&self.settings, &self.workspace, &self.aliases_map, &self.extensions)
     }
 
     fn prefix_context(&self) -> &Rc<IdPrefixContext> {
         self.operation.prefix_context.get_or_init(|| {
             Rc::new(
-                build_prefix_context(&self.settings, &self.workspace, &self.aliases_map)
+                build_prefix_context(&self.settings, &self.workspace, &self.aliases_map, &self.extensions)
                     .expect("init prefix context"),
             )
         })
     }
 
     fn resolver(&self) -> DefaultSymbolResolver {
-        let commit_id_resolver: revset::PrefixResolver<CommitId> =
-            Box::new(|repo, prefix| self.prefix_context().resolve_commit_prefix(repo, prefix));
-        let change_id_resolver: revset::PrefixResolver<Vec<CommitId>> =
-            Box::new(|repo, prefix| self.prefix_context().resolve_change_prefix(repo, prefix));
-        DefaultSymbolResolver::new(self.operation.repo.as_ref())
-            .with_commit_id_resolver(commit_id_resolver)
-            .with_change_id_resolver(change_id_resolver)
+        DefaultSymbolResolver::new(self.operation.repo.as_ref(), &([] as [Box<dyn SymbolResolverExtension>; 0]))
+            .with_id_prefix_context(&self.prefix_context())
     }
 
     pub fn ref_index(&self) -> &Rc<RefIndex> {
@@ -800,7 +795,7 @@ impl WorkspaceSession<'_> {
 
         // rebase each child, and then auto-rebase their descendants
         let mut rebased_commit_ids = HashMap::new();
-        for child_commit in &children {
+        for child_commit in children {
             let new_child_parent_ids: Vec<CommitId> = child_commit
                 .parents()
                 .iter()
@@ -820,11 +815,10 @@ impl WorkspaceSession<'_> {
                         .parents()
                         .ancestors(),
                 );
-            let new_child_parents: Vec<Commit> = new_child_parents_expression
+            let new_child_parents: Vec<CommitId> = new_child_parents_expression
                 .evaluate_programmatic(tx.base_repo().as_ref())?
                 .iter()
-                .commits(tx.base_repo().store())
-                .try_collect()?;
+                .collect();
 
             rebased_commit_ids.insert(
                 child_commit.id().clone(),
@@ -832,7 +826,7 @@ impl WorkspaceSession<'_> {
                     &self.settings,
                     tx.mut_repo(),
                     child_commit,
-                    &new_child_parents,
+                    new_child_parents,
                 )?
                 .id()
                 .clone(),
@@ -937,6 +931,7 @@ fn build_parse_context<'a>(
     settings: &UserSettings,
     workspace: &'a Workspace,
     aliases_map: &'a RevsetAliasesMap,
+    extensions: &'a RevsetExtensions
 ) -> RevsetParseContext<'a> {
     let workspace_context = RevsetWorkspaceContext {
         cwd: workspace.workspace_root(),
@@ -947,6 +942,7 @@ fn build_parse_context<'a>(
         aliases_map: &aliases_map,
         user_email: settings.user_email(),
         workspace: Some(workspace_context),
+        extensions
     }
 }
 
@@ -954,6 +950,7 @@ fn build_prefix_context(
     settings: &UserSettings,
     workspace: &Workspace,
     aliases_map: &RevsetAliasesMap,
+    extensions: &RevsetExtensions
 ) -> Result<IdPrefixContext> {
     let mut prefix_context = IdPrefixContext::default();
 
@@ -964,7 +961,7 @@ fn build_prefix_context(
 
     if !revset_string.is_empty() {
         let disambiguation_revset: Rc<RevsetExpression> = parse_revset(
-            &build_parse_context(&settings, &workspace, &aliases_map),
+            &build_parse_context(&settings, &workspace, &aliases_map, extensions),
             &revset_string,
         )?;
         prefix_context = prefix_context.disambiguate_within(disambiguation_revset);
