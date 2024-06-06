@@ -35,7 +35,7 @@ use jj_lib::{
     op_store::WorkspaceId,
     operation::Operation,
     repo::{ReadonlyRepo, Repo, RepoLoaderError, StoreFactories},
-    repo_path::RepoPath,
+    repo_path::{RepoPath, RepoPathUiConverter},
     revset::{
         self, DefaultSymbolResolver, Revset, RevsetAliasesMap, RevsetEvaluationError, RevsetExpression, RevsetExtensions, RevsetIteratorExt, RevsetParseContext, RevsetResolutionError, RevsetWorkspaceContext, SymbolResolverExtension
     },
@@ -61,6 +61,7 @@ pub struct WorkspaceSession<'a> {
     // workspace-level data, initialised once
     pub settings: UserSettings,
     workspace: Workspace,
+    path_converter: RepoPathUiConverter,
     aliases_map: RevsetAliasesMap,
     extensions: RevsetExtensions,
     is_large: bool,
@@ -135,11 +136,17 @@ impl WorkerSession {
 
         let is_colocated = is_colocated_git_workspace(&workspace, &operation.repo);
 
+        let path_converter = RepoPathUiConverter::Fs { 
+            cwd: workspace.workspace_root().clone(), 
+            base: workspace.workspace_root().clone()
+        };
+
         Ok(WorkspaceSession {
             session: self,
             is_large,
             settings,
             workspace,
+            path_converter,
             aliases_map,
             extensions: Default::default(),
             operation,
@@ -385,15 +392,36 @@ impl WorkspaceSession<'_> {
      *************************************************************/
 
     fn parse_context(&self) -> RevsetParseContext {
-        build_parse_context(&self.settings, &self.workspace, &self.aliases_map, &self.extensions)
+        let workspace_context = RevsetWorkspaceContext {
+            path_converter: &self.path_converter,
+            workspace_id: self.workspace.workspace_id(),
+        };
+        RevsetParseContext::new(
+            &self.aliases_map,
+            self.settings.user_email(),
+            &self.extensions,
+            Some(workspace_context)
+        )
     }
 
     fn prefix_context(&self) -> &Rc<IdPrefixContext> {
-        self.operation.prefix_context.get_or_init(|| {
-            Rc::new(
-                build_prefix_context(&self.settings, &self.workspace, &self.aliases_map, &self.extensions)
-                    .expect("init prefix context"),
-            )
+        self.operation.prefix_context.get_or_init(|| {            
+            let mut prefix_context = IdPrefixContext::default();
+
+            let revset_string: String = self.settings
+                .config()
+                .get_string("revsets.short-prefixes")
+                .unwrap_or_else(|_| self.settings.default_revset());
+
+            if !revset_string.is_empty() {
+                let disambiguation_revset: Rc<RevsetExpression> = parse_revset(
+                    &self.parse_context(),
+                    &revset_string,
+                ).expect("init prefix context: parse revsets.short-prefixes");
+                prefix_context = prefix_context.disambiguate_within(disambiguation_revset);
+            };
+
+            Rc::new(prefix_context)
         })
     }
 
@@ -925,49 +953,6 @@ fn build_aliases_map(layered_configs: &LayeredConfigs) -> Result<RevsetAliasesMa
         }
     }
     Ok(aliases_map)
-}
-
-fn build_parse_context<'a>(
-    settings: &UserSettings,
-    workspace: &'a Workspace,
-    aliases_map: &'a RevsetAliasesMap,
-    extensions: &'a RevsetExtensions
-) -> RevsetParseContext<'a> {
-    let workspace_context = RevsetWorkspaceContext {
-        cwd: workspace.workspace_root(),
-        workspace_id: workspace.workspace_id(),
-        workspace_root: workspace.workspace_root(),
-    };
-    RevsetParseContext {
-        aliases_map: &aliases_map,
-        user_email: settings.user_email(),
-        workspace: Some(workspace_context),
-        extensions
-    }
-}
-
-fn build_prefix_context(
-    settings: &UserSettings,
-    workspace: &Workspace,
-    aliases_map: &RevsetAliasesMap,
-    extensions: &RevsetExtensions
-) -> Result<IdPrefixContext> {
-    let mut prefix_context = IdPrefixContext::default();
-
-    let revset_string: String = settings
-        .config()
-        .get_string("revsets.short-prefixes")
-        .unwrap_or_else(|_| settings.default_revset());
-
-    if !revset_string.is_empty() {
-        let disambiguation_revset: Rc<RevsetExpression> = parse_revset(
-            &build_parse_context(&settings, &workspace, &aliases_map, extensions),
-            &revset_string,
-        )?;
-        prefix_context = prefix_context.disambiguate_within(disambiguation_revset);
-    };
-
-    Ok(prefix_context)
 }
 
 fn parse_revset(
