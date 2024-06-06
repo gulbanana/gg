@@ -5,7 +5,7 @@ use std::{
 };
 
 use anyhow::{anyhow, Context, Result};
-use jj_cli::{cli_util, config::ConfigSource};
+use jj_cli::config::{write_config_value_to_file, ConfigNamePathBuf, ConfigSource};
 
 use super::{
     gui_util::WorkspaceSession,
@@ -53,11 +53,11 @@ pub enum SessionEvent {
     },
     ReadConfigArray {
         tx: Sender<Result<Vec<String>>>,
-        key: String,
+        key: Vec<String>,
     },
     WriteConfigArray {
         scope: ConfigSource,
-        key: String,
+        key: Vec<String>,
         values: Vec<String>,
     },
 }
@@ -233,10 +233,11 @@ impl Session for WorkspaceSession<'_> {
                     }
                 }
                 SessionEvent::ReadConfigArray { key, tx } => {
+                    let name: ConfigNamePathBuf = key.iter().collect();
+
                     tx.send(
-                        self.settings
-                            .config()
-                            .get_array(&key)
+                        name.lookup_value(self.settings.config())
+                            .and_then(|value| value.into_array())
                             .and_then(|values| {
                                 values
                                     .into_iter()
@@ -244,10 +245,11 @@ impl Session for WorkspaceSession<'_> {
                                     .collect()
                             })
                             .context("read config"),
-                        //.map_err(|err| anyhow!(err)),
                     )?;
                 }
                 SessionEvent::WriteConfigArray { scope, key, values } => {
+                    let name = key.iter().collect();
+
                     let path = match scope {
                         ConfigSource::User => jj_cli::config::new_config_path()
                             .map_err(|err| anyhow!(err))
@@ -263,7 +265,7 @@ impl Session for WorkspaceSession<'_> {
                         let mut parseable_value = String::from("['");
                         parseable_value.push_str(&values.join("','"));
                         parseable_value.push_str("']");
-                        cli_util::write_config_value_to_file(&key, &parseable_value, &path)
+                        write_config_value_to_file(&name, &parseable_value, &path)
                             .map_err(|err| anyhow!("{err:?}"))
                     });
 
