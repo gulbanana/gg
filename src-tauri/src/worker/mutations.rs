@@ -4,7 +4,7 @@ use anyhow::{anyhow, Context, Result};
 use indexmap::IndexMap;
 use itertools::Itertools;
 use jj_lib::{
-    backend::CommitId,
+    backend::{BackendError, CommitId},
     commit::Commit,
     git::{self, GitBranchPushTargets, REMOTE_NAME_FOR_LOCAL_GIT_REPO},
     matchers::{EverythingMatcher, FilesMatcher, Matcher},
@@ -80,8 +80,9 @@ impl Mutation for BackoutRevisions {
 
         let working_copy = ws.get_commit(ws.wc_id())?;
         let reverted = ws.resolve_multiple_changes(self.ids)?;
+        let reverted_parents: Result<Vec<_>, BackendError> = reverted[0].parents().collect();
 
-        let old_base_tree = rewrite::merge_commit_trees(tx.mut_repo(), &reverted[0].parents())?;
+        let old_base_tree = rewrite::merge_commit_trees(tx.mut_repo(), &reverted_parents?)?;
         let new_base_tree = working_copy.tree()?;
         let old_tree = reverted[0].tree()?;
         let new_tree = new_base_tree.merge(&old_tree, &old_base_tree)?;
@@ -206,14 +207,13 @@ impl Mutation for DuplicateRevisions {
 
         // toposort ensures that parents are duplicated first
         for clonee in clonees.into_iter().rev() {
-            let clone_parents = clonee
+            let clone_parents: Result<Vec<_>, _> = clonee
                 .parents()
-                .iter()
-                .map(|parent| {
-                    if let Some(cloned_parent) = clones.get(parent) {
+                .map_ok(|parent| {
+                    if let Some(cloned_parent) = clones.get(&parent) {
                         cloned_parent
                     } else {
-                        parent
+                        &parent
                     }
                     .id()
                     .clone()
@@ -223,7 +223,7 @@ impl Mutation for DuplicateRevisions {
                 .mut_repo()
                 .rewrite_commit(&ws.settings, &clonee)
                 .generate_new_change_id()
-                .set_parents(clone_parents)
+                .set_parents(clone_parents?)
                 .write()?;
             clones.insert(clonee, clone);
         }
@@ -369,7 +369,8 @@ impl Mutation for MoveChanges {
 
         // construct a split tree and a remainder tree by copying changes from child to parent and from parent to child
         let from_tree = from.tree()?;
-        let parent_tree = rewrite::merge_commit_trees(tx.repo(), &from.parents())?;
+        let from_parents: Result<Vec<_>, _> = from.parents().collect();
+        let parent_tree = rewrite::merge_commit_trees(tx.repo(), &from_parents?)?;
         let split_tree_id = rewrite::restore_tree(&from_tree, &parent_tree, matcher.as_ref())?;
         let split_tree = tx.repo().store().get_root_tree(&split_tree_id)?;
         let remainder_tree_id = rewrite::restore_tree(&parent_tree, &from_tree, matcher.as_ref())?;

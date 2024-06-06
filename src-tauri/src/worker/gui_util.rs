@@ -824,18 +824,18 @@ impl WorkspaceSession<'_> {
         // rebase each child, and then auto-rebase their descendants
         let mut rebased_commit_ids = HashMap::new();
         for child_commit in children {
-            let new_child_parent_ids: Vec<CommitId> = child_commit
-                .parents()
+            let new_child_parent_ids = child_commit
+                .parent_ids()
                 .iter()
                 .flat_map(|c| {
-                    if c == target {
-                        target.parents().iter().map(|c| c.id().clone()).collect()
+                    if c == target.id() {
+                        target.parent_ids().to_vec()
                     } else {
-                        [c.id().clone()].to_vec()
+                        vec![c.clone()]
                     }
                 })
-                .collect();
-
+                .collect_vec();
+        
             // some of the new parents may be ancestors of others
             let new_child_parents_expression =
                 RevsetExpression::commits(new_child_parent_ids.clone()).minus(

@@ -25,7 +25,7 @@ use pollster::FutureExt;
 
 use crate::messages::{
     ChangeHunk, ChangeKind, FileRange, HunkLocation, LogCoordinates, LogLine, LogPage, LogRow,
-    MultilineString, RevChange, RevConflict, RevHeader, RevId, RevResult,
+    MultilineString, RevChange, RevConflict, RevId, RevResult,
 };
 
 use super::WorkspaceSession;
@@ -282,7 +282,8 @@ pub fn query_revision(ws: &WorkspaceSession, id: RevId) -> Result<RevResult> {
         None => return Ok(RevResult::NotFound { id }),
     };
 
-    let parent_tree = rewrite::merge_commit_trees(ws.repo(), &commit.parents())?;
+    let commit_parents: Result<Vec<_>, _> = commit.parents().collect();
+    let parent_tree = rewrite::merge_commit_trees(ws.repo(), &commit_parents?)?;
     let tree = commit.tree()?;
 
     let mut conflicts = Vec::new();
@@ -312,12 +313,11 @@ pub fn query_revision(ws: &WorkspaceSession, id: RevId) -> Result<RevResult> {
 
     let header = ws.format_header(&commit, None)?;
 
-    let parents: Result<Vec<RevHeader>> = commit
+    let parents = commit
         .parents()
-        .iter()
-        .map(|p| {
+        .map_ok(|p| {
             ws.format_header(
-                p,
+                &p,
                 if header.is_immutable {
                     Some(true)
                 } else {
@@ -325,8 +325,9 @@ pub fn query_revision(ws: &WorkspaceSession, id: RevId) -> Result<RevResult> {
                 },
             )
         })
-        .collect();
-    let parents = parents?;
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()?;
 
     Ok(RevResult::Detail {
         header,
@@ -445,8 +446,8 @@ fn get_value_contents(path: &RepoPath, value: MaterializedTreeValue) -> Result<V
             contents.push_str("(submodule)");
         }
         MaterializedTreeValue::Conflict {
-            id: _,
             contents: conflict_data,
+            ..
         } => contents = conflict_data,
         MaterializedTreeValue::Tree(_) => {
             panic!("Unexpected tree in diff at path {path:?}");
