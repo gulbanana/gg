@@ -4,6 +4,7 @@ use crate::{
     worker::{Session, SessionEvent, WorkerSession},
 };
 use anyhow::Result;
+use jj_cli::config::ConfigSource;
 use std::{path::PathBuf, sync::mpsc::channel};
 
 #[test]
@@ -326,6 +327,67 @@ fn query_rev_not_found() -> Result<()> {
     assert!(
         matches!(result, RevResult::NotFound { id } if id.change.hex == "abcdefghijklmnopqrstuvwxyz")
     );
+
+    Ok(())
+}
+
+#[test]
+fn config_read() -> Result<()> {
+    let repo = mkrepo();
+
+    let (tx, rx) = channel::<SessionEvent>();
+    let (tx_load, rx_load) = channel::<Result<RepoConfig>>();
+    let (tx_read, rx_read) = channel::<Result<Vec<String>>>();
+
+    tx.send(SessionEvent::OpenWorkspace {
+        tx: tx_load,
+        wd: Some(repo.path().to_owned()),
+    })?;
+    tx.send(SessionEvent::ReadConfigArray {
+        tx: tx_read,
+        key: vec!["gg".into(), "ui".into(), "recent-workspaces".into()],
+    })?;
+    tx.send(SessionEvent::EndSession)?;
+
+    WorkerSession::default().handle_events(&rx)?;
+
+    _ = rx_load.recv()??;
+    let result = rx_read.recv()?;
+
+    assert!(result.is_ok()); // key may be empty, but should exist due to defaults
+
+    Ok(())
+}
+
+#[test]
+fn config_write() -> Result<()> {
+    let repo = mkrepo();
+
+    let (tx, rx) = channel::<SessionEvent>();
+    let (tx_load, rx_load) = channel::<Result<RepoConfig>>();
+    let (tx_read, rx_read) = channel::<Result<Vec<String>>>();
+
+    tx.send(SessionEvent::OpenWorkspace {
+        tx: tx_load,
+        wd: Some(repo.path().to_owned()),
+    })?;
+    tx.send(SessionEvent::WriteConfigArray {
+        scope: ConfigSource::Repo,
+        key: vec!["gg".into(), "test".into()],
+        values: vec!["a".into(), "b".into()],
+    })?;
+    tx.send(SessionEvent::ReadConfigArray {
+        tx: tx_read,
+        key: vec!["gg".into(), "test".into()],
+    })?;
+    tx.send(SessionEvent::EndSession)?;
+
+    WorkerSession::default().handle_events(&rx)?;
+
+    _ = rx_load.recv()??;
+    let result = rx_read.recv()??;
+
+    assert_eq!(vec!["a".to_string(), "b".to_string()], result);
 
     Ok(())
 }

@@ -324,4 +324,6 @@ fn move_source() -> Result<()> {
     Ok(())
 }
 
-// XXX need tests for branch/ref mutations
+// XXX missing tests for:
+// - branch/ref mutations
+// - git interop
