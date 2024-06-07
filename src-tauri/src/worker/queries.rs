@@ -18,7 +18,7 @@ use jj_lib::{
     repo::Repo,
     repo_path::RepoPath,
     revset::Revset,
-    revset_graph::{RevsetGraphEdge, RevsetGraphEdgeType, TopoGroupedRevsetGraphIterator},
+    graph::{GraphEdge, GraphEdgeType, TopoGroupedGraphIterator},
     rewrite,
 };
 use pollster::FutureExt;
@@ -64,8 +64,9 @@ pub struct QuerySession<'q, 'w: 'q> {
     pub state: QueryState,
     iter: Peekable<
         Skip<
-            TopoGroupedRevsetGraphIterator<
-                Box<dyn Iterator<Item = (CommitId, Vec<RevsetGraphEdge>)> + 'q>,
+            TopoGroupedGraphIterator<
+                CommitId,
+                Box<dyn Iterator<Item = (CommitId, Vec<GraphEdge<CommitId>>)> + 'q>,
             >,
         >,
     >,
@@ -78,7 +79,7 @@ impl<'q, 'w> QuerySession<'q, 'w> {
         revset: &'q dyn Revset,
         state: QueryState,
     ) -> QuerySession<'q, 'w> {
-        let iter = TopoGroupedRevsetGraphIterator::new(revset.iter_graph())
+        let iter = TopoGroupedGraphIterator::new(revset.iter_graph())
             .skip(state.next_row)
             .peekable();
 
@@ -170,7 +171,7 @@ impl<'q, 'w> QuerySession<'q, 'w> {
             // merge edges into existing stems or add new ones to the right
             let mut next_missing: Option<CommitId> = None;
             'edges: for edge in commit_edges.iter() {
-                if edge.edge_type == RevsetGraphEdgeType::Missing {
+                if edge.edge_type == GraphEdgeType::Missing {
                     if edge.target == root_id {
                         continue;
                     } else {
@@ -178,7 +179,7 @@ impl<'q, 'w> QuerySession<'q, 'w> {
                     }
                 }
 
-                let indirect = edge.edge_type != RevsetGraphEdgeType::Direct;
+                let indirect = edge.edge_type != GraphEdgeType::Direct;
 
                 for (slot, stem) in self.state.stems.iter().enumerate() {
                     if let Some(stem) = stem {
