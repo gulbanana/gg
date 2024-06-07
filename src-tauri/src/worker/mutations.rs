@@ -1,4 +1,4 @@
-use std::{collections::HashSet, fmt::Display};
+use std::fmt::Display;
 
 use anyhow::{anyhow, Context, Result};
 use indexmap::IndexMap;
@@ -739,11 +739,8 @@ impl Mutation for GitPush {
         };
 
         // determine branches to push, recording the old and new commits
-        let mut remote_branch_updates: Vec<(
-            &str,
-            Vec<(String, refs::BranchPushUpdate)>,
-            HashSet<String>,
-        )> = Vec::new();
+        let mut remote_branch_updates: Vec<(&str, Vec<(String, refs::BranchPushUpdate)>)> =
+            Vec::new();
         let remote_branch_refs: Vec<_> = match &*self {
             GitPush::AllBranches { ref remote_name } => {
                 let mut branch_updates = Vec::new();
@@ -758,7 +755,7 @@ impl Mutation for GitPush {
                         Ok(Some(update)) => branch_updates.push((branch_name.to_owned(), update)),
                     }
                 }
-                remote_branch_updates.push((remote_name, branch_updates, HashSet::new()));
+                remote_branch_updates.push((remote_name, branch_updates));
 
                 ws.view().remote_branches(&remote_name).collect()
             }
@@ -796,7 +793,7 @@ impl Mutation for GitPush {
                         }
                         remote_branch_refs.push((remote_name, remote_ref));
                     }
-                    remote_branch_updates.push((remote_name, branch_updates, HashSet::new()));
+                    remote_branch_updates.push((remote_name, branch_updates));
                 }
 
                 remote_branch_refs
@@ -820,11 +817,8 @@ impl Mutation for GitPush {
                     Err(message) => return Ok(MutationResult::PreconditionError { message }),
                     Ok(None) => (),
                     Ok(Some(update)) => {
-                        remote_branch_updates.push((
-                            remote_name,
-                            vec![(branch_name.to_owned(), update)],
-                            HashSet::new(),
-                        ));
+                        remote_branch_updates
+                            .push((remote_name, vec![(branch_name.to_owned(), update)]));
                     }
                 }
 
@@ -837,17 +831,10 @@ impl Mutation for GitPush {
 
         // check for conflicts
         let mut new_heads = vec![];
-        for (_, branch_updates, force_pushed_branches) in &mut remote_branch_updates {
-            for (branch_name, update) in branch_updates {
+        for (_, branch_updates) in &mut remote_branch_updates {
+            for (_, update) in branch_updates {
                 if let Some(new_target) = &update.new_target {
                     new_heads.push(new_target.clone());
-                    let force = match &update.old_target {
-                        None => false,
-                        Some(old_target) => !ws.repo().index().is_ancestor(old_target, new_target),
-                    };
-                    if force {
-                        force_pushed_branches.insert(branch_name.to_string());
-                    }
                 }
             }
         }
@@ -894,13 +881,8 @@ impl Mutation for GitPush {
         }
 
         // push to each remote
-        for (remote_name, branch_updates, force_pushed_branches) in
-            remote_branch_updates.into_iter()
-        {
-            let targets = GitBranchPushTargets {
-                branch_updates,
-                force_pushed_branches,
-            };
+        for (remote_name, branch_updates) in remote_branch_updates.into_iter() {
+            let targets = GitBranchPushTargets { branch_updates };
 
             ws.session.callbacks.with_git(tx.mut_repo(), &|repo, cb| {
                 Ok(git::push_branches(
