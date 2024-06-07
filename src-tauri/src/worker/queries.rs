@@ -290,7 +290,9 @@ pub fn query_revision(ws: &WorkspaceSession, id: RevId) -> Result<RevResult> {
     for (path, entry) in parent_tree.entries() {
         if let Ok(entry) = entry {
             if !entry.is_resolved() {
-                match conflicts::materialize_tree_value(ws.repo().store(), &path, entry).block_on()? {
+                match conflicts::materialize_tree_value(ws.repo().store(), &path, entry)
+                    .block_on()?
+                {
                     MaterializedTreeValue::Conflict { contents, .. } => {
                         let mut hunks = get_unified_hunks(3, &contents, &[])?;
 
@@ -422,13 +424,12 @@ fn get_value_hunks(
 }
 
 fn get_value_contents(path: &RepoPath, value: MaterializedTreeValue) -> Result<Vec<u8>> {
-    let mut contents: Vec<u8>;
     match value {
         MaterializedTreeValue::Absent => {
-            panic!("Absent path {path:?} in diff should have been handled by caller");
+            Err(anyhow!("Absent path {path:?} in diff should have been handled by caller"))
         }
         MaterializedTreeValue::File { mut reader, .. } => {
-            contents = vec![];
+            let mut contents = vec![];
             reader.read_to_end(&mut contents)?;
 
             let start = &contents[..8000.min(contents.len())]; // same heuristic git uses
@@ -437,23 +438,21 @@ fn get_value_contents(path: &RepoPath, value: MaterializedTreeValue) -> Result<V
                 contents.clear();
                 contents.push_str("(binary)");
             }
+            Ok(contents)
         }
         MaterializedTreeValue::Symlink { target, .. } => {
-            contents = target.into_bytes();
+            Ok(target.into_bytes())
         }
         MaterializedTreeValue::GitSubmodule(_) => {
-            contents = vec![];
-            contents.push_str("(submodule)");
+            Ok("(submodule)".to_owned().into_bytes())
         }
         MaterializedTreeValue::Conflict {
-            contents: conflict_data,
+            contents,
             ..
-        } => contents = conflict_data,
-        MaterializedTreeValue::Tree(_) => {
-            panic!("Unexpected tree in diff at path {path:?}");
-        }
+        } => Ok(contents),
+        MaterializedTreeValue::Tree(_) => Err(anyhow!("Unexpected tree in diff at path {path:?}")),
+        MaterializedTreeValue::AccessDenied(error) => Err(anyhow!(error)),
     }
-    Ok(contents)
 }
 
 fn get_unified_hunks(
