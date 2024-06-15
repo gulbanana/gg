@@ -11,12 +11,10 @@ use std::{
 };
 
 use anyhow::{anyhow, Context, Result};
-use config::Config;
 use git2::Repository;
 use itertools::Itertools;
 use jj_cli::{
     cli_util::{check_stale_working_copy, short_operation_hash, WorkingCopyFreshness},
-    config::LayeredConfigs,
     git_util::{self, is_colocated_git_workspace},
     revset_util,
 };
@@ -37,10 +35,12 @@ use jj_lib::{
     repo::{ReadonlyRepo, Repo, RepoLoaderError, StoreFactories},
     repo_path::{RepoPath, RepoPathUiConverter},
     revset::{
-        self, DefaultSymbolResolver, Revset, RevsetAliasesMap, RevsetEvaluationError, RevsetExpression, RevsetExtensions, RevsetIteratorExt, RevsetParseContext, RevsetResolutionError, RevsetWorkspaceContext, SymbolResolverExtension
+        self, DefaultSymbolResolver, Revset, RevsetAliasesMap, RevsetEvaluationError,
+        RevsetExpression, RevsetExtensions, RevsetIteratorExt, RevsetParseContext,
+        RevsetResolutionError, RevsetWorkspaceContext, SymbolResolverExtension,
     },
     rewrite,
-    settings::{ConfigResultExt, UserSettings},
+    settings::UserSettings,
     transaction::Transaction,
     view::View,
     working_copy::{CheckoutStats, SnapshotOptions},
@@ -50,7 +50,7 @@ use thiserror::Error;
 
 use super::WorkerSession;
 use crate::{
-    config::GGSettings,
+    config::{read_config, GGSettings},
     messages::{self, RevId},
 };
 
@@ -59,12 +59,14 @@ pub struct WorkspaceSession<'a> {
     pub(crate) session: &'a mut WorkerSession,
 
     // workspace-level data, initialised once
-    pub settings: UserSettings,
     workspace: Workspace,
     path_converter: RepoPathUiConverter,
-    aliases_map: RevsetAliasesMap,
     extensions: RevsetExtensions,
     is_large: bool,
+
+    // reloadable data
+    pub settings: UserSettings,
+    pub aliases_map: RevsetAliasesMap,
 
     // operation-specific data, containing a repo view and derived extras
     operation: SessionOperation,
@@ -99,19 +101,7 @@ impl WorkerSession {
     pub fn load_directory(&mut self, cwd: &Path) -> Result<WorkspaceSession> {
         let loader = WorkspaceLoader::init(find_workspace_dir(cwd))?;
 
-        let defaults = Config::builder()
-            .add_source(jj_cli::config::default_config())
-            .add_source(config::File::from_str(
-                include_str!("../config/gg.toml"),
-                config::FileFormat::Toml,
-            ))
-            .build()?;
-
-        let mut configs = LayeredConfigs::from_environment(defaults);
-        configs.read_user_config()?;
-        configs.read_repo_config(loader.repo_path())?;
-        let config = configs.merge();
-        let settings = UserSettings::from_config(config);
+        let (settings, aliases_map) = read_config(loader.repo_path())?;
 
         let workspace = loader.load(
             &settings,
@@ -132,13 +122,11 @@ impl WorkerSession {
                 true
             };
 
-        let aliases_map = build_aliases_map(&configs)?;
-
         let is_colocated = is_colocated_git_workspace(&workspace, &operation.repo);
 
-        let path_converter = RepoPathUiConverter::Fs { 
-            cwd: workspace.workspace_root().clone(), 
-            base: workspace.workspace_root().clone()
+        let path_converter = RepoPathUiConverter::Fs {
+            cwd: workspace.workspace_root().clone(),
+            base: workspace.workspace_root().clone(),
         };
 
         Ok(WorkspaceSession {
@@ -400,24 +388,24 @@ impl WorkspaceSession<'_> {
             &self.aliases_map,
             self.settings.user_email(),
             &self.extensions,
-            Some(workspace_context)
+            Some(workspace_context),
         )
     }
 
     fn prefix_context(&self) -> &Rc<IdPrefixContext> {
-        self.operation.prefix_context.get_or_init(|| {            
+        self.operation.prefix_context.get_or_init(|| {
             let mut prefix_context = IdPrefixContext::default();
 
-            let revset_string: String = self.settings
+            let revset_string: String = self
+                .settings
                 .config()
                 .get_string("revsets.short-prefixes")
                 .unwrap_or_else(|_| self.settings.default_revset());
 
             if !revset_string.is_empty() {
-                let disambiguation_revset: Rc<RevsetExpression> = parse_revset(
-                    &self.parse_context(),
-                    &revset_string,
-                ).expect("init prefix context: parse revsets.short-prefixes");
+                let disambiguation_revset: Rc<RevsetExpression> =
+                    parse_revset(&self.parse_context(), &revset_string)
+                        .expect("init prefix context: parse revsets.short-prefixes");
                 prefix_context = prefix_context.disambiguate_within(disambiguation_revset);
             };
 
@@ -426,8 +414,11 @@ impl WorkspaceSession<'_> {
     }
 
     fn resolver(&self) -> DefaultSymbolResolver {
-        DefaultSymbolResolver::new(self.operation.repo.as_ref(), &([] as [Box<dyn SymbolResolverExtension>; 0]))
-            .with_id_prefix_context(&self.prefix_context())
+        DefaultSymbolResolver::new(
+            self.operation.repo.as_ref(),
+            &([] as [Box<dyn SymbolResolverExtension>; 0]),
+        )
+        .with_id_prefix_context(&self.prefix_context())
     }
 
     pub fn ref_index(&self) -> &Rc<RefIndex> {
@@ -835,7 +826,7 @@ impl WorkspaceSession<'_> {
                     }
                 })
                 .collect_vec();
-        
+
             // some of the new parents may be ancestors of others
             let new_child_parents_expression =
                 RevsetExpression::commits(new_child_parent_ids.clone()).minus(
@@ -932,27 +923,6 @@ fn find_workspace_dir(cwd: &Path) -> &Path {
     cwd.ancestors()
         .find(|path| path.join(".jj").is_dir())
         .unwrap_or(cwd)
-}
-
-fn build_aliases_map(layered_configs: &LayeredConfigs) -> Result<RevsetAliasesMap> {
-    const TABLE_KEY: &str = "revset-aliases";
-    let mut aliases_map = RevsetAliasesMap::new();
-    // Load from all config layers in order. 'f(x)' in default layer should be
-    // overridden by 'f(a)' in user.
-    for (_, config) in layered_configs.sources() {
-        let table = if let Some(table) = config.get_table(TABLE_KEY).optional()? {
-            table
-        } else {
-            continue;
-        };
-        for (decl, value) in table.into_iter().sorted_by(|a, b| a.0.cmp(&b.0)) {
-            value
-                .into_string()
-                .map_err(|e| anyhow!(e))
-                .and_then(|v| aliases_map.insert(&decl, v).map_err(|e| anyhow!(e)))?;
-        }
-    }
-    Ok(aliases_map)
 }
 
 fn parse_revset(

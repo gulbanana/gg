@@ -12,7 +12,7 @@ use super::{
     queries::{self, QueryState},
     Mutation, WorkerSession,
 };
-use crate::{handler, messages};
+use crate::{config::read_config, handler, messages};
 
 /// implemented by states of the event loop
 pub trait Session {
@@ -270,6 +270,8 @@ impl Session for WorkspaceSession<'_> {
                     });
 
                     handler::optional!(path);
+
+                    (self.settings, self.aliases_map) = read_config(self.repo().repo_path())?;
                 }
             };
         }
