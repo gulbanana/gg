@@ -14,12 +14,12 @@
     import AuthorSpan from "./controls/AuthorSpan.svelte";
     import ListWidget, { type List } from "./controls/ListWidget.svelte";
     import type { RevChange } from "./messages/RevChange";
+    import ChangeMutator from "./mutators/ChangeMutator";
 
     export let rev: Extract<RevResult, { type: "Detail" }>;
 
     const CONTEXT = 3;
 
-    let mutator = new RevisionMutator(rev.header);
     let fullDescription = rev.header.description.lines.join("\n");
     let resetAuthor = false;
 
@@ -65,7 +65,11 @@
         editRow(row: number) {},
     };
 
-    onEvent<string>("gg://menu/revision", (event) => mutator.handle(event));
+    let revMutator = new RevisionMutator(rev.header);
+    onEvent<string>("gg://menu/revision", (event) => revMutator.handle(event));
+
+    let changeMutator = $changeSelectEvent ? new ChangeMutator(rev.header, $changeSelectEvent.path) : null;
+    onEvent<string>("gg://menu/change", (event) => changeMutator?.handle(event));
 
     function minLines(change: RevChange): number {
         // let total = 0;
@@ -106,11 +110,11 @@
         <div class="checkout-commands">
             <ActionWidget
                 tip="make working copy"
-                onClick={mutator.onEdit}
+                onClick={revMutator.onEdit}
                 disabled={rev.header.is_immutable || rev.header.is_working_copy}>
                 <Icon name="edit-2" /> Edit
             </ActionWidget>
-            <ActionWidget tip="create a child" onClick={mutator.onNew}>
+            <ActionWidget tip="create a child" onClick={revMutator.onNew}>
                 <Icon name="edit" /> New
             </ActionWidget>
         </div>
@@ -132,7 +136,7 @@
             <span></span>
             <ActionWidget
                 tip="set commit message"
-                onClick={() => mutator.onDescribe(fullDescription, resetAuthor)}
+                onClick={() => revMutator.onDescribe(fullDescription, resetAuthor)}
                 disabled={rev.header.is_immutable}>
                 <Icon name="file-text" /> Describe
             </ActionWidget>
@@ -156,13 +160,13 @@
                 <span>Changes:</span>
                 <ActionWidget
                     tip="move all changes to parent"
-                    onClick={mutator.onSquash}
+                    onClick={revMutator.onSquash}
                     disabled={rev.header.is_immutable || rev.header.parent_ids.length != 1}>
                     <Icon name="upload" /> Squash
                 </ActionWidget>
                 <ActionWidget
                     tip="copy all changes from parent"
-                    onClick={mutator.onRestore}
+                    onClick={revMutator.onRestore}
                     disabled={rev.header.is_immutable || rev.header.parent_ids.length != 1}>
                     <Icon name="download" /> Restore
                 </ActionWidget>

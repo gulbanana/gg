@@ -60,7 +60,7 @@
     setContext<Settings>("settings", settings);
 
     onEvent("gg://context/revision", mutateRevision);
-    onEvent("gg://context/tree", mutateTree);
+    onEvent("gg://context/change", mutateTree);
     onEvent("gg://context/branch", mutateRef);
     onEvent("gg://input", requestInput);
 

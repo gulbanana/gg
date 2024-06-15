@@ -111,6 +111,28 @@ pub fn build_main(app_handle: &AppHandle) -> tauri::Result<Menu<Wry>> {
         ],
     )?;
 
+    let change_menu = Submenu::with_items(
+        app_handle,
+        "Change",
+        true,
+        &[
+            &MenuItem::with_id(
+                app_handle,
+                "menu_tree_squash",
+                "Squash into parent",
+                true,
+                None::<&str>,
+            )?,
+            &MenuItem::with_id(
+                app_handle,
+                "menu_tree_restore",
+                "Restore from parent",
+                true,
+                None::<&str>,
+            )?,
+        ],
+    )?;
+
     let edit_menu = Submenu::with_items(
         app_handle,
         "Edit",
@@ -147,6 +169,7 @@ pub fn build_main(app_handle: &AppHandle) -> tauri::Result<Menu<Wry>> {
             )?,
             &repo_menu,
             &revision_menu,
+            &change_menu,
             &edit_menu,
         ],
     )?;
@@ -454,6 +477,8 @@ pub fn handle_event(window: &Window, event: MenuEvent) -> Result<()> {
         "menu_revision_squash" => window.emit("gg://menu/revision", "squash")?,
         "menu_revision_restore" => window.emit("gg://menu/revision", "restore")?,
         "menu_revision_branch" => window.emit("gg://menu/revision", "branch")?,
+        "menu_tree_squash" => window.emit("gg://menu/change", "squash")?,
+        "menu_tree_restore" => window.emit("gg://menu/change", "restore")?,
         "revision_new" => window.emit("gg://context/revision", "new")?,
         "revision_edit" => window.emit("gg://context/revision", "edit")?,
         "revision_backout" => window.emit("gg://context/revision", "backout")?,
@@ -462,8 +487,8 @@ pub fn handle_event(window: &Window, event: MenuEvent) -> Result<()> {
         "revision_squash" => window.emit("gg://context/revision", "squash")?,
         "revision_restore" => window.emit("gg://context/revision", "restore")?,
         "revision_branch" => window.emit("gg://context/revision", "branch")?,
-        "tree_squash" => window.emit("gg://context/tree", "squash")?,
-        "tree_restore" => window.emit("gg://context/tree", "restore")?,
+        "tree_squash" => window.emit("gg://context/change", "squash")?,
+        "tree_restore" => window.emit("gg://context/change", "restore")?,
         "branch_track" => window.emit("gg://context/branch", "track")?,
         "branch_untrack" => window.emit("gg://context/branch", "untrack")?,
         "branch_push_all" => window.emit("gg://context/branch", "push-all")?,
