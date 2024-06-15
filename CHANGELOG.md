@@ -1,5 +1,8 @@
 # GG Changelog
 
+## [0.18.0](releases/tag/v0.18.0) 
+This version is based on Jujutsu 0.18.
+
 ## [0.17.0](releases/tag/v0.17.0) 
 This version is compatible with Jujutsu 0.17.
 
