@@ -9,7 +9,7 @@ use std::{
 
 use anyhow::Result;
 use jj_lib::{git::RemoteCallbacks, repo::MutableRepo};
-use tauri::{Manager, Window};
+use tauri::{Emitter, Manager, Window};
 
 use crate::{
     messages::{InputField, InputRequest},
