@@ -21,7 +21,7 @@ use jj_cli::config::ConfigSource;
 use log::LevelFilter;
 use tauri::menu::Menu;
 use tauri::{ipc::InvokeError, Manager};
-use tauri::{State, Window, WindowEvent, Wry};
+use tauri::{Emitter, Listener, State, Window, WindowEvent, Wry};
 use tauri_plugin_window_state::StateFlags;
 
 use messages::{
