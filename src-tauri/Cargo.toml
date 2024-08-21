@@ -6,7 +6,7 @@ authors = ["Thomas Castiglione"]
 edition = "2021"
 
 [build-dependencies]
-tauri-build = { version = "2.0.0-beta", features = [] }
+tauri-build = { version = "2.0.0-rc", features = [] }
 
 [dev-dependencies]
 tempfile = "3.10.1"
@@ -14,17 +14,17 @@ zip = "0.6"
 assert_matches = "1.5"
 
 [dependencies]
-tauri = { version = "2.0.0-beta", features = [] }
-tauri-codegen = "2.0.0-beta"
-tauri-macros = "2.0.0-beta"
-tauri-plugin = "2.0.0-beta"
-tauri-runtime = "2.0.0-beta"
-tauri-runtime-wry = "2.0.0-beta"
-tauri-utils = "2.0.0-beta"
-tauri-plugin-dialog = "2.0.0-beta"
-tauri-plugin-shell = "2.0.0-beta"
-tauri-plugin-window-state = "2.0.0-beta"
-tauri-plugin-log = "2.0.0-beta"
+tauri = { version = "2.0.0-rc", features = [] }
+tauri-codegen = "2.0.0-rc"
+tauri-macros = "2.0.0-rc"
+tauri-plugin = "2.0.0-rc"
+tauri-runtime = "2.0.0-rc"
+tauri-runtime-wry = "2.0.0-rc"
+tauri-utils = "2.0.0-rc"
+tauri-plugin-dialog = "2.0.0-rc"
+tauri-plugin-shell = "2.0.0-rc"
+tauri-plugin-window-state = "2.0.0-rc"
+tauri-plugin-log = "2.0.0-rc"
 
 jj-lib = { version = "0.18.0", features = ["vendored-openssl", "watchman"] }
 jj-cli = { version = "0.18.0", default-features = false, features = [
