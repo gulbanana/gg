@@ -3,7 +3,7 @@ use anyhow::{anyhow, Context, Result};
 use tauri::menu::AboutMetadata;
 use tauri::{
     menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu},
-    AppHandle, Manager, Window, Wry,
+    AppHandle, Emitter, Manager, Window, Wry,
 };
 use tauri_plugin_dialog::DialogExt;
 
