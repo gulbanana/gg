@@ -1,1 +1,20 @@
-{"main-capability":{"identifier":"main-capability","description":"Capability for the main window","local":true,"windows":["main"],"permissions":["core:path:default","core:event:default","core:window:default","core:app:default","core:resources:default","core:menu:default","core:tray:default","shell:allow-open"]}}
+{
+    "main-capability": {
+        "identifier": "main-capability",
+        "description": "Capability for the main window",
+        "local": true,
+        "windows": [
+            "main"
+        ],
+        "permissions": [
+            "core:path:default",
+            "core:event:default",
+            "core:window:default",
+            "core:app:default",
+            "core:resources:default",
+            "core:menu:default",
+            "core:tray:default",
+            "shell:allow-open"
+        ]
+    }
+}
