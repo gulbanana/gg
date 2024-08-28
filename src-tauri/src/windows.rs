@@ -18,7 +18,7 @@ pub fn reattach_console() {
     let _ = unsafe { AttachConsole(ATTACH_PARENT_PROCESS) };
 }
 
-#[allow(dead_code)]
+#[cfg_attr(not(windows), allow(dead_code))]
 pub fn update_jump_list(recent: &mut Vec<String>, path: &String) -> Result<()> {
     // create a jump list
     // safety: FFI

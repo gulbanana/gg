@@ -15,6 +15,7 @@ pub trait GGSettings {
     fn query_auto_snapshot(&self) -> Option<bool>;
     fn ui_theme_override(&self) -> Option<String>;
     fn ui_mark_unpushed_branches(&self) -> bool;
+    #[allow(dead_code)]
     fn ui_recent_workspaces(&self) -> Vec<String>;
 }
 

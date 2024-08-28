@@ -26,7 +26,7 @@ pub trait Session {
 /// messages sent to a worker from other threads. most come with a channel allowing a response
 #[derive(Debug)]
 pub enum SessionEvent {
-    #[allow(dead_code)]
+    #[allow(dead_code)] // used by tests
     EndSession,
     OpenWorkspace {
         tx: Sender<Result<messages::RepoConfig>>,

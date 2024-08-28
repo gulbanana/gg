@@ -4,6 +4,7 @@ use jj_lib::backend::{Signature, Timestamp};
 use super::*;
 
 /// A change or commit id with a disambiguated prefix
+#[allow(dead_code)] // the frontend needs these structs kept in sync
 pub trait Id {
     fn hex(&self) -> &String;
     fn prefix(&self) -> &String;

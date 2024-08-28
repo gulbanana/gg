@@ -73,8 +73,9 @@ pub struct TreePath {
     derive(TS),
     ts(export, export_to = "../src/messages/")
 )]
+
 pub enum RepoConfig {
-    #[allow(dead_code)]
+    #[allow(dead_code)] // used by frontend
     Initial,
     Workspace {
         absolute_path: DisplayPath,
@@ -85,7 +86,7 @@ pub enum RepoConfig {
         theme_override: Option<String>,
         mark_unpushed_branches: bool,
     },
-    #[allow(dead_code)]
+    #[allow(dead_code)] // used by frontend
     TimeoutError,
     LoadError {
         absolute_path: DisplayPath,

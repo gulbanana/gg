@@ -30,6 +30,7 @@ pub trait Mutation: Debug {
 
     fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<messages::MutationResult>;
 
+    #[cfg(test)]
     fn execute_unboxed(self, ws: &mut WorkspaceSession) -> Result<messages::MutationResult>
     where
         Self: Sized,
