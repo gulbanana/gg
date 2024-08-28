@@ -773,7 +773,7 @@ impl Mutation for GitPush {
                             None
                         }
                     })
-                    .group_by(|(remote_name, _)| *remote_name)
+                    .chunk_by(|(remote_name, _)| *remote_name)
                     .into_iter()
                 {
                     let mut branch_updates = Vec::new();
