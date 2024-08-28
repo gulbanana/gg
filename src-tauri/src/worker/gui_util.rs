@@ -11,6 +11,7 @@ use std::{
 };
 
 use anyhow::{anyhow, Context, Result};
+use chrono::TimeZone;
 use git2::Repository;
 use itertools::Itertools;
 use jj_cli::{
@@ -384,9 +385,17 @@ impl WorkspaceSession<'_> {
             path_converter: &self.path_converter,
             workspace_id: self.workspace.workspace_id(),
         };
+        let now = if let Some(timestamp) = self.settings.commit_timestamp() {
+            chrono::Local
+                .timestamp_millis_opt(timestamp.timestamp.0)
+                .unwrap()
+        } else {
+            chrono::Local::now()
+        };
         RevsetParseContext::new(
             &self.aliases_map,
             self.settings.user_email(),
+            now.into(),
             &self.extensions,
             Some(workspace_context),
         )
@@ -689,7 +698,7 @@ impl WorkspaceSession<'_> {
 
         let new_tree_id = locked_ws.locked_wc().snapshot(SnapshotOptions {
             base_ignores,
-            fsmonitor_kind: self.settings.fsmonitor_kind()?,
+            fsmonitor_settings: self.settings.fsmonitor_settings()?,
             progress: None,
             max_new_file_size: self.settings.max_new_file_size()?,
         })?;
@@ -882,9 +891,9 @@ impl SessionOperation {
 
     pub fn base_ignores(&self) -> Result<Arc<GitIgnoreFile>> {
         fn get_excludes_file_path(config: &gix::config::File) -> Option<PathBuf> {
-            // TODO: maybe use path_by_key() and interpolate(), which can process non-utf-8
+            // TODO: maybe use path() and interpolate(), which can process non-utf-8
             // path on Unix.
-            if let Some(value) = config.string_by_key("core.excludesFile") {
+            if let Some(value) = config.string("core.excludesFile") {
                 std::str::from_utf8(&value)
                     .ok()
                     .map(jj_cli::git_util::expand_git_path)
