@@ -297,10 +297,12 @@ pub fn query_revision(ws: &WorkspaceSession, id: RevId) -> Result<RevResult> {
                     MaterializedTreeValue::Conflict { contents, .. } => {
                         let mut hunks = get_unified_hunks(3, &contents, &[])?;
 
-                        conflicts.push(RevConflict {
-                            path: ws.format_path(path),
-                            hunk: hunks.pop().unwrap(),
-                        });
+                        if let Some(hunk) = hunks.pop() {
+                            conflicts.push(RevConflict {
+                                path: ws.format_path(path),
+                                hunk,
+                            });
+                        }
                     }
                     _ => {
                         log::warn!("nonresolved tree entry did not materialise as conflict");

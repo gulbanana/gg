@@ -7,6 +7,7 @@ This version is based on Jujutsu 0.20.
 - `gg.queries.log-page-size` setting was not being respected.
 - Removed &lt;CR&gt; character which rendered as a circle in the author display on some Linux systems.
 - Improved button/control font display on Linux.
+- Fixed a panic attempting to display delete/delete conflicts in the right pane.
 
 ## [0.18.0](releases/tag/v0.18.0) 
 This version is based on Jujutsu 0.18.
