@@ -37,9 +37,7 @@
       "icons/icon.ico"
     ],
     "windows": {
-      "certificateThumbprint": "a2da0d655fd327e046f5878a11053f2b9c2e2233",
-      "digestAlgorithm": "sha384",
-      "timestampUrl": "http://timestamp.digicert.com"
+      "signCommand": "trusted-signing-cli -e https://wus2.codesigning.azure.net/ -a agile-signing -c cloud-apps %1"
     }
   },
   "plugins": {}
