@@ -1,5 +1,8 @@
 # GG Changelog
 
+## [0.20.0](releases/tag/v0.20.0) 
+This version is based on Jujutsu 0.20.
+
 ## [0.18.0](releases/tag/v0.18.0) 
 This version is based on Jujutsu 0.18.
 
