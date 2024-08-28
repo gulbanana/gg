@@ -3,6 +3,9 @@
 ## [0.20.0](releases/tag/v0.20.0) 
 This version is based on Jujutsu 0.20.
 
+### Fixed
+- `gg.queries.log-page-size` setting was not being respected.
+
 ## [0.18.0](releases/tag/v0.18.0) 
 This version is based on Jujutsu 0.18.
 

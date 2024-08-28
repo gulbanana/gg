@@ -13,12 +13,12 @@ use jj_lib::{
     backend::CommitId,
     conflicts::{self, MaterializedTreeValue},
     diff::{self, Diff, DiffHunk},
+    graph::{GraphEdge, GraphEdgeType, TopoGroupedGraphIterator},
     matchers::EverythingMatcher,
     merged_tree::TreeDiffStream,
     repo::Repo,
     repo_path::RepoPath,
     revset::Revset,
-    graph::{GraphEdge, GraphEdgeType, TopoGroupedGraphIterator},
     rewrite,
 };
 use pollster::FutureExt;
@@ -268,7 +268,7 @@ impl<'q, 'w> QuerySession<'q, 'w> {
     }
 }
 
-#[allow(dead_code)]
+#[cfg(test)]
 pub fn query_log(ws: &WorkspaceSession, revset_str: &str, max_results: usize) -> Result<LogPage> {
     let state = QueryState::new(max_results);
     let revset = ws.evaluate_revset_str(revset_str)?;
@@ -426,9 +426,9 @@ fn get_value_hunks(
 
 fn get_value_contents(path: &RepoPath, value: MaterializedTreeValue) -> Result<Vec<u8>> {
     match value {
-        MaterializedTreeValue::Absent => {
-            Err(anyhow!("Absent path {path:?} in diff should have been handled by caller"))
-        }
+        MaterializedTreeValue::Absent => Err(anyhow!(
+            "Absent path {path:?} in diff should have been handled by caller"
+        )),
         MaterializedTreeValue::File { mut reader, .. } => {
             let mut contents = vec![];
             reader.read_to_end(&mut contents)?;
@@ -441,16 +441,9 @@ fn get_value_contents(path: &RepoPath, value: MaterializedTreeValue) -> Result<V
             }
             Ok(contents)
         }
-        MaterializedTreeValue::Symlink { target, .. } => {
-            Ok(target.into_bytes())
-        }
-        MaterializedTreeValue::GitSubmodule(_) => {
-            Ok("(submodule)".to_owned().into_bytes())
-        }
-        MaterializedTreeValue::Conflict {
-            contents,
-            ..
-        } => Ok(contents),
+        MaterializedTreeValue::Symlink { target, .. } => Ok(target.into_bytes()),
+        MaterializedTreeValue::GitSubmodule(_) => Ok("(submodule)".to_owned().into_bytes()),
+        MaterializedTreeValue::Conflict { contents, .. } => Ok(contents),
         MaterializedTreeValue::Tree(_) => Err(anyhow!("Unexpected tree in diff at path {path:?}")),
         MaterializedTreeValue::AccessDenied(error) => Err(anyhow!(error)),
     }

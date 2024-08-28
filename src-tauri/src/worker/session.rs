@@ -12,7 +12,10 @@ use super::{
     queries::{self, QueryState},
     Mutation, WorkerSession,
 };
-use crate::{config::read_config, handler, messages};
+use crate::{
+    config::{read_config, GGSettings},
+    handler, messages,
+};
 
 /// implemented by states of the event loop
 pub trait Session {
@@ -177,7 +180,10 @@ impl Session for WorkspaceSession<'_> {
                     tx,
                     query: revset_string,
                 } => {
-                    let log_page_size = self.session.force_log_page_size.unwrap_or(1000);
+                    let log_page_size = self
+                        .session
+                        .force_log_page_size
+                        .unwrap_or(self.settings.query_log_page_size());
                     handle_query(
                         &mut state,
                         &self,
