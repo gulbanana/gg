@@ -5,7 +5,7 @@ use tauri::{
     menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu},
     AppHandle, Emitter, Manager, Window, Wry,
 };
-use tauri_plugin_dialog::DialogExt;
+use tauri_plugin_dialog::{DialogExt, FilePath};
 
 use crate::{
     handler,
@@ -481,7 +481,7 @@ pub fn handle_event(window: &Window, event: MenuEvent) -> Result<()> {
 pub fn repo_open(window: &Window) {
     let window = window.clone();
     window.dialog().file().pick_folder(move |picked| {
-        if let Some(cwd) = picked {
+        if let Some(FilePath::Path(cwd)) = picked {
             handler::fatal!(
                 crate::try_open_repository(&window, Some(cwd)).context("try_open_repository")
             );

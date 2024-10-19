@@ -1,5 +1,8 @@
 # GG Changelog
 
+## Unreleased
+This version uses Tauri 2.0.
+
 ## [0.20.0](releases/tag/v0.20.0) 
 This version is based on Jujutsu 0.20.
 

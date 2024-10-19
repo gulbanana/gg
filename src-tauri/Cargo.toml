@@ -6,7 +6,7 @@ authors = ["Thomas Castiglione"]
 edition = "2021"
 
 [build-dependencies]
-tauri-build = { version = "2.0.0-rc", features = [] }
+tauri-build = { version = "2.0.0", features = [] }
 
 [dev-dependencies]
 tempfile = "3.10.1"
@@ -14,17 +14,17 @@ zip = "0.6"
 assert_matches = "1.5"
 
 [dependencies]
-tauri = { version = "2.0.0-rc", features = [] }
-tauri-codegen = "2.0.0-rc"
-tauri-macros = "2.0.0-rc"
-tauri-plugin = "2.0.0-rc"
-tauri-runtime = "2.0.0-rc"
-tauri-runtime-wry = "2.0.0-rc"
-tauri-utils = "2.0.0-rc"
-tauri-plugin-dialog = "2.0.0-rc"
-tauri-plugin-shell = "2.0.0-rc"
-tauri-plugin-window-state = "2.0.0-rc"
-tauri-plugin-log = "2.0.0-rc"
+tauri = { version = "2.0.0", features = [] }
+tauri-codegen = "2.0.0"
+tauri-macros = "2.0.0"
+tauri-plugin = "2.0.0"
+tauri-runtime = "2.0.0"
+tauri-runtime-wry = "2.0.0"
+tauri-utils = "2.0.0"
+tauri-plugin-dialog = "2.0.0"
+tauri-plugin-shell = "2.0.0"
+tauri-plugin-window-state = "2.0.0"
+tauri-plugin-log = "2.0.0"
 
 jj-lib = { version = "0.20.0", features = ["vendored-openssl", "watchman"] }
 jj-cli = { version = "0.20.0", default-features = false, features = [
@@ -47,7 +47,7 @@ futures-util = "0.3.30"
 gix = { version = "0.64.0", default-features = false, features = [
     "index",
     "max-performance-safe",
-    "blob-diff"
+    "blob-diff",
 ] }
 pollster = "0.3.0"
 serde = { version = "1.0", features = ["derive"] }
