@@ -28,6 +28,7 @@ use jj_lib::{
     git_backend::GitBackend,
     gitignore::GitIgnoreFile,
     id_prefix::{IdPrefixContext, IdPrefixIndex},
+    matchers::EverythingMatcher,
     object_id::ObjectId,
     op_heads_store,
     op_store::WorkspaceId,
@@ -680,11 +681,12 @@ impl WorkspaceSession<'_> {
             }
         };
 
-        let new_tree_id = locked_ws.locked_wc().snapshot(SnapshotOptions {
+        let new_tree_id = locked_ws.locked_wc().snapshot(&SnapshotOptions {
             base_ignores,
             fsmonitor_settings: self.data.settings.fsmonitor_settings()?,
             progress: None,
             max_new_file_size: self.data.settings.max_new_file_size()?,
+            start_tracking_matcher: &EverythingMatcher,
         })?;
 
         let did_anything = new_tree_id != *wc_commit.tree_id();
