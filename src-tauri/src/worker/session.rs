@@ -262,9 +262,7 @@ impl Session for WorkspaceSession<'_> {
                             .and_then(|path| {
                                 path.ok_or(anyhow!("No repo config path found to edit"))
                             }),
-                        ConfigSource::Repo => {
-                            Ok(self.repo().loader().repo_path().join("config.toml"))
-                        }
+                        ConfigSource::Repo => Ok(self.workspace.repo_path().join("config.toml")),
                         _ => Err(anyhow!("Can't get path for config source {scope:?}")),
                     }
                     .and_then(|path| {
@@ -278,7 +276,7 @@ impl Session for WorkspaceSession<'_> {
                     handler::optional!(path);
 
                     (self.data.settings, self.data.aliases_map) =
-                        read_config(self.repo().repo_path())?;
+                        read_config(self.workspace.repo_path())?;
                 }
             };
         }

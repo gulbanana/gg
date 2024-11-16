@@ -60,7 +60,7 @@ pub struct WorkspaceSession<'a> {
     pub(crate) session: &'a mut WorkerSession,
 
     // workspace-level data, initialised once
-    workspace: Workspace,
+    pub workspace: Workspace,
     pub data: WorkspaceData,
     is_large: bool, // this is based on the head operation and thus derived from the rest of the data
 
