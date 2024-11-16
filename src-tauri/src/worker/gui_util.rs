@@ -1018,7 +1018,7 @@ fn build_ref_index(repo: &ReadonlyRepo) -> RefIndex {
 
     let mut index = RefIndex::default();
 
-    for (branch_name, branch_target) in repo.view().branches() {
+    for (branch_name, branch_target) in repo.view().bookmarks() {
         let local_target = branch_target.local_target;
         let remote_refs = branch_target.remote_refs;
         if local_target.is_present() {

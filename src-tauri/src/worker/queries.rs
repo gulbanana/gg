@@ -361,7 +361,7 @@ pub fn query_remotes(
         Some(branch_name) => all_remotes
             .into_iter()
             .filter(|remote_name| {
-                let remote_ref = ws.view().get_remote_branch(&branch_name, &remote_name);
+                let remote_ref = ws.view().get_remote_bookmark(&branch_name, &remote_name);
                 !remote_ref.is_absent() && remote_ref.is_tracking()
             })
             .collect(),
