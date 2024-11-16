@@ -26,14 +26,14 @@ tauri-plugin-shell = "2.0.0"
 tauri-plugin-window-state = "2.0.0"
 tauri-plugin-log = "2.0.0"
 
-jj-lib = { version = "0.20.0", features = ["vendored-openssl", "watchman"] }
-jj-cli = { version = "0.20.0", default-features = false, features = [
+jj-lib = { version = "0.23.0", features = ["vendored-openssl", "watchman"] }
+jj-cli = { version = "0.23.0", default-features = false, features = [
     "vendored-openssl",
 ] }
 
 # deps shared with JJ, which we try to keep on the same version
-anyhow = "1.0.86"
-clap = { version = "4.5.13", features = [
+anyhow = "1.0.93"
+clap = { version = "4.5.20", features = [
     "derive",
     "deprecated",
     "wrap_help",
@@ -41,29 +41,29 @@ clap = { version = "4.5.13", features = [
 ] }
 config = { version = "0.13.4", default-features = false, features = ["toml"] }
 dirs = "5.0.1"
+dunce = "1.0.5"
 itertools = "0.13.0"
-indexmap = "2.3.0"
-futures-util = "0.3.30"
-gix = { version = "0.64.0", default-features = false, features = [
+indexmap = "2.6.0"
+gix = { version = "0.66.0", default-features = false, features = [
     "index",
     "max-performance-safe",
     "blob-diff",
 ] }
 pollster = "0.3.0"
 serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0.122"
-thiserror = "1.0.63"
+serde_json = "1.0.132"
+thiserror = "1.0.68"
 
 # deps implicitly used by JJ, which need to be pinned to a version to fix errors
 gix-object = "0.42.3"
 
 # deps used by JJ but with different features
 chrono = { version = "0.4.38", features = ["serde"] }
-git2 = { version = "0.18.3", features = ["vendored-libgit2"] }
+git2 = { version = "0.19.0", features = ["vendored-libgit2"] }
 
 # extra deps not used by JJ
 log = "0.4"
-dunce = "1.0.4"
+futures-util = "0.3.30"
 ts-rs = { version = "7.1.1", features = ["chrono-impl"], optional = true }
 
 [target."cfg(windows)".dependencies]
