@@ -1,6 +1,8 @@
 use std::{
+    borrow::Borrow,
     io::Write,
     iter::{Peekable, Skip},
+    mem,
     ops::Range,
 };
 
@@ -9,13 +11,17 @@ use anyhow::{anyhow, Result};
 use futures_util::{try_join, StreamExt};
 use gix::bstr::ByteVec;
 use itertools::Itertools;
+use jj_cli::diff_util::{LineCompareMode, LineDiffOptions};
 use jj_lib::{
     backend::CommitId,
     conflicts::{self, MaterializedTreeValue},
-    diff::{self, Diff, DiffHunk},
+    diff::{
+        find_line_ranges, CompareBytesExactly, CompareBytesIgnoreAllWhitespace,
+        CompareBytesIgnoreWhitespaceAmount, Diff, DiffHunk, DiffHunkKind,
+    },
     graph::{GraphEdge, GraphEdgeType, TopoGroupedGraphIterator},
     matchers::EverythingMatcher,
-    merged_tree::TreeDiffStream,
+    merged_tree::{TreeDiffEntry, TreeDiffStream},
     repo::Repo,
     repo_path::RepoPath,
     revset::{Revset, RevsetEvaluationError},
@@ -301,9 +307,10 @@ pub fn query_revision(ws: &WorkspaceSession, id: RevId) -> Result<RevResult> {
                 match conflicts::materialize_tree_value(ws.repo().store(), &path, entry)
                     .block_on()?
                 {
-                    MaterializedTreeValue::Conflict { contents, .. } => {
-                        let mut hunks = get_unified_hunks(3, &contents, &[])?;
-
+                    MaterializedTreeValue::FileConflict { contents, .. } => {
+                        let mut hunk_content = vec![];
+                        conflicts::materialize_merge_result(&contents, &mut hunk_content)?;
+                        let mut hunks = get_unified_hunks(3, &hunk_content, &[])?;
                         if let Some(hunk) = hunks.pop() {
                             conflicts.push(RevConflict {
                                 path: ws.format_path(path)?,
@@ -385,8 +392,8 @@ async fn format_tree_changes(
 ) -> Result<()> {
     let store = ws.repo().store();
 
-    while let Some((path, diff)) = tree_diff.next().await {
-        let (before, after) = diff?;
+    while let Some(TreeDiffEntry { path, values }) = tree_diff.next().await {
+        let (before, after) = values?;
 
         let kind = if before.is_present() && after.is_present() {
             ChangeKind::Modified
@@ -452,7 +459,12 @@ fn get_value_contents(path: &RepoPath, value: MaterializedTreeValue) -> Result<V
         }
         MaterializedTreeValue::Symlink { target, .. } => Ok(target.into_bytes()),
         MaterializedTreeValue::GitSubmodule(_) => Ok("(submodule)".to_owned().into_bytes()),
-        MaterializedTreeValue::Conflict { contents, .. } => Ok(contents),
+        MaterializedTreeValue::FileConflict { contents, .. } => {
+            let mut hunk_content = vec![];
+            conflicts::materialize_merge_result(&contents, &mut hunk_content)?;
+            Ok(hunk_content)
+        }
+        MaterializedTreeValue::OtherConflict { id } => Ok(id.describe().into_bytes()),
         MaterializedTreeValue::Tree(_) => Err(anyhow!("Unexpected tree in diff at path {path:?}")),
         MaterializedTreeValue::AccessDenied(error) => Err(anyhow!(error)),
     }
@@ -465,7 +477,16 @@ fn get_unified_hunks(
 ) -> Result<Vec<ChangeHunk>> {
     let mut hunks = Vec::new();
 
-    for hunk in unified_diff_hunks(left_content, right_content, num_context_lines) {
+    for hunk in unified_diff_hunks(
+        left_content,
+        right_content,
+        &UnifiedDiffOptions {
+            context: num_context_lines,
+            line_diff: LineDiffOptions {
+                compare_mode: LineCompareMode::Exact,
+            },
+        },
+    ) {
         let location = HunkLocation {
             from_file: FileRange {
                 start: hunk.left_line_range.start,
@@ -478,7 +499,7 @@ fn get_unified_hunks(
         };
 
         let mut lines = Vec::new();
-        for (line_type, content) in hunk.lines {
+        for (line_type, tokens) in hunk.lines {
             let mut formatter: Vec<u8> = vec![];
             match line_type {
                 DiffLineType::Context => {
@@ -491,7 +512,14 @@ fn get_unified_hunks(
                     write!(formatter, "+")?;
                 }
             }
-            formatter.write(content)?;
+
+            for (token_type, content) in tokens {
+                match token_type {
+                    DiffTokenType::Matching => formatter.write_all(content)?,
+                    DiffTokenType::Different => formatter.write_all(content)?, // XXX mark this for GUI display
+                }
+            }
+
             lines.push(std::str::from_utf8(&formatter)?.into());
         }
 
@@ -508,23 +536,65 @@ fn get_unified_hunks(
 /* from jj_cli::diff_util */
 /**************************/
 
-#[derive(PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct UnifiedDiffOptions {
+    /// Number of context lines to show.
+    pub context: usize,
+    /// How lines are tokenized and compared.
+    pub line_diff: LineDiffOptions,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum DiffLineType {
     Context,
     Removed,
     Added,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum DiffTokenType {
+    Matching,
+    Different,
+}
+
+type DiffTokenVec<'content> = Vec<(DiffTokenType, &'content [u8])>;
+
 struct UnifiedDiffHunk<'content> {
     left_line_range: Range<usize>,
     right_line_range: Range<usize>,
-    lines: Vec<(DiffLineType, &'content [u8])>,
+    lines: Vec<(DiffLineType, DiffTokenVec<'content>)>,
+}
+
+impl<'content> UnifiedDiffHunk<'content> {
+    fn extend_context_lines(&mut self, lines: impl IntoIterator<Item = &'content [u8]>) {
+        let old_len = self.lines.len();
+        self.lines.extend(lines.into_iter().map(|line| {
+            let tokens = vec![(DiffTokenType::Matching, line)];
+            (DiffLineType::Context, tokens)
+        }));
+        self.left_line_range.end += self.lines.len() - old_len;
+        self.right_line_range.end += self.lines.len() - old_len;
+    }
+
+    fn extend_removed_lines(&mut self, lines: impl IntoIterator<Item = DiffTokenVec<'content>>) {
+        let old_len = self.lines.len();
+        self.lines
+            .extend(lines.into_iter().map(|line| (DiffLineType::Removed, line)));
+        self.left_line_range.end += self.lines.len() - old_len;
+    }
+
+    fn extend_added_lines(&mut self, lines: impl IntoIterator<Item = DiffTokenVec<'content>>) {
+        let old_len = self.lines.len();
+        self.lines
+            .extend(lines.into_iter().map(|line| (DiffLineType::Added, line)));
+        self.right_line_range.end += self.lines.len() - old_len;
+    }
 }
 
 fn unified_diff_hunks<'content>(
     left_content: &'content [u8],
     right_content: &'content [u8],
-    num_context_lines: usize,
+    options: &UnifiedDiffOptions,
 ) -> Vec<UnifiedDiffHunk<'content>> {
     let mut hunks = vec![];
     let mut current_hunk = UnifiedDiffHunk {
@@ -532,27 +602,26 @@ fn unified_diff_hunks<'content>(
         right_line_range: 1..1,
         lines: vec![],
     };
-    let mut show_context_after = false;
-    let diff = Diff::for_tokenizer([left_content, right_content], &diff::find_line_ranges);
-    for hunk in diff.hunks() {
-        match hunk {
-            DiffHunk::Matching(content) => {
-                let lines = content.split_inclusive(|b| *b == b'\n').collect_vec();
-                // Number of context lines to print after the previous non-matching hunk.
-                let num_after_lines = lines.len().min(if show_context_after {
-                    num_context_lines
-                } else {
-                    0
-                });
-                current_hunk.left_line_range.end += num_after_lines;
-                current_hunk.right_line_range.end += num_after_lines;
-                for line in lines.iter().take(num_after_lines) {
-                    current_hunk.lines.push((DiffLineType::Context, line));
+    let diff = diff_by_line([left_content, right_content], &options.line_diff);
+    let mut diff_hunks = diff.hunks().peekable();
+    while let Some(hunk) = diff_hunks.next() {
+        match hunk.kind {
+            DiffHunkKind::Matching => {
+                // Just use the right (i.e. new) content. We could count the
+                // number of skipped lines separately, but the number of the
+                // context lines should match the displayed content.
+                let [_, right] = hunk.contents[..].try_into().unwrap();
+                let mut lines = right.split_inclusive(|b| *b == b'\n').fuse();
+                if !current_hunk.lines.is_empty() {
+                    // The previous hunk line should be either removed/added.
+                    current_hunk.extend_context_lines(lines.by_ref().take(options.context));
                 }
-                let num_skip_lines = lines
-                    .len()
-                    .saturating_sub(num_after_lines)
-                    .saturating_sub(num_context_lines);
+                let before_lines = if diff_hunks.peek().is_some() {
+                    lines.by_ref().rev().take(options.context).collect()
+                } else {
+                    vec![] // No more hunks
+                };
+                let num_skip_lines = lines.count();
                 if num_skip_lines > 0 {
                     let left_start = current_hunk.left_line_range.end + num_skip_lines;
                     let right_start = current_hunk.right_line_range.end + num_skip_lines;
@@ -565,38 +634,97 @@ fn unified_diff_hunks<'content>(
                         lines: vec![],
                     };
                 }
-                let num_before_lines = lines.len() - num_after_lines - num_skip_lines;
-                current_hunk.left_line_range.end += num_before_lines;
-                current_hunk.right_line_range.end += num_before_lines;
-                for line in lines.iter().skip(num_after_lines + num_skip_lines) {
-                    current_hunk.lines.push((DiffLineType::Context, line));
-                }
+                // The next hunk should be of DiffHunk::Different type if any.
+                current_hunk.extend_context_lines(before_lines.into_iter().rev());
             }
-            DiffHunk::Different(content) => {
-                show_context_after = true;
-                let left_lines = content[0].split_inclusive(|b| *b == b'\n').collect_vec();
-                let right_lines = content[1].split_inclusive(|b| *b == b'\n').collect_vec();
-                if !left_lines.is_empty() {
-                    current_hunk.left_line_range.end += left_lines.len();
-                    for line in left_lines {
-                        current_hunk.lines.push((DiffLineType::Removed, line));
+            DiffHunkKind::Different => {
+                let (left_lines, right_lines) =
+                    unzip_diff_hunks_to_lines(Diff::by_word(hunk.contents).hunks());
+                current_hunk.extend_removed_lines(left_lines);
+                current_hunk.extend_added_lines(right_lines);
+            }
+        }
+    }
+    if !current_hunk.lines.is_empty() {
+        hunks.push(current_hunk);
+    }
+    hunks
+}
+
+/// Splits `(left, right)` hunk pairs into `(left_lines, right_lines)`.
+fn unzip_diff_hunks_to_lines<'content, I>(
+    diff_hunks: I,
+) -> (Vec<DiffTokenVec<'content>>, Vec<DiffTokenVec<'content>>)
+where
+    I: IntoIterator,
+    I::Item: Borrow<DiffHunk<'content>>,
+{
+    let mut left_lines: Vec<DiffTokenVec<'content>> = vec![];
+    let mut right_lines: Vec<DiffTokenVec<'content>> = vec![];
+    let mut left_tokens: DiffTokenVec<'content> = vec![];
+    let mut right_tokens: DiffTokenVec<'content> = vec![];
+
+    for hunk in diff_hunks {
+        let hunk = hunk.borrow();
+        match hunk.kind {
+            DiffHunkKind::Matching => {
+                // TODO: add support for unmatched contexts
+                debug_assert!(hunk.contents.iter().all_equal());
+                for token in hunk.contents[0].split_inclusive(|b| *b == b'\n') {
+                    left_tokens.push((DiffTokenType::Matching, token));
+                    right_tokens.push((DiffTokenType::Matching, token));
+                    if token.ends_with(b"\n") {
+                        left_lines.push(mem::take(&mut left_tokens));
+                        right_lines.push(mem::take(&mut right_tokens));
                     }
                 }
-                if !right_lines.is_empty() {
-                    current_hunk.right_line_range.end += right_lines.len();
-                    for line in right_lines {
-                        current_hunk.lines.push((DiffLineType::Added, line));
+            }
+            DiffHunkKind::Different => {
+                let [left, right] = hunk.contents[..]
+                    .try_into()
+                    .expect("hunk should have exactly two inputs");
+                for token in left.split_inclusive(|b| *b == b'\n') {
+                    left_tokens.push((DiffTokenType::Different, token));
+                    if token.ends_with(b"\n") {
+                        left_lines.push(mem::take(&mut left_tokens));
+                    }
+                }
+                for token in right.split_inclusive(|b| *b == b'\n') {
+                    right_tokens.push((DiffTokenType::Different, token));
+                    if token.ends_with(b"\n") {
+                        right_lines.push(mem::take(&mut right_tokens));
                     }
                 }
             }
         }
     }
-    if !current_hunk
-        .lines
-        .iter()
-        .all(|(diff_type, _line)| *diff_type == DiffLineType::Context)
-    {
-        hunks.push(current_hunk);
+
+    if !left_tokens.is_empty() {
+        left_lines.push(left_tokens);
     }
-    hunks
+    if !right_tokens.is_empty() {
+        right_lines.push(right_tokens);
+    }
+    (left_lines, right_lines)
+}
+
+fn diff_by_line<'input, T: AsRef<[u8]> + ?Sized + 'input>(
+    inputs: impl IntoIterator<Item = &'input T>,
+    options: &LineDiffOptions,
+) -> Diff<'input> {
+    // TODO: If we add --ignore-blank-lines, its tokenizer will have to attach
+    // blank lines to the preceding range. Maybe it can also be implemented as a
+    // post-process (similar to refine_changed_regions()) that expands unchanged
+    // regions across blank lines.
+    match options.compare_mode {
+        LineCompareMode::Exact => {
+            Diff::for_tokenizer(inputs, find_line_ranges, CompareBytesExactly)
+        }
+        LineCompareMode::IgnoreAllSpace => {
+            Diff::for_tokenizer(inputs, find_line_ranges, CompareBytesIgnoreAllWhitespace)
+        }
+        LineCompareMode::IgnoreSpaceChange => {
+            Diff::for_tokenizer(inputs, find_line_ranges, CompareBytesIgnoreWhitespaceAmount)
+        }
+    }
 }
