@@ -52,6 +52,7 @@ gix = { version = "0.66.0", default-features = false, features = [
 pollster = "0.3.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0.132"
+toml_edit = { version = "0.19.15", features = ["serde"] }
 thiserror = "1.0.68"
 
 # deps implicitly used by JJ, which need to be pinned to a version to fix errors

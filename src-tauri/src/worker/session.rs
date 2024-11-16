@@ -266,10 +266,8 @@ impl Session for WorkspaceSession<'_> {
                         _ => Err(anyhow!("Can't get path for config source {scope:?}")),
                     }
                     .and_then(|path| {
-                        let mut parseable_value = String::from("['");
-                        parseable_value.push_str(&values.join("','"));
-                        parseable_value.push_str("']");
-                        write_config_value_to_file(&name, &parseable_value, &path)
+                        let toml_array = toml_edit::Value::Array(values.iter().collect());
+                        write_config_value_to_file(&name, toml_array, &path)
                             .map_err(|err| anyhow!("{err:?}"))
                     });
 
