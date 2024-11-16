@@ -18,7 +18,7 @@ use jj_lib::{
     merged_tree::TreeDiffStream,
     repo::Repo,
     repo_path::RepoPath,
-    revset::Revset,
+    revset::{Revset, RevsetEvaluationError},
     rewrite,
 };
 use pollster::FutureExt;
@@ -66,11 +66,18 @@ pub struct QuerySession<'q, 'w: 'q> {
         Skip<
             TopoGroupedGraphIterator<
                 CommitId,
-                Box<dyn Iterator<Item = (CommitId, Vec<GraphEdge<CommitId>>)> + 'q>,
+                Box<
+                    dyn Iterator<
+                            Item = Result<
+                                (CommitId, Vec<GraphEdge<CommitId>>),
+                                RevsetEvaluationError,
+                            >,
+                        > + 'q,
+                >,
             >,
         >,
     >,
-    is_immutable: Box<dyn Fn(&CommitId) -> bool + 'q>,
+    is_immutable: Box<dyn Fn(&CommitId) -> Result<bool, RevsetEvaluationError> + 'q>,
 }
 
 impl<'q, 'w> QuerySession<'q, 'w> {
@@ -101,7 +108,7 @@ impl<'q, 'w> QuerySession<'q, 'w> {
 
         let root_id = self.ws.repo().store().root_commit_id().clone();
 
-        while let Some((commit_id, commit_edges)) = self.iter.next() {
+        while let Some(Ok((commit_id, commit_edges))) = self.iter.next() {
             // output lines to draw for the current row
             let mut lines: Vec<LogLine> = Vec::new();
 
@@ -149,7 +156,7 @@ impl<'q, 'w> QuerySession<'q, 'w> {
             let known_immutable = if stem_known_immutable {
                 Some(true)
             } else {
-                Some((self.is_immutable)(&commit_id))
+                Some((self.is_immutable)(&commit_id)?)
             };
 
             let header = self

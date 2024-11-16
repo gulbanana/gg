@@ -834,7 +834,7 @@ impl WorkspaceSession<'_> {
                         .parents()
                         .ancestors(),
                 );
-            let new_child_parents: Vec<CommitId> = new_child_parents_expression
+            let new_child_parents: Result<Vec<CommitId>, _> = new_child_parents_expression
                 .evaluate_programmatic(tx.base_repo().as_ref())?
                 .iter()
                 .collect();
@@ -845,7 +845,7 @@ impl WorkspaceSession<'_> {
                     &self.data.settings,
                     tx.repo_mut(),
                     child_commit,
-                    new_child_parents,
+                    new_child_parents?,
                 )?
                 .id()
                 .clone(),

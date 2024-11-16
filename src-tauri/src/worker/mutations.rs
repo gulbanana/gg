@@ -140,13 +140,13 @@ impl Mutation for CreateRevision {
                 .collect_vec(),
         )?;
 
-        let parent_ids = parents_revset.iter().collect_vec();
+        let parent_ids: Result<_, _> = parents_revset.iter().collect();
         let parent_commits = ws.resolve_multiple(parents_revset)?;
         let merged_tree = rewrite::merge_commit_trees(tx.repo(), &parent_commits)?;
 
         let new_commit = tx
             .repo_mut()
-            .new_commit(&ws.settings, parent_ids, merged_tree.id())
+            .new_commit(&ws.data.settings, parent_ids?, merged_tree.id())
             .write()?;
 
         tx.repo_mut().edit(ws.id().clone(), &new_commit)?;
