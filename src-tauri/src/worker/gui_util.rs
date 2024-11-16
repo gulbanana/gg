@@ -27,7 +27,6 @@ use jj_lib::{
     git,
     git_backend::GitBackend,
     gitignore::GitIgnoreFile,
-    hex_util::to_reverse_hex,
     id_prefix::IdPrefixContext,
     object_id::ObjectId,
     op_heads_store,
@@ -503,10 +502,14 @@ impl WorkspaceSession<'_> {
             .prefix_context()
             .shortest_change_prefix_len(self.operation.repo.as_ref(), id);
 
-        let hex = to_reverse_hex(&id.hex()).expect("format change id as reverse hex");
+        let hex = &id.reverse_hex();
         let mut prefix = hex.clone();
         let rest = prefix.split_off(prefix_len);
-        messages::ChangeId { hex, prefix, rest }
+        messages::ChangeId {
+            hex: hex.clone(),
+            prefix,
+            rest,
+        }
     }
 
     pub fn format_id(&self, commit: &Commit) -> RevId {
