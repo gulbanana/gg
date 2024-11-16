@@ -299,7 +299,7 @@ pub fn query_revision(ws: &WorkspaceSession, id: RevId) -> Result<RevResult> {
 
                         if let Some(hunk) = hunks.pop() {
                             conflicts.push(RevConflict {
-                                path: ws.format_path(path),
+                                path: ws.format_path(path)?,
                                 hunk,
                             });
                         }
@@ -398,7 +398,7 @@ async fn format_tree_changes(
         let hunks = get_value_hunks(3, &path, before_value, after_value)?;
 
         changes.push(RevChange {
-            path: ws.format_path(path),
+            path: ws.format_path(path)?,
             kind,
             has_conflict,
             hunks,
