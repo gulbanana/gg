@@ -183,7 +183,7 @@ impl Session for WorkspaceSession<'_> {
                     let log_page_size = self
                         .session
                         .force_log_page_size
-                        .unwrap_or(self.settings.query_log_page_size());
+                        .unwrap_or(self.data.settings.query_log_page_size());
                     handle_query(
                         &mut state,
                         &self,
@@ -242,7 +242,7 @@ impl Session for WorkspaceSession<'_> {
                     let name: ConfigNamePathBuf = key.iter().collect();
 
                     tx.send(
-                        name.lookup_value(self.settings.config())
+                        name.lookup_value(self.data.settings.config())
                             .and_then(|value| value.into_array())
                             .and_then(|values| {
                                 values
@@ -277,7 +277,8 @@ impl Session for WorkspaceSession<'_> {
 
                     handler::optional!(path);
 
-                    (self.settings, self.aliases_map) = read_config(self.repo().repo_path())?;
+                    (self.data.settings, self.data.aliases_map) =
+                        read_config(self.repo().repo_path())?;
                 }
             };
         }

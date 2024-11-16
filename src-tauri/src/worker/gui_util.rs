@@ -27,7 +27,7 @@ use jj_lib::{
     git,
     git_backend::GitBackend,
     gitignore::GitIgnoreFile,
-    id_prefix::IdPrefixContext,
+    id_prefix::{IdPrefixContext, IdPrefixIndex},
     object_id::ObjectId,
     op_heads_store,
     op_store::WorkspaceId,
@@ -60,17 +60,19 @@ pub struct WorkspaceSession<'a> {
 
     // workspace-level data, initialised once
     workspace: Workspace,
-    path_converter: RepoPathUiConverter,
-    extensions: RevsetExtensions,
-    is_large: bool,
-
-    // reloadable data
-    pub settings: UserSettings,
-    pub aliases_map: RevsetAliasesMap,
+    pub data: WorkspaceData,
+    is_large: bool, // this is based on the head operation and thus derived from the rest of the data
 
     // operation-specific data, containing a repo view and derived extras
     operation: SessionOperation,
     is_colocated: bool,
+}
+
+pub struct WorkspaceData {
+    path_converter: RepoPathUiConverter,
+    extensions: RevsetExtensions,
+    pub settings: UserSettings,
+    pub aliases_map: RevsetAliasesMap,
 }
 
 /// state derived from a specific operation
@@ -78,7 +80,7 @@ pub struct SessionOperation {
     pub repo: Arc<ReadonlyRepo>,
     pub wc_id: CommitId,
     ref_index: OnceCell<Rc<RefIndex>>,
-    prefix_context: OnceCell<Rc<IdPrefixContext>>,
+    prefix_context: IdPrefixContext,
 }
 
 #[derive(Debug, Error)]
@@ -110,7 +112,19 @@ impl WorkerSession {
             &workspace::default_working_copy_factories(),
         )?;
 
-        let operation = load_at_head(&settings, &workspace)?;
+        let path_converter = RepoPathUiConverter::Fs {
+            cwd: workspace.workspace_root().to_owned(),
+            base: workspace.workspace_root().to_owned(),
+        };
+
+        let data: WorkspaceData = WorkspaceData {
+            settings,
+            path_converter,
+            aliases_map,
+            extensions: Default::default(),
+        };
+
+        let operation = load_at_head(&workspace, &data)?;
 
         let index_store = workspace.repo_loader().index_store();
         let index = index_store
@@ -118,26 +132,18 @@ impl WorkerSession {
         let is_large =
             if let Some(default_index) = index.as_any().downcast_ref::<DefaultReadonlyIndex>() {
                 let stats = default_index.as_composite().stats();
-                stats.num_commits as i64 >= settings.query_large_repo_heuristic()
+                stats.num_commits as i64 >= data.settings.query_large_repo_heuristic()
             } else {
                 true
             };
 
         let is_colocated = is_colocated_git_workspace(&workspace, &operation.repo);
 
-        let path_converter = RepoPathUiConverter::Fs {
-            cwd: workspace.workspace_root().to_owned(),
-            base: workspace.workspace_root().to_owned(),
-        };
-
         Ok(WorkspaceSession {
             session: self,
-            is_large,
-            settings,
             workspace,
-            path_converter,
-            aliases_map,
-            extensions: Default::default(),
+            data,
+            is_large,
             operation,
             is_colocated,
         })
@@ -174,7 +180,7 @@ impl WorkspaceSession<'_> {
     }
 
     pub fn load_at_head(&mut self) -> Result<bool> {
-        let head = load_at_head(&self.settings, &self.workspace)?;
+        let head = load_at_head(&self.workspace, &self.data)?;
         if head.repo.op_id() != self.operation.repo.op_id() {
             self.operation = head;
             Ok(true)
@@ -382,46 +388,16 @@ impl WorkspaceSession<'_> {
      * Functions for creating temporary per-request derived data *
      *************************************************************/
 
-    fn parse_context(&self) -> RevsetParseContext {
-        let workspace_context = RevsetWorkspaceContext {
-            path_converter: &self.path_converter,
-            workspace_id: self.workspace.workspace_id(),
-        };
-        let now = if let Some(timestamp) = self.settings.commit_timestamp() {
-            chrono::Local
-                .timestamp_millis_opt(timestamp.timestamp.0)
-                .unwrap()
-        } else {
-            chrono::Local::now()
-        };
-        RevsetParseContext::new(
-            &self.aliases_map,
-            self.settings.user_email(),
-            now.into(),
-            &self.extensions,
-            Some(workspace_context),
-        )
+    pub fn parse_context<'a>(&'a self) -> RevsetParseContext<'a> {
+        self.data.parse_context(self.workspace.workspace_id())
     }
 
-    fn prefix_context(&self) -> &Rc<IdPrefixContext> {
-        self.operation.prefix_context.get_or_init(|| {
-            let mut prefix_context = IdPrefixContext::default();
-
-            let revset_string: String = self
-                .settings
-                .config()
-                .get_string("revsets.short-prefixes")
-                .unwrap_or_else(|_| self.settings.default_revset());
-
-            if !revset_string.is_empty() {
-                let disambiguation_revset: Rc<RevsetExpression> =
-                    parse_revset(&self.parse_context(), &revset_string)
-                        .expect("init prefix context: parse revsets.short-prefixes");
-                prefix_context = prefix_context.disambiguate_within(disambiguation_revset);
-            };
-
-            Rc::new(prefix_context)
-        })
+    // the prefix context caches this itself, but the way it does so is not convenient for us - you need a fallible method and the &dyn Repo
+    fn prefix_index(&self) -> IdPrefixIndex<'_> {
+        self.operation
+            .prefix_context
+            .populate(self.repo())
+            .expect("prefix context disambiguate_within()")
     }
 
     fn resolver(&self) -> DefaultSymbolResolver {
@@ -429,7 +405,7 @@ impl WorkspaceSession<'_> {
             self.operation.repo.as_ref(),
             &([] as [Box<dyn SymbolResolverExtension>; 0]),
         )
-        .with_id_prefix_context(&self.prefix_context())
+        .with_id_prefix_context(&self.operation.prefix_context)
     }
 
     pub fn ref_index(&self) -> &Rc<RefIndex> {
@@ -455,7 +431,7 @@ impl WorkspaceSession<'_> {
             None => vec![],
         };
 
-        let default_query = self.settings.default_revset();
+        let default_query = self.data.settings.default_revset();
 
         let latest_query = self
             .session
@@ -470,8 +446,8 @@ impl WorkspaceSession<'_> {
             default_query,
             latest_query,
             status: self.format_status(),
-            theme_override: self.settings.ui_theme_override(),
-            mark_unpushed_branches: self.settings.ui_mark_unpushed_branches(),
+            theme_override: self.data.settings.ui_theme_override(),
+            mark_unpushed_branches: self.data.settings.ui_mark_unpushed_branches(),
         })
     }
 
@@ -491,7 +467,7 @@ impl WorkspaceSession<'_> {
 
     pub fn format_commit_id(&self, id: &CommitId) -> messages::CommitId {
         let prefix_len = self
-            .prefix_context()
+            .prefix_index()
             .shortest_commit_prefix_len(self.operation.repo.as_ref(), id);
 
         let hex = id.hex();
@@ -502,7 +478,7 @@ impl WorkspaceSession<'_> {
 
     pub fn format_change_id(&self, id: &ChangeId) -> messages::ChangeId {
         let prefix_len = self
-            .prefix_context()
+            .prefix_index()
             .shortest_change_prefix_len(self.operation.repo.as_ref(), id);
 
         let hex = &id.reverse_hex();
@@ -582,7 +558,7 @@ impl WorkspaceSession<'_> {
 
     pub fn start_transaction(&mut self) -> Result<Transaction> {
         self.import_and_snapshot(true)?;
-        Ok(self.operation.repo.start_transaction(&self.settings))
+        Ok(self.operation.repo.start_transaction(&self.data.settings))
     }
 
     pub fn finish_transaction(
@@ -594,7 +570,7 @@ impl WorkspaceSession<'_> {
             return Ok(None);
         }
 
-        tx.mut_repo().rebase_descendants(&self.settings)?;
+        tx.repo_mut().rebase_descendants(&self.data.settings)?;
 
         let old_repo = tx.base_repo().clone();
 
@@ -621,8 +597,7 @@ impl WorkspaceSession<'_> {
             git::export_refs(tx.mut_repo())?;
         }
 
-        self.operation =
-            SessionOperation::new(tx.commit(description), self.workspace.workspace_id());
+        self.operation = SessionOperation::new(&self.id(), &self.data, tx.commit(description));
 
         // XXX do this only if loaded at head, which is currently always true, but won't be once we have undo-redo
         if let Some(new_commit) = &maybe_new_wc_commit {
@@ -636,6 +611,7 @@ impl WorkspaceSession<'_> {
     pub fn import_and_snapshot(&mut self, force: bool) -> Result<bool> {
         if !(force
             || self
+                .data
                 .settings
                 .query_auto_snapshot()
                 .unwrap_or(!self.is_large))
@@ -706,30 +682,33 @@ impl WorkspaceSession<'_> {
 
         let new_tree_id = locked_ws.locked_wc().snapshot(SnapshotOptions {
             base_ignores,
-            fsmonitor_settings: self.settings.fsmonitor_settings()?,
+            fsmonitor_settings: self.data.settings.fsmonitor_settings()?,
             progress: None,
-            max_new_file_size: self.settings.max_new_file_size()?,
+            max_new_file_size: self.data.settings.max_new_file_size()?,
         })?;
 
         let did_anything = new_tree_id != *wc_commit.tree_id();
 
         if did_anything {
-            let mut tx = repo.start_transaction(&self.settings);
+            let mut tx = repo.start_transaction(&self.data.settings);
             let mut_repo = tx.mut_repo();
             let commit = mut_repo
-                .rewrite_commit(&self.settings, &wc_commit)
+                .rewrite_commit(&self.data.settings, &wc_commit)
                 .set_tree_id(new_tree_id)
                 .write()?;
             mut_repo.set_wc_commit(workspace_id.clone(), commit.id().clone())?;
 
-            mut_repo.rebase_descendants(&self.settings)?;
+            mut_repo.rebase_descendants(&self.data.settings)?;
 
             if self.is_colocated {
                 git::export_refs(mut_repo)?;
             }
 
-            self.operation =
-                SessionOperation::new(tx.commit("snapshot working copy"), &workspace_id);
+            self.operation = SessionOperation::new(
+                &workspace_id,
+                &self.data,
+                tx.commit("snapshot working copy"),
+            );
         }
 
         locked_ws.finish(self.operation.repo.op_id().clone())?;
@@ -758,7 +737,7 @@ impl WorkspaceSession<'_> {
     }
 
     fn import_git_head(&mut self) -> Result<()> {
-        let mut tx = self.operation.repo.start_transaction(&self.settings);
+        let mut tx = self.operation.repo.start_transaction(&self.data.settings);
         git::import_head(tx.mut_repo())?;
         if !tx.mut_repo().has_changes() {
             return Ok(());
@@ -775,16 +754,20 @@ impl WorkspaceSession<'_> {
                     .record_abandoned_commit(old_wc_commit_id.clone());
             }
 
-            let new_git_head_commit = tx.mut_repo().store().get_commit(new_git_head_id)?;
-            tx.mut_repo()
-                .check_out(workspace_id.clone(), &self.settings, &new_git_head_commit)?;
+            let new_git_head_commit = tx.repo().store().get_commit(new_git_head_id)?;
+            tx.mut_repo().check_out(
+                workspace_id.clone(),
+                &self.data.settings,
+                &new_git_head_commit,
+            )?;
 
             let mut locked_ws = self.workspace.start_working_copy_mutation()?;
 
             locked_ws.locked_wc().reset(&new_git_head_commit)?;
-            tx.mut_repo().rebase_descendants(&self.settings)?;
+            tx.mut_repo().rebase_descendants(&self.data.settings)?;
 
-            self.operation = SessionOperation::new(tx.commit("import git head"), &workspace_id);
+            self.operation =
+                SessionOperation::new(&workspace_id, &self.data, tx.commit("import git head"));
 
             locked_ws.finish(self.operation.repo.op_id().clone())?;
         } else {
@@ -794,8 +777,8 @@ impl WorkspaceSession<'_> {
     }
 
     fn import_git_refs(&mut self) -> Result<()> {
-        let git_settings = self.settings.git_settings();
-        let mut tx = self.operation.repo.start_transaction(&self.settings);
+        let git_settings = self.data.settings.git_settings();
+        let mut tx = self.operation.repo.start_transaction(&self.data.settings);
         // Automated import shouldn't fail because of reserved remote name.
         git::import_some_refs(tx.mut_repo(), &git_settings, |ref_name| {
             !git::is_reserved_git_remote_ref(ref_name)
@@ -804,7 +787,7 @@ impl WorkspaceSession<'_> {
             return Ok(());
         }
 
-        tx.mut_repo().rebase_descendants(&self.settings)?;
+        tx.mut_repo().rebase_descendants(&self.data.settings)?;
 
         self.finish_transaction(tx, "import git refs")?;
         Ok(())
@@ -859,7 +842,7 @@ impl WorkspaceSession<'_> {
             rebased_commit_ids.insert(
                 child_commit.id().clone(),
                 rewrite::rebase_commit(
-                    &self.settings,
+                    &self.data.settings,
                     tx.mut_repo(),
                     child_commit,
                     new_child_parents,
@@ -870,26 +853,69 @@ impl WorkspaceSession<'_> {
         }
         rebased_commit_ids.extend(
             tx.mut_repo()
-                .rebase_descendants_return_map(&self.settings)?,
+                .rebase_descendants_return_map(&self.data.settings)?,
         );
 
         Ok(rebased_commit_ids)
     }
 }
 
+impl WorkspaceData {
+    // unfortunately not cached as it borrows from everything
+    fn parse_context<'a>(&'a self, id: &'a WorkspaceId) -> RevsetParseContext<'a> {
+        let workspace_context = RevsetWorkspaceContext {
+            path_converter: &self.path_converter,
+            workspace_id: id,
+        };
+        let now = if let Some(timestamp) = self.settings.commit_timestamp() {
+            chrono::Local
+                .timestamp_millis_opt(timestamp.timestamp.0)
+                .unwrap()
+        } else {
+            chrono::Local::now()
+        };
+        RevsetParseContext::new(
+            &self.aliases_map,
+            self.settings.user_email(),
+            now.into(),
+            &self.extensions,
+            Some(workspace_context),
+        )
+    }
+}
+
 impl SessionOperation {
-    pub fn new(repo: Arc<ReadonlyRepo>, id: &WorkspaceId) -> SessionOperation {
+    pub fn new(
+        id: &WorkspaceId,
+        data: &WorkspaceData,
+        repo: Arc<ReadonlyRepo>,
+    ) -> SessionOperation {
         let wc_id = repo
             .view()
             .get_wc_commit_id(id)
             .expect("No working copy found for workspace")
             .clone();
 
+        let revset_string: String = data
+            .settings
+            .config()
+            .get_string("revsets.short-prefixes")
+            .unwrap_or_else(|_| data.settings.default_revset());
+
+        // guarantee that an index can be populated - we will unwrap later
+        let prefix_context =
+            IdPrefixContext::default().disambiguate_within(if !revset_string.is_empty() {
+                parse_revset(&data.parse_context(id), &revset_string)
+                    .expect("init prefix context: parse revsets.short-prefixes")
+            } else {
+                RevsetExpression::all()
+            });
+
         SessionOperation {
             repo,
             wc_id,
             ref_index: OnceCell::default(),
-            prefix_context: OnceCell::default(),
+            prefix_context,
         }
     }
 
@@ -1041,7 +1067,7 @@ fn build_ref_index(repo: &ReadonlyRepo) -> RefIndex {
     index
 }
 
-fn load_at_head(settings: &UserSettings, workspace: &Workspace) -> Result<SessionOperation> {
+fn load_at_head(workspace: &Workspace, data: &WorkspaceData) -> Result<SessionOperation> {
     let loader = workspace.repo_loader();
 
     let op = op_heads_store::resolve_op_heads(
@@ -1050,10 +1076,10 @@ fn load_at_head(settings: &UserSettings, workspace: &Workspace) -> Result<Sessio
         |op_heads| {
             let base_repo = loader.load_at(&op_heads[0])?;
             // might want to set some tags
-            let mut tx = base_repo.start_transaction(settings);
+            let mut tx = base_repo.start_transaction(&data.settings);
             for other_op_head in op_heads.into_iter().skip(1) {
                 tx.merge_operation(other_op_head)?;
-                tx.mut_repo().rebase_descendants(settings)?;
+                tx.mut_repo().rebase_descendants(&data.settings)?;
             }
             Ok::<Operation, RepoLoaderError>(
                 tx.write("resolve concurrent operations")
@@ -1069,5 +1095,5 @@ fn load_at_head(settings: &UserSettings, workspace: &Workspace) -> Result<Sessio
         .load_at(&op)
         .context("load op head")?;
 
-    Ok(SessionOperation::new(repo, workspace.workspace_id()))
+    Ok(SessionOperation::new(workspace.workspace_id(), &data, repo))
 }
