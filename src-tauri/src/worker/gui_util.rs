@@ -44,7 +44,7 @@ use jj_lib::{
     transaction::Transaction,
     view::View,
     working_copy::{CheckoutStats, SnapshotOptions},
-    workspace::{self, Workspace, WorkspaceLoader},
+    workspace::{self, DefaultWorkspaceLoaderFactory, Workspace, WorkspaceLoaderFactory},
 };
 use thiserror::Error;
 
@@ -99,7 +99,8 @@ impl From<BackendError> for RevsetError {
 
 impl WorkerSession {
     pub fn load_directory(&mut self, cwd: &Path) -> Result<WorkspaceSession> {
-        let loader = WorkspaceLoader::init(find_workspace_dir(cwd))?;
+        let factory = DefaultWorkspaceLoaderFactory;
+        let loader = factory.create(find_workspace_dir(cwd))?;
 
         let (settings, aliases_map) = read_config(loader.repo_path())?;
 
@@ -125,8 +126,8 @@ impl WorkerSession {
         let is_colocated = is_colocated_git_workspace(&workspace, &operation.repo);
 
         let path_converter = RepoPathUiConverter::Fs {
-            cwd: workspace.workspace_root().clone(),
-            base: workspace.workspace_root().clone(),
+            cwd: workspace.workspace_root().to_owned(),
+            base: workspace.workspace_root().to_owned(),
         };
 
         Ok(WorkspaceSession {
