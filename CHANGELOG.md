@@ -3,6 +3,9 @@
 ## [0.23.0](releases/tag/v0.23.0) 
 This version is based on Jujutsu 0.23 and the recently-released Tauri 2.0.
 
+### Changed
+- Branches have been renamed to bookmarks. The setting `gg.ui.mark-unpushed-branches` has changed to `mark-unpushed-bookmarks`, but the old one will still work as well.
+
 ## [0.20.0](releases/tag/v0.20.0) 
 This version is based on Jujutsu 0.20.
 

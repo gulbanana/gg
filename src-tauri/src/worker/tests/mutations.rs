@@ -40,18 +40,18 @@ fn checkout_revision() -> Result<()> {
     let mut ws = session.load_directory(repo.path())?;
 
     let head_rev = queries::query_revision(&ws, revs::working_copy())?;
-    let conflict_rev = queries::query_revision(&ws, revs::conflict_branch())?;
+    let conflict_rev = queries::query_revision(&ws, revs::conflict_bookmark())?;
     assert_matches!(head_rev, RevResult::Detail { header, .. } if header.is_working_copy);
     assert_matches!(conflict_rev, RevResult::Detail { header, .. } if !header.is_working_copy);
 
     let result = CheckoutRevision {
-        id: revs::conflict_branch(),
+        id: revs::conflict_bookmark(),
     }
     .execute_unboxed(&mut ws)?;
     assert_matches!(result, MutationResult::UpdatedSelection { .. });
 
     let head_rev = queries::query_revision(&ws, revs::working_copy())?;
-    let conflict_rev = queries::query_revision(&ws, revs::conflict_branch())?;
+    let conflict_rev = queries::query_revision(&ws, revs::conflict_bookmark())?;
     assert_matches!(head_rev, RevResult::NotFound { .. });
     assert_matches!(conflict_rev, RevResult::Detail { header, .. } if header.is_working_copy);
 
@@ -132,7 +132,7 @@ fn create_revision_multi_parent() -> Result<()> {
     assert_matches!(parent_rev, RevResult::Detail { header, .. } if header.is_working_copy);
 
     let result = CreateRevision {
-        parent_ids: vec![revs::working_copy(), revs::conflict_branch()],
+        parent_ids: vec![revs::working_copy(), revs::conflict_bookmark()],
     }
     .execute_unboxed(&mut ws)?;
 
@@ -213,7 +213,7 @@ fn duplicate_revisions() -> Result<()> {
     assert_matches!(rev, RevResult::Detail { header, .. } if header.description.lines[0] == "");
 
     let result = DuplicateRevisions {
-        ids: vec![revs::main_branch()],
+        ids: vec![revs::main_bookmark()],
     }
     .execute_unboxed(&mut ws)?;
     assert_matches!(result, MutationResult::UpdatedSelection { .. });
@@ -235,7 +235,7 @@ fn insert_revision() -> Result<()> {
     assert_eq!(2, page.rows.len());
 
     InsertRevision {
-        after_id: revs::main_branch(),
+        after_id: revs::main_bookmark(),
         before_id: revs::working_copy(),
         id: revs::resolve_conflict(),
     }
@@ -254,18 +254,18 @@ fn move_changes_all_paths() -> Result<()> {
     let mut session = WorkerSession::default();
     let mut ws = session.load_directory(repo.path())?;
 
-    let parent_rev = queries::query_revision(&ws, revs::conflict_branch())?;
+    let parent_rev = queries::query_revision(&ws, revs::conflict_bookmark())?;
     assert_matches!(parent_rev, RevResult::Detail { header, .. } if header.has_conflict);
 
     let result = MoveChanges {
         from_id: revs::resolve_conflict(),
-        to_id: revs::conflict_branch().commit,
+        to_id: revs::conflict_bookmark().commit,
         paths: vec![],
     }
     .execute_unboxed(&mut ws)?;
     assert_matches!(result, MutationResult::Updated { .. });
 
-    let parent_rev = queries::query_revision(&ws, revs::conflict_branch())?;
+    let parent_rev = queries::query_revision(&ws, revs::conflict_bookmark())?;
     assert_matches!(parent_rev, RevResult::Detail { header, .. } if !header.has_conflict);
 
     Ok(())
@@ -278,13 +278,13 @@ fn move_changes_single_path() -> Result<()> {
     let mut session = WorkerSession::default();
     let mut ws = session.load_directory(repo.path())?;
 
-    let from_rev = queries::query_revision(&ws, revs::main_branch())?;
+    let from_rev = queries::query_revision(&ws, revs::main_bookmark())?;
     let to_rev = queries::query_revision(&ws, revs::working_copy())?;
     assert_matches!(from_rev, RevResult::Detail { changes, .. } if changes.len() == 2);
     assert_matches!(to_rev, RevResult::Detail { changes, .. } if changes.len() == 0);
 
     let result = MoveChanges {
-        from_id: revs::main_branch(),
+        from_id: revs::main_bookmark(),
         to_id: revs::working_copy().commit,
         paths: vec![TreePath {
             repo_path: "c.txt".to_owned(),
@@ -294,7 +294,7 @@ fn move_changes_single_path() -> Result<()> {
     .execute_unboxed(&mut ws)?;
     assert_matches!(result, MutationResult::Updated { .. });
 
-    let from_rev = queries::query_revision(&ws, revs::main_branch())?;
+    let from_rev = queries::query_revision(&ws, revs::main_bookmark())?;
     let to_rev = queries::query_revision(&ws, revs::working_copy())?;
     assert_matches!(from_rev, RevResult::Detail { changes, .. } if changes.len() == 1);
     assert_matches!(to_rev, RevResult::Detail { changes, .. } if changes.len() == 1);

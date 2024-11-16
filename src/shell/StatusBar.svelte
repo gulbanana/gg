@@ -49,11 +49,11 @@
     }
 
     function onPush(remote: string) {
-        mutate<GitPush>("git_push", { type: "AllBranches", remote_name: remote });
+        mutate<GitPush>("git_push", { type: "AllBookmarks", remote_name: remote });
     }
 
     function onFetch(remote: string) {
-        mutate<GitFetch>("git_fetch", { type: "AllBranches", remote_name: remote });
+        mutate<GitFetch>("git_fetch", { type: "AllBookmarks", remote_name: remote });
     }
 </script>
 
@@ -68,7 +68,7 @@
             {#if $repoConfigEvent?.type == "Workspace"}
                 {#each $repoConfigEvent.git_remotes as remote}
                     <div class="substatus">
-                        <ActionWidget tip="git push (all branches)" onClick={() => onPush(remote)}>
+                        <ActionWidget tip="git push (all bookmarks)" onClick={() => onPush(remote)}>
                             <Icon name="upload-cloud" />
                         </ActionWidget>
                         <span>{remote}</span>
@@ -81,7 +81,9 @@
         </div>
         <div id="status-operation" class="substatus">
             <span>
-                {$repoConfigEvent?.type != "Workspace" ? "" : $repoStatusEvent?.operation_description ?? "no operation"}
+                {$repoConfigEvent?.type != "Workspace"
+                    ? ""
+                    : ($repoStatusEvent?.operation_description ?? "no operation")}
             </span>
             <ActionWidget tip="undo latest operation" onClick={onUndo} disabled={$repoConfigEvent?.type != "Workspace"}>
                 <Icon name="rotate-ccw" /> Undo
@@ -94,7 +96,7 @@
             {#each dropHint as run, i}
                 {#if typeof run == "string"}
                     <span>{run}{i == dropHint.length - 1 ? "." : ""}</span>
-                {:else if run.type == "LocalBranch" || run.type == "RemoteBranch"}
+                {:else if run.type == "LocalBookmark" || run.type == "RemoteBookmark"}
                     <span><BranchSpan ref={run} /></span>
                 {:else}
                     <span><IdSpan id={run} />{i == dropHint.length - 1 ? "." : ""}</span>

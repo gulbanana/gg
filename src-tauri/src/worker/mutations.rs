@@ -459,10 +459,10 @@ impl Mutation for TrackBranch {
             StoreRef::Tag { tag_name } => {
                 precondition!("{} is a tag and cannot be tracked", tag_name);
             }
-            StoreRef::LocalBranch { branch_name, .. } => {
-                precondition!("{} is a local branch and cannot be tracked", branch_name);
+            StoreRef::LocalBookmark { branch_name, .. } => {
+                precondition!("{} is a local bookmark and cannot be tracked", branch_name);
             }
-            StoreRef::RemoteBranch {
+            StoreRef::RemoteBookmark {
                 branch_name,
                 remote_name,
                 ..
@@ -479,7 +479,7 @@ impl Mutation for TrackBranch {
                 tx.repo_mut()
                     .track_remote_bookmark(&branch_name, &remote_name);
 
-                match ws.finish_transaction(tx, format!("track remote branch {}", branch_name))? {
+                match ws.finish_transaction(tx, format!("track remote bookmark {}", branch_name))? {
                     Some(new_status) => Ok(MutationResult::Updated { new_status }),
                     None => Ok(MutationResult::Unchanged),
                 }
@@ -497,7 +497,7 @@ impl Mutation for UntrackBranch {
             StoreRef::Tag { tag_name } => {
                 precondition!("{} is a tag and cannot be untracked", tag_name);
             }
-            StoreRef::LocalBranch { branch_name, .. } => {
+            StoreRef::LocalBookmark { branch_name, .. } => {
                 // untrack all remotes
                 for ((name, remote), remote_ref) in ws.view().remote_bookmarks_matching(
                     &StringPattern::exact(branch_name),
@@ -509,7 +509,7 @@ impl Mutation for UntrackBranch {
                     }
                 }
             }
-            StoreRef::RemoteBranch {
+            StoreRef::RemoteBookmark {
                 branch_name,
                 remote_name,
                 ..
@@ -529,7 +529,7 @@ impl Mutation for UntrackBranch {
 
         match ws.finish_transaction(
             tx,
-            format!("untrack remote {}", combine_branches(&untracked)),
+            format!("untrack remote {}", combine_bookmarks(&untracked)),
         )? {
             Some(new_status) => Ok(MutationResult::Updated { new_status }),
             None => Ok(MutationResult::Unchanged),
@@ -543,11 +543,11 @@ impl Mutation for RenameBranch {
 
         let ref_target = ws.view().get_local_bookmark(old_name).clone();
         if ref_target.is_absent() {
-            precondition!("No such branch: {}", old_name);
+            precondition!("No such bookmark: {}", old_name);
         }
 
         if ws.view().get_local_bookmark(&self.new_name).is_present() {
-            precondition!("Branch already exists: {}", &self.new_name);
+            precondition!("Bookmark already exists: {}", &self.new_name);
         }
 
         let mut tx = ws.start_transaction()?;
@@ -571,18 +571,18 @@ impl Mutation for CreateRef {
         let commit = ws.resolve_single_change(&self.id)?;
 
         match self.r#ref {
-            StoreRef::RemoteBranch {
+            StoreRef::RemoteBookmark {
                 branch_name,
                 remote_name,
                 ..
             } => {
                 precondition!(
-                    "{}@{} is a remote branch and cannot be created",
+                    "{}@{} is a remote bookmark and cannot be created",
                     branch_name,
                     remote_name
                 );
             }
-            StoreRef::LocalBranch { branch_name, .. } => {
+            StoreRef::LocalBookmark { branch_name, .. } => {
                 let existing_branch = ws.view().get_local_bookmark(&branch_name);
                 if existing_branch.is_present() {
                     precondition!("{} already exists", branch_name);
@@ -633,14 +633,14 @@ impl Mutation for CreateRef {
 impl Mutation for DeleteRef {
     fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         match self.r#ref {
-            StoreRef::RemoteBranch {
+            StoreRef::RemoteBookmark {
                 branch_name,
                 remote_name,
                 ..
             } => {
                 let mut tx = ws.start_transaction()?;
 
-                // forget the branch entirely - when target is absent, it's removed from the view
+                // forget the bookmark entirely - when target is absent, it's removed from the view
                 let remote_ref = RemoteRef {
                     target: RefTarget::absent(),
                     state: RemoteRefState::New,
@@ -656,7 +656,7 @@ impl Mutation for DeleteRef {
                     None => Ok(MutationResult::Unchanged),
                 }
             }
-            StoreRef::LocalBranch { branch_name, .. } => {
+            StoreRef::LocalBookmark { branch_name, .. } => {
                 let mut tx = ws.start_transaction()?;
 
                 tx.repo_mut()
@@ -689,17 +689,17 @@ impl Mutation for MoveRef {
         let commit = ws.resolve_single_change(&self.to_id)?;
 
         match self.r#ref {
-            StoreRef::RemoteBranch {
+            StoreRef::RemoteBookmark {
                 branch_name,
                 remote_name,
                 ..
             } => {
-                precondition!("Branch is remote: {branch_name}@{remote_name}")
+                precondition!("Bookmark is remote: {branch_name}@{remote_name}")
             }
-            StoreRef::LocalBranch { branch_name, .. } => {
+            StoreRef::LocalBookmark { branch_name, .. } => {
                 let old_target = ws.view().get_local_bookmark(&branch_name);
                 if old_target.is_absent() {
-                    precondition!("No such branch: {branch_name}");
+                    precondition!("No such bookmark: {branch_name}");
                 }
 
                 tx.repo_mut().set_local_bookmark_target(
@@ -745,11 +745,11 @@ impl Mutation for GitPush {
             None => precondition!("No git backend"),
         };
 
-        // determine branches to push, recording the old and new commits
+        // determine bookmarks to push, recording the old and new commits
         let mut remote_branch_updates: Vec<(&str, Vec<(String, refs::BookmarkPushUpdate)>)> =
             Vec::new();
         let remote_branch_refs: Vec<_> = match &*self {
-            GitPush::AllBranches { ref remote_name } => {
+            GitPush::AllBookmarks { ref remote_name } => {
                 let mut branch_updates = Vec::new();
                 for (branch_name, targets) in ws.view().local_remote_bookmarks(&remote_name) {
                     if !targets.remote_ref.is_tracking() {
@@ -805,7 +805,7 @@ impl Mutation for GitPush {
 
                 remote_branch_refs
             }
-            GitPush::RemoteBranch {
+            GitPush::RemoteBookmark {
                 ref remote_name,
                 ref branch_ref,
             } => {
@@ -905,7 +905,7 @@ impl Mutation for GitPush {
         match ws.finish_transaction(
             tx,
             match *self {
-                GitPush::AllBranches { remote_name } => {
+                GitPush::AllBookmarks { remote_name } => {
                     format!("push all tracked branches to git remote {}", remote_name)
                 }
                 GitPush::AllRemotes { branch_ref } => {
@@ -914,7 +914,7 @@ impl Mutation for GitPush {
                         branch_ref.as_branch()?
                     )
                 }
-                GitPush::RemoteBranch {
+                GitPush::RemoteBookmark {
                     remote_name,
                     branch_ref,
                 } => {
@@ -943,7 +943,7 @@ impl Mutation for GitFetch {
 
         let mut remote_patterns = Vec::new();
         match *self {
-            GitFetch::AllBranches { remote_name } => {
+            GitFetch::AllBookmarks { remote_name } => {
                 remote_patterns.push((remote_name, None));
             }
             GitFetch::AllRemotes { branch_ref } => {
@@ -956,7 +956,7 @@ impl Mutation for GitFetch {
                     remote_patterns.push((remote_name, Some(branch_name.to_owned())));
                 }
             }
-            GitFetch::RemoteBranch {
+            GitFetch::RemoteBookmark {
                 remote_name,
                 branch_ref,
             } => {
@@ -1040,10 +1040,10 @@ fn combine_messages(source: &Commit, destination: &Commit, abandon_source: bool)
     }
 }
 
-fn combine_branches(branch_names: &[impl Display]) -> String {
+fn combine_bookmarks(branch_names: &[impl Display]) -> String {
     match branch_names {
-        [branch_name] => format!("branch {}", branch_name),
-        branch_names => format!("branches {}", branch_names.iter().join(", ")),
+        [branch_name] => format!("bookmark {}", branch_name),
+        branch_names => format!("bookmarks {}", branch_names.iter().join(", ")),
     }
 }
 
@@ -1069,14 +1069,14 @@ fn classify_branch_push(
         BookmarkPushAction::AlreadyMatches => Ok(None),
         BookmarkPushAction::Update(update) => Ok(Some(update)),
         BookmarkPushAction::LocalConflicted => {
-            Err(format!("Branch {} is conflicted.", branch_name))
+            Err(format!("Bookmark {} is conflicted.", branch_name))
         }
         BookmarkPushAction::RemoteConflicted => Err(format!(
-            "Branch {}@{} is conflicted. Try fetching first.",
+            "Bookmark {}@{} is conflicted. Try fetching first.",
             branch_name, remote_name
         )),
         BookmarkPushAction::RemoteUntracked => Err(format!(
-            "Non-tracking remote branch {}@{} exists. Try tracking it first.",
+            "Non-tracking remote bookmark {}@{} exists. Try tracking it first.",
             branch_name, remote_name
         )),
     }

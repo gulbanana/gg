@@ -16,10 +16,10 @@
 
     const presets = [
         { label: "Default", value: default_query },
-        { label: "Tracked Branches", value: "@ | ancestors(branches(), 5)" },
+        { label: "Tracked Bookmarks", value: "@ | ancestors(bookmarks(), 5)" },
         {
-            label: "Remote Branches",
-            value: "@ | ancestors(remote_branches(), 5)",
+            label: "Remote Bookmarks",
+            value: "@ | ancestors(remote_bookmarks(), 5)",
         },
         { label: "All Revisions", value: "all()" },
     ];

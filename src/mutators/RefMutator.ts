@@ -70,9 +70,9 @@ export default class RefMutator {
     };
 
     onRename = async () => {
-        let response = await getInput("Rename Branch", "", ["Branch Name"]);
+        let response = await getInput("Rename Bookmark", "", ["Bookmark Name"]);
         if (response) {
-            let new_name = response["Branch Name"];
+            let new_name = response["Bookmark Name"];
             mutate<RenameBranch>("rename_branch", {
                 ref: this.#ref,
                 new_name
@@ -92,15 +92,15 @@ export default class RefMutator {
                 console.log("error: Can't push tag");
                 break;
 
-            case "RemoteBranch":
+            case "RemoteBookmark":
                 mutate<GitPush>("git_push", {
-                    type: "RemoteBranch",
+                    type: "RemoteBookmark",
                     remote_name: this.#ref.remote_name,
                     branch_ref: this.#ref
                 });
                 break;
 
-            case "LocalBranch":
+            case "LocalBookmark":
                 mutate<GitPush>("git_push", {
                     type: "AllRemotes",
                     branch_ref: this.#ref
@@ -112,11 +112,14 @@ export default class RefMutator {
     onPushSingle = async () => {
         switch (this.#ref.type) {
             case "Tag":
-            case "RemoteBranch":
-                console.log("error: Can't push tag/tracking branch to a specific remote");
+                console.log("error: Can't push tag to a specific remote");
                 break;
 
-            case "LocalBranch":
+            case "RemoteBookmark":
+                console.log("error: Can't push tracking bookmark to a specific remote");
+                break;
+
+            case "LocalBookmark":
                 let allRemotes = await query<string[]>("query_remotes", { tracking_branch: null });
                 if (allRemotes.type == "error") {
                     console.log("error loading remotes: " + allRemotes.message);
@@ -127,7 +130,7 @@ export default class RefMutator {
                 if (response) {
                     let remote_name = response["Remote Name"];
                     mutate<GitPush>("git_push", {
-                        type: "RemoteBranch",
+                        type: "RemoteBookmark",
                         remote_name,
                         branch_ref: this.#ref
                     })
@@ -142,14 +145,14 @@ export default class RefMutator {
                 console.log("error: Can't fetch tag");
                 break;
 
-            case "RemoteBranch":
+            case "RemoteBookmark":
                 mutate<GitFetch>("git_fetch", {
                     type: "AllRemotes",
                     branch_ref: this.#ref
                 });
                 break;
 
-            case "LocalBranch":
+            case "LocalBookmark":
                 mutate<GitFetch>("git_fetch", {
                     type: "AllRemotes",
                     branch_ref: this.#ref
@@ -161,11 +164,14 @@ export default class RefMutator {
     onFetchSingle = async () => {
         switch (this.#ref.type) {
             case "Tag":
-            case "RemoteBranch":
-                console.log("error: Can't fetch tag/tracking branch to a specific remote");
+                console.log("error: Can't fetch tag from a specific remote");
                 break;
 
-            case "LocalBranch":
+            case "RemoteBookmark":
+                console.log("error: Can't fetch tracking bookmark from a specific remote");
+                break;
+
+            case "LocalBookmark":
                 let trackedRemotes = await query<string[]>("query_remotes", { tracking_branch: this.#ref.branch_name });
                 if (trackedRemotes.type == "error") {
                     console.log("error loading remotes: " + trackedRemotes.message);
@@ -176,7 +182,7 @@ export default class RefMutator {
                 if (response) {
                     let remote_name = response["Remote Name"];
                     mutate<GitFetch>("git_fetch", {
-                        type: "RemoteBranch",
+                        type: "RemoteBookmark",
                         remote_name,
                         branch_ref: this.#ref
                     })

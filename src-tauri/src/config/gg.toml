@@ -13,8 +13,8 @@ large-repo-heuristic = 100000
 # Stores a list of recently opened directories for shell integration
 recent-workspaces = []
 
-# When set, branches that are local-only or remote-only will be visually indicated.
-mark-unpushed-branches = true
+# When set, bookmarks that are local-only or remote-only will be visually indicated.
+mark-unpushed-bookmarks = true
 
 # "light" or "dark". If not set, your OS settings will be used.
 # theme-override =

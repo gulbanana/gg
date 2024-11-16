@@ -14,7 +14,7 @@ pub trait GGSettings {
     fn query_large_repo_heuristic(&self) -> i64;
     fn query_auto_snapshot(&self) -> Option<bool>;
     fn ui_theme_override(&self) -> Option<String>;
-    fn ui_mark_unpushed_branches(&self) -> bool;
+    fn ui_mark_unpushed_bookmarks(&self) -> bool;
     #[allow(dead_code)]
     fn ui_recent_workspaces(&self) -> Vec<String>;
 }
@@ -40,10 +40,14 @@ impl GGSettings for UserSettings {
         self.config().get_string("gg.ui.theme-override").ok()
     }
 
-    fn ui_mark_unpushed_branches(&self) -> bool {
+    fn ui_mark_unpushed_bookmarks(&self) -> bool {
         self.config()
-            .get_bool("gg.ui.mark-unpushed-branches")
-            .unwrap_or(true)
+            .get_bool("gg.ui.mark-unpushed-bookmarks")
+            .unwrap_or(
+                self.config()
+                    .get_bool("gg.ui.mark-unpushed-branches")
+                    .unwrap_or(true),
+            )
     }
 
     fn ui_recent_workspaces(&self) -> Vec<String> {

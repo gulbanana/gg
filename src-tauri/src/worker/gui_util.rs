@@ -447,7 +447,7 @@ impl WorkspaceSession<'_> {
             latest_query,
             status: self.format_status(),
             theme_override: self.data.settings.ui_theme_override(),
-            mark_unpushed_branches: self.data.settings.ui_mark_unpushed_branches(),
+            mark_unpushed_branches: self.data.settings.ui_mark_unpushed_bookmarks(),
         })
     }
 
@@ -1027,7 +1027,7 @@ fn build_ref_index(repo: &ReadonlyRepo) -> RefIndex {
         if local_target.is_present() {
             index.insert(
                 local_target.added_ids(),
-                messages::StoreRef::LocalBranch {
+                messages::StoreRef::LocalBookmark {
                     branch_name: branch_name.to_owned(),
                     has_conflict: local_target.has_conflict(),
                     is_synced: remote_refs.iter().all(|&(_, remote_ref)| {
@@ -1046,7 +1046,7 @@ fn build_ref_index(repo: &ReadonlyRepo) -> RefIndex {
         for &(remote_name, remote_ref) in &remote_refs {
             index.insert(
                 remote_ref.target.added_ids(),
-                messages::StoreRef::RemoteBranch {
+                messages::StoreRef::RemoteBookmark {
                     branch_name: branch_name.to_owned(),
                     remote_name: remote_name.to_owned(),
                     has_conflict: remote_ref.target.has_conflict(),

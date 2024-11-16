@@ -54,7 +54,7 @@
             <span class="refs">
                 {#each header.refs as ref}
                     {#if ref.type != "Tag"}
-                        {#if !noBranches && (ref.type == "LocalBranch" || !ref.is_synced || !ref.is_tracked)}
+                        {#if !noBranches && (ref.type == "LocalBookmark" || !ref.is_synced || !ref.is_tracked)}
                             <div>
                                 <BranchObject {header} {ref} />
                             </div>
@@ -83,7 +83,7 @@
                 <span class="refs">
                     {#each header.refs as ref}
                         {#if ref.type != "Tag"}
-                            {#if ref.type == "LocalBranch" || !ref.is_synced || !ref.is_tracked}
+                            {#if ref.type == "LocalBookmark" || !ref.is_synced || !ref.is_tracked}
                                 <div>
                                     <BranchObject {header} {ref} />
                                 </div>

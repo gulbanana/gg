@@ -104,7 +104,7 @@ pub fn build_main(app_handle: &AppHandle) -> tauri::Result<Menu<Wry>> {
             &MenuItem::with_id(
                 app_handle,
                 "menu_revision_branch",
-                "Create branch",
+                "Create bookmark",
                 true,
                 None::<&str>,
             )?,
@@ -208,7 +208,7 @@ pub fn build_context(
             &MenuItem::with_id(
                 app_handle,
                 "revision_branch",
-                "Create branch",
+                "Create bookmark",
                 true,
                 None::<&str>,
             )?,
@@ -368,7 +368,7 @@ pub fn handle_context(window: Window, ctx: Operand) -> Result<()> {
                 "branch_track",
                 matches!(
                     r#ref,
-                    StoreRef::RemoteBranch {
+                    StoreRef::RemoteBookmark {
                         is_tracked: false,
                         ..
                     }
@@ -380,13 +380,13 @@ pub fn handle_context(window: Window, ctx: Operand) -> Result<()> {
                 "branch_untrack",
                 matches!(
                     r#ref,
-                    StoreRef::LocalBranch {
+                    StoreRef::LocalBookmark {
                         ref tracking_remotes,
                         ..
                     } if !tracking_remotes.is_empty()
                 ) || matches!(
                     r#ref,
-                    StoreRef::RemoteBranch {
+                    StoreRef::RemoteBookmark {
                         is_synced: false, // we can *see* the remote ref, and
                         is_tracked: true, // it has a local, and
                         is_absent: false, // that local is somewhere else
@@ -397,26 +397,26 @@ pub fn handle_context(window: Window, ctx: Operand) -> Result<()> {
 
             // push a local to its remotes, or finish a CLI delete
             context_menu.enable("branch_push_all", 
-                matches!(r#ref, StoreRef::LocalBranch { ref tracking_remotes, .. } if !tracking_remotes.is_empty()) || 
-                matches!(r#ref, StoreRef::RemoteBranch { is_tracked: true, is_absent: true, .. }))?;
+                matches!(r#ref, StoreRef::LocalBookmark { ref tracking_remotes, .. } if !tracking_remotes.is_empty()) || 
+                matches!(r#ref, StoreRef::RemoteBookmark { is_tracked: true, is_absent: true, .. }))?;
 
             // push a local to a selected remote, tracking first if necessary
             context_menu.enable("branch_push_single", 
-                matches!(r#ref, StoreRef::LocalBranch { potential_remotes, .. } if potential_remotes > 0))?;
+                matches!(r#ref, StoreRef::LocalBookmark { potential_remotes, .. } if potential_remotes > 0))?;
 
             // fetch a local's remotes, or just a remote (unless we're deleting it; that would be silly)
             context_menu.enable("branch_fetch_all", 
-                matches!(r#ref, StoreRef::LocalBranch { ref tracking_remotes, .. } if !tracking_remotes.is_empty()) || 
-                matches!(r#ref, StoreRef::RemoteBranch { is_tracked, is_absent, .. } if (!is_tracked || !is_absent)))?;
+                matches!(r#ref, StoreRef::LocalBookmark { ref tracking_remotes, .. } if !tracking_remotes.is_empty()) || 
+                matches!(r#ref, StoreRef::RemoteBookmark { is_tracked, is_absent, .. } if (!is_tracked || !is_absent)))?;
 
             // fetch a local, tracking first if necessary
             context_menu.enable("branch_fetch_single", 
-                matches!(r#ref, StoreRef::LocalBranch { available_remotes, .. } if available_remotes > 0))?;
+                matches!(r#ref, StoreRef::LocalBookmark { available_remotes, .. } if available_remotes > 0))?;
 
             // rename a local, which also untracks remotes
             context_menu.enable(
                 "branch_rename",
-                matches!(r#ref, StoreRef::LocalBranch { .. }),
+                matches!(r#ref, StoreRef::LocalBookmark { .. }),
             )?;
 
             // remove a local, or make a remote absent
@@ -424,7 +424,7 @@ pub fn handle_context(window: Window, ctx: Operand) -> Result<()> {
                 "branch_delete",
                 !matches!(
                     r#ref,
-                    StoreRef::RemoteBranch {
+                    StoreRef::RemoteBookmark {
                         is_absent: true,
                         is_tracked: true,
                         ..

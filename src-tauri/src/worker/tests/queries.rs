@@ -41,7 +41,7 @@ fn log_subset() -> Result<()> {
     let mut session = WorkerSession::default();
     let ws = session.load_directory(repo.path())?;
 
-    let several_rows = queries::query_log(&ws, "branches()", 100)?;
+    let several_rows = queries::query_log(&ws, "bookmarks()", 100)?;
 
     assert_eq!(3, several_rows.rows.len());
 
@@ -89,14 +89,14 @@ fn revision() -> Result<()> {
     let mut session = WorkerSession::default();
     let ws = session.load_directory(repo.path())?;
 
-    let rev = queries::query_revision(&ws, revs::main_branch())?;
+    let rev = queries::query_revision(&ws, revs::main_bookmark())?;
 
     assert_matches!(
         rev,
         RevResult::Detail {
             header: RevHeader { refs, .. },
             ..
-        } if matches!(refs.as_slice(), [StoreRef::LocalBranch { branch_name, .. }] if branch_name == "main")
+        } if matches!(refs.as_slice(), [StoreRef::LocalBookmark { branch_name, .. }] if branch_name == "main")
     );
 
     Ok(())
@@ -119,7 +119,7 @@ fn remotes_all() -> Result<()> {
 }
 
 #[test]
-fn remotes_tracking_branch() -> Result<()> {
+fn remotes_tracking_bookmark() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();

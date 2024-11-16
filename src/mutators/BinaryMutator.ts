@@ -12,7 +12,7 @@ import ChangeMutator from "./ChangeMutator";
 import RefMutator from "./RefMutator";
 import type { StoreRef } from "../messages/StoreRef";
 
-export type RichHint = (string | ChangeId | CommitId | Extract<StoreRef, { type: "LocalBranch" } | { type: "RemoteBranch" }>)[];
+export type RichHint = (string | ChangeId | CommitId | Extract<StoreRef, { type: "LocalBookmark" } | { type: "RemoteBookmark" }>)[];
 export type Eligibility = { type: "yes", hint: RichHint } | { type: "maybe", hint: string } | { type: "no" };
 
 export default class BinaryMutator {
@@ -45,7 +45,7 @@ export default class BinaryMutator {
         } else if (from.type == "Change") {
             return { type: "yes", hint: [`Squashing changes at ${from.path.relative_path}`] };
         } else if (from.type == "Ref" && from.ref.type != "Tag") {
-            return { type: "yes", hint: ["Moving branch ", from.ref] };
+            return { type: "yes", hint: ["Moving bookmark ", from.ref] };
         }
 
         return { type: "no" };
@@ -107,31 +107,31 @@ export default class BinaryMutator {
 
         if (this.#from.type == "Ref" && this.#from.ref.type != "Tag") {
             // local -> rev: set
-            if (this.#to.type == "Revision" && this.#from.ref.type == "LocalBranch") {
+            if (this.#to.type == "Revision" && this.#from.ref.type == "LocalBookmark") {
                 if (this.#to.header.id.change.hex == this.#from.header.id.change.hex) {
                     return { type: "no" };
                 } else {
-                    return { type: "yes", hint: ["Moving branch ", this.#from.ref, " to ", this.#to.header.id.change] };
+                    return { type: "yes", hint: ["Moving bookmark ", this.#from.ref, " to ", this.#to.header.id.change] };
                 }
             }
 
             // remote -> local: track
-            else if (this.#to.type == "Ref" && this.#to.ref.type == "LocalBranch" &&
-                this.#from.ref.type == "RemoteBranch" && this.#from.ref.branch_name == this.#to.ref.branch_name) {
+            else if (this.#to.type == "Ref" && this.#to.ref.type == "LocalBookmark" &&
+                this.#from.ref.type == "RemoteBookmark" && this.#from.ref.branch_name == this.#to.ref.branch_name) {
                 if (this.#from.ref.is_tracked) {
                     return { type: "maybe", hint: "(already tracked)" };
                 } else {
-                    return { type: "yes", hint: ["Tracking remote branch ", this.#from.ref] };
+                    return { type: "yes", hint: ["Tracking remote bookmark ", this.#from.ref] };
                 }
             }
 
             // anything -> anywhere: delete
             else if (this.#to.type == "Repository") {
-                if (this.#from.ref.type == "LocalBranch") {
-                    return { type: "yes", hint: ["Deleting branch ", this.#from.ref] };
+                if (this.#from.ref.type == "LocalBookmark") {
+                    return { type: "yes", hint: ["Deleting bookmark ", this.#from.ref] };
                 } else {
                     return {
-                        type: "yes", hint: ["Forgetting remote branch ", this.#from.ref]
+                        type: "yes", hint: ["Forgetting remote bookmark ", this.#from.ref]
                     };
                 }
             }
@@ -189,8 +189,8 @@ export default class BinaryMutator {
                 // point ref to revision
                 mutate<MoveRef>("move_ref", { to_id: this.#to.header.id, ref: this.#from.ref });
                 return;
-            } else if (this.#to.type == "Ref" && this.#from.ref.type == "RemoteBranch") {
-                // track remote branch with existing local
+            } else if (this.#to.type == "Ref" && this.#from.ref.type == "RemoteBookmark") {
+                // track remote bookmark with existing local
                 new RefMutator(this.#from.ref).onTrack();
             } else if (this.#to.type == "Repository") {
                 // various kinds of total or partial deletion

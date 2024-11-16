@@ -108,7 +108,7 @@ pub struct RepoStatus {
     pub working_copy: CommitId,
 }
 
-/// Branch or tag name with metadata.
+/// Bookmark or tag name with metadata.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(tag = "type")]
 #[cfg_attr(
@@ -117,7 +117,7 @@ pub struct RepoStatus {
     ts(export, export_to = "../src/messages/")
 )]
 pub enum StoreRef {
-    LocalBranch {
+    LocalBookmark {
         branch_name: String,
         has_conflict: bool,
         /// Synchronized with all tracking remotes
@@ -127,7 +127,7 @@ pub enum StoreRef {
         available_remotes: usize,
         potential_remotes: usize,
     },
-    RemoteBranch {
+    RemoteBookmark {
         branch_name: String,
         remote_name: String,
         has_conflict: bool,
@@ -146,9 +146,9 @@ pub enum StoreRef {
 impl StoreRef {
     pub fn as_branch(&self) -> Result<&str> {
         match self {
-            StoreRef::LocalBranch { branch_name, .. } => Ok(&branch_name),
-            StoreRef::RemoteBranch { branch_name, .. } => Ok(&branch_name),
-            _ => Err(anyhow!("not a local branch")),
+            StoreRef::LocalBookmark { branch_name, .. } => Ok(&branch_name),
+            StoreRef::RemoteBookmark { branch_name, .. } => Ok(&branch_name),
+            _ => Err(anyhow!("not a local bookmark")),
         }
     }
 }

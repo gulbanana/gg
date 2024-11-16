@@ -51,11 +51,11 @@ mod revs {
         mkid("nnloouly", "56018b94eb61a9acddc58ad7974aa51c3368eadd")
     }
 
-    pub fn main_branch() -> RevId {
+    pub fn main_bookmark() -> RevId {
         mkid("mnkoropy", "87e9c6c03e1b727ff712d962c03b32fffb704bc0")
     }
 
-    pub fn conflict_branch() -> RevId {
+    pub fn conflict_bookmark() -> RevId {
         mkid("nwrnuwyp", "880abeefdd3ac344e2a0901c5f486d02d34053da")
     }
 

@@ -10,7 +10,7 @@
     import Zone from "./Zone.svelte";
 
     export let header: RevHeader;
-    export let ref: Extract<StoreRef, { type: "LocalBranch" | "RemoteBranch" }>;
+    export let ref: Extract<StoreRef, { type: "LocalBookmark" | "RemoteBookmark" }>;
 
     let operand: Operand = { type: "Ref", header, ref };
 
@@ -20,15 +20,15 @@
     let tip: string;
 
     switch (ref.type) {
-        case "LocalBranch":
+        case "LocalBookmark":
             label = ref.branch_name;
             state = ref.is_synced ? "change" : "add";
             disconnected = ref.available_remotes == 0 && ref.potential_remotes > 0;
 
             if (disconnected) {
-                tip = "local-only branch";
+                tip = "local-only bookmark";
             } else {
-                tip = "local branch";
+                tip = "local bookmark";
                 if (ref.tracking_remotes.length >= 0) {
                     tip = tip + " (tracking ";
                     let first = true;
@@ -46,12 +46,12 @@
 
             break;
 
-        case "RemoteBranch":
+        case "RemoteBookmark":
             label = `${ref.branch_name}@${ref.remote_name}`;
             state = ref.is_tracked ? "remove" : "change"; // we haven't combined this remote, and it has a local = red
             disconnected = ref.is_tracked && ref.is_absent;
 
-            tip = "remote branch";
+            tip = "remote bookmark";
             if (disconnected) {
                 tip = tip + " (deleting)";
             } else if (ref.is_tracked) {
@@ -71,7 +71,7 @@
 <Object {operand} {label} conflicted={ref.has_conflict} let:context let:hint={dragHint}>
     <Zone {operand} let:target let:hint={dropHint}>
         <Chip {context} {target} {disconnected} {tip}>
-            <Icon name="git-branch" state={context ? null : state} />
+            <Icon name="bookmark" state={context ? null : state} />
             <span>{dragHint ?? dropHint ?? label}</span>
         </Chip>
     </Zone>

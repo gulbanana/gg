@@ -127,11 +127,11 @@ export default class RevisionMutator {
     };
 
     onBranch = async () => {
-        let response = await getInput("Create Branch", "", ["Branch Name"]);
+        let response = await getInput("Create Bookmark", "", ["Bookmark Name"]);
         if (response) {
             let ref: StoreRef = {
-                type: "LocalBranch",
-                branch_name: response["Branch Name"],
+                type: "LocalBookmark",
+                branch_name: response["Bookmark Name"],
                 has_conflict: false,
                 is_synced: false,
                 potential_remotes: 0,
