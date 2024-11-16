@@ -23,8 +23,7 @@ use jj_lib::{
     backend::{BackendError, ChangeId, CommitId},
     commit::Commit,
     default_index::{AsCompositeIndex, DefaultReadonlyIndex},
-    file_util::relative_path,
-    git,
+    file_util, git,
     git_backend::GitBackend,
     gitignore::GitIgnoreFile,
     id_prefix::{IdPrefixContext, IdPrefixIndex},
@@ -529,7 +528,8 @@ impl WorkspaceSession<'_> {
 
     pub fn format_path<T: AsRef<RepoPath>>(&self, repo_path: T) -> Result<messages::TreePath> {
         let base_path = self.workspace.workspace_root();
-        let relative_path = relative_path(base_path, &repo_path.as_ref().to_fs_path(base_path)?);
+        let relative_path =
+            file_util::relative_path(base_path, &repo_path.as_ref().to_fs_path(base_path)?);
         Ok(messages::TreePath {
             repo_path: repo_path.as_ref().as_internal_file_string().to_owned(),
             relative_path: relative_path.into(),
@@ -925,6 +925,7 @@ impl SessionOperation {
         self.repo.store().backend_impl().downcast_ref()
     }
 
+    // XXX out of snyc with jj-cli version
     pub fn base_ignores(&self) -> Result<Arc<GitIgnoreFile>> {
         fn get_excludes_file_path(config: &gix::config::File) -> Option<PathBuf> {
             // TODO: maybe use path() and interpolate(), which can process non-utf-8
@@ -932,7 +933,7 @@ impl SessionOperation {
             if let Some(value) = config.string("core.excludesFile") {
                 std::str::from_utf8(&value)
                     .ok()
-                    .map(jj_cli::git_util::expand_git_path)
+                    .map(file_util::expand_home_path)
             } else {
                 xdg_config_home().ok().map(|x| x.join("git").join("ignore"))
             }
