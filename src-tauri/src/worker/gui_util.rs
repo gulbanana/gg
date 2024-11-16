@@ -35,9 +35,9 @@ use jj_lib::{
     repo::{ReadonlyRepo, Repo, RepoLoaderError, StoreFactories},
     repo_path::{RepoPath, RepoPathUiConverter},
     revset::{
-        self, DefaultSymbolResolver, Revset, RevsetAliasesMap, RevsetEvaluationError,
-        RevsetExpression, RevsetExtensions, RevsetIteratorExt, RevsetParseContext,
-        RevsetResolutionError, RevsetWorkspaceContext, SymbolResolverExtension,
+        self, DefaultSymbolResolver, Revset, RevsetAliasesMap, RevsetDiagnostics,
+        RevsetEvaluationError, RevsetExpression, RevsetExtensions, RevsetIteratorExt,
+        RevsetParseContext, RevsetResolutionError, RevsetWorkspaceContext, SymbolResolverExtension,
     },
     rewrite,
     settings::UserSettings,
@@ -230,7 +230,9 @@ impl WorkspaceSession<'_> {
     }
 
     pub fn evaluate_immutable(&self) -> Result<Box<dyn Revset + '_>> {
-        let expr = revset_util::parse_immutable_expression(&self.parse_context())?;
+        let mut diagnostics = RevsetDiagnostics::new(); // XXX pass this down, then include it in the Result
+        let expr =
+            revset_util::parse_immutable_heads_expression(&mut diagnostics, &self.parse_context())?;
         let revset = self.evaluate_revset_expr(expr)?;
         Ok(revset)
     }
@@ -352,7 +354,7 @@ impl WorkspaceSession<'_> {
             .as_ref()
             .iter()
             .commits(self.operation.repo.store())
-            .collect::<Result<Vec<Commit>, BackendError>>()?;
+            .collect::<Result<Vec<Commit>, RevsetEvaluationError>>()?;
         Ok(commits)
     }
 
@@ -560,7 +562,9 @@ impl WorkspaceSession<'_> {
     pub fn check_immutable(&self, ids: impl IntoIterator<Item = CommitId>) -> Result<bool> {
         let check_revset = RevsetExpression::commits(ids.into_iter().collect());
 
-        let immutable_revset = revset_util::parse_immutable_expression(&self.parse_context())?;
+        let mut diagnostics = RevsetDiagnostics::new();
+        let immutable_revset =
+            revset_util::parse_immutable_heads_expression(&mut diagnostics, &self.parse_context())?;
         let intersection_revset = check_revset.intersection(&immutable_revset);
 
         // note: slow! jj has added a caching contains_fn to revsets, but this codepath is used in one-offs where
@@ -942,7 +946,9 @@ fn parse_revset(
     parse_context: &RevsetParseContext,
     revision: &str,
 ) -> Result<Rc<RevsetExpression>, RevsetError> {
-    let expression = revset::parse(revision, parse_context).context("parse revset")?;
+    let mut diagnostics = RevsetDiagnostics::new(); // XXX move this up and include it in errors
+    let expression =
+        revset::parse(&mut diagnostics, revision, parse_context).context("parse revset")?;
     let expression = revset::optimize(expression);
     Ok(expression)
 }
