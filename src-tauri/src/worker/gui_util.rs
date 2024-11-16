@@ -566,7 +566,7 @@ impl WorkspaceSession<'_> {
         mut tx: Transaction,
         description: impl Into<String>,
     ) -> Result<Option<messages::RepoStatus>> {
-        if !tx.mut_repo().has_changes() {
+        if !tx.repo().has_changes() {
             return Ok(None);
         }
 
@@ -592,9 +592,9 @@ impl WorkspaceSession<'_> {
                 .ok_or(anyhow!("colocated, but git backend not found"))?
                 .open_git_repo()?;
             if let Some(wc_commit) = &maybe_new_wc_commit {
-                git::reset_head(tx.mut_repo(), &git_repo, wc_commit)?;
+                git::reset_head(tx.repo_mut(), &git_repo, wc_commit)?;
             }
-            git::export_refs(tx.mut_repo())?;
+            git::export_refs(tx.repo_mut())?;
         }
 
         self.operation = SessionOperation::new(&self.id(), &self.data, tx.commit(description));
@@ -691,7 +691,7 @@ impl WorkspaceSession<'_> {
 
         if did_anything {
             let mut tx = repo.start_transaction(&self.data.settings);
-            let mut_repo = tx.mut_repo();
+            let mut_repo = tx.repo_mut();
             let commit = mut_repo
                 .rewrite_commit(&self.data.settings, &wc_commit)
                 .set_tree_id(new_tree_id)
@@ -738,24 +738,24 @@ impl WorkspaceSession<'_> {
 
     fn import_git_head(&mut self) -> Result<()> {
         let mut tx = self.operation.repo.start_transaction(&self.data.settings);
-        git::import_head(tx.mut_repo())?;
-        if !tx.mut_repo().has_changes() {
+        git::import_head(tx.repo_mut())?;
+        if !tx.repo().has_changes() {
             return Ok(());
         }
 
-        let new_git_head = tx.mut_repo().view().git_head().clone();
+        let new_git_head = tx.repo().view().git_head().clone();
         if let Some(new_git_head_id) = new_git_head.as_normal() {
             let workspace_id = self.workspace.workspace_id().to_owned();
 
             if let Some(old_wc_commit_id) =
                 self.operation.repo.view().get_wc_commit_id(&workspace_id)
             {
-                tx.mut_repo()
+                tx.repo_mut()
                     .record_abandoned_commit(old_wc_commit_id.clone());
             }
 
             let new_git_head_commit = tx.repo().store().get_commit(new_git_head_id)?;
-            tx.mut_repo().check_out(
+            tx.repo_mut().check_out(
                 workspace_id.clone(),
                 &self.data.settings,
                 &new_git_head_commit,
@@ -764,7 +764,7 @@ impl WorkspaceSession<'_> {
             let mut locked_ws = self.workspace.start_working_copy_mutation()?;
 
             locked_ws.locked_wc().reset(&new_git_head_commit)?;
-            tx.mut_repo().rebase_descendants(&self.data.settings)?;
+            tx.repo_mut().rebase_descendants(&self.data.settings)?;
 
             self.operation =
                 SessionOperation::new(&workspace_id, &self.data, tx.commit("import git head"));
@@ -780,14 +780,14 @@ impl WorkspaceSession<'_> {
         let git_settings = self.data.settings.git_settings();
         let mut tx = self.operation.repo.start_transaction(&self.data.settings);
         // Automated import shouldn't fail because of reserved remote name.
-        git::import_some_refs(tx.mut_repo(), &git_settings, |ref_name| {
+        git::import_some_refs(tx.repo_mut(), &git_settings, |ref_name| {
             !git::is_reserved_git_remote_ref(ref_name)
         })?;
-        if !tx.mut_repo().has_changes() {
+        if !tx.repo().has_changes() {
             return Ok(());
         }
 
-        tx.mut_repo().rebase_descendants(&self.data.settings)?;
+        tx.repo_mut().rebase_descendants(&self.data.settings)?;
 
         self.finish_transaction(tx, "import git refs")?;
         Ok(())
@@ -843,7 +843,7 @@ impl WorkspaceSession<'_> {
                 child_commit.id().clone(),
                 rewrite::rebase_commit(
                     &self.data.settings,
-                    tx.mut_repo(),
+                    tx.repo_mut(),
                     child_commit,
                     new_child_parents,
                 )?
@@ -852,7 +852,7 @@ impl WorkspaceSession<'_> {
             );
         }
         rebased_commit_ids.extend(
-            tx.mut_repo()
+            tx.repo_mut()
                 .rebase_descendants_return_map(&self.data.settings)?,
         );
 
@@ -1079,7 +1079,7 @@ fn load_at_head(workspace: &Workspace, data: &WorkspaceData) -> Result<SessionOp
             let mut tx = base_repo.start_transaction(&data.settings);
             for other_op_head in op_heads.into_iter().skip(1) {
                 tx.merge_operation(other_op_head)?;
-                tx.mut_repo().rebase_descendants(&data.settings)?;
+                tx.repo_mut().rebase_descendants(&data.settings)?;
             }
             Ok::<Operation, RepoLoaderError>(
                 tx.write("resolve concurrent operations")
