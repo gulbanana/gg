@@ -476,7 +476,8 @@ impl Mutation for TrackBranch {
                     precondition!("{branch_name}@{remote_name} is already tracked");
                 }
 
-                tx.repo_mut().track_remote_bookmark(&branch_name, &remote_name);
+                tx.repo_mut()
+                    .track_remote_bookmark(&branch_name, &remote_name);
 
                 match ws.finish_transaction(tx, format!("track remote branch {}", branch_name))? {
                     Some(new_status) => Ok(MutationResult::Updated { new_status }),
@@ -587,8 +588,10 @@ impl Mutation for CreateRef {
                     precondition!("{} already exists", branch_name);
                 }
 
-                tx.repo_mut()
-                    .set_local_bookmark_target(&branch_name, RefTarget::normal(commit.id().clone()));
+                tx.repo_mut().set_local_bookmark_target(
+                    &branch_name,
+                    RefTarget::normal(commit.id().clone()),
+                );
 
                 match ws.finish_transaction(
                     tx,
@@ -699,8 +702,10 @@ impl Mutation for MoveRef {
                     precondition!("No such branch: {branch_name}");
                 }
 
-                tx.repo_mut()
-                    .set_local_bookmark_target(&branch_name, RefTarget::normal(commit.id().clone()));
+                tx.repo_mut().set_local_bookmark_target(
+                    &branch_name,
+                    RefTarget::normal(commit.id().clone()),
+                );
 
                 match ws.finish_transaction(
                     tx,
@@ -972,6 +977,7 @@ impl Mutation for GitFetch {
                         .unwrap_or_else(StringPattern::everything)],
                     cb,
                     &ws.data.settings.git_settings(),
+                    None,
                 )?;
                 Ok(())
             })?;
@@ -1062,7 +1068,9 @@ fn classify_branch_push(
     match push_action {
         BookmarkPushAction::AlreadyMatches => Ok(None),
         BookmarkPushAction::Update(update) => Ok(Some(update)),
-        BookmarkPushAction::LocalConflicted => Err(format!("Branch {} is conflicted.", branch_name)),
+        BookmarkPushAction::LocalConflicted => {
+            Err(format!("Branch {} is conflicted.", branch_name))
+        }
         BookmarkPushAction::RemoteConflicted => Err(format!(
             "Branch {}@{} is conflicted. Try fetching first.",
             branch_name, remote_name
