@@ -181,6 +181,12 @@ pub enum Operand {
         header: RevHeader,
         r#ref: StoreRef,
     },
+    Hunk {
+        header: RevHeader,
+        path: String,
+        hunk: ChangeHunk,
+        conflicted: bool,
+    },
 }
 
 #[derive(Serialize, Debug, Clone)]
