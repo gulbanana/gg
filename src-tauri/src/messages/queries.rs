@@ -115,7 +115,7 @@ impl TryFrom<&Signature> for RevAuthor {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
@@ -128,7 +128,7 @@ pub struct RevChange {
     pub hunks: Vec<ChangeHunk>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
@@ -139,7 +139,7 @@ pub struct RevConflict {
     pub hunk: ChangeHunk,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
@@ -152,7 +152,7 @@ pub enum ChangeKind {
     Modified,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
@@ -163,7 +163,7 @@ pub struct ChangeHunk {
     pub lines: MultilineString,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
@@ -174,7 +174,7 @@ pub struct HunkLocation {
     pub to_file: FileRange,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
@@ -185,7 +185,7 @@ pub struct FileRange {
     pub len: usize,
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(tag = "type")]
 #[cfg_attr(
     feature = "ts-rs",

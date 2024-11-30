@@ -3,7 +3,7 @@ use crate::{
     messages::{
         AbandonRevisions, CheckoutRevision, CopyChanges, CreateRevision, DescribeRevision,
         DuplicateRevisions, InsertRevision, MoveChanges, MoveSource, MutationResult, RevResult,
-        TreePath,
+        TreePath, MoveHunk, ChangeHunk, HunkLocation, FileRange, MultilineString,
     },
     worker::{queries, Mutation, WorkerSession},
 };
@@ -320,6 +320,86 @@ fn move_source() -> Result<()> {
 
     let page = queries::query_log(&ws, "@+", 2)?;
     assert_eq!(1, page.rows.len());
+
+    Ok(())
+}
+
+#[test]
+fn move_hunk_single_line() -> anyhow::Result<()> {
+    let repo = mkrepo();
+    let mut session = WorkerSession::default();
+    let mut ws = session.load_directory(repo.path())?;
+
+    // Prepare hunk mutation: remove "-old line" and add "+new line" in file b.txt
+    let mutation = MoveHunk {
+        from_id: revs::resolve_conflict(),
+        to_id: revs::conflict_bookmark().commit,
+        path: TreePath { repo_path: "b.txt".to_owned(), relative_path: "".into() },
+        hunk: ChangeHunk {
+            location: HunkLocation {
+                from_file: FileRange { start: 1, len: 1 },
+                to_file: FileRange { start: 1, len: 6 },
+            },
+            lines: MultilineString { lines: vec!["-<<<<<<< Conflict 1 of 1".to_owned(),
+              "-+++++++ Contents of side #1".to_owned(),
+              " 11".to_owned(),
+              "-%%%%%%% Changes from base to side #2".to_owned(),
+              "- 1".to_owned(),
+              "-2".to_owned(),
+              "->>>>>>> Conflict 1 of 1 ends".to_owned(),
+              "+2".to_owned(),
+            ] },
+        },
+    };
+
+    let result = mutation.execute_unboxed(&mut ws)?;
+    assert_matches!(result, MutationResult::Updated { .. });
+
+    // Verify that the file content of b.txt in the working directory now reflects the mutation
+    let file_path = repo.path().join("b.txt");
+    let content = std::fs::read_to_string(&file_path)?;
+    assert!(!content.contains("old line"), "File should not contain 'old line'");
+    assert!(content.contains("new line"), "File should contain 'new line'");
+
+    Ok(())
+}
+
+#[test]
+fn move_hunk_insertion_position() -> anyhow::Result<()> {
+    let repo = mkrepo();
+    let mut session = WorkerSession::default();
+    let mut ws = session.load_directory(repo.path())?;
+
+    // Create known content for b.txt with three lines.
+    let file_path = repo.path().join("b.txt");
+    std::fs::write(&file_path, "first\nold line\nthird\n")?;
+
+    // Construct a hunk to replace "old line" with "new line" at line 2.
+    let mutation = MoveHunk {
+        from_id: revs::resolve_conflict(),
+        to_id: revs::conflict_bookmark().commit,
+        path: TreePath { repo_path: "b.txt".to_owned(), relative_path: "".into() },
+        hunk: ChangeHunk {
+            location: HunkLocation {
+                from_file: FileRange { start: 2, len: 1 },
+                to_file: FileRange { start: 2, len: 1 },
+            },
+            lines: MultilineString { lines: vec![
+                "-old line".to_owned(),
+                "+new line".to_owned(),
+            ] },
+        },
+    };
+
+    let result = mutation.execute_unboxed(&mut ws)?;
+    assert_matches!(result, MutationResult::Updated { .. });
+
+    let content = std::fs::read_to_string(&file_path)?;
+    let lines: Vec<&str> = content.lines().collect();
+    assert_eq!(lines.len(), 3, "Expected exactly three lines in b.txt");
+    assert_eq!(lines[0], "first", "The first line should remain unchanged");
+    assert_eq!(lines[1], "new line", "The inserted line should be at the correct position");
+    assert_eq!(lines[2], "third", "The third line should remain unchanged");
 
     Ok(())
 }
