@@ -20,7 +20,14 @@
     const CONTEXT = 3;
 
     let mutator = new RevisionMutator(rev.header);
-    let fullDescription = rev.header.description.lines.join("\n");
+
+    const currentDescription = rev.header.description.lines.join("\n");
+    let fullDescription = currentDescription;
+    $: descriptionChanged = fullDescription !== currentDescription;
+    function updateDescription() {
+        mutator.onDescribe(fullDescription, resetAuthor);
+    }
+
     let resetAuthor = false;
 
     let unresolvedConflicts = rev.conflicts.filter(
@@ -123,7 +130,12 @@
             disabled={rev.header.is_immutable}
             bind:value={fullDescription}
             on:dragenter={dragOverWidget}
-            on:dragover={dragOverWidget} />
+            on:dragover={dragOverWidget}
+            on:keypress={(ev) => {
+                if (descriptionChanged && ev.key === "Enter" && (ev.metaKey || ev.ctrlKey)) {
+                    updateDescription();
+                }
+            }} />
 
         <div class="signature-commands">
             <span>Author:</span>
@@ -133,7 +145,7 @@
             <ActionWidget
                 tip="set commit message"
                 onClick={() => mutator.onDescribe(fullDescription, resetAuthor)}
-                disabled={rev.header.is_immutable}>
+                disabled={rev.header.is_immutable || !descriptionChanged}>
                 <Icon name="file-text" /> Describe
             </ActionWidget>
         </div>
