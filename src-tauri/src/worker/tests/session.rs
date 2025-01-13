@@ -4,7 +4,7 @@ use crate::{
     worker::{Session, SessionEvent, WorkerSession},
 };
 use anyhow::Result;
-use jj_cli::config::ConfigSource;
+use jj_lib::config::ConfigSource;
 use std::{path::PathBuf, sync::mpsc::channel};
 
 #[test]

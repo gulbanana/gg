@@ -14,6 +14,7 @@ use itertools::Itertools;
 use jj_cli::diff_util::{LineCompareMode, LineDiffOptions};
 use jj_lib::{
     backend::CommitId,
+    conflicts::ConflictMarkerStyle,
     conflicts::{self, MaterializedTreeValue},
     diff::{
         find_line_ranges, CompareBytesExactly, CompareBytesIgnoreAllWhitespace,
@@ -309,7 +310,11 @@ pub fn query_revision(ws: &WorkspaceSession, id: RevId) -> Result<RevResult> {
                 {
                     MaterializedTreeValue::FileConflict { contents, .. } => {
                         let mut hunk_content = vec![];
-                        conflicts::materialize_merge_result(&contents, &mut hunk_content)?;
+                        conflicts::materialize_merge_result(
+                            &contents,
+                            ConflictMarkerStyle::default(),
+                            &mut hunk_content,
+                        )?;
                         let mut hunks = get_unified_hunks(3, &hunk_content, &[])?;
                         if let Some(hunk) = hunks.pop() {
                             conflicts.push(RevConflict {
@@ -461,7 +466,11 @@ fn get_value_contents(path: &RepoPath, value: MaterializedTreeValue) -> Result<V
         MaterializedTreeValue::GitSubmodule(_) => Ok("(submodule)".to_owned().into_bytes()),
         MaterializedTreeValue::FileConflict { contents, .. } => {
             let mut hunk_content = vec![];
-            conflicts::materialize_merge_result(&contents, &mut hunk_content)?;
+            conflicts::materialize_merge_result(
+                &contents,
+                ConflictMarkerStyle::default(),
+                &mut hunk_content,
+            )?;
             Ok(hunk_content)
         }
         MaterializedTreeValue::OtherConflict { id } => Ok(id.describe().into_bytes()),
