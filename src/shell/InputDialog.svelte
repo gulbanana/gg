@@ -83,6 +83,6 @@
     }
 
     :last-of-type {
-        margin-bottom: 1em;
+        margin: 1em 0;
     }
 </style>
