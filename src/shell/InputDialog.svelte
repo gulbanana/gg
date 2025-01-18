@@ -63,7 +63,7 @@
         {:else if field.label == "Password"}
             <input id="field-{field.label}" type="password" />
         {:else}
-            <input id="field-{field.label}" type="text" />
+            <input id="field-{field.label}" type="text" autoCapitalize="off" autoCorrect="off" />
         {/if}
     {/each}
     <svelte:fragment slot="commands">
