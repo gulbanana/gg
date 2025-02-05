@@ -5,16 +5,18 @@ use std::{
 };
 
 use anyhow::{anyhow, Context, Result};
-use jj_cli::config::{write_config_value_to_file, ConfigNamePathBuf, ConfigSource};
+use jj_lib::config::{ConfigNamePathBuf, ConfigSource};
+use jj_cli::config::ConfigEnv;
 
 use super::{
     gui_util::WorkspaceSession,
     queries::{self, QueryState},
-    Mutation, WorkerSession,
 };
 use crate::{
     config::{read_config, GGSettings},
     handler, messages,
+    Mutation,
+    WorkerSession,
 };
 
 /// implemented by states of the event loop
@@ -242,33 +244,29 @@ impl Session for WorkspaceSession<'_> {
                     let name: ConfigNamePathBuf = key.iter().collect();
 
                     tx.send(
-                        name.lookup_value(self.data.settings.config())
-                            .and_then(|value| value.into_array())
-                            .and_then(|values| {
-                                values
-                                    .into_iter()
-                                    .map(|value| value.into_string())
-                                    .collect()
-                            })
-                            .context("read config"),
+                        self.data.settings.config().get_value_with(&name, |value| {
+                            value.as_array().map(|values| {
+                                values.into_iter().flat_map(|v| v.as_str().map(|s| s.to_string())).collect::<Vec<String>>()
+                            }).ok_or(anyhow!("config value is not an array"))
+                        }).context("read config")
                     )?;
                 }
                 SessionEvent::WriteConfigArray { scope, key, values } => {
-                    let name = key.iter().collect();
-
+                    let name: ConfigNamePathBuf = key.iter().collect();
+                    let config_env = ConfigEnv::from_environment()?;
                     let path = match scope {
-                        ConfigSource::User => jj_cli::config::new_config_path()
-                            .map_err(|err| anyhow!(err))
-                            .and_then(|path| {
-                                path.ok_or(anyhow!("No repo config path found to edit"))
-                            }),
+                        ConfigSource::User => config_env.user_config_path()
+                            .ok_or_else(|| anyhow!("No user config path found to edit"))
+                            .map(|p| p.to_path_buf()),
                         ConfigSource::Repo => Ok(self.workspace.repo_path().join("config.toml")),
                         _ => Err(anyhow!("Can't get path for config source {scope:?}")),
                     }
                     .and_then(|path| {
-                        let toml_array = toml_edit::Value::Array(values.iter().collect());
-                        write_config_value_to_file(&name, toml_array, &path)
-                            .map_err(|err| anyhow!("{err:?}"))
+                        let toml_array: toml_edit::Value = toml_edit::Value::Array(values.iter().collect());
+                        let mut file = jj_lib::config::ConfigFile::load_or_empty(scope, &path)?;
+                        file.set_value(&name, toml_array)?;
+                        file.save()?;
+                        Ok(())
                     });
 
                     handler::optional!(path);

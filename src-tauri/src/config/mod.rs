@@ -1,11 +1,9 @@
 use std::path::Path;
 
 use anyhow::{anyhow, Result};
-use config::{Config, ConfigError};
-use itertools::Itertools;
-use jj_cli::config::ConfigEnv;
+use jj_cli::config::{config_from_environment, default_config_layers, ConfigEnv};
 use jj_lib::{
-    config::{ConfigGetResultExt, StackedConfig},
+    config::{ConfigGetError, ConfigLayer, ConfigNamePathBuf, ConfigSource, StackedConfig},
     revset::RevsetAliasesMap,
     settings::UserSettings,
 };
@@ -40,59 +38,73 @@ impl GGSettings for UserSettings {
 
     fn ui_mark_unpushed_bookmarks(&self) -> bool {
         self.get_bool("gg.ui.mark-unpushed-bookmarks").unwrap_or(
-            self.config()
-                .get_bool("gg.ui.mark-unpushed-branches")
-                .unwrap_or(true),
+            self.get_bool("gg.ui.mark-unpushed-branches").unwrap_or(true),
         )
     }
 
     fn ui_recent_workspaces(&self) -> Vec<String> {
-        let paths: Result<Vec<String>, ConfigError> = self
-            .config()
-            .get_array("gg.ui.recent-workspaces")
-            .unwrap_or(vec![])
-            .into_iter()
-            .map(|value| value.into_string())
-            .collect();
-        paths.unwrap_or(vec![])
+        self.get_value("gg.ui.recent-workspaces")
+            .ok()
+            .and_then(|v| v.as_array().cloned())
+            .map(|values| {
+                values
+                    .into_iter()
+                    .filter_map(|value| value.as_str().map(|s| s.to_string()))
+                    .collect()
+            })
+            .unwrap_or_default()
     }
 }
 
 pub fn read_config(repo_path: &Path) -> Result<(UserSettings, RevsetAliasesMap)> {
-    let defaults = Config::builder()
-        .add_source(jj_cli::config::default_config())
-        .add_source(config::File::from_str(
-            include_str!("../config/gg.toml"),
-            config::FileFormat::Toml,
-        ))
-        .build()?;
+    let mut default_layers = default_config_layers();
+    let gg_layer = ConfigLayer::parse(ConfigSource::Default, include_str!("../config/gg.toml"))?;
+    default_layers.push(gg_layer);
+    let mut raw_config = config_from_environment(default_layers);
 
-    let mut configs = ConfigEnv::from_environment()?;
-    configs.read_user_config()?;
-    configs.read_repo_config(repo_path)?;
+    let mut config_env = ConfigEnv::from_environment()?;
 
-    let aliases_map = build_aliases_map(&configs)?;
-    let settings = UserSettings::from_config(configs)?;
+    config_env.reload_user_config(&mut raw_config)?;
+
+    config_env.reset_repo_path(repo_path);
+    config_env.reload_repo_config(&mut raw_config)?;
+
+    let config = config_env.resolve_config(&raw_config)?;
+
+    let aliases_map = build_aliases_map(&config)?;
+    let settings = UserSettings::from_config(config)?;
 
     Ok((settings, aliases_map))
 }
 
-fn build_aliases_map(layered_configs: &StackedConfig) -> Result<RevsetAliasesMap> {
-    const TABLE_KEY: &str = "revset-aliases";
+pub fn build_aliases_map(
+    stacked_config: &StackedConfig,
+) -> Result<RevsetAliasesMap> {
+    let table_name = ConfigNamePathBuf::from_iter(["revset-aliases"]);
     let mut aliases_map = RevsetAliasesMap::new();
     // Load from all config layers in order. 'f(x)' in default layer should be
     // overridden by 'f(a)' in user.
-    for config in layered_configs.layers() {
-        let table = if let Some(table) = config.look_up_table(TABLE_KEY).optional()? {
-            table
-        } else {
-            continue;
+    for layer in stacked_config.layers() {
+        let table = match layer.look_up_table(&table_name) {
+            Ok(Some(table)) => table,
+            Ok(None) => continue,
+            Err(item) => {
+                return Err(ConfigGetError::Type {
+                    name: table_name.to_string(),
+                    error: format!("Expected a table, but is {}", item.type_name()).into(),
+                    source_path: layer.path.clone(),
+                }
+                .into());
+            }
         };
-        for (decl, value) in table.into_iter().sorted_by(|a, b| a.0.cmp(&b.0)) {
-            value
-                .into_string()
-                .map_err(|e| anyhow!(e))
-                .and_then(|v| aliases_map.insert(&decl, v).map_err(|e| anyhow!(e)))?;
+        for (decl, item) in table.iter() {
+            let r = item
+                .as_str()
+                .ok_or_else(|| format!("Expected a string, but is {}", item.type_name()))
+                .and_then(|v| aliases_map.insert(decl, v).map_err(|e| e.to_string()));
+            if let Err(s) = r {
+                return Err(anyhow!("Failed to load `{table_name}.{decl}`: {s}"));
+            }
         }
     }
     Ok(aliases_map)

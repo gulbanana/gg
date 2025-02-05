@@ -17,7 +17,7 @@ use std::thread::{self, JoinHandle};
 
 use anyhow::{anyhow, Context, Result};
 use clap::Parser;
-use jj_cli::config::ConfigSource;
+use jj_lib::config::ConfigSource;
 use log::LevelFilter;
 use tauri::menu::Menu;
 use tauri::{ipc::InvokeError, Manager};

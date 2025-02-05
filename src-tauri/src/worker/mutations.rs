@@ -15,7 +15,7 @@ use jj_lib::{
     repo::Repo,
     repo_path::RepoPath,
     revset::{self, RevsetIteratorExt},
-    rewrite,
+    rewrite::{self, RebaseOptions, RebasedCommit},
     settings::UserSettings,
     str_util::StringPattern,
 };
@@ -49,9 +49,11 @@ impl Mutation for AbandonRevisions {
         }
 
         for id in &abandoned_ids {
-            tx.repo_mut().record_abandoned_commit(id.clone());
+            let commit = tx.repo().store().get_commit(id)
+                .context("Failed to lookup commit")?;
+            tx.repo_mut().record_abandoned_commit(&commit);
         }
-        tx.repo_mut().rebase_descendants(&ws.data.settings)?;
+        tx.repo_mut().rebase_descendants()?;
 
         let transaction_description = if abandoned_ids.len() == 1 {
             format!("abandon commit {}", abandoned_ids[0].hex())
@@ -88,7 +90,7 @@ impl Mutation for BackoutRevisions {
         let new_tree = new_base_tree.merge(&old_tree, &old_base_tree)?;
 
         tx.repo_mut()
-            .rewrite_commit(&ws.data.settings, &&working_copy)
+            .rewrite_commit(&working_copy)
             .set_tree_id(new_tree.id())
             .write()?;
 
@@ -146,7 +148,7 @@ impl Mutation for CreateRevision {
 
         let new_commit = tx
             .repo_mut()
-            .new_commit(&ws.data.settings, parent_ids?, merged_tree.id())
+            .new_commit(parent_ids?, merged_tree.id())
             .write()?;
 
         tx.repo_mut().edit(ws.id().clone(), &new_commit)?;
@@ -180,7 +182,7 @@ impl Mutation for DescribeRevision {
 
         let mut commit_builder = tx
             .repo_mut()
-            .rewrite_commit(&ws.data.settings, &described)
+            .rewrite_commit(&described)
             .set_description(self.new_description);
 
         if self.reset_author {
@@ -221,7 +223,7 @@ impl Mutation for DuplicateRevisions {
                 .collect();
             let clone = tx
                 .repo_mut()
-                .rewrite_commit(&ws.data.settings, &clonee)
+                .rewrite_commit(&clonee)
                 .generate_new_change_id()
                 .set_parents(clone_parents?)
                 .write()?;
@@ -279,9 +281,8 @@ impl Mutation for InsertRevision {
         // rebase the target (which now has no children), then the new post-target tree atop it
         let rebased_id = target.id().hex();
         let target =
-            rewrite::rebase_commit(&ws.data.settings, tx.repo_mut(), target, vec![after_id])?;
+            rewrite::rebase_commit(tx.repo_mut(), target, vec![after_id])?;
         rewrite::rebase_commit(
-            &ws.data.settings,
             tx.repo_mut(),
             before,
             vec![target.id().clone()],
@@ -321,7 +322,7 @@ impl Mutation for MoveRevision {
 
         // rebase the target itself
         let rebased_id = target.id().hex();
-        rewrite::rebase_commit(&ws.data.settings, tx.repo_mut(), target, parent_ids)?;
+        rewrite::rebase_commit(tx.repo_mut(), target, parent_ids)?;
 
         match ws.finish_transaction(tx, format!("rebase commit {}", rebased_id))? {
             Some(new_status) => Ok(MutationResult::Updated { new_status }),
@@ -347,7 +348,7 @@ impl Mutation for MoveSource {
 
         // just rebase the target, which will also rebase its descendants
         let rebased_id = target.id().hex();
-        rewrite::rebase_commit(&ws.data.settings, tx.repo_mut(), target, parent_ids)?;
+        rewrite::rebase_commit(tx.repo_mut(), target, parent_ids)?;
 
         match ws.finish_transaction(tx, format!("rebase commit {}", rebased_id))? {
             Some(new_status) => Ok(MutationResult::Updated { new_status }),
@@ -380,22 +381,29 @@ impl Mutation for MoveChanges {
         // abandon or rewrite source
         let abandon_source = remainder_tree.id() == parent_tree.id();
         if abandon_source {
-            tx.repo_mut().record_abandoned_commit(from.id().clone());
+            tx.repo_mut().record_abandoned_commit(&from);
         } else {
             tx.repo_mut()
-                .rewrite_commit(&ws.data.settings, &from)
+                .rewrite_commit(&from)
                 .set_tree_id(remainder_tree.id().clone())
                 .write()?;
         }
 
         // rebase descendants of source, which may include destination
         if tx.repo().index().is_ancestor(from.id(), to.id()) {
-            let rebase_map = tx
-                .repo_mut()
-                .rebase_descendants_return_map(&ws.data.settings)?;
+            let mut rebase_map = std::collections::HashMap::new();
+            tx.repo_mut().rebase_descendants_with_options(&RebaseOptions::default(), |old_commit, rebased_commit| {
+                rebase_map.insert(
+                    old_commit.id().clone(),
+                    match rebased_commit {
+                        RebasedCommit::Rewritten(new_commit) => new_commit.id().clone(),
+                        RebasedCommit::Abandoned { parent_id } => parent_id,
+                    },
+                );
+            })?;
             let rebased_to_id = rebase_map
                 .get(to.id())
-                .ok_or(anyhow!("descendant to_commit not found in rebase map"))?
+                .ok_or_else(|| anyhow!("descendant to_commit not found in rebase map"))?
                 .clone();
             to = tx.repo().store().get_commit(&rebased_to_id)?;
         }
@@ -405,7 +413,7 @@ impl Mutation for MoveChanges {
         let new_to_tree = to_tree.merge(&parent_tree, &split_tree)?;
         let description = combine_messages(&from, &to, abandon_source);
         tx.repo_mut()
-            .rewrite_commit(&ws.data.settings, &to)
+            .rewrite_commit(&to)
             .set_tree_id(new_to_tree.id().clone())
             .set_description(description)
             .write()?;
@@ -439,11 +447,11 @@ impl Mutation for CopyChanges {
             Ok(MutationResult::Unchanged)
         } else {
             tx.repo_mut()
-                .rewrite_commit(&ws.data.settings, &to)
+                .rewrite_commit(&to)
                 .set_tree_id(new_to_tree_id)
                 .write()?;
 
-            tx.repo_mut().rebase_descendants(&ws.data.settings)?;
+            tx.repo_mut().rebase_descendants()?;
 
             match ws.finish_transaction(tx, format!("restore into commit {}", to.id().hex()))? {
                 Some(new_status) => Ok(MutationResult::Updated { new_status }),
@@ -890,11 +898,12 @@ impl Mutation for GitPush {
         // push to each remote
         for (remote_name, branch_updates) in remote_branch_updates.into_iter() {
             let targets = GitBranchPushTargets { branch_updates };
+            let git_settings = ws.data.settings.git_settings()?;
 
             ws.session.callbacks.with_git(tx.repo_mut(), &|repo, cb| {
                 Ok(git::push_branches(
                     repo,
-                    &git_repo,
+                    &git_settings,
                     &remote_name,
                     &targets,
                     cb,
@@ -964,21 +973,13 @@ impl Mutation for GitFetch {
                 remote_patterns.push((remote_name, Some(branch_name.to_owned())));
             }
         }
+        let git_settings = ws.data.settings.git_settings()?;
 
         for (remote_name, pattern) in remote_patterns {
             ws.session.callbacks.with_git(tx.repo_mut(), &|repo, cb| {
-                git::fetch(
-                    repo,
-                    &git_repo,
-                    &remote_name,
-                    &[pattern
-                        .clone()
-                        .map(StringPattern::exact)
-                        .unwrap_or_else(StringPattern::everything)],
-                    cb,
-                    &ws.data.settings.git_settings(),
-                    None,
-                )?;
+                let mut fetcher = git::GitFetch::new(repo, &git_settings)?;
+                fetcher.fetch(&remote_name, &[pattern.clone().map(StringPattern::exact).unwrap_or_else(StringPattern::everything)], cb, None)
+                    .context("failed to fetch")?;
                 Ok(())
             })?;
         }

@@ -15,36 +15,14 @@ use chrono::TimeZone;
 use git2::Repository;
 use itertools::Itertools;
 use jj_cli::{
-    cli_util::{check_stale_working_copy, short_operation_hash, WorkingCopyFreshness},
-    git_util::{self, is_colocated_git_workspace},
-    revset_util,
+    cli_util::short_operation_hash, git_util::is_colocated_git_workspace, revset_util
 };
 use jj_lib::{
-    backend::{BackendError, ChangeId, CommitId},
-    commit::Commit,
-    default_index::{AsCompositeIndex, DefaultReadonlyIndex},
-    file_util, git,
-    git_backend::GitBackend,
-    gitignore::GitIgnoreFile,
-    id_prefix::{IdPrefixContext, IdPrefixIndex},
-    matchers::EverythingMatcher,
-    object_id::ObjectId,
-    op_heads_store,
-    op_store::WorkspaceId,
-    operation::Operation,
-    repo::{ReadonlyRepo, Repo, RepoLoaderError, StoreFactories},
-    repo_path::{RepoPath, RepoPathUiConverter},
-    revset::{
+    backend::{BackendError, ChangeId, CommitId}, commit::Commit, conflicts::ConflictMarkerStyle, default_index::{AsCompositeIndex, DefaultReadonlyIndex}, file_util, git, git_backend::GitBackend, gitignore::GitIgnoreFile, id_prefix::{IdPrefixContext, IdPrefixIndex}, matchers::EverythingMatcher, object_id::ObjectId, op_heads_store, op_store::WorkspaceId, operation::Operation, repo::{ReadonlyRepo, Repo, RepoLoaderError, StoreFactories}, repo_path::{RepoPath, RepoPathUiConverter}, revset::{
         self, DefaultSymbolResolver, Revset, RevsetAliasesMap, RevsetDiagnostics,
         RevsetEvaluationError, RevsetExpression, RevsetExtensions, RevsetIteratorExt,
-        RevsetParseContext, RevsetResolutionError, RevsetWorkspaceContext, SymbolResolverExtension,
-    },
-    rewrite,
-    settings::UserSettings,
-    transaction::Transaction,
-    view::View,
-    working_copy::{CheckoutStats, SnapshotOptions},
-    workspace::{self, DefaultWorkspaceLoaderFactory, Workspace, WorkspaceLoaderFactory},
+        RevsetParseContext, RevsetResolutionError, RevsetWorkspaceContext, SymbolResolverExtension, UserRevsetExpression,
+    }, rewrite::{self, RebaseOptions, RebasedCommit}, settings::{HumanByteSize, UserSettings}, transaction::Transaction, view::View, working_copy::{CheckoutOptions, CheckoutStats, SnapshotOptions, WorkingCopyFreshness}, workspace::{self, DefaultWorkspaceLoaderFactory, Workspace, WorkspaceLoaderFactory}
 };
 use thiserror::Error;
 
@@ -196,7 +174,7 @@ impl WorkspaceSession<'_> {
 
     pub fn evaluate_revset_expr<'op>(
         &'op self,
-        revset_expr: Rc<RevsetExpression>,
+        revset_expr: Rc<UserRevsetExpression>,
     ) -> Result<Box<dyn Revset + 'op>, RevsetError> {
         let resolved_expression =
             revset_expr.resolve_user_expression(self.operation.repo.as_ref(), &self.resolver())?;
@@ -431,7 +409,7 @@ impl WorkspaceSession<'_> {
             None => vec![],
         };
 
-        let default_query = self.data.settings.default_revset();
+        let default_query = self.data.settings.get_string("revsets.log").unwrap_or_default();
 
         let latest_query = self
             .session
@@ -559,7 +537,7 @@ impl WorkspaceSession<'_> {
 
     pub fn start_transaction(&mut self) -> Result<Transaction> {
         self.import_and_snapshot(true)?;
-        Ok(self.operation.repo.start_transaction(&self.data.settings))
+        Ok(self.operation.repo.start_transaction())
     }
 
     pub fn finish_transaction(
@@ -571,7 +549,7 @@ impl WorkspaceSession<'_> {
             return Ok(None);
         }
 
-        tx.repo_mut().rebase_descendants(&self.data.settings)?;
+        tx.repo_mut().rebase_descendants()?;
 
         let old_repo = tx.base_repo().clone();
 
@@ -593,12 +571,12 @@ impl WorkspaceSession<'_> {
                 .ok_or(anyhow!("colocated, but git backend not found"))?
                 .open_git_repo()?;
             if let Some(wc_commit) = &maybe_new_wc_commit {
-                git::reset_head(tx.repo_mut(), &git_repo, wc_commit)?;
+                git::reset_head(tx.repo_mut(), wc_commit)?;
             }
             git::export_refs(tx.repo_mut())?;
         }
 
-        self.operation = SessionOperation::new(&self.id(), &self.data, tx.commit(description));
+        self.operation = SessionOperation::new(&self.id(), &self.data, tx.commit(description)?);
 
         // XXX do this only if loaded at head, which is currently always true, but won't be once we have undo-redo
         if let Some(new_commit) = &maybe_new_wc_commit {
@@ -651,7 +629,7 @@ impl WorkspaceSession<'_> {
         // Compare working-copy tree and operation with repo's, and reload as needed.
         let mut locked_ws = self.workspace.start_working_copy_mutation()?;
         let old_op_id = locked_ws.locked_wc().old_operation_id().clone();
-        let (repo, wc_commit) = match check_stale_working_copy(
+        let (repo, wc_commit) = match WorkingCopyFreshness::check_stale(
             locked_ws.locked_wc(),
             &wc_commit,
             &repo,
@@ -681,26 +659,33 @@ impl WorkspaceSession<'_> {
             }
         };
 
-        let new_tree_id = locked_ws.locked_wc().snapshot(&SnapshotOptions {
+        let HumanByteSize(mut max_new_file_size) = self
+            .data.settings
+            .get_value_with("snapshot.max-new-file-size", TryInto::try_into)?;
+        if max_new_file_size == 0 {
+            max_new_file_size = u64::MAX;
+        }
+        let (new_tree_id, _) = locked_ws.locked_wc().snapshot(&SnapshotOptions {
             base_ignores,
             fsmonitor_settings: self.data.settings.fsmonitor_settings()?,
             progress: None,
-            max_new_file_size: self.data.settings.max_new_file_size()?,
+            max_new_file_size: max_new_file_size,
             start_tracking_matcher: &EverythingMatcher,
+            conflict_marker_style: ConflictMarkerStyle::default(),
         })?;
 
         let did_anything = new_tree_id != *wc_commit.tree_id();
 
         if did_anything {
-            let mut tx = repo.start_transaction(&self.data.settings);
+            let mut tx = repo.start_transaction();
             let mut_repo = tx.repo_mut();
             let commit = mut_repo
-                .rewrite_commit(&self.data.settings, &wc_commit)
+                .rewrite_commit(&wc_commit)
                 .set_tree_id(new_tree_id)
                 .write()?;
             mut_repo.set_wc_commit(workspace_id.clone(), commit.id().clone())?;
 
-            mut_repo.rebase_descendants(&self.data.settings)?;
+            mut_repo.rebase_descendants()?;
 
             if self.is_colocated {
                 git::export_refs(mut_repo)?;
@@ -709,7 +694,7 @@ impl WorkspaceSession<'_> {
             self.operation = SessionOperation::new(
                 &workspace_id,
                 &self.data,
-                tx.commit("snapshot working copy"),
+                tx.commit("snapshot working copy")?,
             );
         }
 
@@ -730,6 +715,7 @@ impl WorkspaceSession<'_> {
                 self.operation.repo.op_id().clone(),
                 old_tree_id.as_ref(),
                 new_commit,
+                &CheckoutOptions::empty_for_test(),
             )?)
         } else {
             let locked_ws = self.workspace.start_working_copy_mutation()?;
@@ -739,7 +725,7 @@ impl WorkspaceSession<'_> {
     }
 
     fn import_git_head(&mut self) -> Result<()> {
-        let mut tx = self.operation.repo.start_transaction(&self.data.settings);
+        let mut tx = self.operation.repo.start_transaction();
         git::import_head(tx.repo_mut())?;
         if !tx.repo().has_changes() {
             return Ok(());
@@ -752,24 +738,23 @@ impl WorkspaceSession<'_> {
             if let Some(old_wc_commit_id) =
                 self.operation.repo.view().get_wc_commit_id(&workspace_id)
             {
-                tx.repo_mut()
-                    .record_abandoned_commit(old_wc_commit_id.clone());
+                let old_wc_commit = tx.repo().store().get_commit(&old_wc_commit_id)?;
+                tx.repo_mut().record_abandoned_commit(&old_wc_commit);
             }
 
             let new_git_head_commit = tx.repo().store().get_commit(new_git_head_id)?;
             tx.repo_mut().check_out(
                 workspace_id.clone(),
-                &self.data.settings,
                 &new_git_head_commit,
             )?;
 
             let mut locked_ws = self.workspace.start_working_copy_mutation()?;
 
             locked_ws.locked_wc().reset(&new_git_head_commit)?;
-            tx.repo_mut().rebase_descendants(&self.data.settings)?;
+            tx.repo_mut().rebase_descendants()?;
 
             self.operation =
-                SessionOperation::new(&workspace_id, &self.data, tx.commit("import git head"));
+                SessionOperation::new(&workspace_id, &self.data, tx.commit("import git head")?);
 
             locked_ws.finish(self.operation.repo.op_id().clone())?;
         } else {
@@ -779,8 +764,8 @@ impl WorkspaceSession<'_> {
     }
 
     fn import_git_refs(&mut self) -> Result<()> {
-        let git_settings = self.data.settings.git_settings();
-        let mut tx = self.operation.repo.start_transaction(&self.data.settings);
+        let git_settings = self.data.settings.git_settings()?;
+        let mut tx = self.operation.repo.start_transaction();
         // Automated import shouldn't fail because of reserved remote name.
         git::import_some_refs(tx.repo_mut(), &git_settings, |ref_name| {
             !git::is_reserved_git_remote_ref(ref_name)
@@ -789,7 +774,7 @@ impl WorkspaceSession<'_> {
             return Ok(());
         }
 
-        tx.repo_mut().rebase_descendants(&self.data.settings)?;
+        tx.repo_mut().rebase_descendants()?;
 
         self.finish_transaction(tx, "import git refs")?;
         Ok(())
@@ -809,7 +794,7 @@ impl WorkspaceSession<'_> {
         // find all children of target
         let children_expr = RevsetExpression::commit(target.id().clone()).children();
         let children: Vec<_> = children_expr
-            .evaluate_programmatic(self.operation.repo.as_ref())?
+            .evaluate(self.operation.repo.as_ref())?
             .iter()
             .commits(self.operation.repo.store())
             .try_collect()?;
@@ -837,26 +822,30 @@ impl WorkspaceSession<'_> {
                         .ancestors(),
                 );
             let new_child_parents: Result<Vec<CommitId>, _> = new_child_parents_expression
-                .evaluate_programmatic(tx.base_repo().as_ref())?
+                .evaluate(tx.base_repo().as_ref())?
                 .iter()
                 .collect();
 
             rebased_commit_ids.insert(
                 child_commit.id().clone(),
-                rewrite::rebase_commit(
-                    &self.data.settings,
-                    tx.repo_mut(),
-                    child_commit,
-                    new_child_parents?,
-                )?
-                .id()
-                .clone(),
+                rewrite::rebase_commit(tx.repo_mut(), child_commit, new_child_parents?)?
+                    .id()
+                    .clone(),
             );
         }
-        rebased_commit_ids.extend(
-            tx.repo_mut()
-                .rebase_descendants_return_map(&self.data.settings)?,
-        );
+        {
+            let mut mapping = HashMap::new();
+            tx.repo_mut().rebase_descendants_with_options(&RebaseOptions::default(), |old_commit, rebased| {
+                mapping.insert(
+                    old_commit.id().clone(),
+                    match rebased {
+                        RebasedCommit::Rewritten(new_commit) => new_commit.id().clone(),
+                        RebasedCommit::Abandoned { parent_id } => parent_id,
+                    },
+                );
+            })?;
+            rebased_commit_ids.extend(mapping);
+        }
 
         Ok(rebased_commit_ids)
     }
@@ -900,9 +889,8 @@ impl SessionOperation {
 
         let revset_string: String = data
             .settings
-            .config()
             .get_string("revsets.short-prefixes")
-            .unwrap_or_else(|_| data.settings.default_revset());
+            .unwrap_or_else(|_| data.settings.get_string("revsets.log").unwrap_or_default());
 
         // guarantee that an index can be populated - we will unwrap later
         let prefix_context =
@@ -951,7 +939,7 @@ impl SessionOperation {
         let mut git_ignores = GitIgnoreFile::empty();
         if let Some(git_backend) = self.git_backend() {
             let git_repo = git_backend.git_repo();
-            if let Some(excludes_file_path) = get_excludes_file_path(&git_repo.config_snapshot()) {
+            if let Some(excludes_file_path) = get_excludes_file_path(&*git_repo.config_snapshot()) {
                 git_ignores = git_ignores.chain_with_file("", excludes_file_path)?;
             }
             git_ignores = git_ignores
@@ -974,7 +962,7 @@ fn find_workspace_dir(cwd: &Path) -> &Path {
 fn parse_revset(
     parse_context: &RevsetParseContext,
     revision: &str,
-) -> Result<Rc<RevsetExpression>, RevsetError> {
+) -> Result<Rc<UserRevsetExpression>, RevsetError> {
     let mut diagnostics = RevsetDiagnostics::new(); // XXX move this up and include it in errors
     let expression =
         revset::parse(&mut diagnostics, revision, parse_context).context("parse revset")?;
@@ -1013,10 +1001,9 @@ impl RefIndex {
 }
 
 fn build_ref_index(repo: &ReadonlyRepo) -> RefIndex {
-    let potential_remotes = git_util::get_git_repo(repo.store())
+    let potential_remotes = git::get_git_backend(repo.store())
         .ok()
-        .and_then(|git_repo| git_repo.remotes().ok())
-        .map(|remotes| remotes.len())
+        .map(|git_backend| git_backend.git_repo().remote_names().len())
         .unwrap_or(0);
 
     let mut index = RefIndex::default();
@@ -1079,10 +1066,10 @@ fn load_at_head(workspace: &Workspace, data: &WorkspaceData) -> Result<SessionOp
         |op_heads| {
             let base_repo = loader.load_at(&op_heads[0])?;
             // might want to set some tags
-            let mut tx = base_repo.start_transaction(&data.settings);
+            let mut tx = base_repo.start_transaction();
             for other_op_head in op_heads.into_iter().skip(1) {
                 tx.merge_operation(other_op_head)?;
-                tx.repo_mut().rebase_descendants(&data.settings)?;
+                tx.repo_mut().rebase_descendants()?;
             }
             Ok::<Operation, RepoLoaderError>(
                 tx.write("resolve concurrent operations")
