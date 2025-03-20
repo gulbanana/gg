@@ -11,7 +11,7 @@ use jj_lib::{
     object_id::ObjectId,
     op_store::{RefTarget, RemoteRef, RemoteRefState},
     op_walk,
-    refs::{self, BookmarkPushAction, BookmarkPushUpdate, LocalAndRemoteRef},
+    refs::{self, BookmarkPushAction, BookmarkPushUpdate, LocalAndRemoteRef, RemoteRefSymbol},
     repo::Repo,
     repo_path::RepoPath,
     revset::{self, RevsetIteratorExt},
@@ -280,8 +280,7 @@ impl Mutation for InsertRevision {
 
         // rebase the target (which now has no children), then the new post-target tree atop it
         let rebased_id = target.id().hex();
-        let target =
-            rewrite::rebase_commit(tx.repo_mut(), target, vec![after_id])?;
+        let target = rewrite::rebase_commit(tx.repo_mut(), target, vec![after_id])?;
         rewrite::rebase_commit(
             tx.repo_mut(),
             before,
@@ -418,10 +417,7 @@ impl Mutation for MoveChanges {
             .set_description(description)
             .write()?;
 
-        match ws.finish_transaction(
-            tx,
-            format!("move changes from {} to {}", from.id().hex(), to.id().hex()),
-        )? {
+        match ws.finish_transaction(tx, format!("move changes from {} to {}", from.id().hex(), to.id().hex()))? {
             Some(new_status) => Ok(MutationResult::Updated { new_status }),
             None => Ok(MutationResult::Unchanged),
         }
@@ -476,16 +472,17 @@ impl Mutation for TrackBranch {
                 ..
             } => {
                 let mut tx = ws.start_transaction()?;
+                let remote_ref_symbol = RemoteRefSymbol { name: &branch_name, remote: &remote_name };
 
                 let remote_ref: &jj_lib::op_store::RemoteRef =
-                    ws.view().get_remote_bookmark(&branch_name, &remote_name);
+                    ws.view().get_remote_bookmark(remote_ref_symbol);
 
                 if remote_ref.is_tracking() {
                     precondition!("{branch_name}@{remote_name} is already tracked");
                 }
 
                 tx.repo_mut()
-                    .track_remote_bookmark(&branch_name, &remote_name);
+                    .track_remote_bookmark(remote_ref_symbol);
 
                 match ws.finish_transaction(tx, format!("track remote bookmark {}", branch_name))? {
                     Some(new_status) => Ok(MutationResult::Updated { new_status }),
@@ -507,13 +504,13 @@ impl Mutation for UntrackBranch {
             }
             StoreRef::LocalBookmark { branch_name, .. } => {
                 // untrack all remotes
-                for ((name, remote), remote_ref) in ws.view().remote_bookmarks_matching(
+                for (remote_ref_symbol, remote_ref) in ws.view().remote_bookmarks_matching(
                     &StringPattern::exact(branch_name),
                     &StringPattern::everything(),
                 ) {
-                    if remote != REMOTE_NAME_FOR_LOCAL_GIT_REPO && remote_ref.is_tracking() {
-                        tx.repo_mut().untrack_remote_bookmark(name, remote);
-                        untracked.push(format!("{name}@{remote}"));
+                    if remote_ref_symbol.remote != REMOTE_NAME_FOR_LOCAL_GIT_REPO && remote_ref.is_tracking() {
+                        tx.repo_mut().untrack_remote_bookmark(remote_ref_symbol);
+                        untracked.push(format!("{}@{}", remote_ref_symbol.name, remote_ref_symbol.remote));
                     }
                 }
             }
@@ -522,16 +519,17 @@ impl Mutation for UntrackBranch {
                 remote_name,
                 ..
             } => {
+                let remote_ref_symbol = RemoteRefSymbol { name: &branch_name, remote: &remote_name };
                 let remote_ref: &jj_lib::op_store::RemoteRef =
-                    ws.view().get_remote_bookmark(&branch_name, &remote_name);
+                    ws.view().get_remote_bookmark(remote_ref_symbol);
 
                 if !remote_ref.is_tracking() {
                     precondition!("{branch_name}@{remote_name} is not tracked");
                 }
 
                 tx.repo_mut()
-                    .untrack_remote_bookmark(&branch_name, &remote_name);
-                untracked.push(format!("{branch_name}@{remote_name}"));
+                    .untrack_remote_bookmark(remote_ref_symbol);
+                untracked.push(format!("{}@{}", branch_name, remote_name));
             }
         }
 
@@ -653,9 +651,10 @@ impl Mutation for DeleteRef {
                     target: RefTarget::absent(),
                     state: RemoteRefState::New,
                 };
+                let remote_ref_symbol = RemoteRefSymbol { name: &branch_name, remote: &remote_name };
 
                 tx.repo_mut()
-                    .set_remote_bookmark(&branch_name, &remote_name, remote_ref);
+                    .set_remote_bookmark(remote_ref_symbol, remote_ref);
 
                 match ws
                     .finish_transaction(tx, format!("forget {}@{}", branch_name, remote_name))?
@@ -748,11 +747,6 @@ impl Mutation for GitPush {
     fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction()?;
 
-        let git_repo = match ws.git_repo()? {
-            Some(git_repo) => git_repo,
-            None => precondition!("No git backend"),
-        };
-
         // determine bookmarks to push, recording the old and new commits
         let mut remote_branch_updates: Vec<(&str, Vec<(String, refs::BookmarkPushUpdate)>)> =
             Vec::new();
@@ -781,9 +775,9 @@ impl Mutation for GitPush {
                 for (remote_name, group) in ws
                     .view()
                     .all_remote_bookmarks()
-                    .filter_map(|((branch, remote), remote_ref)| {
-                        if remote_ref.is_tracking() && branch == branch_name {
-                            Some((remote, remote_ref))
+                    .filter_map(|(remote_ref_symbol, remote_ref)| {
+                        if remote_ref.is_tracking() && remote_ref_symbol.name == branch_name {
+                            Some((remote_ref_symbol.remote, remote_ref))
                         } else {
                             None
                         }
@@ -819,7 +813,8 @@ impl Mutation for GitPush {
             } => {
                 let branch_name = branch_ref.as_branch()?;
                 let local_target = ws.view().get_local_bookmark(branch_name);
-                let remote_ref = ws.view().get_remote_bookmark(branch_name, remote_name);
+                let remote_ref_symbol = RemoteRefSymbol { name: &branch_name, remote: &remote_name };
+                let remote_ref = ws.view().get_remote_bookmark(remote_ref_symbol);
 
                 match classify_branch_push(
                     branch_name,
@@ -839,7 +834,7 @@ impl Mutation for GitPush {
 
                 vec![(
                     branch_name,
-                    ws.view().get_remote_bookmark(branch_name, &remote_name),
+                    ws.view().get_remote_bookmark(remote_ref_symbol),
                 )]
             }
         };
@@ -904,7 +899,7 @@ impl Mutation for GitPush {
                 Ok(git::push_branches(
                     repo,
                     &git_settings,
-                    &remote_name,
+                    remote_name,
                     &targets,
                     cb,
                 )?)
@@ -1009,7 +1004,7 @@ impl Mutation for UndoOperation {
         let repo_loader = tx.base_repo().loader();
         let head_repo = repo_loader.load_at(&head_op)?;
         let parent_repo = repo_loader.load_at(&parent_op)?;
-        tx.repo_mut().merge(&head_repo, &parent_repo);
+        tx.repo_mut().merge(&head_repo, &parent_repo)?;
         let restored_view = tx.repo().view().store_view().clone();
         tx.repo_mut().set_view(restored_view);
 
