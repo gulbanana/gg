@@ -11,7 +11,7 @@ use jj_lib::{
     object_id::ObjectId,
     op_store::{RefTarget, RemoteRef, RemoteRefState},
     op_walk,
-    refs::{self, BookmarkPushAction, BookmarkPushUpdate, LocalAndRemoteRef},
+    refs::{self, BookmarkPushAction, BookmarkPushUpdate, LocalAndRemoteRef, RemoteRefSymbol},
     repo::Repo,
     repo_path::RepoPath,
     revset::{self, RevsetIteratorExt},
@@ -477,16 +477,19 @@ impl Mutation for TrackBranch {
                 ..
             } => {
                 let mut tx = ws.start_transaction()?;
+                let remote_ref_symbol = RemoteRefSymbol {
+                    name: &branch_name,
+                    remote: &remote_name,
+                };
 
                 let remote_ref: &jj_lib::op_store::RemoteRef =
-                    ws.view().get_remote_bookmark(&branch_name, &remote_name);
+                    ws.view().get_remote_bookmark(remote_ref_symbol);
 
                 if remote_ref.is_tracking() {
                     precondition!("{branch_name}@{remote_name} is already tracked");
                 }
 
-                tx.repo_mut()
-                    .track_remote_bookmark(&branch_name, &remote_name);
+                tx.repo_mut().track_remote_bookmark(remote_ref_symbol);
 
                 match ws.finish_transaction(tx, format!("track remote bookmark {}", branch_name))? {
                     Some(new_status) => Ok(MutationResult::Updated { new_status }),
@@ -508,13 +511,18 @@ impl Mutation for UntrackBranch {
             }
             StoreRef::LocalBookmark { branch_name, .. } => {
                 // untrack all remotes
-                for ((name, remote), remote_ref) in ws.view().remote_bookmarks_matching(
+                for (remote_ref_symbol, remote_ref) in ws.view().remote_bookmarks_matching(
                     &StringPattern::exact(branch_name),
                     &StringPattern::everything(),
                 ) {
-                    if remote != REMOTE_NAME_FOR_LOCAL_GIT_REPO && remote_ref.is_tracking() {
-                        tx.repo_mut().untrack_remote_bookmark(name, remote);
-                        untracked.push(format!("{name}@{remote}"));
+                    if remote_ref_symbol.remote != REMOTE_NAME_FOR_LOCAL_GIT_REPO
+                        && remote_ref.is_tracking()
+                    {
+                        tx.repo_mut().untrack_remote_bookmark(remote_ref_symbol);
+                        untracked.push(format!(
+                            "{}@{}",
+                            remote_ref_symbol.name, remote_ref_symbol.remote
+                        ));
                     }
                 }
             }
@@ -523,16 +531,19 @@ impl Mutation for UntrackBranch {
                 remote_name,
                 ..
             } => {
+                let remote_ref_symbol = RemoteRefSymbol {
+                    name: &branch_name,
+                    remote: &remote_name,
+                };
                 let remote_ref: &jj_lib::op_store::RemoteRef =
-                    ws.view().get_remote_bookmark(&branch_name, &remote_name);
+                    ws.view().get_remote_bookmark(remote_ref_symbol);
 
                 if !remote_ref.is_tracking() {
                     precondition!("{branch_name}@{remote_name} is not tracked");
                 }
 
-                tx.repo_mut()
-                    .untrack_remote_bookmark(&branch_name, &remote_name);
-                untracked.push(format!("{branch_name}@{remote_name}"));
+                tx.repo_mut().untrack_remote_bookmark(remote_ref_symbol);
+                untracked.push(format!("{}@{}", branch_name, remote_name));
             }
         }
 
@@ -654,9 +665,13 @@ impl Mutation for DeleteRef {
                     target: RefTarget::absent(),
                     state: RemoteRefState::New,
                 };
+                let remote_ref_symbol = RemoteRefSymbol {
+                    name: &branch_name,
+                    remote: &remote_name,
+                };
 
                 tx.repo_mut()
-                    .set_remote_bookmark(&branch_name, &remote_name, remote_ref);
+                    .set_remote_bookmark(remote_ref_symbol, remote_ref);
 
                 match ws
                     .finish_transaction(tx, format!("forget {}@{}", branch_name, remote_name))?
@@ -779,9 +794,9 @@ impl Mutation for GitPush {
                 for (remote_name, group) in ws
                     .view()
                     .all_remote_bookmarks()
-                    .filter_map(|((branch, remote), remote_ref)| {
-                        if remote_ref.is_tracking() && branch == branch_name {
-                            Some((remote, remote_ref))
+                    .filter_map(|(remote_ref_symbol, remote_ref)| {
+                        if remote_ref.is_tracking() && remote_ref_symbol.name == branch_name {
+                            Some((remote_ref_symbol.remote, remote_ref))
                         } else {
                             None
                         }
@@ -817,7 +832,11 @@ impl Mutation for GitPush {
             } => {
                 let branch_name = branch_ref.as_branch()?;
                 let local_target = ws.view().get_local_bookmark(branch_name);
-                let remote_ref = ws.view().get_remote_bookmark(branch_name, remote_name);
+                let remote_ref_symbol = RemoteRefSymbol {
+                    name: &branch_name,
+                    remote: &remote_name,
+                };
+                let remote_ref = ws.view().get_remote_bookmark(remote_ref_symbol);
 
                 match classify_branch_push(
                     branch_name,
@@ -837,7 +856,7 @@ impl Mutation for GitPush {
 
                 vec![(
                     branch_name,
-                    ws.view().get_remote_bookmark(branch_name, &remote_name),
+                    ws.view().get_remote_bookmark(remote_ref_symbol),
                 )]
             }
         };
@@ -901,7 +920,7 @@ impl Mutation for GitPush {
                 Ok(git::push_branches(
                     repo,
                     &git_settings,
-                    &remote_name,
+                    remote_name,
                     &targets,
                     cb,
                 )?)

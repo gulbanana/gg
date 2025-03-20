@@ -14,8 +14,7 @@ use itertools::Itertools;
 use jj_cli::diff_util::{LineCompareMode, LineDiffOptions};
 use jj_lib::{
     backend::CommitId,
-    conflicts::ConflictMarkerStyle,
-    conflicts::{self, MaterializedTreeValue},
+    conflicts::{self, ConflictMarkerStyle, MaterializedTreeValue},
     diff::{
         find_line_ranges, CompareBytesExactly, CompareBytesIgnoreAllWhitespace,
         CompareBytesIgnoreWhitespaceAmount, Diff, DiffHunk, DiffHunkKind,
@@ -23,6 +22,7 @@ use jj_lib::{
     graph::{GraphEdge, GraphEdgeType, TopoGroupedGraphIterator},
     matchers::EverythingMatcher,
     merged_tree::{TreeDiffEntry, TreeDiffStream},
+    refs::RemoteRefSymbol,
     repo::Repo,
     repo_path::RepoPath,
     revset::{Revset, RevsetEvaluationError},
@@ -380,7 +380,11 @@ pub fn query_remotes(
         Some(branch_name) => all_remotes
             .into_iter()
             .filter(|remote_name| {
-                let remote_ref = ws.view().get_remote_bookmark(&branch_name, &remote_name);
+                let remote_ref_symbol = RemoteRefSymbol {
+                    name: &branch_name,
+                    remote: &remote_name,
+                };
+                let remote_ref = ws.view().get_remote_bookmark(remote_ref_symbol);
                 !remote_ref.is_absent() && remote_ref.is_tracking()
             })
             .collect(),
