@@ -46,8 +46,6 @@ pub trait WorkerCallbacks {
         repo: &mut MutableRepo,
         f: &dyn Fn(&mut MutableRepo, RemoteCallbacks<'_>) -> Result<()>,
     ) -> Result<()>;
-
-    fn select_remote(&self, choices: &[&str]) -> Option<String>;
 }
 
 struct NoCallbacks;
@@ -59,10 +57,6 @@ impl WorkerCallbacks for NoCallbacks {
         f: &dyn Fn(&mut MutableRepo, RemoteCallbacks<'_>) -> Result<()>,
     ) -> Result<()> {
         f(repo, RemoteCallbacks::default())
-    }
-
-    fn select_remote(&self, choices: &[&str]) -> Option<String> {
-        choices.get(0).map(|choice| choice.to_string())
     }
 }
 

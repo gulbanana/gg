@@ -56,18 +56,6 @@ impl WorkerCallbacks for FrontendCallbacks {
 
         f(repo, cb)
     }
-
-    fn select_remote(&self, choices: &[&str]) -> Option<String> {
-        let response = self.request_input(
-            format!("Select a remote"),
-            [InputField {
-                label: "Select Remote".into(),
-                choices: choices.iter().map(|choice| choice.to_string()).collect(),
-            }],
-        );
-
-        response.and_then(|mut fields| fields.remove("Select Remote").to_owned())
-    }
 }
 
 impl FrontendCallbacks {
