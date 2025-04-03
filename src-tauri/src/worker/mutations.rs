@@ -238,7 +238,7 @@ impl Mutation for DuplicateRevisions {
                 if num_clonees == 1 {
                     let new_commit = clones
                         .get_index(0)
-                        .ok_or(anyhow!("single source should have single copy"))?
+                        .ok_or_else(|| anyhow!("single source should have single copy"))?
                         .1;
                     let new_selection = ws.format_header(new_commit, None)?;
                     Ok(MutationResult::UpdatedSelection {
@@ -404,7 +404,7 @@ impl Mutation for MoveChanges {
             )?;
             let rebased_to_id = rebase_map
                 .get(to.id())
-                .ok_or(anyhow!("descendant to_commit not found in rebase map"))?
+                .ok_or_else(|| anyhow!("descendant to_commit not found in rebase map"))?
                 .clone();
             to = tx.repo().store().get_commit(&rebased_to_id)?;
         }
