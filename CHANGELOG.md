@@ -1,5 +1,14 @@
 # GG Changelog
 
+## [0.27.0](releases/tag/v0.27.0) 
+This version is based on Jujutsu 0.27.
+
+### Added
+- Cmd/Ctrl-enter shortcut to save revision descriptions.
+
+### Fixed
+- Suppress MacOS auto-capitalisation of branch/remote names. 
+
 ## [0.23.0](releases/tag/v0.23.0) 
 This version is based on Jujutsu 0.23 and the recently-released Tauri 2.0.
 
