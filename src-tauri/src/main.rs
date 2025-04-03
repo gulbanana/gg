@@ -623,7 +623,11 @@ fn with_recent_workspaces(
 
     let (read_tx, read_rx) = channel();
     session_tx.send(SessionEvent::ReadConfigArray {
-        key: vec!["gg".to_string(), "ui".to_string(), "recent-workspaces".to_string()],
+        key: vec![
+            "gg".to_string(),
+            "ui".to_string(),
+            "recent-workspaces".to_string(),
+        ],
         tx: read_tx,
     })?;
     let mut recent = read_rx.recv()??;
@@ -631,7 +635,11 @@ fn with_recent_workspaces(
     f(&mut recent)?;
 
     session_tx.send(SessionEvent::WriteConfigArray {
-        key: vec!["gg".to_string(), "ui".to_string(), "recent-workspaces".to_string()],
+        key: vec![
+            "gg".to_string(),
+            "ui".to_string(),
+            "recent-workspaces".to_string(),
+        ],
         scope: ConfigSource::User,
         values: recent,
     })?;
