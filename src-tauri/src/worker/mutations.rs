@@ -1,17 +1,28 @@
 use std::fmt::Display;
+use std::ops::Range;
+use std::sync::Arc;
 
 use anyhow::{anyhow, Context, Result};
 use indexmap::IndexMap;
 use itertools::Itertools;
+use jj_lib::absorb::{
+    absorb_hunks, split_hunks_to_trees, AbsorbSource,
+};
+use jj_lib::backend::{FileId, MergedTreeId, TreeValue};
+use jj_lib::conflicts::{materialize_tree_value, MaterializedFileValue};
+use jj_lib::diff::Diff;
+use jj_lib::merge::Merge;
+use jj_lib::merged_tree::{MergedTree, MergedTreeBuilder};
+use jj_lib::ref_name::{RefNameBuf, RemoteName, RemoteNameBuf, RemoteRefSymbol};
 use jj_lib::{
     backend::{BackendError, CommitId},
     commit::Commit,
     git::{self, GitBranchPushTargets, REMOTE_NAME_FOR_LOCAL_GIT_REPO},
     matchers::{EverythingMatcher, FilesMatcher, Matcher},
-    object_id::ObjectId,
+    object_id::ObjectId as ObjectIdTrait,
     op_store::{RefTarget, RemoteRef, RemoteRefState},
     op_walk,
-    refs::{self, BookmarkPushAction, BookmarkPushUpdate, LocalAndRemoteRef, RemoteRefSymbol},
+    refs::{self, BookmarkPushAction, BookmarkPushUpdate, LocalAndRemoteRef},
     repo::Repo,
     repo_path::RepoPath,
     revset::{self, RevsetIteratorExt},
@@ -19,14 +30,12 @@ use jj_lib::{
     settings::UserSettings,
     str_util::StringPattern,
 };
+use pollster::block_on;
 
-use super::{gui_util::WorkspaceSession, Mutation};
-use crate::messages::{
-    AbandonRevisions, BackoutRevisions, CheckoutRevision, CopyChanges, CreateRef, CreateRevision,
-    DeleteRef, DescribeRevision, DuplicateRevisions, GitFetch, GitPush, InsertRevision,
-    MoveChanges, MoveRef, MoveRevision, MoveSource, MutationResult, RenameBranch, StoreRef,
-    TrackBranch, TreePath, UndoOperation, UntrackBranch,
-};
+use crate::messages::{AbandonRevisions, BackoutRevisions, CheckoutRevision, CopyChanges, CreateRef, CreateRevision, DeleteRef, DescribeRevision, DuplicateRevisions, GitFetch, GitPush, InsertRevision, MoveChanges, MoveHunk, MoveRef, MoveRevision, MoveSource, MutationResult, RenameBranch, StoreRef, TrackBranch, TreePath, UndoOperation, UntrackBranch};
+
+use super::gui_util::WorkspaceSession;
+use super::Mutation;
 
 macro_rules! precondition {
     ($($args:tt)*) => {
@@ -118,7 +127,7 @@ impl Mutation for CheckoutRevision {
             return Ok(MutationResult::Unchanged);
         }
 
-        tx.repo_mut().edit(ws.id().clone(), &edited)?;
+        tx.repo_mut().edit(ws.name().to_owned(), &edited)?;
 
         match ws.finish_transaction(tx, format!("edit commit {}", edited.id().hex()))? {
             Some(new_status) => {
@@ -154,7 +163,7 @@ impl Mutation for CreateRevision {
             .new_commit(parent_ids?, merged_tree.id())
             .write()?;
 
-        tx.repo_mut().edit(ws.id().clone(), &new_commit)?;
+        tx.repo_mut().edit(ws.name().to_owned(), &new_commit)?;
 
         match ws.finish_transaction(tx, "new empty commit")? {
             Some(new_status) => {
@@ -238,7 +247,7 @@ impl Mutation for DuplicateRevisions {
                 if num_clonees == 1 {
                     let new_commit = clones
                         .get_index(0)
-                        .ok_or_else(|| anyhow!("single source should have single copy"))?
+                        .ok_or(anyhow!("single source should have single copy"))?
                         .1;
                     let new_selection = ws.format_header(new_commit, None)?;
                     Ok(MutationResult::UpdatedSelection {
@@ -477,21 +486,21 @@ impl Mutation for TrackBranch {
                 ..
             } => {
                 let mut tx = ws.start_transaction()?;
-                let remote_ref_symbol = RemoteRefSymbol {
-                    name: &branch_name,
-                    remote: &remote_name,
-                };
+                let branch_name_ref = RefNameBuf::from(branch_name);
+                let remote_name_ref = RemoteNameBuf::from(remote_name);
+                let remote_ref_symbol = RemoteRefSymbol { name: &branch_name_ref, remote: &remote_name_ref };
 
                 let remote_ref: &jj_lib::op_store::RemoteRef =
                     ws.view().get_remote_bookmark(remote_ref_symbol);
 
-                if remote_ref.is_tracking() {
-                    precondition!("{branch_name}@{remote_name} is already tracked");
+                if remote_ref.is_tracked() {
+                    precondition!("{:?}@{:?} is already tracked", branch_name_ref.as_str(), remote_name_ref.as_str());
                 }
 
-                tx.repo_mut().track_remote_bookmark(remote_ref_symbol);
+                tx.repo_mut()
+                    .track_remote_bookmark(remote_ref_symbol);
 
-                match ws.finish_transaction(tx, format!("track remote bookmark {}", branch_name))? {
+                match ws.finish_transaction(tx, format!("track remote bookmark {:?}@{:?}", branch_name_ref.as_str(), remote_name_ref.as_str()))? {
                     Some(new_status) => Ok(MutationResult::Updated { new_status }),
                     None => Ok(MutationResult::Unchanged),
                 }
@@ -515,14 +524,9 @@ impl Mutation for UntrackBranch {
                     &StringPattern::exact(branch_name),
                     &StringPattern::everything(),
                 ) {
-                    if remote_ref_symbol.remote != REMOTE_NAME_FOR_LOCAL_GIT_REPO
-                        && remote_ref.is_tracking()
-                    {
+                    if remote_ref_symbol.remote != REMOTE_NAME_FOR_LOCAL_GIT_REPO && remote_ref.is_tracked() {
                         tx.repo_mut().untrack_remote_bookmark(remote_ref_symbol);
-                        untracked.push(format!(
-                            "{}@{}",
-                            remote_ref_symbol.name, remote_ref_symbol.remote
-                        ));
+                        untracked.push(format!("{}@{}", remote_ref_symbol.name.as_str(), remote_ref_symbol.remote.as_str()));
                     }
                 }
             }
@@ -531,19 +535,19 @@ impl Mutation for UntrackBranch {
                 remote_name,
                 ..
             } => {
-                let remote_ref_symbol = RemoteRefSymbol {
-                    name: &branch_name,
-                    remote: &remote_name,
-                };
+                let branch_name_ref = RefNameBuf::from(branch_name);
+                let remote_name_ref = RemoteNameBuf::from(remote_name);
+                let remote_ref_symbol = RemoteRefSymbol { name: &branch_name_ref, remote: &remote_name_ref };
                 let remote_ref: &jj_lib::op_store::RemoteRef =
                     ws.view().get_remote_bookmark(remote_ref_symbol);
 
-                if !remote_ref.is_tracking() {
-                    precondition!("{branch_name}@{remote_name} is not tracked");
+                if !remote_ref.is_tracked() {
+                    precondition!("{:?}@{:?} is not tracked", branch_name_ref.as_str(), remote_name_ref.as_str());
                 }
 
-                tx.repo_mut().untrack_remote_bookmark(remote_ref_symbol);
-                untracked.push(format!("{}@{}", branch_name, remote_name));
+                tx.repo_mut()
+                    .untrack_remote_bookmark(remote_ref_symbol);
+                untracked.push(format!("{}@{}", branch_name_ref.as_str(), remote_name_ref.as_str()));
             }
         }
 
@@ -560,24 +564,26 @@ impl Mutation for UntrackBranch {
 impl Mutation for RenameBranch {
     fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let old_name = self.r#ref.as_branch()?;
+        let old_name_ref = RefNameBuf::from(old_name);
 
-        let ref_target = ws.view().get_local_bookmark(old_name).clone();
+        let ref_target = ws.view().get_local_bookmark(&old_name_ref).clone();
         if ref_target.is_absent() {
-            precondition!("No such bookmark: {}", old_name);
+            precondition!("No such bookmark: {}", old_name_ref.as_str());
         }
 
-        if ws.view().get_local_bookmark(&self.new_name).is_present() {
-            precondition!("Bookmark already exists: {}", &self.new_name);
+        let new_name_ref = RefNameBuf::from(self.new_name);
+        if ws.view().get_local_bookmark(&new_name_ref).is_present() {
+            precondition!("Bookmark already exists: {}", new_name_ref.as_str());
         }
 
         let mut tx = ws.start_transaction()?;
 
         tx.repo_mut()
-            .set_local_bookmark_target(&self.new_name, ref_target);
+            .set_local_bookmark_target(&new_name_ref, ref_target);
         tx.repo_mut()
-            .set_local_bookmark_target(old_name, RefTarget::absent());
+            .set_local_bookmark_target(&old_name_ref, RefTarget::absent());
 
-        match ws.finish_transaction(tx, format!("rename {} to {}", old_name, self.new_name))? {
+        match ws.finish_transaction(tx, format!("rename {} to {}", old_name_ref.as_str(), new_name_ref.as_str()))? {
             Some(new_status) => Ok(MutationResult::Updated { new_status }),
             None => Ok(MutationResult::Unchanged),
         }
@@ -603,13 +609,14 @@ impl Mutation for CreateRef {
                 );
             }
             StoreRef::LocalBookmark { branch_name, .. } => {
-                let existing_branch = ws.view().get_local_bookmark(&branch_name);
+                let branch_name_ref = RefNameBuf::from(branch_name);
+                let existing_branch = ws.view().get_local_bookmark(&branch_name_ref);
                 if existing_branch.is_present() {
-                    precondition!("{} already exists", branch_name);
+                    precondition!("{} already exists", branch_name_ref.as_str());
                 }
 
                 tx.repo_mut().set_local_bookmark_target(
-                    &branch_name,
+                    &branch_name_ref,
                     RefTarget::normal(commit.id().clone()),
                 );
 
@@ -617,7 +624,7 @@ impl Mutation for CreateRef {
                     tx,
                     format!(
                         "create {} pointing to commit {}",
-                        branch_name,
+                        branch_name_ref.as_str(),
                         ws.format_commit_id(commit.id()).hex
                     ),
                 )? {
@@ -626,19 +633,20 @@ impl Mutation for CreateRef {
                 }
             }
             StoreRef::Tag { tag_name, .. } => {
-                let existing_tag = ws.view().get_tag(&tag_name);
+                let tag_name_ref = RefNameBuf::from(tag_name);
+                let existing_tag = ws.view().get_tag(&tag_name_ref);
                 if existing_tag.is_present() {
-                    precondition!("{} already exists", tag_name);
+                    precondition!("{} already exists", tag_name_ref.as_str());
                 }
 
                 tx.repo_mut()
-                    .set_tag_target(&tag_name, RefTarget::normal(commit.id().clone()));
+                    .set_tag_target(&tag_name_ref, RefTarget::normal(commit.id().clone()));
 
                 match ws.finish_transaction(
                     tx,
                     format!(
                         "create {} pointing to commit {}",
-                        tag_name,
+                        tag_name_ref.as_str(),
                         ws.format_commit_id(commit.id()).hex
                     ),
                 )? {
@@ -665,38 +673,39 @@ impl Mutation for DeleteRef {
                     target: RefTarget::absent(),
                     state: RemoteRefState::New,
                 };
-                let remote_ref_symbol = RemoteRefSymbol {
-                    name: &branch_name,
-                    remote: &remote_name,
-                };
+                let remote_name_ref = RemoteNameBuf::from(remote_name);
+                let branch_name_ref = RefNameBuf::from(branch_name);
+                let remote_ref_symbol = RemoteRefSymbol { name: &branch_name_ref, remote: &remote_name_ref };
 
                 tx.repo_mut()
                     .set_remote_bookmark(remote_ref_symbol, remote_ref);
 
                 match ws
-                    .finish_transaction(tx, format!("forget {}@{}", branch_name, remote_name))?
+                    .finish_transaction(tx, format!("forget {}@{}", branch_name_ref.as_str(), remote_name_ref.as_str()))?
                 {
                     Some(new_status) => Ok(MutationResult::Updated { new_status }),
                     None => Ok(MutationResult::Unchanged),
                 }
             }
             StoreRef::LocalBookmark { branch_name, .. } => {
+                let branch_name_ref = RefNameBuf::from(branch_name);
                 let mut tx = ws.start_transaction()?;
 
                 tx.repo_mut()
-                    .set_local_bookmark_target(&branch_name, RefTarget::absent());
+                    .set_local_bookmark_target(&branch_name_ref, RefTarget::absent());
 
-                match ws.finish_transaction(tx, format!("forget {}", branch_name))? {
+                match ws.finish_transaction(tx, format!("forget {}", branch_name_ref.as_str()))? {
                     Some(new_status) => Ok(MutationResult::Updated { new_status }),
                     None => Ok(MutationResult::Unchanged),
                 }
             }
             StoreRef::Tag { tag_name } => {
+                let tag_name_ref = RefNameBuf::from(tag_name);
                 let mut tx = ws.start_transaction()?;
 
-                tx.repo_mut().set_tag_target(&tag_name, RefTarget::absent());
+                tx.repo_mut().set_tag_target(&tag_name_ref, RefTarget::absent());
 
-                match ws.finish_transaction(tx, format!("forget tag {}", tag_name))? {
+                match ws.finish_transaction(tx, format!("forget tag {}", tag_name_ref.as_str()))? {
                     Some(new_status) => Ok(MutationResult::Updated { new_status }),
                     None => Ok(MutationResult::Unchanged),
                 }
@@ -721,36 +730,38 @@ impl Mutation for MoveRef {
                 precondition!("Bookmark is remote: {branch_name}@{remote_name}")
             }
             StoreRef::LocalBookmark { branch_name, .. } => {
-                let old_target = ws.view().get_local_bookmark(&branch_name);
+                let branch_name_ref = RefNameBuf::from(branch_name);
+                let old_target = ws.view().get_local_bookmark(&branch_name_ref);
                 if old_target.is_absent() {
-                    precondition!("No such bookmark: {branch_name}");
+                    precondition!("No such bookmark: {:?}", branch_name_ref.as_str());
                 }
 
                 tx.repo_mut().set_local_bookmark_target(
-                    &branch_name,
+                    &branch_name_ref,
                     RefTarget::normal(commit.id().clone()),
                 );
 
                 match ws.finish_transaction(
                     tx,
-                    format!("point {} to commit {}", branch_name, commit.id().hex()),
+                    format!("point {:?} to commit {}", &branch_name_ref, commit.id().hex()),
                 )? {
                     Some(new_status) => Ok(MutationResult::Updated { new_status }),
                     None => Ok(MutationResult::Unchanged),
                 }
             }
             StoreRef::Tag { tag_name } => {
-                let old_target = ws.view().get_tag(&tag_name);
+                let tag_name_ref = RefNameBuf::from(tag_name);
+                let old_target = ws.view().get_tag(&tag_name_ref);
                 if old_target.is_absent() {
-                    precondition!("No such tag: {tag_name}");
+                    precondition!("No such tag: {:?}", tag_name_ref.as_str());
                 }
 
                 tx.repo_mut()
-                    .set_tag_target(&tag_name, RefTarget::normal(commit.id().clone()));
+                    .set_tag_target(&tag_name_ref, RefTarget::normal(commit.id().clone()));
 
                 match ws.finish_transaction(
                     tx,
-                    format!("point {} to commit {}", tag_name, commit.id().hex()),
+                    format!("point {:?} to commit {}", tag_name_ref.as_str(), commit.id().hex()),
                 )? {
                     Some(new_status) => Ok(MutationResult::Updated { new_status }),
                     None => Ok(MutationResult::Unchanged),
@@ -760,24 +771,190 @@ impl Mutation for MoveRef {
     }
 }
 
+impl Mutation for MoveHunk {
+    fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
+        // Resolve the source (from) and target commits
+        let from_commit = ws.resolve_single_change(&self.from_id)?;
+        let target_commit = ws.resolve_single_commit(&self.to_id)?;
+
+        // Convert the file path from our message to a RepoPath
+        let repo_path = RepoPath::from_internal_string(&self.path.repo_path);
+        let store = ws.repo().store();
+
+        // Retrieve the source file content
+        let from_tree = from_commit.tree()?;
+        let from_entry = from_tree.path_value(&repo_path).expect(&format!(
+            "File {} not found in source revision",
+            self.path.repo_path
+        ));
+        let from_value = block_on(materialize_tree_value(
+            store, &repo_path, from_entry,
+        ))
+        .expect(&format!(
+            "File {} not found in source revision",
+            self.path.repo_path
+        ));
+        let from_orig = if let jj_lib::conflicts::MaterializedTreeValue::File(MaterializedFileValue {
+            mut reader,
+            executable: _,
+            ..
+        }) = from_value
+        {
+            let mut buf = Vec::new();
+            reader.read_to_end(&mut buf)?;
+            buf
+        } else {
+            return Ok(MutationResult::PreconditionError {
+                message: "Source value is not a file".to_string(),
+            });
+        };
+
+        // Retrieve the target file content; if missing, assume empty
+        let to_tree = target_commit.tree()?;
+        let entry = to_tree.path_value(&repo_path)?;
+        let value = block_on(materialize_tree_value(
+            store, &repo_path, entry,
+        ))?;
+        let to_orig = if let jj_lib::conflicts::MaterializedTreeValue::File(MaterializedFileValue {
+            mut reader,
+            executable: _,
+            ..
+        }) = value
+        {
+            let mut buf = Vec::new();
+            reader.read_to_end(&mut buf)?;
+            buf
+        } else {
+            Vec::new()
+        };
+
+        // Compute the new source content by removing the hunk
+        let removed_from = remove_hunk(&from_orig, &self.hunk);
+        // Compute the new target content by inserting the hunk
+        let inserted_to = insert_hunk(to_orig.as_slice(), &self.hunk);
+
+        // If the hunk removal range is empty, there's nothing to move
+        if self.hunk.location.from_file.len == 0 {
+            return Ok(MutationResult::Unchanged);
+        }
+
+        // Use the results from the helper functions directly
+        let new_from_text = removed_from;
+        let new_to_text = inserted_to;
+
+        // Write new blobs for source and target
+        let new_from_blob = pollster::block_on(store.write_file(&repo_path, &mut new_from_text.as_slice()))?;
+        let new_to_blob = pollster::block_on(store.write_file(&repo_path, &mut new_to_text.as_slice()))?;
+
+        // Update the trees of the source and target commits
+        let new_from_tree_id = update_tree_entry(store, &from_tree, &repo_path, new_from_blob, false)?;
+        let new_to_tree_id = update_tree_entry(store, &to_tree, &repo_path, new_to_blob, false)?;
+
+        // Begin a transaction and rewrite both commits with the updated trees
+        let mut tx = ws.start_transaction()?;
+        tx.repo_mut()
+            .rewrite_commit(&from_commit)
+            .set_tree_id(new_from_tree_id)
+            .write()?;
+        tx.repo_mut()
+            .rewrite_commit(&target_commit)
+            .set_tree_id(new_to_tree_id)
+            .write()?;
+        tx.repo_mut().rebase_descendants()?;
+
+        match ws.finish_transaction(
+            tx,
+            format!(
+                "move hunk in file {} from commit {} to commit {}",
+                self.path.repo_path,
+                ws.format_commit_id(from_commit.id()).hex,
+                ws.format_commit_id(target_commit.id()).hex
+            ),
+        )? {
+            Some(new_status) => Ok(MutationResult::Updated { new_status }),
+            None => Ok(MutationResult::Unchanged),
+        }
+    }
+}
+
+// Helper function to remove a hunk from the source content. Assumes hunk.location.from_file provides 1-indexed start and length.
+fn remove_hunk(content: &[u8], hunk: &crate::messages::ChangeHunk) -> Vec<u8> {
+    let text = String::from_utf8_lossy(content);
+    let mut lines: Vec<String> = text.lines().map(|s| s.to_string()).collect();
+    let start = hunk.location.from_file.start.saturating_sub(1);
+    let end = start + hunk.location.from_file.len;
+    // Clamp the range to avoid out-of-bounds slice panic
+    if start < lines.len() {
+        let clamped_end = if end > lines.len() { lines.len() } else { end };
+        lines.splice(start..clamped_end, std::iter::empty());
+    }
+    lines.join("\n").into_bytes()
+}
+
+// Helper function to insert a hunk into the target content. Assumes hunk.location.to_file provides 1-indexed insertion point.
+// It collects added lines (those starting with '+') from the hunk and inserts them.
+fn insert_hunk(content: &[u8], hunk: &crate::messages::ChangeHunk) -> Vec<u8> {
+    let text = String::from_utf8_lossy(content);
+    let mut lines: Vec<String> = text.lines().map(|s| s.to_string()).collect();
+    let insert_at = hunk.location.to_file.start.saturating_sub(1);
+    let plus_lines: Vec<String> = hunk
+        .lines
+        .lines
+        .iter()
+        .filter_map(|l| {
+            if l.starts_with('+') {
+                Some(l[1..].to_string())
+            } else {
+                None
+            }
+        })
+        .collect();
+    lines.splice(insert_at..insert_at, plus_lines);
+    lines.join("\n").into_bytes()
+}
+
+// Helper function to update an entry in a tree with a new blob.
+fn update_tree_entry(
+    store: &Arc<jj_lib::store::Store>,
+    original_tree: &MergedTree,
+    path: &RepoPath,
+    new_blob: FileId,
+    executable: bool,
+) -> Result<MergedTreeId, anyhow::Error> {
+    let mut builder = MergedTreeBuilder::new(original_tree.id().clone());
+    builder.set_or_remove(
+        path.to_owned(),
+        Merge::normal(TreeValue::File {
+            id: new_blob,
+            executable,
+        }),
+    );
+    let new_tree_id = builder.write_tree(store)?;
+    Ok(new_tree_id)
+}
+
 impl Mutation for GitPush {
     fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction()?;
 
-        let git_settings = ws.data.settings.git_settings()?;
+        let git_repo = match ws.git_repo()? {
+            Some(git_repo) => git_repo,
+            None => precondition!("No git backend"),
+        };
 
         // determine bookmarks to push, recording the old and new commits
-        let mut remote_branch_updates: Vec<(&str, Vec<(String, refs::BookmarkPushUpdate)>)> =
+        let mut remote_branch_updates: Vec<(&str, Vec<(RefNameBuf, refs::BookmarkPushUpdate)>)> =
             Vec::new();
         let remote_branch_refs: Vec<_> = match &*self {
             GitPush::AllBookmarks { ref remote_name } => {
+                let remote_name_ref = RemoteNameBuf::from(remote_name);
                 let mut branch_updates = Vec::new();
-                for (branch_name, targets) in ws.view().local_remote_bookmarks(&remote_name) {
-                    if !targets.remote_ref.is_tracking() {
+                for (branch_name, targets) in ws.view().local_remote_bookmarks(&remote_name_ref) {
+                    if !targets.remote_ref.is_tracked() {
                         continue;
                     }
 
-                    match classify_branch_push(branch_name, &remote_name, targets) {
+                    match classify_branch_push(branch_name.as_str(), &remote_name, targets) {
                         Err(message) => return Ok(MutationResult::PreconditionError { message }),
                         Ok(None) => (),
                         Ok(Some(update)) => branch_updates.push((branch_name.to_owned(), update)),
@@ -785,17 +962,21 @@ impl Mutation for GitPush {
                 }
                 remote_branch_updates.push((remote_name, branch_updates));
 
-                ws.view().remote_bookmarks(&remote_name).collect()
+                ws.view()
+                    .remote_bookmarks(&remote_name_ref)
+                    .map(|(name, remote_ref)| (name.to_owned(), remote_ref))
+                    .collect()
             }
             GitPush::AllRemotes { branch_ref } => {
                 let branch_name = branch_ref.as_branch()?;
+                let branch_name_ref = RefNameBuf::from(branch_name);
 
                 let mut remote_branch_refs = Vec::new();
                 for (remote_name, group) in ws
                     .view()
                     .all_remote_bookmarks()
                     .filter_map(|(remote_ref_symbol, remote_ref)| {
-                        if remote_ref.is_tracking() && remote_ref_symbol.name == branch_name {
+                        if remote_ref.is_tracked() && remote_ref_symbol.name == &branch_name_ref {
                             Some((remote_ref_symbol.remote, remote_ref))
                         } else {
                             None
@@ -807,21 +988,21 @@ impl Mutation for GitPush {
                     let mut branch_updates = Vec::new();
                     for (_, remote_ref) in group {
                         let targets = LocalAndRemoteRef {
-                            local_target: ws.view().get_local_bookmark(branch_name),
+                            local_target: ws.view().get_local_bookmark(&branch_name_ref),
                             remote_ref,
                         };
-                        match classify_branch_push(branch_name, &remote_name, targets) {
+                        match classify_branch_push(&branch_name, &remote_name.as_str(), targets) {
                             Err(message) => {
                                 return Ok(MutationResult::PreconditionError { message })
                             }
                             Ok(None) => (),
                             Ok(Some(update)) => {
-                                branch_updates.push((branch_name.to_owned(), update))
+                                branch_updates.push((RefNameBuf::from(branch_name), update))
                             }
                         }
-                        remote_branch_refs.push((remote_name, remote_ref));
+                        remote_branch_refs.push((RefNameBuf::from(branch_name), remote_ref));
                     }
-                    remote_branch_updates.push((remote_name, branch_updates));
+                    remote_branch_updates.push((&remote_name.as_str(), branch_updates));
                 }
 
                 remote_branch_refs
@@ -831,11 +1012,10 @@ impl Mutation for GitPush {
                 ref branch_ref,
             } => {
                 let branch_name = branch_ref.as_branch()?;
-                let local_target = ws.view().get_local_bookmark(branch_name);
-                let remote_ref_symbol = RemoteRefSymbol {
-                    name: &branch_name,
-                    remote: &remote_name,
-                };
+                let branch_name_ref = RefNameBuf::from(branch_name);
+                let local_target = ws.view().get_local_bookmark(&branch_name_ref);
+                let remote_name_ref = RemoteNameBuf::from(remote_name);
+                let remote_ref_symbol = RemoteRefSymbol { name: &branch_name_ref, remote: &remote_name_ref };
                 let remote_ref = ws.view().get_remote_bookmark(remote_ref_symbol);
 
                 match classify_branch_push(
@@ -850,12 +1030,12 @@ impl Mutation for GitPush {
                     Ok(None) => (),
                     Ok(Some(update)) => {
                         remote_branch_updates
-                            .push((remote_name, vec![(branch_name.to_owned(), update)]));
+                            .push((remote_name, vec![(RefNameBuf::from(branch_name), update)]));
                     }
                 }
 
                 vec![(
-                    branch_name,
+                    RefNameBuf::from(branch_name),
                     ws.view().get_remote_bookmark(remote_ref_symbol),
                 )]
             }
@@ -915,15 +1095,17 @@ impl Mutation for GitPush {
         // push to each remote
         for (remote_name, branch_updates) in remote_branch_updates.into_iter() {
             let targets = GitBranchPushTargets { branch_updates };
+            let git_settings = ws.data.settings.git_settings()?;
 
             ws.session.callbacks.with_git(tx.repo_mut(), &|repo, cb| {
-                Ok(git::push_branches(
+                git::push_branches(
                     repo,
                     &git_settings,
-                    remote_name,
+                    &RemoteName::new(remote_name),
                     &targets,
                     cb,
-                )?)
+                )?;
+                Ok(())
             })?;
         }
 
@@ -961,7 +1143,6 @@ impl Mutation for GitFetch {
     fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction()?;
 
-        let git_settings = ws.data.settings.git_settings()?;
         let git_repo = match ws.git_repo()? {
             Some(git_repo) => git_repo,
             None => precondition!("No git backend"),
@@ -990,13 +1171,14 @@ impl Mutation for GitFetch {
                 remote_patterns.push((remote_name, Some(branch_name.to_owned())));
             }
         }
+        let git_settings = ws.data.settings.git_settings()?;
 
         for (remote_name, pattern) in remote_patterns {
             ws.session.callbacks.with_git(tx.repo_mut(), &|repo, cb| {
                 let mut fetcher = git::GitFetch::new(repo, &git_settings)?;
                 fetcher
                     .fetch(
-                        &remote_name,
+                        &RemoteName::new(&remote_name),
                         &[pattern
                             .clone()
                             .map(StringPattern::exact)

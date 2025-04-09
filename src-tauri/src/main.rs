@@ -27,7 +27,7 @@ use tauri_plugin_window_state::StateFlags;
 use messages::{
     AbandonRevisions, BackoutRevisions, CheckoutRevision, CopyChanges, CreateRef, CreateRevision,
     DeleteRef, DescribeRevision, DuplicateRevisions, GitFetch, GitPush, InputResponse,
-    InsertRevision, MoveChanges, MoveRef, MoveRevision, MoveSource, MutationResult, RenameBranch,
+    InsertRevision, MoveChanges, MoveRef, MoveRevision, MoveSource, MoveHunk, MutationResult, RenameBranch,
     RevId, TrackBranch, UndoOperation, UntrackBranch,
 };
 use worker::{Mutation, Session, SessionEvent, WorkerSession};
@@ -158,6 +158,7 @@ fn main() -> Result<()> {
             create_ref,
             delete_ref,
             move_ref,
+            move_hunk,
             git_push,
             git_fetch,
             undo_operation
@@ -488,6 +489,15 @@ fn move_ref(
     window: Window,
     app_state: State<AppState>,
     mutation: MoveRef,
+) -> Result<MutationResult, InvokeError> {
+    try_mutate(window, app_state, mutation)
+}
+
+#[tauri::command(async)]
+fn move_hunk(
+    window: Window,
+    app_state: State<AppState>,
+    mutation: MoveHunk,
 ) -> Result<MutationResult, InvokeError> {
     try_mutate(window, app_state, mutation)
 }
