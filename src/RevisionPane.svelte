@@ -320,6 +320,7 @@
 
     .change::-webkit-scrollbar {
         width: 6px;
+        height: 6px;
     }
 
     .change::-webkit-scrollbar-thumb {
