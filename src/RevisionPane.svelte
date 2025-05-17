@@ -2,6 +2,7 @@
     import type { RevResult } from "./messages/RevResult";
     import { changeSelectEvent, dragOverWidget } from "./stores";
     import ChangeObject from "./objects/ChangeObject.svelte";
+    import HunkObject from "./objects/HunkObject.svelte";
     import RevisionObject from "./objects/RevisionObject.svelte";
     import RevisionMutator from "./mutators/RevisionMutator";
     import ActionWidget from "./controls/ActionWidget.svelte";
@@ -191,8 +192,7 @@
                             <div class="change" style="--lines: {minLines(change)}">
                                 {#each change.hunks as hunk}
                                     <div class="hunk">
-                                        @@ -{hunk.location.from_file.start},{hunk.location.from_file.len} +{hunk
-                                            .location.to_file.start},{hunk.location.to_file.len} @@
+                                        <HunkObject header={rev.header} path={change.path.repo_path} {hunk} />
                                     </div>
                                     <pre class="diff">{#each hunk.lines.lines as line}<span class={lineColour(line)}
                                                 >{line}</span
