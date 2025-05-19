@@ -364,7 +364,7 @@ impl Mutation for MoveChanges {
 
         let from = ws.resolve_single_change(&self.from_id)?;
         let mut to = ws.resolve_single_commit(&self.to_id)?;
-        let matcher = build_matcher(&self.paths);
+        let matcher = build_matcher(&self.paths)?;
 
         if ws.check_immutable(vec![from.id().clone(), to.id().clone()])? {
             precondition!("Revisions are immutable");
@@ -438,7 +438,7 @@ impl Mutation for CopyChanges {
 
         let from_tree = ws.resolve_single_commit(&self.from_id)?.tree()?;
         let to = ws.resolve_single_change(&self.to_id)?;
-        let matcher = build_matcher(&self.paths);
+        let matcher = build_matcher(&self.paths)?;
 
         if ws.check_immutable(vec![to.id().clone()])? {
             precondition!("Revisions are immutable");
@@ -1143,15 +1143,15 @@ fn combine_bookmarks(branch_names: &[impl Display]) -> String {
     }
 }
 
-fn build_matcher(paths: &Vec<TreePath>) -> Box<dyn Matcher> {
+fn build_matcher(paths: &Vec<TreePath>) -> Result<Box<dyn Matcher>> {
     if paths.is_empty() {
-        Box::new(EverythingMatcher)
+        Ok(Box::new(EverythingMatcher))
     } else {
-        Box::new(FilesMatcher::new(
-            paths
-                .iter()
-                .map(|p| RepoPath::from_internal_string(&p.repo_path)),
-        ))
+        let repo_paths: Vec<_> = paths
+            .iter()
+            .map(|p| RepoPath::from_internal_string(&p.repo_path))
+            .try_collect()?;
+        Ok(Box::new(FilesMatcher::new(&repo_paths)))
     }
 }
 

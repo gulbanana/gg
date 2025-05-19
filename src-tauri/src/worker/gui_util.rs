@@ -1094,7 +1094,7 @@ fn load_at_head(workspace: &Workspace, data: &WorkspaceData) -> Result<SessionOp
                 tx.repo_mut().rebase_descendants()?;
             }
             Ok::<Operation, RepoLoaderError>(
-                tx.write("resolve concurrent operations")
+                tx.write("resolve concurrent operations")?
                     .leave_unpublished()
                     .operation()
                     .clone(),

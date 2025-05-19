@@ -308,10 +308,10 @@ pub fn query_revision(ws: &WorkspaceSession, id: RevId) -> Result<RevResult> {
                 match conflicts::materialize_tree_value(ws.repo().store(), &path, entry)
                     .block_on()?
                 {
-                    MaterializedTreeValue::FileConflict { contents, .. } => {
+                    MaterializedTreeValue::FileConflict(file) => {
                         let mut hunk_content = vec![];
                         conflicts::materialize_merge_result(
-                            &contents,
+                            &file.contents,
                             ConflictMarkerStyle::default(),
                             &mut hunk_content,
                         )?;
@@ -470,10 +470,10 @@ fn get_value_contents(path: &RepoPath, value: MaterializedTreeValue) -> Result<V
         }
         MaterializedTreeValue::Symlink { target, .. } => Ok(target.into_bytes()),
         MaterializedTreeValue::GitSubmodule(_) => Ok("(submodule)".to_owned().into_bytes()),
-        MaterializedTreeValue::FileConflict { contents, .. } => {
+        MaterializedTreeValue::FileConflict(file) => {
             let mut hunk_content = vec![];
             conflicts::materialize_merge_result(
-                &contents,
+                &file.contents,
                 ConflictMarkerStyle::default(),
                 &mut hunk_content,
             )?;
