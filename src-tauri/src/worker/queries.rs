@@ -236,25 +236,22 @@ impl<'q, 'w> QuerySession<'q, 'w> {
                 padding,
                 lines,
             });
-            row = row + 1;
+            row += 1;
 
             // terminate any temporary stems created for missing edges
-            match next_missing
+            if let Some(slot) = next_missing
                 .take()
                 .and_then(|id| self.find_stem_for_commit(&id))
             {
-                Some(slot) => {
-                    if let Some(terminated_stem) = &self.state.stems[slot] {
-                        rows.last_mut().unwrap().lines.push(LogLine::ToMissing {
-                            indirect: terminated_stem.indirect,
-                            source: LogCoordinates(column, row - 1),
-                            target: LogCoordinates(slot, row),
-                        });
-                    }
-                    self.state.stems[slot] = None;
-                    row = row + 1;
+                if let Some(terminated_stem) = &self.state.stems[slot] {
+                    rows.last_mut().unwrap().lines.push(LogLine::ToMissing {
+                        indirect: terminated_stem.indirect,
+                        source: LogCoordinates(column, row - 1),
+                        target: LogCoordinates(slot, row),
+                    });
                 }
-                None => (),
+                self.state.stems[slot] = None;
+                row += 1;
             };
 
             if row == max {
@@ -442,11 +439,11 @@ fn get_value_hunks(
         let right_part = get_value_contents(path, right_value)?;
         get_unified_hunks(num_context_lines, &[], &right_part)
     } else if right_value.is_present() {
-        let left_part = get_value_contents(&path, left_value)?;
-        let right_part = get_value_contents(&path, right_value)?;
+        let left_part = get_value_contents(path, left_value)?;
+        let right_part = get_value_contents(path, right_value)?;
         get_unified_hunks(num_context_lines, &left_part, &right_part)
     } else {
-        let left_part = get_value_contents(&path, left_value)?;
+        let left_part = get_value_contents(path, left_value)?;
         get_unified_hunks(num_context_lines, &left_part, &[])
     }
 }
