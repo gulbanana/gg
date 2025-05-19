@@ -145,8 +145,8 @@ pub enum StoreRef {
 impl StoreRef {
     pub fn as_branch(&self) -> Result<&str> {
         match self {
-            StoreRef::LocalBookmark { branch_name, .. } => Ok(&branch_name),
-            StoreRef::RemoteBookmark { branch_name, .. } => Ok(&branch_name),
+            StoreRef::LocalBookmark { branch_name, .. } => Ok(branch_name),
+            StoreRef::RemoteBookmark { branch_name, .. } => Ok(branch_name),
             _ => Err(anyhow!("not a local bookmark")),
         }
     }

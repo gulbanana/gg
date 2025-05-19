@@ -68,7 +68,7 @@ fn copy_changes() -> Result<()> {
     let from_rev = queries::query_revision(&ws, revs::resolve_conflict())?;
     let to_rev = queries::query_revision(&ws, revs::working_copy())?;
     assert_matches!(from_rev, RevResult::Detail { changes, .. } if changes.len() == 1);
-    assert_matches!(to_rev, RevResult::Detail { changes, .. } if changes.len() == 0);
+    assert_matches!(to_rev, RevResult::Detail { changes, .. } if changes.is_empty());
 
     let result = CopyChanges {
         from_id: revs::resolve_conflict().commit,
@@ -155,7 +155,7 @@ fn describe_revision() -> Result<()> {
     let mut ws = session.load_directory(repo.path())?;
 
     let rev = queries::query_revision(&ws, revs::working_copy())?;
-    assert_matches!(rev, RevResult::Detail { header, .. } if header.description.lines[0] == "");
+    assert_matches!(rev, RevResult::Detail { header, .. } if header.description.lines[0].is_empty());
 
     let result = DescribeRevision {
         id: revs::working_copy(),
@@ -182,7 +182,7 @@ fn describe_revision_with_snapshot() -> Result<()> {
 
     let rev = queries::query_revision(&ws, revs::working_copy())?;
     assert!(
-        matches!(rev, RevResult::Detail { header, changes, .. } if header.description.lines[0] == "" && changes.len() == 0)
+        matches!(rev, RevResult::Detail { header, changes, .. } if header.description.lines[0].is_empty() && changes.is_empty())
     );
 
     fs::write(repo.path().join("new.txt"), []).unwrap(); // changes the WC commit
@@ -196,7 +196,7 @@ fn describe_revision_with_snapshot() -> Result<()> {
 
     let rev = queries::query_revision(&ws, revs::working_copy())?;
     assert!(
-        matches!(rev, RevResult::Detail { header, changes, .. } if header.description.lines[0] == "wip" && changes.len() != 0)
+        matches!(rev, RevResult::Detail { header, changes, .. } if header.description.lines[0] == "wip" && !changes.is_empty())
     );
 
     Ok(())
@@ -210,7 +210,7 @@ fn duplicate_revisions() -> Result<()> {
     let mut ws = session.load_directory(repo.path())?;
 
     let rev = queries::query_revision(&ws, revs::working_copy())?;
-    assert_matches!(rev, RevResult::Detail { header, .. } if header.description.lines[0] == "");
+    assert_matches!(rev, RevResult::Detail { header, .. } if header.description.lines[0].is_empty());
 
     let result = DuplicateRevisions {
         ids: vec![revs::main_bookmark()],
@@ -281,7 +281,7 @@ fn move_changes_single_path() -> Result<()> {
     let from_rev = queries::query_revision(&ws, revs::main_bookmark())?;
     let to_rev = queries::query_revision(&ws, revs::working_copy())?;
     assert_matches!(from_rev, RevResult::Detail { changes, .. } if changes.len() == 2);
-    assert_matches!(to_rev, RevResult::Detail { changes, .. } if changes.len() == 0);
+    assert_matches!(to_rev, RevResult::Detail { changes, .. } if changes.is_empty());
 
     let result = MoveChanges {
         from_id: revs::main_bookmark(),
