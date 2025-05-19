@@ -614,6 +614,8 @@ fn handle_window_event(window: &Window, event: &WindowEvent) {
     }
 }
 
+// This also uses a lot of code that would otherwise be dead, so #[cfg(windows)] would be more work
+#[allow(dead_code, reason = "Currently, this is only used on Windows")]
 fn with_recent_workspaces(
     window: Window,
     f: impl FnOnce(&mut Vec<String>) -> Result<()>,

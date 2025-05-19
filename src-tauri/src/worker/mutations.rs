@@ -822,7 +822,7 @@ impl Mutation for GitPush {
     fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction()?;
 
-        let git_repo = match ws.git_repo()? {
+        let _git_repo = match ws.git_repo()? {
             Some(git_repo) => git_repo,
             None => precondition!("No git backend"),
         };
