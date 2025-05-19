@@ -13,10 +13,20 @@ use gix::bstr::ByteVec;
 use itertools::Itertools;
 use jj_cli::diff_util::{LineCompareMode, LineDiffOptions};
 use jj_lib::{
-    backend::CommitId, conflicts::{self, ConflictMarkerStyle, MaterializedFileValue, MaterializedTreeValue}, diff::{
+    backend::CommitId,
+    conflicts::{self, ConflictMarkerStyle, MaterializedFileValue, MaterializedTreeValue},
+    diff::{
         find_line_ranges, CompareBytesExactly, CompareBytesIgnoreAllWhitespace,
         CompareBytesIgnoreWhitespaceAmount, Diff, DiffHunk, DiffHunkKind,
-    }, graph::{GraphEdge, GraphEdgeType, TopoGroupedGraphIterator}, matchers::EverythingMatcher, merged_tree::{TreeDiffEntry, TreeDiffStream}, ref_name::{RefNameBuf, RemoteNameBuf, RemoteRefSymbol}, repo::Repo, repo_path::RepoPath, revset::{Revset, RevsetEvaluationError}, rewrite
+    },
+    graph::{GraphEdge, GraphEdgeType, TopoGroupedGraphIterator},
+    matchers::EverythingMatcher,
+    merged_tree::{TreeDiffEntry, TreeDiffStream},
+    ref_name::{RefNameBuf, RemoteNameBuf, RemoteRefSymbol},
+    repo::Repo,
+    repo_path::RepoPath,
+    revset::{Revset, RevsetEvaluationError},
+    rewrite,
 };
 use pollster::FutureExt;
 
