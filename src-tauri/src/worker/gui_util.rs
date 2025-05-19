@@ -16,12 +16,33 @@ use git2::Repository;
 use itertools::Itertools;
 use jj_cli::{cli_util::short_operation_hash, git_util::is_colocated_git_workspace, revset_util};
 use jj_lib::{
-    backend::{BackendError, ChangeId, CommitId}, commit::Commit, conflicts::ConflictMarkerStyle, default_index::{AsCompositeIndex, DefaultReadonlyIndex}, file_util, git, git_backend::GitBackend, gitignore::GitIgnoreFile, id_prefix::{IdPrefixContext, IdPrefixIndex}, matchers::EverythingMatcher, object_id::ObjectId, op_heads_store, operation::Operation, ref_name::WorkspaceName, repo::{ReadonlyRepo, Repo, RepoLoaderError, StoreFactories}, repo_path::{RepoPath, RepoPathUiConverter}, revset::{
+    backend::{BackendError, ChangeId, CommitId},
+    commit::Commit,
+    conflicts::ConflictMarkerStyle,
+    default_index::{AsCompositeIndex, DefaultReadonlyIndex},
+    file_util, git,
+    git_backend::GitBackend,
+    gitignore::GitIgnoreFile,
+    id_prefix::{IdPrefixContext, IdPrefixIndex},
+    matchers::EverythingMatcher,
+    object_id::ObjectId,
+    op_heads_store,
+    operation::Operation,
+    ref_name::WorkspaceName,
+    repo::{ReadonlyRepo, Repo, RepoLoaderError, StoreFactories},
+    repo_path::{RepoPath, RepoPathUiConverter},
+    revset::{
         self, DefaultSymbolResolver, Revset, RevsetAliasesMap, RevsetDiagnostics,
         RevsetEvaluationError, RevsetExpression, RevsetExtensions, RevsetIteratorExt,
         RevsetParseContext, RevsetResolutionError, RevsetWorkspaceContext, SymbolResolverExtension,
         UserRevsetExpression,
-    }, rewrite::{self, RebaseOptions, RebasedCommit}, settings::{HumanByteSize, UserSettings}, transaction::Transaction, view::View, working_copy::{CheckoutOptions, CheckoutStats, SnapshotOptions, WorkingCopyFreshness}, workspace::{self, DefaultWorkspaceLoaderFactory, Workspace, WorkspaceLoaderFactory}
+    },
+    rewrite::{self, RebaseOptions, RebasedCommit},
+    settings::{HumanByteSize, UserSettings},
+    transaction::Transaction,
+    view::View,
+    working_copy::{CheckoutOptions, CheckoutStats, SnapshotOptions, WorkingCopyFreshness},
+    workspace::{self, DefaultWorkspaceLoaderFactory, Workspace, WorkspaceLoaderFactory},
 };
 use thiserror::Error;
 
@@ -1086,5 +1107,9 @@ fn load_at_head(workspace: &Workspace, data: &WorkspaceData) -> Result<SessionOp
         .load_at(&op)
         .context("load op head")?;
 
-    Ok(SessionOperation::new(workspace.workspace_name(), &data, repo))
+    Ok(SessionOperation::new(
+        workspace.workspace_name(),
+        &data,
+        repo,
+    ))
 }
