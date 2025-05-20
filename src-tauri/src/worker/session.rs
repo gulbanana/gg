@@ -5,7 +5,7 @@ use std::{
 };
 
 use anyhow::{anyhow, Context, Result};
-use jj_cli::config::ConfigEnv;
+use jj_cli::{config::ConfigEnv, ui::Ui};
 use jj_lib::config::{ConfigNamePathBuf, ConfigSource};
 
 use super::{
@@ -197,7 +197,7 @@ impl Session for WorkspaceSession<'_> {
                     self.session.latest_query = Some(revset_string);
                 }
                 SessionEvent::QueryLogNextPage { tx } => {
-                    let revset_string = self.session.latest_query.as_ref().map(|x| x.as_str());
+                    let revset_string = self.session.latest_query.as_deref();
                     handle_query(&mut state, &self, tx, rx, revset_string, None)?;
                 }
                 SessionEvent::ExecuteSnapshot { tx } => {
@@ -262,10 +262,11 @@ impl Session for WorkspaceSession<'_> {
                 }
                 SessionEvent::WriteConfigArray { scope, key, values } => {
                     let name: ConfigNamePathBuf = key.iter().collect();
-                    let config_env = ConfigEnv::from_environment()?;
+                    let config_env = ConfigEnv::from_environment(&Ui::null());
                     let path = match scope {
                         ConfigSource::User => config_env
-                            .user_config_path()
+                            .user_config_paths()
+                            .next()
                             .ok_or_else(|| anyhow!("No user config path found to edit"))
                             .map(|p| p.to_path_buf()),
                         ConfigSource::Repo => Ok(self.workspace.repo_path().join("config.toml")),
@@ -299,12 +300,12 @@ impl Session for queries::QuerySession<'_, '_> {
             log::debug!("LogQuery handling {evt:?}");
             match evt {
                 Ok(SessionEvent::QueryRevision { tx, id }) => {
-                    tx.send(queries::query_revision(&self.ws, id))?
+                    tx.send(queries::query_revision(self.ws, id))?
                 }
                 Ok(SessionEvent::QueryRemotes {
                     tx,
                     tracking_branch,
-                }) => tx.send(queries::query_remotes(&self.ws, tracking_branch))?,
+                }) => tx.send(queries::query_remotes(self.ws, tracking_branch))?,
                 Ok(SessionEvent::QueryLogNextPage { tx }) => tx.send(self.get_page())?,
                 Ok(unhandled) => return Ok(QueryResult(unhandled, self.state)),
                 Err(err) => return Err(anyhow!(err)),

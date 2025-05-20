@@ -1,7 +1,10 @@
 use std::path::Path;
 
 use anyhow::{anyhow, Result};
-use jj_cli::config::{config_from_environment, default_config_layers, ConfigEnv};
+use jj_cli::{
+    config::{config_from_environment, default_config_layers, ConfigEnv},
+    ui::Ui,
+};
 use jj_lib::{
     config::{ConfigGetError, ConfigLayer, ConfigNamePathBuf, ConfigSource, StackedConfig},
     revset::RevsetAliasesMap,
@@ -63,7 +66,7 @@ pub fn read_config(repo_path: &Path) -> Result<(UserSettings, RevsetAliasesMap)>
     default_layers.push(gg_layer);
     let mut raw_config = config_from_environment(default_layers);
 
-    let mut config_env = ConfigEnv::from_environment()?;
+    let mut config_env = ConfigEnv::from_environment(&Ui::null());
 
     config_env.reload_user_config(&mut raw_config)?;
 

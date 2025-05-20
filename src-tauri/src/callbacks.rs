@@ -32,7 +32,7 @@ impl WorkerCallbacks for FrontendCallbacks {
 
         let get_password = &mut |url: &str, username: &str| {
             self.request_input(
-                format!("Please enter a password for {} at {}", username, url),
+                format!("Please enter a password for {username} at {url}"),
                 ["Password"],
             )
             .and_then(|mut fields| fields.remove("Password"))
@@ -41,7 +41,7 @@ impl WorkerCallbacks for FrontendCallbacks {
 
         let get_username_password = &mut |url: &str| {
             self.request_input(
-                format!("Please enter a username and password for {}", url),
+                format!("Please enter a username and password for {url}"),
                 ["Username", "Password"],
             )
             .and_then(|mut fields| {
