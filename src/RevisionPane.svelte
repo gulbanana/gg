@@ -356,4 +356,12 @@
         color: black;
         background: var(--ctp-flamingo);
     }
+
+    textarea.description  {
+        /* This is a workaround. It would be nice to make this resizeable;
+         * this would require other widgets to move appropriately on resize.
+         */
+        resize: none
+    }
+
 </style>

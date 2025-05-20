@@ -23,6 +23,8 @@ Planned Features
 * Structured op descriptions - extracted ids etc, maybe via tags. This would benefit from being in JJ core.
 * "Onboarding" features - init/clone/colocate.
 * Relative timestamps should update on refocus.
+* The description textarea could be resizeable vertically. The size of
+  the log vs the size of the revision detal pane could also be adjustable.
 
 UI Expansion
 ------------
