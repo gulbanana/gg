@@ -14,7 +14,7 @@ use itertools::Itertools;
 use jj_cli::diff_util::{LineCompareMode, LineDiffOptions};
 use jj_lib::{
     backend::CommitId,
-    conflicts::{self, ConflictMarkerStyle, MaterializedTreeValue},
+    conflicts::{self, ConflictMarkerStyle, MaterializedFileValue, MaterializedTreeValue},
     diff::{
         find_line_ranges, CompareBytesExactly, CompareBytesIgnoreAllWhitespace,
         CompareBytesIgnoreWhitespaceAmount, Diff, DiffHunk, DiffHunkKind,
@@ -22,7 +22,7 @@ use jj_lib::{
     graph::{GraphEdge, GraphEdgeType, TopoGroupedGraphIterator},
     matchers::EverythingMatcher,
     merged_tree::{TreeDiffEntry, TreeDiffStream},
-    refs::RemoteRefSymbol,
+    ref_name::{RefNameBuf, RemoteNameBuf, RemoteRefSymbol},
     repo::Repo,
     repo_path::RepoPath,
     revset::{Revset, RevsetEvaluationError},
@@ -308,10 +308,10 @@ pub fn query_revision(ws: &WorkspaceSession, id: RevId) -> Result<RevResult> {
                 match conflicts::materialize_tree_value(ws.repo().store(), &path, entry)
                     .block_on()?
                 {
-                    MaterializedTreeValue::FileConflict { contents, .. } => {
+                    MaterializedTreeValue::FileConflict(file) => {
                         let mut hunk_content = vec![];
                         conflicts::materialize_merge_result(
-                            &contents,
+                            &file.contents,
                             ConflictMarkerStyle::default(),
                             &mut hunk_content,
                         )?;
@@ -380,12 +380,14 @@ pub fn query_remotes(
         Some(branch_name) => all_remotes
             .into_iter()
             .filter(|remote_name| {
+                let remote_name_ref = RemoteNameBuf::from(remote_name);
+                let branch_name_ref = RefNameBuf::from(branch_name.clone());
                 let remote_ref_symbol = RemoteRefSymbol {
-                    name: &branch_name,
-                    remote: &remote_name,
+                    name: &branch_name_ref,
+                    remote: &remote_name_ref,
                 };
                 let remote_ref = ws.view().get_remote_bookmark(remote_ref_symbol);
-                !remote_ref.is_absent() && remote_ref.is_tracking()
+                !remote_ref.is_absent() && remote_ref.is_tracked()
             })
             .collect(),
         None => all_remotes,
@@ -454,7 +456,7 @@ fn get_value_contents(path: &RepoPath, value: MaterializedTreeValue) -> Result<V
         MaterializedTreeValue::Absent => Err(anyhow!(
             "Absent path {path:?} in diff should have been handled by caller"
         )),
-        MaterializedTreeValue::File { mut reader, .. } => {
+        MaterializedTreeValue::File(MaterializedFileValue { mut reader, .. }) => {
             let mut contents = vec![];
             reader.read_to_end(&mut contents)?;
 
@@ -468,10 +470,10 @@ fn get_value_contents(path: &RepoPath, value: MaterializedTreeValue) -> Result<V
         }
         MaterializedTreeValue::Symlink { target, .. } => Ok(target.into_bytes()),
         MaterializedTreeValue::GitSubmodule(_) => Ok("(submodule)".to_owned().into_bytes()),
-        MaterializedTreeValue::FileConflict { contents, .. } => {
+        MaterializedTreeValue::FileConflict(file) => {
             let mut hunk_content = vec![];
             conflicts::materialize_merge_result(
-                &contents,
+                &file.contents,
                 ConflictMarkerStyle::default(),
                 &mut hunk_content,
             )?;
