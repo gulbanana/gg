@@ -63,7 +63,7 @@ pub fn read_config(repo_path: &Path) -> Result<(UserSettings, RevsetAliasesMap)>
     default_layers.push(gg_layer);
     let mut raw_config = config_from_environment(default_layers);
 
-    let mut config_env = ConfigEnv::from_environment()?;
+    let mut config_env = ConfigEnv::from_environment();
 
     config_env.reload_user_config(&mut raw_config)?;
 
