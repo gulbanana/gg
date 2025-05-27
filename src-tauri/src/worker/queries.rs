@@ -14,7 +14,7 @@ use itertools::Itertools;
 use jj_cli::diff_util::{LineCompareMode, LineDiffOptions};
 use jj_lib::{
     backend::CommitId,
-    conflicts::{self, ConflictMarkerStyle, MaterializedTreeValue},
+    conflicts::{self, ConflictMarkerStyle, MaterializedFileValue, MaterializedTreeValue},
     diff::{
         find_line_ranges, CompareBytesExactly, CompareBytesIgnoreAllWhitespace,
         CompareBytesIgnoreWhitespaceAmount, Diff, DiffHunk, DiffHunkKind,
@@ -22,7 +22,7 @@ use jj_lib::{
     graph::{GraphEdge, GraphEdgeType, TopoGroupedGraphIterator},
     matchers::EverythingMatcher,
     merged_tree::{TreeDiffEntry, TreeDiffStream},
-    refs::RemoteRefSymbol,
+    ref_name::{RefNameBuf, RemoteNameBuf, RemoteRefSymbol},
     repo::Repo,
     repo_path::RepoPath,
     revset::{Revset, RevsetEvaluationError},
@@ -236,25 +236,22 @@ impl<'q, 'w> QuerySession<'q, 'w> {
                 padding,
                 lines,
             });
-            row = row + 1;
+            row += 1;
 
             // terminate any temporary stems created for missing edges
-            match next_missing
+            if let Some(slot) = next_missing
                 .take()
                 .and_then(|id| self.find_stem_for_commit(&id))
             {
-                Some(slot) => {
-                    if let Some(terminated_stem) = &self.state.stems[slot] {
-                        rows.last_mut().unwrap().lines.push(LogLine::ToMissing {
-                            indirect: terminated_stem.indirect,
-                            source: LogCoordinates(column, row - 1),
-                            target: LogCoordinates(slot, row),
-                        });
-                    }
-                    self.state.stems[slot] = None;
-                    row = row + 1;
+                if let Some(terminated_stem) = &self.state.stems[slot] {
+                    rows.last_mut().unwrap().lines.push(LogLine::ToMissing {
+                        indirect: terminated_stem.indirect,
+                        source: LogCoordinates(column, row - 1),
+                        target: LogCoordinates(slot, row),
+                    });
                 }
-                None => (),
+                self.state.stems[slot] = None;
+                row += 1;
             };
 
             if row == max {
@@ -308,10 +305,10 @@ pub fn query_revision(ws: &WorkspaceSession, id: RevId) -> Result<RevResult> {
                 match conflicts::materialize_tree_value(ws.repo().store(), &path, entry)
                     .block_on()?
                 {
-                    MaterializedTreeValue::FileConflict { contents, .. } => {
+                    MaterializedTreeValue::FileConflict(file) => {
                         let mut hunk_content = vec![];
                         conflicts::materialize_merge_result(
-                            &contents,
+                            &file.contents,
                             ConflictMarkerStyle::default(),
                             &mut hunk_content,
                         )?;
@@ -380,12 +377,14 @@ pub fn query_remotes(
         Some(branch_name) => all_remotes
             .into_iter()
             .filter(|remote_name| {
+                let remote_name_ref = RemoteNameBuf::from(remote_name);
+                let branch_name_ref = RefNameBuf::from(branch_name.clone());
                 let remote_ref_symbol = RemoteRefSymbol {
-                    name: &branch_name,
-                    remote: &remote_name,
+                    name: &branch_name_ref,
+                    remote: &remote_name_ref,
                 };
                 let remote_ref = ws.view().get_remote_bookmark(remote_ref_symbol);
-                !remote_ref.is_absent() && remote_ref.is_tracking()
+                !remote_ref.is_absent() && remote_ref.is_tracked()
             })
             .collect(),
         None => all_remotes,
@@ -440,11 +439,11 @@ fn get_value_hunks(
         let right_part = get_value_contents(path, right_value)?;
         get_unified_hunks(num_context_lines, &[], &right_part)
     } else if right_value.is_present() {
-        let left_part = get_value_contents(&path, left_value)?;
-        let right_part = get_value_contents(&path, right_value)?;
+        let left_part = get_value_contents(path, left_value)?;
+        let right_part = get_value_contents(path, right_value)?;
         get_unified_hunks(num_context_lines, &left_part, &right_part)
     } else {
-        let left_part = get_value_contents(&path, left_value)?;
+        let left_part = get_value_contents(path, left_value)?;
         get_unified_hunks(num_context_lines, &left_part, &[])
     }
 }
@@ -454,7 +453,7 @@ fn get_value_contents(path: &RepoPath, value: MaterializedTreeValue) -> Result<V
         MaterializedTreeValue::Absent => Err(anyhow!(
             "Absent path {path:?} in diff should have been handled by caller"
         )),
-        MaterializedTreeValue::File { mut reader, .. } => {
+        MaterializedTreeValue::File(MaterializedFileValue { mut reader, .. }) => {
             let mut contents = vec![];
             reader.read_to_end(&mut contents)?;
 
@@ -468,10 +467,10 @@ fn get_value_contents(path: &RepoPath, value: MaterializedTreeValue) -> Result<V
         }
         MaterializedTreeValue::Symlink { target, .. } => Ok(target.into_bytes()),
         MaterializedTreeValue::GitSubmodule(_) => Ok("(submodule)".to_owned().into_bytes()),
-        MaterializedTreeValue::FileConflict { contents, .. } => {
+        MaterializedTreeValue::FileConflict(file) => {
             let mut hunk_content = vec![];
             conflicts::materialize_merge_result(
-                &contents,
+                &file.contents,
                 ConflictMarkerStyle::default(),
                 &mut hunk_content,
             )?;

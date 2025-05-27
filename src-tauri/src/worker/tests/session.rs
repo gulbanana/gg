@@ -132,7 +132,7 @@ fn query_log_single() -> Result<()> {
     _ = rx_load.recv()??;
     let page = rx_query.recv()??;
     assert_eq!(1, page.rows.len());
-    assert_eq!(false, page.has_more);
+    assert!(!page.has_more);
 
     Ok(())
 }
@@ -166,11 +166,11 @@ fn query_log_multi() -> Result<()> {
 
     let page1 = rx_page1.recv()??;
     assert_eq!(7, page1.rows.len());
-    assert_eq!(true, page1.has_more);
+    assert!(page1.has_more);
 
     let page2 = rx_page2.recv()??;
     assert_eq!(5, page2.rows.len());
-    assert_eq!(false, page2.has_more);
+    assert!(!page2.has_more);
 
     Ok(())
 }
@@ -209,15 +209,15 @@ fn query_log_multi_restart() -> Result<()> {
 
     let page1 = rx_page1.recv()??;
     assert_eq!(7, page1.rows.len());
-    assert_eq!(true, page1.has_more);
+    assert!(page1.has_more);
 
     let page1b = rx_page1b.recv()??;
     assert_eq!(7, page1b.rows.len());
-    assert_eq!(true, page1b.has_more);
+    assert!(page1b.has_more);
 
     let page2 = rx_page2.recv()??;
     assert_eq!(5, page2.rows.len());
-    assert_eq!(false, page2.has_more);
+    assert!(!page2.has_more);
 
     Ok(())
 }
@@ -256,14 +256,14 @@ fn query_log_multi_interrupt() -> Result<()> {
 
     let page1 = rx_page1.recv()??;
     assert_eq!(7, page1.rows.len());
-    assert_eq!(true, page1.has_more);
+    assert!(page1.has_more);
 
     let rev = rx_rev.recv()??;
     assert!(matches!(rev, RevResult::Detail { header, .. } if header.is_working_copy));
 
     let page2 = rx_page2.recv()??;
     assert_eq!(5, page2.rows.len());
-    assert_eq!(false, page2.has_more);
+    assert!(!page2.has_more);
 
     Ok(())
 }
