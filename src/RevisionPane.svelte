@@ -131,7 +131,7 @@
             bind:value={fullDescription}
             on:dragenter={dragOverWidget}
             on:dragover={dragOverWidget}
-            on:keypress={(ev) => {
+            on:keydown={(ev) => {
                 if (descriptionChanged && ev.key === "Enter" && (ev.metaKey || ev.ctrlKey)) {
                     updateDescription();
                 }
