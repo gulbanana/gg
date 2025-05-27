@@ -5,7 +5,7 @@ use std::{
 };
 
 use anyhow::{anyhow, Context, Result};
-use jj_cli::config::ConfigEnv;
+use jj_cli::{config::ConfigEnv, ui::Ui};
 use jj_lib::config::{ConfigNamePathBuf, ConfigSource};
 
 use super::{
@@ -262,10 +262,13 @@ impl Session for WorkspaceSession<'_> {
                 }
                 SessionEvent::WriteConfigArray { scope, key, values } => {
                     let name: ConfigNamePathBuf = key.iter().collect();
-                    let config_env = ConfigEnv::from_environment()?;
+                    let config_env = ConfigEnv::from_environment(&Ui::null());
                     let path = match scope {
                         ConfigSource::User => config_env
-                            .user_config_path()
+                            .user_config_paths()
+                            // TODO: If there are multiple config paths, is there
+                            // a more intelligent way to pick one?
+                            .next()
                             .ok_or_else(|| anyhow!("No user config path found to edit"))
                             .map(|p| p.to_path_buf()),
                         ConfigSource::Repo => Ok(self.workspace.repo_path().join("config.toml")),
