@@ -6,9 +6,9 @@ use std::{
     ops::Range,
 };
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 
-use futures_util::{try_join, StreamExt};
+use futures_util::{StreamExt, try_join};
 use gix::bstr::ByteVec;
 use itertools::Itertools;
 use jj_cli::diff_util::{LineCompareMode, LineDiffOptions};
@@ -16,8 +16,8 @@ use jj_lib::{
     backend::CommitId,
     conflicts::{self, ConflictMarkerStyle, MaterializedTreeValue},
     diff::{
-        find_line_ranges, CompareBytesExactly, CompareBytesIgnoreAllWhitespace,
-        CompareBytesIgnoreWhitespaceAmount, Diff, DiffHunk, DiffHunkKind,
+        CompareBytesExactly, CompareBytesIgnoreAllWhitespace, CompareBytesIgnoreWhitespaceAmount,
+        Diff, DiffHunk, DiffHunkKind, find_line_ranges,
     },
     graph::{GraphEdge, GraphEdgeType, TopoGroupedGraphIterator},
     matchers::EverythingMatcher,

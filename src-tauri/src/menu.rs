@@ -1,16 +1,15 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 #[cfg(target_os = "macos")]
 use tauri::menu::AboutMetadata;
 use tauri::{
-    menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu},
     AppHandle, Emitter, Manager, Window, Wry,
+    menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu},
 };
 use tauri_plugin_dialog::{DialogExt, FilePath};
 
 use crate::{
-    handler,
+    AppState, handler,
     messages::{Operand, RevHeader, StoreRef},
-    AppState,
 };
 
 pub fn build_main(app_handle: &AppHandle) -> tauri::Result<Menu<Wry>> {

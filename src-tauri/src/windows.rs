@@ -1,17 +1,17 @@
 use std::path::Path;
 
-use anyhow::{anyhow, Result};
-use windows::core::{w, Interface, BSTR, HSTRING, PROPVARIANT, PWSTR};
+use anyhow::{Result, anyhow};
 use windows::Win32::Foundation::MAX_PATH;
-use windows::Win32::System::Com::{CoCreateInstance, CLSCTX_INPROC_SERVER};
-use windows::Win32::System::Console::{AttachConsole, ATTACH_PARENT_PROCESS};
+use windows::Win32::System::Com::{CLSCTX_INPROC_SERVER, CoCreateInstance};
+use windows::Win32::System::Console::{ATTACH_PARENT_PROCESS, AttachConsole};
 use windows::Win32::UI::Shell::Common::{IObjectArray, IObjectCollection};
 use windows::Win32::UI::Shell::PropertiesSystem::{
-    IPropertyStore, PSGetPropertyKeyFromName, PROPERTYKEY,
+    IPropertyStore, PROPERTYKEY, PSGetPropertyKeyFromName,
 };
 use windows::Win32::UI::Shell::{
     DestinationList, EnumerableObjectCollection, ICustomDestinationList, IShellLinkW, ShellLink,
 };
+use windows::core::{BSTR, HSTRING, Interface, PROPVARIANT, PWSTR, w};
 
 pub fn reattach_console() {
     // safety: FFI

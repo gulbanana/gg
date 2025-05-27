@@ -11,17 +11,17 @@ mod worker;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::mpsc::{channel, Sender};
 use std::sync::Mutex;
+use std::sync::mpsc::{Sender, channel};
 use std::thread::{self, JoinHandle};
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use clap::Parser;
 use jj_lib::config::ConfigSource;
 use log::LevelFilter;
 use tauri::menu::Menu;
-use tauri::{ipc::InvokeError, Manager};
 use tauri::{Emitter, Listener, State, Window, WindowEvent, Wry};
+use tauri::{Manager, ipc::InvokeError};
 use tauri_plugin_window_state::StateFlags;
 
 use messages::{

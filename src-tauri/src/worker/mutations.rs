@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use indexmap::IndexMap;
 use itertools::Itertools;
 use jj_lib::{
@@ -20,7 +20,7 @@ use jj_lib::{
     str_util::StringPattern,
 };
 
-use super::{gui_util::WorkspaceSession, Mutation};
+use super::{Mutation, gui_util::WorkspaceSession};
 use crate::messages::{
     AbandonRevisions, BackoutRevisions, CheckoutRevision, CopyChanges, CreateRef, CreateRevision,
     DeleteRef, DescribeRevision, DuplicateRevisions, GitFetch, GitPush, InsertRevision,
@@ -812,7 +812,7 @@ impl Mutation for GitPush {
                         };
                         match classify_branch_push(branch_name, &remote_name, targets) {
                             Err(message) => {
-                                return Ok(MutationResult::PreconditionError { message })
+                                return Ok(MutationResult::PreconditionError { message });
                             }
                             Ok(None) => (),
                             Ok(Some(update)) => {

@@ -8,7 +8,7 @@ use std::{
     fs::{self, File},
     path::PathBuf,
 };
-use tempfile::{tempdir, TempDir};
+use tempfile::{TempDir, tempdir};
 use zip::ZipArchive;
 
 mod mutations;
@@ -77,10 +77,12 @@ fn wc_path_is_visible() -> Result<()> {
         .path_value(RepoPath::from_internal_string("a.txt"))?;
 
     assert!(value.is_resolved());
-    assert!(value
-        .first()
-        .as_ref()
-        .is_some_and(|x| matches!(x, TreeValue::File { .. })));
+    assert!(
+        value
+            .first()
+            .as_ref()
+            .is_some_and(|x| matches!(x, TreeValue::File { .. }))
+    );
 
     Ok(())
 }
@@ -140,10 +142,12 @@ fn transaction_snapshot_path_is_visible() -> Result<()> {
         .path_value(RepoPath::from_internal_string("new.txt"))?;
 
     assert!(value.is_resolved());
-    assert!(value
-        .first()
-        .as_ref()
-        .is_some_and(|x| matches!(x, TreeValue::File { .. })));
+    assert!(
+        value
+            .first()
+            .as_ref()
+            .is_some_and(|x| matches!(x, TreeValue::File { .. }))
+    );
 
     Ok(())
 }

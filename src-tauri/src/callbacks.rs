@@ -12,9 +12,9 @@ use jj_lib::{git::RemoteCallbacks, repo::MutableRepo};
 use tauri::{Emitter, Manager, Window};
 
 use crate::{
+    AppState,
     messages::{InputField, InputRequest},
     worker::WorkerCallbacks,
-    AppState,
 };
 
 pub struct FrontendCallbacks(pub Window);
