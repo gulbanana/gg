@@ -450,6 +450,7 @@ impl WorkspaceSession<'_> {
             status: self.format_status(),
             theme_override: self.data.settings.ui_theme_override(),
             mark_unpushed_branches: self.data.settings.ui_mark_unpushed_bookmarks(),
+            font_size: self.data.settings.ui_font_size(),
         })
     }
 

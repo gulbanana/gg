@@ -64,6 +64,11 @@ pub enum SessionEvent {
         key: Vec<String>,
         values: Vec<String>,
     },
+    WriteConfigValue {
+        scope: ConfigSource,
+        key: Vec<String>,
+        value: String,
+    },
 }
 
 /// transitions for a workspace session
@@ -276,6 +281,41 @@ impl Session for WorkspaceSession<'_> {
                             toml_edit::Value::Array(values.iter().collect());
                         let mut file = jj_lib::config::ConfigFile::load_or_empty(scope, &path)?;
                         file.set_value(&name, toml_array)?;
+                        file.save()?;
+                        Ok(())
+                    });
+
+                    handler::optional!(path);
+
+                    (self.data.settings, self.data.aliases_map) =
+                        read_config(self.workspace.repo_path())?;
+                }
+                SessionEvent::WriteConfigValue { scope, key, value } => {
+                    let name: ConfigNamePathBuf = key.iter().collect();
+                    let config_env = ConfigEnv::from_environment()?;
+                    let path = match scope {
+                        ConfigSource::User => config_env
+                            .user_config_path()
+                            .ok_or_else(|| anyhow!("No user config path found to edit"))
+                            .map(|p| p.to_path_buf()),
+                        ConfigSource::Repo => Ok(self.workspace.repo_path().join("config.toml")),
+                        _ => Err(anyhow!("Can't get path for config source {scope:?}")),
+                    }
+                    .and_then(|path| {
+                        // try to parse as different types
+                        let toml_value: toml_edit::Value = if let Ok(int_val) = value.parse::<i64>()
+                        {
+                            int_val.into()
+                        } else if let Ok(float_val) = value.parse::<f64>() {
+                            float_val.into()
+                        } else if let Ok(bool_val) = value.parse::<bool>() {
+                            bool_val.into()
+                        } else {
+                            value.into() // default to string
+                        };
+
+                        let mut file = jj_lib::config::ConfigFile::load_or_empty(scope, &path)?;
+                        file.set_value(&name, toml_value)?;
                         file.save()?;
                         Ok(())
                     });

@@ -2,7 +2,7 @@
     import type { RevId } from "./messages/RevId";
     import type { RevResult } from "./messages/RevResult";
     import type { RepoConfig } from "./messages/RepoConfig";
-    import { type Query, query, trigger, onEvent } from "./ipc.js";
+    import { type Query, query, trigger, onEvent, writeFontSize } from "./ipc.js";
     import {
         currentMutation,
         currentContext,
@@ -22,6 +22,7 @@
     import StatusBar from "./shell/StatusBar.svelte";
     import ModalOverlay from "./shell/ModalOverlay.svelte";
     import ErrorDialog from "./shell/ErrorDialog.svelte";
+    import OptionsDialog from "./shell/OptionsDialog.svelte";
     import { onMount, setContext } from "svelte";
     import IdSpan from "./controls/IdSpan.svelte";
     import InputDialog from "./shell/InputDialog.svelte";
@@ -81,6 +82,8 @@
         $revisionSelectEvent = undefined;
         if (config.type == "Workspace") {
             settings.markUnpushedBranches = config.mark_unpushed_branches;
+            settings.fontSize = config.font_size;
+            applyFontSize(settings.fontSize);
             $repoStatusEvent = config.status;
         }
     }
@@ -133,6 +136,36 @@
         if (event === "options") {
             showOptionsDialog = true;
         }
+    }
+
+    async function handleSaveOptions(event: CustomEvent<Settings>) {
+        await saveSettings(event.detail);
+        showOptionsDialog = false;
+    }
+
+    function handleCancelOptions() {
+        showOptionsDialog = false;
+    }
+
+    // save settings to jj config
+    async function saveSettings(newSettings: Settings) {
+        try {
+            // save font size to jj config
+            const success = await writeFontSize(newSettings.fontSize);
+            if (success) {
+                settings = newSettings;
+                applyFontSize(settings.fontSize);
+            } else {
+                console.error("Failed to save font size to jj config");
+            }
+        } catch (error) {
+            console.error("Failed to save settings to jj config:", error);
+        }
+    }
+
+    // apply font size to page
+    function applyFontSize(fontSize: number) {
+        document.documentElement.style.setProperty("--app-font-size", `${fontSize}px`);
     }
 </script>
 
@@ -199,7 +232,11 @@
 
         <StatusBar {target} />
 
-        {#if $currentInput}
+        {#if showOptionsDialog}
+            <ModalOverlay>
+                <OptionsDialog {settings} on:save={handleSaveOptions} on:cancel={handleCancelOptions} />
+            </ModalOverlay>
+        {:else if $currentInput}
             <ModalOverlay>
                 <InputDialog
                     title={$currentInput.title}

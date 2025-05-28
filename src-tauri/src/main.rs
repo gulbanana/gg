@@ -160,7 +160,8 @@ fn main() -> Result<()> {
             move_ref,
             git_push,
             git_fetch,
-            undo_operation
+            undo_operation,
+            write_font_size
         ])
         .menu(menu::build_main)
         .setup(|app| {
@@ -645,4 +646,21 @@ fn with_recent_workspaces(
     })?;
 
     Ok(())
+}
+
+#[tauri::command(async)]
+fn write_font_size(
+    window: Window,
+    app_state: State<AppState>,
+    font_size: usize,
+) -> Result<(), InvokeError> {
+    let session_tx: Sender<SessionEvent> = app_state.get_session(window.label());
+
+    session_tx
+        .send(SessionEvent::WriteConfigValue {
+            scope: ConfigSource::User,
+            key: vec!["gg".to_string(), "ui".to_string(), "font-size".to_string()],
+            value: font_size.to_string(),
+        })
+        .map_err(InvokeError::from_error)
 }

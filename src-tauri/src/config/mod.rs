@@ -14,6 +14,7 @@ pub trait GGSettings {
     fn query_auto_snapshot(&self) -> Option<bool>;
     fn ui_theme_override(&self) -> Option<String>;
     fn ui_mark_unpushed_bookmarks(&self) -> bool;
+    fn ui_font_size(&self) -> usize;
     #[allow(dead_code)]
     fn ui_recent_workspaces(&self) -> Vec<String>;
 }
@@ -41,6 +42,10 @@ impl GGSettings for UserSettings {
             self.get_bool("gg.ui.mark-unpushed-branches")
                 .unwrap_or(true),
         )
+    }
+
+    fn ui_font_size(&self) -> usize {
+        self.get_int("gg.ui.font-size").unwrap_or(16) as usize
     }
 
     fn ui_recent_workspaces(&self) -> Vec<String> {
