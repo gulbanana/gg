@@ -126,6 +126,9 @@ pub fn build_main(app_handle: &AppHandle) -> tauri::Result<Menu<Wry>> {
         ],
     )?;
 
+    let options_item =
+        MenuItem::with_id(app_handle, "menu_options", "Options", true, None::<&str>)?;
+
     let menu = Menu::with_items(
         app_handle,
         &[
@@ -148,6 +151,7 @@ pub fn build_main(app_handle: &AppHandle) -> tauri::Result<Menu<Wry>> {
             &repo_menu,
             &revision_menu,
             &edit_menu,
+            &options_item,
         ],
     )?;
 
@@ -472,6 +476,7 @@ pub fn handle_event(window: &Window, event: MenuEvent) -> Result<()> {
         "branch_fetch_single" => window.emit("gg://context/branch", "fetch-single")?,
         "branch_rename" => window.emit("gg://context/branch", "rename")?,
         "branch_delete" => window.emit("gg://context/branch", "delete")?,
+        "menu_options" => window.emit("gg://menu/options", "options")?,
         _ => (),
     };
 
