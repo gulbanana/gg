@@ -248,7 +248,7 @@
         height: 30px;
         width: 100%;
         display: grid;
-        grid-template-columns: 63px auto auto 1fr auto;
+        grid-template-columns: min-content auto auto 1fr auto;
         align-items: center;
         gap: 6px;
         padding: 0 3px;
@@ -261,7 +261,7 @@
 
     .parent {
         display: grid;
-        grid-template-columns: 63px 1fr;
+        grid-template-columns: min-content 1fr;
         align-items: baseline;
         gap: 6px;
     }

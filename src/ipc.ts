@@ -154,3 +154,16 @@ export function getInput<const T extends string>(title: string, detail: string, 
         });
     });
 }
+
+/**
+ * save font size setting
+ */
+export async function writeFontSize(fontSize: number): Promise<boolean> {
+    try {
+        await invoke<void>("write_font_size", { fontSize });
+        return true;
+    } catch (error: any) {
+        console.log(error);
+        return false;
+    }
+}

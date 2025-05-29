@@ -28,6 +28,7 @@
 
 #shell,
 #shell.light {
+  font-size: var(--app-font-size);
   /* catppuccin latte */
   --ctp-crust: var(--ctp-latte-crust);
   --ctp-mantle: var(--ctp-latte-mantle);
@@ -61,6 +62,7 @@
 }
 
 #shell.dark {
+  font-size: var(--app-font-size);
   --ctp-crust: var(--ctp-macchiato-crust);
   --ctp-mantle: var(--ctp-macchiato-mantle);
   --ctp-base: var(--ctp-macchiato-base);
@@ -94,6 +96,7 @@
 
 @media (prefers-color-scheme: dark) {
   #shell {
+    font-size: var(--app-font-size);
     --ctp-crust: var(--ctp-macchiato-crust);
     --ctp-mantle: var(--ctp-macchiato-mantle);
     --ctp-base: var(--ctp-macchiato-base);
