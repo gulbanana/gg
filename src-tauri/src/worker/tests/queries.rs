@@ -1,6 +1,6 @@
 use super::{mkrepo, revs};
 use crate::messages::{RevHeader, RevResult, StoreRef};
-use crate::worker::{queries, WorkerSession};
+use crate::worker::{WorkerSession, queries};
 use anyhow::Result;
 use assert_matches::assert_matches;
 

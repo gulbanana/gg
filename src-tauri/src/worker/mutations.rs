@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use indexmap::IndexMap;
 use itertools::Itertools;
 use jj_lib::{
@@ -20,7 +20,7 @@ use jj_lib::{
     str_util::StringPattern,
 };
 
-use super::{gui_util::WorkspaceSession, Mutation};
+use super::{Mutation, gui_util::WorkspaceSession};
 use crate::messages::{
     AbandonRevisions, BackoutRevisions, CheckoutRevision, CopyChanges, CreateRef, CreateRevision,
     DeleteRef, DescribeRevision, DuplicateRevisions, GitFetch, GitPush, InsertRevision,
@@ -770,7 +770,7 @@ impl Mutation for GitPush {
         let mut remote_branch_updates: Vec<(&str, Vec<(String, refs::BookmarkPushUpdate)>)> =
             Vec::new();
         let remote_branch_refs: Vec<_> = match &*self {
-            GitPush::AllBookmarks { ref remote_name } => {
+            GitPush::AllBookmarks { remote_name } => {
                 let mut branch_updates = Vec::new();
                 for (branch_name, targets) in ws.view().local_remote_bookmarks(&remote_name) {
                     if !targets.remote_ref.is_tracking() {
@@ -812,7 +812,7 @@ impl Mutation for GitPush {
                         };
                         match classify_branch_push(branch_name, &remote_name, targets) {
                             Err(message) => {
-                                return Ok(MutationResult::PreconditionError { message })
+                                return Ok(MutationResult::PreconditionError { message });
                             }
                             Ok(None) => (),
                             Ok(Some(update)) => {
@@ -827,8 +827,8 @@ impl Mutation for GitPush {
                 remote_branch_refs
             }
             GitPush::RemoteBookmark {
-                ref remote_name,
-                ref branch_ref,
+                remote_name,
+                branch_ref,
             } => {
                 let branch_name = branch_ref.as_branch()?;
                 let local_target = ws.view().get_local_bookmark(branch_name);

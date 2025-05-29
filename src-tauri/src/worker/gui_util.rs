@@ -10,7 +10,7 @@ use std::{
     sync::Arc,
 };
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use chrono::TimeZone;
 use git2::Repository;
 use itertools::Itertools;
@@ -48,7 +48,7 @@ use thiserror::Error;
 
 use super::WorkerSession;
 use crate::{
-    config::{read_config, GGSettings},
+    config::{GGSettings, read_config},
     messages::{self, RevId},
 };
 
@@ -278,7 +278,7 @@ impl WorkspaceSession<'_> {
         let change_revset = match self.evaluate_revset_str(&id.change.hex) {
             Ok(revset) => revset,
             Err(RevsetError::Resolution(RevsetResolutionError::NoSuchRevision { .. })) => {
-                return Ok(None)
+                return Ok(None);
             }
             Err(err) => return Err(err),
         };

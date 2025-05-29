@@ -1,20 +1,20 @@
 use std::{
-    panic::{catch_unwind, AssertUnwindSafe},
+    panic::{AssertUnwindSafe, catch_unwind},
     path::PathBuf,
     sync::mpsc::{Receiver, Sender},
 };
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use jj_cli::config::ConfigEnv;
 use jj_lib::config::{ConfigNamePathBuf, ConfigSource};
 
 use super::{
+    Mutation, WorkerSession,
     gui_util::WorkspaceSession,
     queries::{self, QueryState},
-    Mutation, WorkerSession,
 };
 use crate::{
-    config::{read_config, GGSettings},
+    config::{GGSettings, read_config},
     handler, messages,
 };
 

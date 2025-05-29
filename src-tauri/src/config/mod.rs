@@ -1,7 +1,7 @@
 use std::path::Path;
 
-use anyhow::{anyhow, Result};
-use jj_cli::config::{config_from_environment, default_config_layers, ConfigEnv};
+use anyhow::{Result, anyhow};
+use jj_cli::config::{ConfigEnv, config_from_environment, default_config_layers};
 use jj_lib::{
     config::{ConfigGetError, ConfigLayer, ConfigNamePathBuf, ConfigSource, StackedConfig},
     revset::RevsetAliasesMap,

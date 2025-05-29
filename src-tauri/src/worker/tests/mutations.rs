@@ -5,7 +5,7 @@ use crate::{
         DuplicateRevisions, InsertRevision, MoveChanges, MoveSource, MutationResult, RevResult,
         TreePath,
     },
-    worker::{queries, Mutation, WorkerSession},
+    worker::{Mutation, WorkerSession, queries},
 };
 use anyhow::Result;
 use assert_matches::assert_matches;
