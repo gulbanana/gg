@@ -5,9 +5,9 @@ log-page-size = 1000
 # Some query settings will default to false instead of true if a repo has this many commits.
 large-repo-heuristic = 100000
 
-# Take a snapshot when the window gains focus; slow in large checkouts. 
-# When disabled, snapshots will still be created if you run commands. 
-# auto-snapshot = 
+# Take a snapshot when the window gains focus; slow in large checkouts.
+# When disabled, snapshots will still be created if you run commands.
+# auto-snapshot =
 
 [gg.ui]
 # Stores a list of recently opened directories for shell integration
@@ -15,6 +15,9 @@ recent-workspaces = []
 
 # When set, bookmarks that are local-only or remote-only will be visually indicated.
 mark-unpushed-bookmarks = true
+
+# Font size for the UI in pixels (range: 8-30)
+font-size = 16
 
 # "light" or "dark". If not set, your OS settings will be used.
 # theme-override =

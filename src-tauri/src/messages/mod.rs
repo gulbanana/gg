@@ -85,6 +85,7 @@ pub enum RepoConfig {
         status: RepoStatus,
         theme_override: Option<String>,
         mark_unpushed_branches: bool,
+        font_size: usize,
     },
     #[allow(dead_code)] // used by frontend
     TimeoutError,
