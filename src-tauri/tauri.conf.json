@@ -4,7 +4,7 @@
   "identifier": "au.gulbanana.gg",
   "build": {
     "beforeDevCommand": "npm run dev",
-    "devUrl": "http://localhost:1420",
+    "devUrl": "http://localhost:6973",
     "beforeBuildCommand": "npm run build",
     "frontendDist": "../dist"
   },
