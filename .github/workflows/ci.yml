@@ -1,45 +1,70 @@
-name: 'ci'
+name: "ci"
 
 on:
   push:
     branches:
-      - master
+      - "*"
+  pull_request:
+    branches:
+      - "*"
 
 jobs:
-  svelte-check:
+  frontend-check:
     runs-on: "ubuntu-22.04"
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-            node-version: '20'
-            cache: 'npm'
-      
-      - name: install packages
-        run: npm install --package-lock=false 
+          node-version: "20"
+          cache: "npm"
 
-      - name: run check
+      - name: install packages
+        run: npm install --package-lock=false
+
+      - name: run svelte check
         run: npm run check
 
-  cargo-test:
-    runs-on: "ubuntu-22.04"
-    env:
-        RUST_BACKTRACE: "1"
+      - name: check frontend formatting
+        run: npx prettier --check "**/*.{js,ts,svelte,json,css,md,yml}" "!package-lock.json" "!src-tauri/gen/**"
+
+  rust-check:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+          - os: macos-latest
+            target: x86_64-apple-darwin
     steps:
       - uses: actions/checkout@v4
 
+      # Linux dependencies
       - uses: awalsh128/cache-apt-pkgs-action@v1
+        if: matrix.os == 'ubuntu-22.04'
         with:
           packages: libgtk-3-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
           version: 1.0
-            
+
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
 
       - uses: Swatinem/rust-cache@v2
         with:
-            workspaces: "src-tauri"
+          workspaces: "src-tauri"
+          key: ${{ matrix.target }}
+
+      # check rust formatting only once
+      - name: check rust formatting
+        if: matrix.os == 'ubuntu-22.04'
+        run: cd src-tauri && cargo fmt --check
+
+      - name: check rust linting
+        run: cd src-tauri && cargo clippy -- -D warnings
 
       - name: run tests
         run: cd src-tauri && cargo test
-
