@@ -3,4 +3,8 @@ import type { CommitId } from "./CommitId";
 import type { RevId } from "./RevId";
 import type { TreePath } from "./TreePath";
 
-export interface CopyChanges { from_id: CommitId, to_id: RevId, paths: Array<TreePath>, }
+export interface CopyChanges {
+    from_id: CommitId;
+    to_id: RevId;
+    paths: Array<TreePath>;
+}

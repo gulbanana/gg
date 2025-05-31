@@ -9,7 +9,13 @@
     import type { UndoOperation } from "../messages/UndoOperation";
     import type { RichHint } from "../mutators/BinaryMutator";
     import BinaryMutator from "../mutators/BinaryMutator";
-    import { currentSource, currentTarget, hasModal, repoConfigEvent, repoStatusEvent } from "../stores";
+    import {
+        currentSource,
+        currentTarget,
+        hasModal,
+        repoConfigEvent,
+        repoStatusEvent,
+    } from "../stores";
     import BranchSpan from "../controls/BranchSpan.svelte";
 
     export let target: boolean;
@@ -61,7 +67,9 @@
     <div id="status-bar" class="repo-bar" inert={$hasModal}>
         <div class="substatus">
             <span id="status-workspace">
-                {$repoConfigEvent?.type == "Workspace" ? $repoConfigEvent.absolute_path : "No workspace"}
+                {$repoConfigEvent?.type == "Workspace"
+                    ? $repoConfigEvent.absolute_path
+                    : "No workspace"}
             </span>
         </div>
         <div id="status-remotes" class="substatus">
@@ -85,7 +93,10 @@
                     ? ""
                     : ($repoStatusEvent?.operation_description ?? "no operation")}
             </span>
-            <ActionWidget tip="undo latest operation" onClick={onUndo} disabled={$repoConfigEvent?.type != "Workspace"}>
+            <ActionWidget
+                tip="undo latest operation"
+                onClick={onUndo}
+                disabled={$repoConfigEvent?.type != "Workspace"}>
                 <Icon name="rotate-ccw" /> Undo
             </ActionWidget>
         </div>

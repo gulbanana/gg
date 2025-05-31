@@ -6,7 +6,10 @@ import { currentInput, currentMutation, repoStatusEvent, revisionSelectEvent } f
 import { onMount } from "svelte";
 import { resolve } from "@tauri-apps/api/path";
 
-export type Query<T> = { type: "wait" } | { type: "data", value: T } | { type: "error", message: string };
+export type Query<T> =
+    | { type: "wait" }
+    | { type: "data"; value: T }
+    | { type: "error"; message: string };
 
 export interface Settable<T> extends Readable<T> {
     set: (value: T) => void;
@@ -19,7 +22,7 @@ export async function event<T>(name: string, initialValue: T): Promise<Settable<
     const subscribers = new Set<Subscriber<T>>();
     let lastValue: T = initialValue;
 
-    const unlisten = await listen<T>(name, event => {
+    const unlisten = await listen<T>(name, (event) => {
         for (let subscriber of subscribers) {
             subscriber(event.payload);
         }
@@ -41,8 +44,8 @@ export async function event<T>(name: string, initialValue: T): Promise<Settable<
         set(value: T) {
             lastValue = value;
             emit(name, value);
-        }
-    }
+        },
+    };
 }
 
 /**
@@ -50,7 +53,7 @@ export async function event<T>(name: string, initialValue: T): Promise<Settable<
  */
 export function onEvent<T>(name: string, callback: (payload: T) => void) {
     onMount(() => {
-        let promise = listen<T>(name, e => callback(e.payload));
+        let promise = listen<T>(name, (e) => callback(e.payload));
         return () => {
             promise.then((unlisten) => {
                 unlisten();
@@ -64,10 +67,16 @@ export function onEvent<T>(name: string, callback: (payload: T) => void) {
  */
 type ImmediateQuery<T> = Extract<Query<T>, { type: "data" } | { type: "error" }>;
 type DelayedQuery<T> = Extract<Query<T>, { type: "wait" }>;
-export async function query<T>(command: string, request: InvokeArgs | null, onWait?: (q: DelayedQuery<T>) => void): Promise<ImmediateQuery<T>> {
+export async function query<T>(
+    command: string,
+    request: InvokeArgs | null,
+    onWait?: (q: DelayedQuery<T>) => void
+): Promise<ImmediateQuery<T>> {
     try {
         if (onWait) {
-            let fetch = invoke<T>(command, request ?? undefined).then(value => ({ type: "data", value } as ImmediateQuery<T>));
+            let fetch = invoke<T>(command, request ?? undefined).then(
+                (value) => ({ type: "data", value }) as ImmediateQuery<T>
+            );
             let result = await Promise.race([fetch, delay<T>()]);
             if (result.type == "wait") {
                 onWait(result);
@@ -91,8 +100,7 @@ export function trigger(command: string, request?: InvokeArgs) {
     (async () => {
         try {
             await invoke(command, request);
-        }
-        catch (error: any) {
+        } catch (error: any) {
             console.log(error);
             currentMutation.set({ type: "error", message: error.toString() });
         }
@@ -106,12 +114,19 @@ export async function mutate<T>(command: string, mutation: T): Promise<boolean> 
     try {
         // set a wait state then the data state, unless the data comes in hella fast
         let fetch = invoke<MutationResult>(command, { mutation });
-        let result = await Promise.race([fetch.then(r => Promise.resolve<Query<MutationResult>>({ type: "data", value: r })), delay<MutationResult>()]);
+        let result = await Promise.race([
+            fetch.then((r) => Promise.resolve<Query<MutationResult>>({ type: "data", value: r })),
+            delay<MutationResult>(),
+        ]);
         currentMutation.set(result);
         let value = await fetch;
 
         // succeeded; dismiss modals
-        if (value.type == "Updated" || value.type == "UpdatedSelection" || value.type == "Unchanged") {
+        if (
+            value.type == "Updated" ||
+            value.type == "UpdatedSelection" ||
+            value.type == "Unchanged"
+        ) {
             if (value.type != "Unchanged") {
                 repoStatusEvent.set(value.new_status);
                 if (value.type == "UpdatedSelection") {
@@ -141,16 +156,25 @@ export function delay<T>(): Promise<Query<T>> {
     });
 }
 
-export function getInput<const T extends string>(title: string, detail: string, fields: T[] | { label: T, choices: string[] }[]): Promise<{ [K in T]: string } | null> {
-    return new Promise(resolve => {
+export function getInput<const T extends string>(
+    title: string,
+    detail: string,
+    fields: T[] | { label: T; choices: string[] }[]
+): Promise<{ [K in T]: string } | null> {
+    return new Promise((resolve) => {
         if (typeof fields[0] == "string") {
-            fields = fields.map(f => ({ label: f, choices: [] } as { label: T, choices: string[] }));
+            fields = fields.map(
+                (f) => ({ label: f, choices: [] }) as { label: T; choices: string[] }
+            );
         }
         currentInput.set({
-            title, detail, fields: fields as { label: T, choices: string[] }[], callback: response => {
+            title,
+            detail,
+            fields: fields as { label: T; choices: string[] }[],
+            callback: (response) => {
                 currentInput.set(null);
-                resolve(response.cancel ? null : response.fields as any);
-            }
+                resolve(response.cancel ? null : (response.fields as any));
+            },
         });
     });
 }

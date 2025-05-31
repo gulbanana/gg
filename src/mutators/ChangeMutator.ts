@@ -34,7 +34,7 @@ export default class ChangeMutator {
         mutate<MoveChanges>("move_changes", {
             from_id: this.#revision.id,
             to_id: this.#revision.parent_ids[0],
-            paths: [this.#path]
+            paths: [this.#path],
         });
     };
 
@@ -42,7 +42,7 @@ export default class ChangeMutator {
         mutate<CopyChanges>("copy_changes", {
             from_id: this.#revision.parent_ids[0],
             to_id: this.#revision.id,
-            paths: [this.#path]
+            paths: [this.#path],
         });
     };
 }

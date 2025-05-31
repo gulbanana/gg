@@ -134,7 +134,7 @@ impl Mutation for CheckoutRevision {
 }
 
 impl Mutation for CreateRevision {
-    fn execute<'a>(self: Box<Self>, ws: &'a mut WorkspaceSession) -> Result<MutationResult> {
+    fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction()?;
 
         let parents_revset = ws.evaluate_revset_changes(
@@ -255,7 +255,7 @@ impl Mutation for DuplicateRevisions {
 }
 
 impl Mutation for InsertRevision {
-    fn execute<'a>(self: Box<Self>, ws: &'a mut WorkspaceSession) -> Result<MutationResult> {
+    fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction()?;
 
         let target = ws
@@ -294,7 +294,7 @@ impl Mutation for InsertRevision {
 }
 
 impl Mutation for MoveRevision {
-    fn execute<'a>(self: Box<Self>, ws: &'a mut WorkspaceSession) -> Result<MutationResult> {
+    fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction()?;
 
         let target = ws.resolve_single_change(&self.id)?;
@@ -330,7 +330,7 @@ impl Mutation for MoveRevision {
 }
 
 impl Mutation for MoveSource {
-    fn execute<'a>(self: Box<Self>, ws: &'a mut WorkspaceSession) -> Result<MutationResult> {
+    fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction()?;
 
         let target = ws.resolve_single_change(&self.id)?;
@@ -772,12 +772,12 @@ impl Mutation for GitPush {
         let remote_branch_refs: Vec<_> = match &*self {
             GitPush::AllBookmarks { ref remote_name } => {
                 let mut branch_updates = Vec::new();
-                for (branch_name, targets) in ws.view().local_remote_bookmarks(&remote_name) {
+                for (branch_name, targets) in ws.view().local_remote_bookmarks(remote_name) {
                     if !targets.remote_ref.is_tracking() {
                         continue;
                     }
 
-                    match classify_branch_push(branch_name, &remote_name, targets) {
+                    match classify_branch_push(branch_name, remote_name, targets) {
                         Err(message) => return Ok(MutationResult::PreconditionError { message }),
                         Ok(None) => (),
                         Ok(Some(update)) => branch_updates.push((branch_name.to_owned(), update)),
@@ -785,7 +785,7 @@ impl Mutation for GitPush {
                 }
                 remote_branch_updates.push((remote_name, branch_updates));
 
-                ws.view().remote_bookmarks(&remote_name).collect()
+                ws.view().remote_bookmarks(remote_name).collect()
             }
             GitPush::AllRemotes { branch_ref } => {
                 let branch_name = branch_ref.as_branch()?;
@@ -810,7 +810,7 @@ impl Mutation for GitPush {
                             local_target: ws.view().get_local_bookmark(branch_name),
                             remote_ref,
                         };
-                        match classify_branch_push(branch_name, &remote_name, targets) {
+                        match classify_branch_push(branch_name, remote_name, targets) {
                             Err(message) => {
                                 return Ok(MutationResult::PreconditionError { message })
                             }
@@ -833,8 +833,8 @@ impl Mutation for GitPush {
                 let branch_name = branch_ref.as_branch()?;
                 let local_target = ws.view().get_local_bookmark(branch_name);
                 let remote_ref_symbol = RemoteRefSymbol {
-                    name: &branch_name,
-                    remote: &remote_name,
+                    name: branch_name,
+                    remote: remote_name,
                 };
                 let remote_ref = ws.view().get_remote_bookmark(remote_ref_symbol);
 
@@ -1009,7 +1009,7 @@ impl Mutation for GitFetch {
             })?;
         }
 
-        match ws.finish_transaction(tx, format!("fetch from git remote(s)"))? {
+        match ws.finish_transaction(tx, "fetch from git remote(s)".to_string())? {
             Some(new_status) => Ok(MutationResult::Updated { new_status }),
             None => Ok(MutationResult::Unchanged),
         }

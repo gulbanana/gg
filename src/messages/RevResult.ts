@@ -4,4 +4,12 @@ import type { RevConflict } from "./RevConflict";
 import type { RevHeader } from "./RevHeader";
 import type { RevId } from "./RevId";
 
-export type RevResult = { "type": "NotFound", id: RevId, } | { "type": "Detail", header: RevHeader, parents: Array<RevHeader>, changes: Array<RevChange>, conflicts: Array<RevConflict>, };
+export type RevResult =
+    | { type: "NotFound"; id: RevId }
+    | {
+          type: "Detail";
+          header: RevHeader;
+          parents: Array<RevHeader>;
+          changes: Array<RevChange>;
+          conflicts: Array<RevConflict>;
+      };

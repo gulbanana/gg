@@ -6,7 +6,12 @@
 </script>
 
 <label>
-    <input {id} type="checkbox" bind:checked on:dragenter={dragOverWidget} on:dragover={dragOverWidget} />
+    <input
+        {id}
+        type="checkbox"
+        bind:checked
+        on:dragenter={dragOverWidget}
+        on:dragover={dragOverWidget} />
     <slot />
 </label>
 

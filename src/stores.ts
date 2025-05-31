@@ -11,14 +11,22 @@ import type { RevChange } from "./messages/RevChange";
 
 export const repoConfigEvent = await event<RepoConfig>("gg://repo/config", { type: "Initial" });
 export const repoStatusEvent = await event<RepoStatus | undefined>("gg://repo/status", undefined);
-export const revisionSelectEvent = await event<RevHeader | undefined>("gg://revision/select", undefined);
-export const changeSelectEvent = await event<RevChange | undefined>("gg://change/select", undefined);
+export const revisionSelectEvent = await event<RevHeader | undefined>(
+    "gg://revision/select",
+    undefined
+);
+export const changeSelectEvent = await event<RevChange | undefined>(
+    "gg://change/select",
+    undefined
+);
 
 export const currentMutation = writable<Query<MutationResult> | null>(null);
 export const currentContext = writable<Operand | null>();
 export const currentSource = writable<Operand | null>();
 export const currentTarget = writable<Operand | null>();
-export const currentInput = writable<InputRequest & { callback: (response: InputResponse) => void } | null>();
+export const currentInput = writable<
+    (InputRequest & { callback: (response: InputResponse) => void }) | null
+>();
 
 export const hasModal = writable<boolean>(false);
 

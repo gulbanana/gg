@@ -2,4 +2,7 @@
 import type { RevId } from "./RevId";
 import type { StoreRef } from "./StoreRef";
 
-export interface MoveRef { ref: StoreRef, to_id: RevId, }
+export interface MoveRef {
+    ref: StoreRef;
+    to_id: RevId;
+}
