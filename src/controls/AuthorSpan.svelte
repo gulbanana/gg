@@ -7,7 +7,15 @@
 
     function relativeDate() {
         const cutoffs = [60, 3600, 86400, 86400 * 7, 86400 * 30, 86400 * 365, Infinity];
-        const units: Intl.RelativeTimeFormatUnit[] = ["second", "minute", "hour", "day", "week", "month", "year"];
+        const units: Intl.RelativeTimeFormatUnit[] = [
+            "second",
+            "minute",
+            "hour",
+            "day",
+            "week",
+            "month",
+            "year",
+        ];
         const formatter = new Intl.RelativeTimeFormat(undefined, {
             style: "long",
             numeric: "auto",

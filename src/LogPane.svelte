@@ -39,7 +39,9 @@
         },
         getSelection() {
             return (
-                graphRows?.findIndex((row) => row.revision.id.commit.hex == $revisionSelectEvent?.id.commit.hex) ?? -1
+                graphRows?.findIndex(
+                    (row) => row.revision.id.commit.hex == $revisionSelectEvent?.id.commit.hex
+                ) ?? -1
             );
         },
         selectRow(row: number) {
@@ -78,7 +80,7 @@
             {
                 revset: entered_query == "" ? "all()" : entered_query,
             },
-            () => (graphRows = undefined),
+            () => (graphRows = undefined)
         );
 
         if (page.type == "data") {
@@ -107,7 +109,7 @@
             {
                 revset: entered_query == "" ? "all()" : entered_query,
             },
-            () => (graphRows = undefined),
+            () => (graphRows = undefined)
         );
 
         if (page.type == "data") {
@@ -191,7 +193,8 @@
                 {#if row}
                     <RevisionObject
                         header={row.revision}
-                        selected={$revisionSelectEvent?.id.commit.hex == row.revision.id.commit.hex} />
+                        selected={$revisionSelectEvent?.id.commit.hex ==
+                            row.revision.id.commit.hex} />
                 {/if}
             </GraphLog>
         {:else}

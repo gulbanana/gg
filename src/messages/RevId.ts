@@ -2,4 +2,7 @@
 import type { ChangeId } from "./ChangeId";
 import type { CommitId } from "./CommitId";
 
-export interface RevId { change: ChangeId, commit: CommitId, }
+export interface RevId {
+    change: ChangeId;
+    commit: CommitId;
+}

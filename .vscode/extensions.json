@@ -3,5 +3,7 @@
     "rust-lang.rust-analyzer",
     "svelte.svelte-vscode",
     "tauri-apps.tauri-vscode",
+    "editorconfig.editorconfig",
+    "esbenp.prettier-vscode"
   ]
 }

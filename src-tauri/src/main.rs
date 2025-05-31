@@ -17,6 +17,7 @@ use std::thread::{self, JoinHandle};
 
 use anyhow::{anyhow, Context, Result};
 use clap::Parser;
+#[cfg(windows)]
 use jj_lib::config::ConfigSource;
 use log::LevelFilter;
 use tauri::menu::Menu;
@@ -562,7 +563,7 @@ fn try_open_repository(window: &Window, cwd: Option<PathBuf>) -> Result<()> {
             window.emit(
                 "gg://repo/config",
                 messages::RepoConfig::LoadError {
-                    absolute_path: cwd.unwrap_or(PathBuf::new()).into(),
+                    absolute_path: cwd.unwrap_or_default().into(),
                     message: format!("{:#?}", err),
                 },
             )?;
@@ -590,30 +591,28 @@ fn try_mutate<T: Mutation + Send + Sync + 'static>(
 }
 
 fn handle_window_event(window: &Window, event: &WindowEvent) {
-    match *event {
-        WindowEvent::Focused(true) => {
-            log::debug!("window focused; requesting snapshot");
+    if let WindowEvent::Focused(true) = *event {
+        log::debug!("window focused; requesting snapshot");
 
-            let app_state = window.state::<AppState>();
+        let app_state = window.state::<AppState>();
 
-            let session_tx: Sender<SessionEvent> = app_state.get_session(window.label());
-            let (call_tx, call_rx) = channel();
+        let session_tx: Sender<SessionEvent> = app_state.get_session(window.label());
+        let (call_tx, call_rx) = channel();
 
-            handler::nonfatal!(session_tx.send(SessionEvent::ExecuteSnapshot { tx: call_tx }));
+        handler::nonfatal!(session_tx.send(SessionEvent::ExecuteSnapshot { tx: call_tx }));
 
-            // events are handled on the main thread, so don't wait for
-            // a worker response - that's a recipe for deadlock
-            let window = window.clone();
-            thread::spawn(move || {
-                if let Some(status) = handler::nonfatal!(call_rx.recv()) {
-                    handler::nonfatal!(window.emit("gg://repo/status", status));
-                }
-            });
-        }
-        _ => (),
+        // events are handled on the main thread, so don't wait for
+        // a worker response - that's a recipe for deadlock
+        let window = window.clone();
+        thread::spawn(move || {
+            if let Some(status) = handler::nonfatal!(call_rx.recv()) {
+                handler::nonfatal!(window.emit("gg://repo/status", status));
+            }
+        });
     }
 }
 
+#[cfg(windows)]
 fn with_recent_workspaces(
     window: Window,
     f: impl FnOnce(&mut Vec<String>) -> Result<()>,

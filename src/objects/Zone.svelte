@@ -22,7 +22,9 @@ A drop target for direct-manipulation objects.
     function match(target: Operand | null): boolean {
         return (
             target == operand ||
-            (operand.type == "Merge" && target?.type == "Merge" && operand.header.id.commit == target.header.id.commit)
+            (operand.type == "Merge" &&
+                target?.type == "Merge" &&
+                operand.header.id.commit == target.header.id.commit)
         );
     }
 

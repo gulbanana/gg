@@ -192,6 +192,7 @@ pub struct FileRange {
     derive(TS),
     ts(export, export_to = "../src/messages/")
 )]
+#[allow(clippy::large_enum_variant)]
 pub enum RevResult {
     NotFound {
         id: RevId,

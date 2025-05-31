@@ -10,7 +10,8 @@
     "check": "svelte-check --tsconfig ./tsconfig.json",
     "tauri": "tauri",
     "gen": "cd src-tauri && cargo test -F ts-rs",
-    "test": "cd src-tauri && cargo test"
+    "test": "cd src-tauri && cargo test",
+    "fmt": "npx prettier --write \"**/*.{js,ts,svelte,json,css,md,yml}\" \"!package-lock.json\" \"!src-tauri/gen/**\" && cd src-tauri && cargo fmt && cargo clippy --fix --allow-dirty"
   },
   "dependencies": {
     "@catppuccin/palette": "^1.0.3",
@@ -23,6 +24,7 @@
     "@sveltejs/vite-plugin-svelte": "^3.0.2",
     "@tauri-apps/cli": "^2.0.0-beta.0",
     "@tsconfig/svelte": "^5.0.2",
+    "prettier-plugin-svelte": "^3.4.0",
     "svelte": "^4.2.10",
     "svelte-check": "^3.6.3",
     "tslib": "^2.6.0",

@@ -1,6 +1,16 @@
 {
+    "useTabs": false,
     "tabWidth": 4,
+    "semi": true,
+    "trailingComma": "es5",
+    "printWidth": 100,
     "bracketSameLine": true,
-    "svelteBracketNewLine": false,
-    "printWidth": 120
+    "plugins": ["prettier-plugin-svelte"],
+
+    "overrides": [
+        { "files": "*.svelte", "options": { "parser": "svelte" } },
+        { "files": "*.yml", "options": { "tabWidth": 2 } },
+        { "files": "*.json", "options": { "tabWidth": 2 } },
+        { "files": "*.md", "options": { "tabWidth": 2, "printWidth": 80 } }
+    ]
 }

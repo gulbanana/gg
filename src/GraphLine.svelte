@@ -83,7 +83,11 @@
     </foreignObject>
 {/if}
 
-<path d={path} fill="none" stroke-dasharray={line.indirect ? "1,2" : "none"} class:target={$currentTarget == operand} />
+<path
+    d={path}
+    fill="none"
+    stroke-dasharray={line.indirect ? "1,2" : "none"}
+    class:target={$currentTarget == operand} />
 
 <style>
     path {

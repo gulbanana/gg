@@ -59,13 +59,13 @@ export default class RefMutator {
 
     onTrack = () => {
         mutate<TrackBranch>("track_branch", {
-            ref: this.#ref
+            ref: this.#ref,
         });
     };
 
     onUntrack = () => {
         mutate<UntrackBranch>("untrack_branch", {
-            ref: this.#ref
+            ref: this.#ref,
         });
     };
 
@@ -75,14 +75,14 @@ export default class RefMutator {
             let new_name = response["Bookmark Name"];
             mutate<RenameBranch>("rename_branch", {
                 ref: this.#ref,
-                new_name
-            })
+                new_name,
+            });
         }
     };
 
     onDelete = () => {
         mutate<DeleteRef>("delete_ref", {
-            ref: this.#ref
+            ref: this.#ref,
         });
     };
 
@@ -96,14 +96,14 @@ export default class RefMutator {
                 mutate<GitPush>("git_push", {
                     type: "RemoteBookmark",
                     remote_name: this.#ref.remote_name,
-                    branch_ref: this.#ref
+                    branch_ref: this.#ref,
                 });
                 break;
 
             case "LocalBookmark":
                 mutate<GitPush>("git_push", {
                     type: "AllRemotes",
-                    branch_ref: this.#ref
+                    branch_ref: this.#ref,
                 });
                 break;
         }
@@ -126,14 +126,16 @@ export default class RefMutator {
                     return;
                 }
 
-                let response = await getInput("Select Remote", "", [{ label: "Remote Name", choices: allRemotes.value }]);
+                let response = await getInput("Select Remote", "", [
+                    { label: "Remote Name", choices: allRemotes.value },
+                ]);
                 if (response) {
                     let remote_name = response["Remote Name"];
                     mutate<GitPush>("git_push", {
                         type: "RemoteBookmark",
                         remote_name,
-                        branch_ref: this.#ref
-                    })
+                        branch_ref: this.#ref,
+                    });
                 }
                 break;
         }
@@ -148,14 +150,14 @@ export default class RefMutator {
             case "RemoteBookmark":
                 mutate<GitFetch>("git_fetch", {
                     type: "AllRemotes",
-                    branch_ref: this.#ref
+                    branch_ref: this.#ref,
                 });
                 break;
 
             case "LocalBookmark":
                 mutate<GitFetch>("git_fetch", {
                     type: "AllRemotes",
-                    branch_ref: this.#ref
+                    branch_ref: this.#ref,
                 });
                 break;
         }
@@ -172,20 +174,24 @@ export default class RefMutator {
                 break;
 
             case "LocalBookmark":
-                let trackedRemotes = await query<string[]>("query_remotes", { tracking_branch: this.#ref.branch_name });
+                let trackedRemotes = await query<string[]>("query_remotes", {
+                    tracking_branch: this.#ref.branch_name,
+                });
                 if (trackedRemotes.type == "error") {
                     console.log("error loading remotes: " + trackedRemotes.message);
                     return;
                 }
 
-                let response = await getInput("Select Remote", "", [{ label: "Remote Name", choices: trackedRemotes.value }]);
+                let response = await getInput("Select Remote", "", [
+                    { label: "Remote Name", choices: trackedRemotes.value },
+                ]);
                 if (response) {
                     let remote_name = response["Remote Name"];
                     mutate<GitFetch>("git_fetch", {
                         type: "RemoteBookmark",
                         remote_name,
-                        branch_ref: this.#ref
-                    })
+                        branch_ref: this.#ref,
+                    });
                 }
                 break;
         }
