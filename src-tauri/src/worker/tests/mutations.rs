@@ -115,7 +115,7 @@ fn create_revision_single_parent() -> Result<()> {
                 matches!(child_rev, RevResult::Detail { header, .. } if header.is_working_copy)
             );
         }
-        _ => assert!(false, "CreateRevision failed"),
+        _ => panic!("CreateRevision failed"),
     }
 
     Ok(())
@@ -141,7 +141,7 @@ fn create_revision_multi_parent() -> Result<()> {
             let child_rev = queries::query_revision(&ws, new_selection.id)?;
             assert_matches!(child_rev, RevResult::Detail { parents, .. } if parents.len() == 2);
         }
-        _ => assert!(false, "CreateRevision failed"),
+        _ => panic!("CreateRevision failed"),
     }
 
     Ok(())

@@ -1073,7 +1073,7 @@ fn combine_bookmarks(branch_names: &[impl Display]) -> String {
     }
 }
 
-fn build_matcher(paths: &Vec<TreePath>) -> Box<dyn Matcher> {
+fn build_matcher(paths: &[TreePath]) -> Box<dyn Matcher> {
     if paths.is_empty() {
         Box::new(EverythingMatcher)
     } else {

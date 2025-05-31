@@ -69,6 +69,7 @@ impl QueryState {
 pub struct QuerySession<'q, 'w: 'q> {
     pub ws: &'q WorkspaceSession<'w>,
     pub state: QueryState,
+    #[allow(clippy::type_complexity)]
     iter: Peekable<
         Skip<
             TopoGroupedGraphIterator<
@@ -84,6 +85,7 @@ pub struct QuerySession<'q, 'w: 'q> {
             >,
         >,
     >,
+    #[allow(clippy::type_complexity)]
     is_immutable: Box<dyn Fn(&CommitId) -> Result<bool, RevsetEvaluationError> + 'q>,
 }
 

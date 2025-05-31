@@ -17,6 +17,7 @@ use std::thread::{self, JoinHandle};
 
 use anyhow::{anyhow, Context, Result};
 use clap::Parser;
+#[cfg(windows)]
 use jj_lib::config::ConfigSource;
 use log::LevelFilter;
 use tauri::menu::Menu;
@@ -611,6 +612,7 @@ fn handle_window_event(window: &Window, event: &WindowEvent) {
     }
 }
 
+#[cfg(windows)]
 fn with_recent_workspaces(
     window: Window,
     f: impl FnOnce(&mut Vec<String>) -> Result<()>,

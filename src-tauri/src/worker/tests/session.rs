@@ -332,6 +332,7 @@ fn query_rev_not_found() -> Result<()> {
 }
 
 #[test]
+#[cfg(windows)]
 fn config_read() -> Result<()> {
     let repo = mkrepo();
 
@@ -360,6 +361,7 @@ fn config_read() -> Result<()> {
 }
 
 #[test]
+#[cfg(windows)]
 fn config_write() -> Result<()> {
     let repo = mkrepo();
 
