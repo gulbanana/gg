@@ -1,6 +1,7 @@
 use std::{
     panic::{catch_unwind, AssertUnwindSafe},
     path::PathBuf,
+    str::FromStr as _,
     sync::mpsc::{Receiver, Sender},
 };
 
@@ -302,18 +303,7 @@ impl Session for WorkspaceSession<'_> {
                         _ => Err(anyhow!("Can't get path for config source {scope:?}")),
                     }
                     .and_then(|path| {
-                        // try to parse as different types
-                        let toml_value: toml_edit::Value = if let Ok(int_val) = value.parse::<i64>()
-                        {
-                            int_val.into()
-                        } else if let Ok(float_val) = value.parse::<f64>() {
-                            float_val.into()
-                        } else if let Ok(bool_val) = value.parse::<bool>() {
-                            bool_val.into()
-                        } else {
-                            value.into() // default to string
-                        };
-
+                        let toml_value: toml_edit::Value = toml_edit::Value::from_str(&value)?;
                         let mut file = jj_lib::config::ConfigFile::load_or_empty(scope, &path)?;
                         file.set_value(&name, toml_value)?;
                         file.save()?;
