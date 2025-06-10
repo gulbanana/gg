@@ -196,7 +196,7 @@ dependencies = [
  "enumflags2",
  "futures-channel",
  "futures-util",
- "rand 0.9.0",
+ "rand 0.9.1",
  "raw-window-handle",
  "serde",
  "serde_repr",
@@ -694,9 +694,9 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "4.5.38"
+version = "4.5.40"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ed93b9805f8ba930df42c2590f05453d5ec36cbb85d018868a5b24d31f6ac000"
+checksum = "40b6887a1d8685cebccf115538db5c0efe625ccac9696ad45c409d96566e910f"
 dependencies = [
  "clap_builder",
  "clap_derive",
@@ -713,9 +713,9 @@ dependencies = [
 
 [[package]]
 name = "clap_builder"
-version = "4.5.38"
+version = "4.5.40"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "379026ff283facf611b0ea629334361c4211d1b12ee01024eec1591133b04120"
+checksum = "e0c66c08ce9f0c698cbce5c0279d0bb6ac936d8674174fe48f736533b964f59e"
 dependencies = [
  "anstream",
  "anstyle",
@@ -726,9 +726,9 @@ dependencies = [
 
 [[package]]
 name = "clap_complete"
-version = "4.5.50"
+version = "4.5.54"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c91d3baa3bcd889d60e6ef28874126a0b384fd225ab83aa6d8a801c519194ce1"
+checksum = "aad5b1b4de04fead402672b48897030eec1f3bfe1550776322f59f6d6e6a5677"
 dependencies = [
  "clap",
  "clap_lex",
@@ -738,9 +738,9 @@ dependencies = [
 
 [[package]]
 name = "clap_complete_nushell"
-version = "4.5.5"
+version = "4.5.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c6a8b1593457dfc2fe539002b795710d022dc62a65bf15023f039f9760c7b18a"
+checksum = "cdb8335b398d197fb3176efe9400c6c053a41733c26794316c73423d212b2f3d"
 dependencies = [
  "clap",
  "clap_complete",
@@ -748,9 +748,9 @@ dependencies = [
 
 [[package]]
 name = "clap_derive"
-version = "4.5.32"
+version = "4.5.40"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "09176aae279615badda0765c0c0b3f6ed53f4709118af73cf4655d85d1530cd7"
+checksum = "d2c7947ae4cc3d851207c1adb5b5e260ff0cca11446b1d6d1423788e442257ce"
 dependencies = [
  "heck 0.5.0",
  "proc-macro2",
@@ -1838,11 +1838,11 @@ dependencies = [
  "git2",
  "gix",
  "indexmap 2.9.0",
- "itertools 0.13.0",
+ "itertools 0.14.0",
  "jj-cli",
  "jj-lib",
  "log",
- "pollster 0.3.0",
+ "pollster",
  "serde",
  "serde_json",
  "tauri",
@@ -1858,7 +1858,7 @@ dependencies = [
  "tauri-runtime-wry",
  "tauri-utils",
  "tempfile",
- "thiserror 1.0.69",
+ "thiserror 2.0.12",
  "toml_edit 0.22.26",
  "ts-rs",
  "windows 0.54.0",
@@ -3314,9 +3314,9 @@ dependencies = [
 
 [[package]]
 name = "jj-cli"
-version = "0.29.0"
+version = "0.30.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b4ffa544db48618b4c51ca1228e680669eb0d21eaccb2610332ec8e34fd5638a"
+checksum = "24a4059ee1d31c4df7c6e8fac40b172e84c115f1facd16aafefdb872a5d0d49e"
 dependencies = [
  "bstr",
  "chrono",
@@ -3329,7 +3329,6 @@ dependencies = [
  "dunce",
  "etcetera",
  "futures 0.3.31",
- "git2",
  "gix",
  "glob",
  "indexmap 2.9.0",
@@ -3342,7 +3341,7 @@ dependencies = [
  "os_pipe",
  "pest",
  "pest_derive",
- "pollster 0.4.0",
+ "pollster",
  "rayon",
  "regex",
  "rpassword",
@@ -3357,6 +3356,7 @@ dependencies = [
  "textwrap",
  "thiserror 2.0.12",
  "timeago",
+ "tokio",
  "toml_edit 0.22.26",
  "tracing",
  "tracing-chrome",
@@ -3367,9 +3367,9 @@ dependencies = [
 
 [[package]]
 name = "jj-lib"
-version = "0.29.0"
+version = "0.30.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5fcfc8f12d2a6bc9455805243425782da908dbde1c32cd3cba005577b3691edf"
+checksum = "7a58796b9deacfd092a83828ae8adaf0bf0c9599b2cf5a39814afb3c67928635"
 dependencies = [
  "async-trait",
  "blake2",
@@ -3380,7 +3380,6 @@ dependencies = [
  "dunce",
  "either",
  "futures 0.3.31",
- "git2",
  "gix",
  "glob",
  "hashbrown 0.15.3",
@@ -3394,10 +3393,10 @@ dependencies = [
  "once_cell",
  "pest",
  "pest_derive",
- "pollster 0.4.0",
+ "pollster",
  "prost",
- "rand 0.8.5",
- "rand_chacha 0.3.1",
+ "rand 0.9.1",
+ "rand_chacha 0.9.0",
  "rayon",
  "ref-cast",
  "regex",
@@ -3419,9 +3418,9 @@ dependencies = [
 
 [[package]]
 name = "jj-lib-proc-macros"
-version = "0.29.0"
+version = "0.30.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "958df075169d9a22b0d5da0ed83629fc1078dd28377470fa23c1eac484c6ecd3"
+checksum = "042456f52f26a0ea4e25dd0ad7ee0f3e98199a0ec247519dae4491e4d52921f6"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -4250,15 +4249,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d05e27ee213611ffe7d6348b942e8f942b37114c00cc03cec254295a4a17852e"
 
 [[package]]
-name = "openssl-src"
-version = "300.4.2+3.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "168ce4e058f975fe43e89d9ccf78ca668601887ae736090aacc23ae353c298e2"
-dependencies = [
- "cc",
-]
-
-[[package]]
 name = "openssl-sys"
 version = "0.9.106"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4266,7 +4256,6 @@ checksum = "8bb61ea9811cc39e3c2069f40b8b8e2e70d8569b361f879786cc7ed48b777cdd"
 dependencies = [
  "cc",
  "libc",
- "openssl-src",
  "pkg-config",
  "vcpkg",
 ]
@@ -4298,9 +4287,9 @@ dependencies = [
 
 [[package]]
 name = "os_pipe"
-version = "1.2.1"
+version = "1.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5ffd2b0a5634335b135d5728d84c5e0fd726954b87111f7506a61c502280d982"
+checksum = "db335f4760b14ead6290116f2427bf33a14d4f0617d49f78a246de10c1831224"
 dependencies = [
  "libc",
  "windows-sys 0.59.0",
@@ -4642,12 +4631,6 @@ dependencies = [
 
 [[package]]
 name = "pollster"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "22686f4785f02a4fcc856d3b3bb19bf6c8160d103f7a99cc258bddd0251dc7f2"
-
-[[package]]
-name = "pollster"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2f3a9f18d041e6d0e102a0a46750538147e5e8992d3b4873aaafee2520b00ce3"
@@ -4782,7 +4765,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8a56d757972c98b346a9b766e3f02746cde6dd1cd1d1d563472929fdd74bec4d"
 dependencies = [
  "anyhow",
- "itertools 0.13.0",
+ "itertools 0.14.0",
  "proc-macro2",
  "quote",
  "syn 2.0.101",
@@ -4865,13 +4848,12 @@ dependencies = [
 
 [[package]]
 name = "rand"
-version = "0.9.0"
+version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3779b94aeb87e8bd4e834cee3650289ee9e0d5677f976ecdb6d219e5f4f6cd94"
+checksum = "9fbfd9d094a40bf3ae768db9361049ace4c0e04a4fd6b359518bd7b73a73dd97"
 dependencies = [
  "rand_chacha 0.9.0",
  "rand_core 0.9.3",
- "zerocopy 0.8.24",
 ]
 
 [[package]]
@@ -6310,9 +6292,9 @@ dependencies = [
 
 [[package]]
 name = "tempfile"
-version = "3.19.1"
+version = "3.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7437ac7763b9b123ccf33c338a5cc1bac6f69b45a136c19bdd8a65e3916435bf"
+checksum = "e8a64e3985349f2441a1a9ef0b853f869006c3855f2cda6862a94d26ebb9d6a1"
 dependencies = [
  "fastrand",
  "getrandom 0.3.2",
@@ -6547,9 +6529,9 @@ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 
 [[package]]
 name = "tokio"
-version = "1.44.2"
+version = "1.45.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e6b88822cbe49de4185e3a4cbf8321dd487cf5fe0c5c65695fef6346371e9c48"
+checksum = "75ef51a33ef1da925cea3e4eb122833cb377c61439ca401b770f54902b806779"
 dependencies = [
  "backtrace",
  "bytes",
