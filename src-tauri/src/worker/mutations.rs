@@ -822,11 +822,6 @@ impl Mutation for GitPush {
     fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction()?;
 
-        let git_repo = match ws.git_repo()? {
-            Some(git_repo) => git_repo,
-            None => precondition!("No git backend"),
-        };
-
         // determine bookmarks to push, recording the old and new commits
         let mut remote_branch_updates: Vec<(&str, Vec<(RefNameBuf, refs::BookmarkPushUpdate)>)> =
             Vec::new();
