@@ -238,10 +238,17 @@
     .body {
         height: 100%;
         overflow: hidden;
-        display: grid;
-        grid-template-rows: 90px 30px auto 30px 1fr;
+        display: flex;
+        flex-direction: column;
         margin: 0 -6px -3px -6px;
         padding: 0 6px 3px 6px;
+        gap: 0;
+    }
+
+    .description {
+        resize: vertical;
+        min-height: 90px;
+        overflow: auto;
     }
 
     .signature-commands {
@@ -252,6 +259,7 @@
         align-items: center;
         gap: 6px;
         padding: 0 3px;
+        flex-shrink: 0;
     }
 
     .parents {
@@ -293,6 +301,8 @@
         overflow-x: hidden;
         overflow-y: auto;
         scrollbar-color: var(--ctp-text) var(--ctp-crust);
+        flex: 1;
+        min-height: 0;
     }
 
     .changes::-webkit-scrollbar {
