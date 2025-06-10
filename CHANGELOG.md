@@ -1,4 +1,18 @@
 # GG Changelog
+## [0.29.0](releases/tag/v0.29.0) 
+This version is based on Jujutsu 0.29.
+
+### Changed
+- Update to jj 0.29 (thanks to @nightcore and and @ilyagr).
+- Update to rust 2024 (thanks to @natural-selection1).
+
+### Fixed
+- Excessively tall horizontal scrollbars in WebKit (thanks to @ninjamuffin99).
+- Untracked some Tauri artifacts that were changing every version (thanks to @ilyagr).
+- `tauri dev` is now compatible with Hyper-V (thanks to @natural-selection1).
+- Ctrl-enter keyboard shortcut on some platforms (thanks to @natural-selection1).
+- Describe box resizing on some platforms (thanks to @natural-selection1).
+- Flickering when dragging commits onto each other to rebase (thanks to @natural-selection1).
 
 ## [0.27.0](releases/tag/v0.27.0) 
 This version is based on Jujutsu 0.27.
