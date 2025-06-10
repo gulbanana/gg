@@ -102,6 +102,7 @@
 
 <style>
     .layout {
+        pointer-events: auto;
         /* layout summary components along a text line */
         width: 100%;
         height: 30px;
