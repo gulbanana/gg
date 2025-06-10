@@ -1,6 +1,6 @@
 [package]
 name = "gg"
-version = "0.27.0"
+version = "0.29.0"
 description = "GG - Gui for JJ"
 authors = ["Thomas Castiglione"]
 edition = "2024"
@@ -26,8 +26,8 @@ tauri-plugin-shell = "2.0.0"
 tauri-plugin-window-state = "2.0.0"
 tauri-plugin-log = "2.0.0"
 
-jj-lib = { version = "0.27.0", features = ["vendored-openssl", "watchman"] }
-jj-cli = { version = "0.27.0", default-features = false, features = [
+jj-lib = { version = "0.29", features = ["vendored-openssl", "watchman"] }
+jj-cli = { version = "0.29", default-features = false, features = [
     "git",
     "vendored-openssl",
 ] }
@@ -45,7 +45,7 @@ dirs = "5.0.1"
 dunce = "1.0.5"
 itertools = "0.13.0"
 indexmap = "2.6.0"
-gix = { version = "0.70.0", default-features = false, features = [
+gix = { version = "0.71.0", default-features = false, features = [
     "index",
     "max-performance-safe",
     "blob-diff",
@@ -56,12 +56,9 @@ serde_json = "1.0.132"
 toml_edit = { version = "0.22.23", features = ["serde"] }
 thiserror = "1.0.68"
 
-# deps implicitly used by JJ, which need to be pinned to a version to fix errors
-gix-object = "0.47.0"
-
 # deps used by JJ but with different features
 chrono = { version = "0.4.38", features = ["serde"] }
-git2 = { version = "0.19.0", features = ["vendored-libgit2"] }
+git2 = { version = "0.20.1", features = ["vendored-libgit2"] }
 
 # extra deps not used by JJ
 log = "0.4"
