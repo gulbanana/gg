@@ -1,8 +1,8 @@
 use std::path::Path;
 
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use jj_cli::{
-    config::{config_from_environment, default_config_layers, ConfigEnv},
+    config::{ConfigEnv, config_from_environment, default_config_layers},
     ui::Ui,
 };
 use jj_lib::{

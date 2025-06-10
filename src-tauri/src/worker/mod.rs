@@ -15,7 +15,7 @@ use std::{
     path::PathBuf,
 };
 
-use anyhow::{anyhow, Error, Result};
+use anyhow::{Error, Result, anyhow};
 use jj_lib::{git::RemoteCallbacks, repo::MutableRepo};
 
 use crate::messages;

@@ -1,4 +1,4 @@
-use chrono::{offset::LocalResult, DateTime, FixedOffset, Local, TimeZone, Utc};
+use chrono::{DateTime, FixedOffset, Local, TimeZone, Utc, offset::LocalResult};
 use jj_lib::backend::{Signature, Timestamp};
 
 use super::*;

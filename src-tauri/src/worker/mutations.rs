@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use indexmap::IndexMap;
 use itertools::Itertools;
 use jj_lib::ref_name::{RefNameBuf, RemoteName, RemoteNameBuf, RemoteRefSymbol};
@@ -28,8 +28,8 @@ use crate::messages::{
     TrackBranch, TreePath, UndoOperation, UntrackBranch,
 };
 
-use super::gui_util::WorkspaceSession;
 use super::Mutation;
+use super::gui_util::WorkspaceSession;
 
 macro_rules! precondition {
     ($($args:tt)*) => {
@@ -878,7 +878,7 @@ impl Mutation for GitPush {
                         };
                         match classify_branch_push(&branch_name, &remote_name.as_str(), targets) {
                             Err(message) => {
-                                return Ok(MutationResult::PreconditionError { message })
+                                return Ok(MutationResult::PreconditionError { message });
                             }
                             Ok(None) => (),
                             Ok(Some(update)) => {
