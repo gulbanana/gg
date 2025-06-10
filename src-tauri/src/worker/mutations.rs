@@ -137,7 +137,7 @@ impl Mutation for CheckoutRevision {
 }
 
 impl Mutation for CreateRevision {
-    fn execute<'a>(self: Box<Self>, ws: &'a mut WorkspaceSession) -> Result<MutationResult> {
+    fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction()?;
 
         let parents_revset = ws.evaluate_revset_changes(
@@ -258,7 +258,7 @@ impl Mutation for DuplicateRevisions {
 }
 
 impl Mutation for InsertRevision {
-    fn execute<'a>(self: Box<Self>, ws: &'a mut WorkspaceSession) -> Result<MutationResult> {
+    fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction()?;
 
         let target = ws
@@ -297,7 +297,7 @@ impl Mutation for InsertRevision {
 }
 
 impl Mutation for MoveRevision {
-    fn execute<'a>(self: Box<Self>, ws: &'a mut WorkspaceSession) -> Result<MutationResult> {
+    fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction()?;
 
         let target = ws.resolve_single_change(&self.id)?;
@@ -333,7 +333,7 @@ impl Mutation for MoveRevision {
 }
 
 impl Mutation for MoveSource {
-    fn execute<'a>(self: Box<Self>, ws: &'a mut WorkspaceSession) -> Result<MutationResult> {
+    fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction()?;
 
         let target = ws.resolve_single_change(&self.id)?;
@@ -839,7 +839,7 @@ impl Mutation for GitPush {
                         continue;
                     }
 
-                    match classify_branch_push(branch_name.as_str(), &remote_name, targets) {
+                    match classify_branch_push(branch_name.as_str(), remote_name, targets) {
                         Err(message) => return Ok(MutationResult::PreconditionError { message }),
                         Ok(None) => (),
                         Ok(Some(update)) => branch_updates.push((branch_name.to_owned(), update)),
@@ -876,7 +876,7 @@ impl Mutation for GitPush {
                             local_target: ws.view().get_local_bookmark(&branch_name_ref),
                             remote_ref,
                         };
-                        match classify_branch_push(&branch_name, &remote_name.as_str(), targets) {
+                        match classify_branch_push(branch_name, remote_name.as_str(), targets) {
                             Err(message) => {
                                 return Ok(MutationResult::PreconditionError { message });
                             }
@@ -887,7 +887,7 @@ impl Mutation for GitPush {
                         }
                         remote_branch_refs.push((RefNameBuf::from(branch_name), remote_ref));
                     }
-                    remote_branch_updates.push((&remote_name.as_str(), branch_updates));
+                    remote_branch_updates.push((remote_name.as_str(), branch_updates));
                 }
 
                 remote_branch_refs
@@ -989,7 +989,7 @@ impl Mutation for GitPush {
                 git::push_branches(
                     repo,
                     &git_settings,
-                    &RemoteName::new(remote_name),
+                    RemoteName::new(remote_name),
                     &targets,
                     cb,
                 )?;
@@ -1066,7 +1066,7 @@ impl Mutation for GitFetch {
                 let mut fetcher = git::GitFetch::new(repo, &git_settings)?;
                 fetcher
                     .fetch(
-                        &RemoteName::new(&remote_name),
+                        RemoteName::new(&remote_name),
                         &[pattern
                             .clone()
                             .map(StringPattern::exact)
@@ -1079,7 +1079,7 @@ impl Mutation for GitFetch {
             })?;
         }
 
-        match ws.finish_transaction(tx, format!("fetch from git remote(s)"))? {
+        match ws.finish_transaction(tx, "fetch from git remote(s)".to_string())? {
             Some(new_status) => Ok(MutationResult::Updated { new_status }),
             None => Ok(MutationResult::Unchanged),
         }

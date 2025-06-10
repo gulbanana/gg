@@ -81,20 +81,22 @@ pub fn update_jump_list(recent: &mut Vec<String>, path: &String) -> Result<()> {
 
 // safety: no invariants, it's all FFI
 unsafe fn create_directory_link(path: HSTRING, args: HSTRING, title: BSTR) -> Result<IShellLinkW> {
-    let link: IShellLinkW = CoCreateInstance(&ShellLink, None, CLSCTX_INPROC_SERVER)?;
-    link.SetPath(&path)?; // launch ourselves...
-    link.SetIconLocation(w!("%SystemRoot%\\System32\\shell32.dll"), 3)?; // ...with the icon for a directory...
-    link.SetArguments(&args)?; // ...the directory as an argument...
-    link.SetDescription(&args)?; // ...and a tooltip containing just the directory name
+    unsafe {
+        let link: IShellLinkW = CoCreateInstance(&ShellLink, None, CLSCTX_INPROC_SERVER)?;
+        link.SetPath(&path)?; // launch ourselves...
+        link.SetIconLocation(w!("%SystemRoot%\\System32\\shell32.dll"), 3)?; // ...with the icon for a directory...
+        link.SetArguments(&args)?; // ...the directory as an argument...
+        link.SetDescription(&args)?; // ...and a tooltip containing just the directory name
 
-    // the actual display string must be set as a property because IShellLink is primarily for shortcuts
-    let title_value = PROPVARIANT::from(title);
-    let mut title_key = PROPERTYKEY::default();
-    PSGetPropertyKeyFromName(w!("System.Title"), &mut title_key)?;
+        // the actual display string must be set as a property because IShellLink is primarily for shortcuts
+        let title_value = PROPVARIANT::from(title);
+        let mut title_key = PROPERTYKEY::default();
+        PSGetPropertyKeyFromName(w!("System.Title"), &mut title_key)?;
 
-    let store: IPropertyStore = link.cast()?;
-    store.SetValue(&title_key, &title_value)?;
-    store.Commit()?;
+        let store: IPropertyStore = link.cast()?;
+        store.SetValue(&title_key, &title_value)?;
+        store.Commit()?;
 
-    Ok(link)
+        Ok(link)
+    }
 }

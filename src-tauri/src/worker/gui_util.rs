@@ -126,7 +126,7 @@ impl WorkerSession {
 
         let index_store = workspace.repo_loader().index_store();
         let index = index_store
-            .get_index_at_op(&operation.repo.operation(), workspace.repo_loader().store())?;
+            .get_index_at_op(operation.repo.operation(), workspace.repo_loader().store())?;
         let is_large =
             if let Some(default_index) = index.as_any().downcast_ref::<DefaultReadonlyIndex>() {
                 let stats = default_index.as_composite().stats();
@@ -150,7 +150,7 @@ impl WorkerSession {
 
 impl WorkspaceSession<'_> {
     pub fn name(&self) -> &WorkspaceName {
-        &self.workspace.workspace_name()
+        self.workspace.workspace_name()
     }
 
     pub fn wc_id(&self) -> &CommitId {
@@ -167,7 +167,7 @@ impl WorkspaceSession<'_> {
     }
 
     pub fn get_commit(&self, id: &CommitId) -> Result<Commit> {
-        Ok(self.operation.repo.store().get_commit(&id)?)
+        Ok(self.operation.repo.store().get_commit(id)?)
     }
 
     pub fn git_repo(&self) -> Result<Option<Repository>> {
@@ -386,7 +386,7 @@ impl WorkspaceSession<'_> {
      * Functions for creating temporary per-request derived data *
      *************************************************************/
 
-    pub fn parse_context<'a>(&'a self) -> RevsetParseContext<'a> {
+    pub fn parse_context(&self) -> RevsetParseContext<'_> {
         self.data.parse_context(self.workspace.workspace_name())
     }
 
@@ -439,7 +439,7 @@ impl WorkspaceSession<'_> {
             .session
             .latest_query
             .as_ref()
-            .unwrap_or_else(|| &default_query)
+            .unwrap_or(&default_query)
             .clone();
 
         Ok(messages::RepoConfig::Workspace {
@@ -506,10 +506,10 @@ impl WorkspaceSession<'_> {
         known_immutable: Option<bool>,
     ) -> Result<messages::RevHeader> {
         let index = self.ref_index();
-        let branches = index.get(commit.id()).iter().cloned().collect();
+        let branches = index.get(commit.id()).to_vec();
 
         let is_immutable = known_immutable
-            .map(|x| Result::Ok(x))
+            .map(Result::Ok)
             .unwrap_or_else(|| self.check_immutable(vec![commit.id().clone()]))?;
 
         Ok(messages::RevHeader {
@@ -595,7 +595,7 @@ impl WorkspaceSession<'_> {
             git::export_refs(tx.repo_mut())?;
         }
 
-        self.operation = SessionOperation::new(&self.name(), &self.data, tx.commit(description)?);
+        self.operation = SessionOperation::new(self.name(), &self.data, tx.commit(description)?);
 
         // XXX do this only if loaded at head, which is currently always true, but won't be once we have undo-redo
         if let Some(new_commit) = &maybe_new_wc_commit {
@@ -689,7 +689,7 @@ impl WorkspaceSession<'_> {
             base_ignores,
             fsmonitor_settings: self.data.settings.fsmonitor_settings()?,
             progress: None,
-            max_new_file_size: max_new_file_size,
+            max_new_file_size,
             start_tracking_matcher: &EverythingMatcher,
             conflict_marker_style: ConflictMarkerStyle::default(),
         })?;
@@ -760,7 +760,7 @@ impl WorkspaceSession<'_> {
             if let Some(old_wc_commit_id) =
                 self.operation.repo.view().get_wc_commit_id(&workspace_name)
             {
-                let old_wc_commit = tx.repo().store().get_commit(&old_wc_commit_id)?;
+                let old_wc_commit = tx.repo().store().get_commit(old_wc_commit_id)?;
                 tx.repo_mut().record_abandoned_commit(&old_wc_commit);
             }
 
@@ -961,7 +961,7 @@ impl SessionOperation {
         let mut git_ignores = GitIgnoreFile::empty();
         if let Some(git_backend) = self.git_backend() {
             let git_repo = git_backend.git_repo();
-            if let Some(excludes_file_path) = get_excludes_file_path(&*git_repo.config_snapshot()) {
+            if let Some(excludes_file_path) = get_excludes_file_path(&git_repo.config_snapshot()) {
                 git_ignores = git_ignores.chain_with_file("", excludes_file_path)?;
             }
             git_ignores = git_ignores
@@ -1109,7 +1109,7 @@ fn load_at_head(workspace: &Workspace, data: &WorkspaceData) -> Result<SessionOp
 
     Ok(SessionOperation::new(
         workspace.workspace_name(),
-        &data,
+        data,
         repo,
     ))
 }
