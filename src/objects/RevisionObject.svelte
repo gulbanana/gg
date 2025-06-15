@@ -9,6 +9,7 @@
     import RevisionMutator from "../mutators/RevisionMutator";
     import TagObject from "./TagObject.svelte";
     import AuthorSpan from "../controls/AuthorSpan.svelte";
+    import EmojiText from "../controls/EmojiText.svelte";
 
     export let header: RevHeader;
     export let child: RevHeader | null = null;
@@ -46,7 +47,11 @@
                         $currentTarget.header.parent_ids.findIndex((id) => id.hex == header.id.commit.hex) != -1)} />
 
             <span class="text desc truncate" class:indescribable={!context && header.description.lines[0] == ""}>
-                {dragHint ?? (header.description.lines[0] == "" ? "(no description set)" : header.description.lines[0])}
+                {#if header.description.lines[0] == ""}
+                    {dragHint ?? "(no description set)"}
+                {:else}
+                    <EmojiText text={dragHint ?? header.description.lines[0]} />
+                {/if}
             </span>
 
             <span class="email"><AuthorSpan author={header.author} /></span>
@@ -73,9 +78,11 @@
                 <IdSpan id={header.id.change} pronoun={context || target || dropHint != null} />
 
                 <span class="text desc truncate" class:indescribable={!context && header.description.lines[0] == ""}>
-                    {dragHint ??
-                        dropHint ??
-                        (header.description.lines[0] == "" ? "(no description set)" : header.description.lines[0])}
+                    {#if header.description.lines[0] == ""}
+                        {dragHint ?? dropHint ?? "(no description set)"}
+                    {:else}
+                        <EmojiText text={dragHint ?? dropHint ?? header.description.lines[0]} />
+                    {/if}
                 </span>
 
                 <span class="email"><AuthorSpan author={header.author} /></span>
