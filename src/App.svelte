@@ -22,6 +22,7 @@
     import StatusBar from "./shell/StatusBar.svelte";
     import ModalOverlay from "./shell/ModalOverlay.svelte";
     import ErrorDialog from "./shell/ErrorDialog.svelte";
+    import RecentWorkspaces from "./shell/RecentWorkspaces.svelte";
     import { onMount, setContext } from "svelte";
     import IdSpan from "./controls/IdSpan.svelte";
     import InputDialog from "./shell/InputDialog.svelte";
@@ -32,6 +33,8 @@
     let selection: Query<RevResult> = {
         type: "wait",
     };
+    // for open recent workspaces when error dialogs happen
+    let recentWorkspaces: string[] = [];
 
     document.addEventListener("keydown", (event) => {
         if (event.key === "o" && event.ctrlKey) {
@@ -66,6 +69,13 @@
 
     $: if ($repoConfigEvent) loadRepo($repoConfigEvent);
     $: if ($repoStatusEvent && $revisionSelectEvent) loadChange($revisionSelectEvent.id);
+    $: if (
+        $repoConfigEvent.type === "LoadError" ||
+        $repoConfigEvent.type === "TimeoutError" ||
+        $repoConfigEvent.type === "WorkerError"
+    ) {
+        queryRecentWorkspaces();
+    }
 
     async function loadRepo(config: RepoConfig) {
         if (loadTimeout) {
@@ -83,7 +93,11 @@
     async function loadChange(id: RevId) {
         let rev = await query<RevResult>("query_revision", { id }, (q) => (selection = q));
 
-        if (rev.type == "data" && rev.value.type == "NotFound" && id.commit.hex != $repoStatusEvent?.working_copy.hex) {
+        if (
+            rev.type == "data" &&
+            rev.value.type == "NotFound" &&
+            id.commit.hex != $repoStatusEvent?.working_copy.hex
+        ) {
             return loadChange({
                 change: { type: "ChangeId", hex: "@", prefix: "@", rest: "" },
                 commit: $repoStatusEvent!.working_copy,
@@ -91,6 +105,11 @@
         }
 
         selection = rev;
+    }
+
+    async function queryRecentWorkspaces() {
+        const result = await query<string[]>("query_recent_workspaces", null);
+        recentWorkspaces = result.type === "data" ? result.value : [];
     }
 
     function mutateRevision(event: string) {
@@ -125,7 +144,9 @@
 </script>
 
 <Zone operand={{ type: "Repository" }} alwaysTarget let:target>
-    <div id="shell" class={$repoConfigEvent?.type == "Workspace" ? $repoConfigEvent.theme_override : ""}>
+    <div
+        id="shell"
+        class={$repoConfigEvent?.type == "Workspace" ? $repoConfigEvent.theme_override : ""}>
         {#if $repoConfigEvent.type == "Initial"}
             <Pane>
                 <h2 slot="header">Loading...</h2>
@@ -136,7 +157,9 @@
             <Pane />
         {:else if $repoConfigEvent.type == "Workspace"}
             {#key $repoConfigEvent.absolute_path}
-                <LogPane default_query={$repoConfigEvent.default_query} latest_query={$repoConfigEvent.latest_query} />
+                <LogPane
+                    default_query={$repoConfigEvent.default_query}
+                    latest_query={$repoConfigEvent.latest_query} />
             {/key}
 
             <div class="separator" />
@@ -148,7 +171,8 @@
                     <Pane>
                         <h2 slot="header">Not Found</h2>
                         <p slot="body">
-                            Revision <IdSpan id={data.id.change} />|<IdSpan id={data.id.commit} /> does not exist.
+                            Revision <IdSpan id={data.id.change} />|<IdSpan id={data.id.commit} /> does
+                            not exist.
                         </p>
                     </Pane>
                 {/if}
@@ -165,6 +189,7 @@
                 <ErrorDialog title="No Workspace Loaded">
                     <p>{$repoConfigEvent.message}.</p>
                     <p>Try opening a workspace from the Repository menu.</p>
+                    <RecentWorkspaces workspaces={recentWorkspaces} />
                 </ErrorDialog>
             </ModalOverlay>
         {:else if $repoConfigEvent.type == "TimeoutError"}
@@ -172,6 +197,7 @@
                 <ErrorDialog title="No Workspace Loaded" severe>
                     <p>Error communicating with backend: the operation is taking too long.</p>
                     <p>You may need to restart GG to continue.</p>
+                    <RecentWorkspaces workspaces={recentWorkspaces} />
                 </ErrorDialog>
             </ModalOverlay>
         {:else}
@@ -179,6 +205,7 @@
                 <ErrorDialog title="Fatal Error" severe>
                     <p>Error communicating with backend: {$repoConfigEvent.message}.</p>
                     <p>You may need to restart GG to continue.</p>
+                    <RecentWorkspaces workspaces={recentWorkspaces} />
                 </ErrorDialog>
             </ModalOverlay>
         {/if}
@@ -198,7 +225,10 @@
         {:else if $currentMutation}
             <ModalOverlay>
                 {#if $currentMutation.type == "data" && ($currentMutation.value.type == "InternalError" || $currentMutation.value.type == "PreconditionError")}
-                    <ErrorDialog title="Command Error" onClose={() => ($currentMutation = null)} severe>
+                    <ErrorDialog
+                        title="Command Error"
+                        onClose={() => ($currentMutation = null)}
+                        severe>
                         {#if $currentMutation.value.type == "InternalError"}
                             <p>
                                 {#each $currentMutation.value.message.lines as line}
