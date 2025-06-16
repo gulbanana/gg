@@ -16,9 +16,9 @@ use std::{
 };
 
 use anyhow::{Error, Result, anyhow};
-use jj_lib::{git::RemoteCallbacks, repo::MutableRepo};
+use jj_lib::{git::RemoteCallbacks, repo::MutableRepo, settings::UserSettings};
 
-use crate::messages;
+use crate::{config::read_config, messages};
 use gui_util::WorkspaceSession;
 pub use session::{Session, SessionEvent};
 
@@ -66,13 +66,20 @@ pub struct WorkerSession {
     pub latest_query: Option<String>,
     pub callbacks: Box<dyn WorkerCallbacks>,
     pub working_directory: Option<PathBuf>,
+    #[allow(dead_code, reason = "read in handle_events")]
+    pub global_settings: Option<UserSettings>,
 }
 
 impl WorkerSession {
     pub fn new<T: WorkerCallbacks + 'static>(callbacks: T, workspace: Option<PathBuf>) -> Self {
+        let global_settings = match read_config(None) {
+            Ok((settings, _)) => Some(settings),
+            Err(_) => None,
+        };
         WorkerSession {
             callbacks: Box::new(callbacks),
             working_directory: workspace,
+            global_settings,
             ..Default::default()
         }
     }
@@ -98,6 +105,7 @@ impl Default for WorkerSession {
             latest_query: None,
             callbacks: Box::new(NoCallbacks),
             working_directory: None,
+            global_settings: None,
         }
     }
 }

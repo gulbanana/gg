@@ -60,21 +60,24 @@ impl GGSettings for UserSettings {
     }
 }
 
-pub fn read_config(repo_path: &Path) -> Result<(UserSettings, RevsetAliasesMap)> {
-    let mut default_layers = default_config_layers();
-    let gg_layer = ConfigLayer::parse(ConfigSource::Default, include_str!("../config/gg.toml"))?;
-    default_layers.push(gg_layer);
-    let mut raw_config = config_from_environment(default_layers);
-
+pub fn read_config(repo_path: Option<&Path>) -> Result<(UserSettings, RevsetAliasesMap)> {
+    let mut layers = vec![];
     let mut config_env = ConfigEnv::from_environment(&Ui::null());
 
+    let jj_default_layers = default_config_layers();
+    let gg_default_layer =
+        ConfigLayer::parse(ConfigSource::Default, include_str!("../config/gg.toml"))?;
+    layers.extend(jj_default_layers);
+    layers.push(gg_default_layer);
+    
+    let mut raw_config = config_from_environment(layers);
     config_env.reload_user_config(&mut raw_config)?;
-
-    config_env.reset_repo_path(repo_path);
-    config_env.reload_repo_config(&mut raw_config)?;
+    if let Some(repo_path) = repo_path {
+        config_env.reset_repo_path(repo_path);
+        config_env.reload_repo_config(&mut raw_config)?;
+    }
 
     let config = config_env.resolve_config(&raw_config)?;
-
     let aliases_map = build_aliases_map(&config)?;
     let settings = UserSettings::from_config(config)?;
 

@@ -286,7 +286,7 @@ impl Session for WorkspaceSession<'_> {
                     handler::optional!(path);
 
                     (self.data.settings, self.data.aliases_map) =
-                        read_config(self.workspace.repo_path())?;
+                        read_config(Some(self.workspace.repo_path()))?;
                 }
             };
         }
