@@ -160,7 +160,9 @@ fn main() -> Result<()> {
             move_ref,
             git_push,
             git_fetch,
-            undo_operation
+            undo_operation,
+            query_recent_workspaces,
+            open_workspace_at_path,
         ])
         .menu(menu::build_main)
         .setup(|app| {
@@ -641,4 +643,39 @@ fn add_recent_workspaces(window: Window, repo_path: &str) -> Result<()> {
     })?;
 
     Ok(())
+}
+
+#[tauri::command(async)]
+fn query_recent_workspaces(
+    window: Window,
+    app_state: State<AppState>,
+) -> Result<Vec<String>, InvokeError> {
+    let session_tx: Sender<SessionEvent> = app_state.get_session(window.label());
+    let (call_tx, call_rx) = channel();
+    session_tx
+        .send(SessionEvent::ReadConfigArray {
+            key: vec![
+                "gg".to_string(),
+                "ui".to_string(),
+                "recent-workspaces".to_string(),
+            ],
+            tx: call_tx,
+        })
+        .map_err(InvokeError::from_error)?;
+
+    match call_rx.recv().map_err(InvokeError::from_error)? {
+        Ok(workspaces) => Ok(workspaces),
+        Err(_) => Ok(vec![]),
+    }
+}
+
+#[tauri::command]
+fn open_workspace_at_path(window: Window, path: String) -> Result<(), InvokeError> {
+    match try_open_repository(&window, Some(PathBuf::from(path))) {
+        Ok(_) => Ok(()),
+        Err(err) => {
+            log::error!("try_open_repository: {:#}", err);
+            Err(InvokeError::from_anyhow(err))
+        }
+    }
 }
