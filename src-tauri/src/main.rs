@@ -538,15 +538,10 @@ fn try_open_repository(window: &Window, cwd: Option<PathBuf>) -> Result<()> {
                 messages::RepoConfig::Workspace { absolute_path, .. } => {
                     let repo_path = absolute_path.0.clone();
                     window.set_title((String::from("GG - ") + repo_path.as_str()).as_str())?;
-
-                    // on windows, update the shell jumplist; this can be slow
-                    #[cfg(windows)]
                     {
                         let window = window.clone();
                         thread::spawn(move || {
-                            handler::nonfatal!(with_recent_workspaces(window, |recent| {
-                                windows::update_jump_list(recent, &repo_path)
-                            }));
+                            handler::nonfatal!(add_recent_workspaces(window, &repo_path));
                         });
                     }
                 }
@@ -611,10 +606,7 @@ fn handle_window_event(window: &Window, event: &WindowEvent) {
     }
 }
 
-fn with_recent_workspaces(
-    window: Window,
-    f: impl FnOnce(&mut Vec<String>) -> Result<()>,
-) -> Result<()> {
+fn add_recent_workspaces(window: Window, repo_path: &str) -> Result<()> {
     let app_state = window.state::<AppState>();
     let session_tx: Sender<SessionEvent> = app_state.get_session(window.label());
 
@@ -628,8 +620,15 @@ fn with_recent_workspaces(
         tx: read_tx,
     })?;
     let mut recent = read_rx.recv()??;
+    recent.retain(|x| x != repo_path);
+    recent.insert(0, repo_path.to_owned());
+    recent.truncate(5);
 
-    f(&mut recent)?;
+    #[cfg(windows)]
+    {
+        // update the shell jumplist; this can be slow
+        windows::update_jump_list(&mut recent)?;
+    }
 
     session_tx.send(SessionEvent::WriteConfigArray {
         key: vec![
