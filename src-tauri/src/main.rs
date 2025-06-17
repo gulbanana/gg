@@ -5,8 +5,6 @@ mod config;
 mod handler;
 mod menu;
 mod messages;
-#[cfg(windows)]
-mod windows;
 mod worker;
 
 use std::collections::HashMap;
@@ -93,7 +91,9 @@ fn main() -> Result<()> {
     // before parsing args, attach a console on windows - will fail if not started from a shell, but that's fine
     #[cfg(windows)]
     {
-        windows::reattach_console();
+        use windows::Win32::System::Console::{ATTACH_PARENT_PROCESS, AttachConsole};
+        // safety: FFI
+        let _ = unsafe { AttachConsole(ATTACH_PARENT_PROCESS) };
     }
 
     let args = Args::parse();
