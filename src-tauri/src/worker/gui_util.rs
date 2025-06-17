@@ -102,7 +102,7 @@ impl WorkerSession {
         let factory = DefaultWorkspaceLoaderFactory;
         let loader = factory.create(find_workspace_dir(cwd))?;
 
-        let (settings, aliases_map) = read_config(loader.repo_path())?;
+        let (settings, aliases_map) = read_config(Some(loader.repo_path()))?;
 
         let workspace = loader.load(
             &settings,
