@@ -101,7 +101,8 @@
 <Pane>
     <h2 slot="header" class="header">
         <span class="title">
-            <IdSpan id={rev.header.id.change} /> | <IdSpan id={rev.header.id.commit} />
+            <IdSpan id={rev.header.id.change} clickable={true} />
+            | <IdSpan id={rev.header.id.commit} clickable={true} />
             {#if rev.header.is_working_copy}
                 | Working copy
             {/if}
