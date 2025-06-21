@@ -116,7 +116,7 @@
 
     .repo-bar {
         display: grid;
-        grid-template-columns: minmax(auto, 40%) 1fr minmax(auto, 40%);
+        grid-template-columns: minmax(120px, max-content) 1fr minmax(120px, max-content);
     }
 
     .drag-bar {
@@ -144,11 +144,19 @@
         height: 100%;
         padding: 0 3px;
         justify-content: end;
+        min-width: 0;
     }
 
-    #status-operation > span,
+    #status-operation > span {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
     #status-workspace {
         white-space: nowrap;
+        direction: rtl;
+        text-align: left;
         overflow: hidden;
         text-overflow: ellipsis;
     }
