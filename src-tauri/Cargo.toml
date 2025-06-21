@@ -6,7 +6,7 @@ authors = ["Thomas Castiglione"]
 edition = "2024"
 
 [build-dependencies]
-tauri-build = { version = "2.0.0", features = [] }
+tauri-build = { version = "2.0.0", features = ["config-toml"] }
 
 [dev-dependencies]
 tempfile = "3.10.1"
@@ -14,7 +14,7 @@ zip = "0.6"
 assert_matches = "1.5"
 
 [dependencies]
-tauri = { version = "2.0.0", features = [] }
+tauri = { version = "2.0.0", features = ["config-toml"] }
 tauri-codegen = "2.0.0"
 tauri-macros = "2.0.0"
 tauri-plugin = "2.0.0"
