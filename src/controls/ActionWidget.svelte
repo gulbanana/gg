@@ -43,6 +43,20 @@
         padding: 1px 6px;
     }
 
+    button :global(.id) {
+        color: var(--ctp-crust) !important;
+    }
+
+    button :global(.id .ChangeId) {
+        color: rgb(198, 35, 117);
+        font-weight: bold;
+    }
+
+    button :global(.id .CommitId) {
+        color: rgb(38, 107, 255);
+        font-weight: bold;
+    }
+
     button:not(:disabled) {
         &:hover {
             background: var(--ctp-maroon);
