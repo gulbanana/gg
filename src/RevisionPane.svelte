@@ -14,6 +14,8 @@
     import AuthorSpan from "./controls/AuthorSpan.svelte";
     import ListWidget, { type List } from "./controls/ListWidget.svelte";
     import type { RevChange } from "./messages/RevChange";
+    import type { ChangeId } from "./messages/ChangeId";
+    import type { CommitId } from "./messages/CommitId";
 
     export let rev: Extract<RevResult, { type: "Detail" }>;
 
@@ -96,12 +98,46 @@
             return null;
         }
     }
+
+    function getShortId(id: ChangeId | CommitId) {
+        return id.prefix + id.rest.substring(0, 2);
+    }
+    function getStandardId(id: ChangeId | CommitId) {
+        return id.prefix + id.rest.substring(0, 8 - id.prefix.length);
+    }
+    function copyId(id: ChangeId | CommitId, event: MouseEvent) {
+        if (event.ctrlKey || event.metaKey) {
+            navigator.clipboard.writeText(getStandardId(id));
+        } else {
+            navigator.clipboard.writeText(getShortId(id));
+        }
+    }
+    $: shortChangeId = getShortId(rev.header.id.change);
+    $: standardChangeId = getStandardId(rev.header.id.change);
+    $: shortCommitId = getShortId(rev.header.id.commit);
+    $: standardCommitId = getStandardId(rev.header.id.commit);
 </script>
 
 <Pane>
     <h2 slot="header" class="header">
         <span class="title">
-            <IdSpan id={rev.header.id.change} /> | <IdSpan id={rev.header.id.commit} />
+            <ActionWidget
+                tip={`click to copy ${shortChangeId}\
+                \nCtrl/⌘+click to copy ${standardChangeId}`}
+                onClick={(event) => {
+                    copyId(rev.header.id.change, event);
+                }}>
+                <Icon name="copy" /><IdSpan id={rev.header.id.change} />
+            </ActionWidget>
+            |
+            <ActionWidget
+                tip={`click to copy ${shortCommitId}\
+                \nCtrl/⌘+click to copy ${standardCommitId}`}
+                onClick={(event) => {
+                    copyId(rev.header.id.commit, event);
+                }}>
+                <Icon name="copy" /><IdSpan id={rev.header.id.commit} />
+            </ActionWidget>
             {#if rev.header.is_working_copy}
                 | Working copy
             {/if}
@@ -224,6 +260,9 @@
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
+        display: flex;
+        align-items: center;
+        gap: 6px;
     }
 
     .checkout-commands {
