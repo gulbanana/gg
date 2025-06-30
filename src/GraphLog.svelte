@@ -75,7 +75,7 @@
 
     $: graphHeight = Math.max(containerHeight, rows.length * rowHeight);
     $: visibleRows = Math.ceil(containerHeight / rowHeight) + 1;
-    $: startIndex = Math.floor(scrollTop / rowHeight);
+    $: startIndex = Math.floor(Math.max(scrollTop, 0) / rowHeight);
     $: endIndex = startIndex + visibleRows;
     $: overlap = startIndex % visibleRows;
     $: visibleSlice = {
