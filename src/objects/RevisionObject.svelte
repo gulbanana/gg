@@ -1,7 +1,12 @@
 <script lang="ts">
     import type { RevHeader } from "../messages/RevHeader";
     import type { Operand } from "../messages/Operand";
-    import { currentTarget, revisionSelectEvent } from "../stores.js";
+    import {
+        currentTarget,
+        revisionSelectEvent,
+        revisionSetEvent,
+        currentSource,
+    } from "../stores.js";
     import IdSpan from "../controls/IdSpan.svelte";
     import BranchObject from "./BranchObject.svelte";
     import Object from "./Object.svelte";
@@ -17,8 +22,18 @@
 
     let operand: Operand = child ? { type: "Parent", header, child } : { type: "Revision", header };
 
-    function onSelect() {
-        revisionSelectEvent.set(header);
+    function onSelect(event: CustomEvent<MouseEvent>) {
+        if (event.detail.ctrlKey) {
+            if ($revisionSetEvent.has(header.id.commit.hex)) {
+                $revisionSetEvent.delete(header.id.commit.hex);
+            } else {
+                $revisionSetEvent.add(header.id.commit.hex);
+            }
+            revisionSetEvent.set($revisionSetEvent);
+        } else {
+            revisionSelectEvent.set(header);
+            revisionSetEvent.set(new Set());
+        }
     }
 
     function onEdit() {
@@ -31,6 +46,7 @@
     suffix={header.id.commit.prefix}
     conflicted={header.has_conflict}
     {selected}
+    marked={$revisionSetEvent.has(header.id.commit.hex)}
     label={header.description.lines[0]}
     on:click={onSelect}
     on:dblclick={onEdit}

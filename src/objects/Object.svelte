@@ -6,7 +6,12 @@ Core component for direct-manipulation objects. A drag&drop source.
 <script lang="ts">
     import type { Operand } from "../messages/Operand";
     import { trigger } from "../ipc";
-    import { currentContext, currentSource } from "../stores";
+    import {
+        currentContext,
+        currentSource,
+        revisionSetEvent,
+        revisionSelectEvent,
+    } from "../stores";
     import { createEventDispatcher } from "svelte";
     import BinaryMutator from "../mutators/BinaryMutator";
 
@@ -24,6 +29,7 @@ Core component for direct-manipulation objects. A drag&drop source.
     export let selected: boolean = false;
     export let conflicted: boolean;
     export let operand: Operand;
+    export let marked: boolean = false;
 
     let dispatch = createEventDispatcher();
 
@@ -52,6 +58,12 @@ Core component for direct-manipulation objects. A drag&drop source.
     function onDragStart(event: DragEvent) {
         currentContext.set(null);
         event.stopPropagation();
+
+        // Clearing the revision set when dragging an un-marked revision
+        // matches the behavior of common file managers.
+        if (!marked) {
+            revisionSetEvent.set(new Set());
+        }
 
         let canDrag = BinaryMutator.canDrag(operand);
 
@@ -83,6 +95,7 @@ Core component for direct-manipulation objects. A drag&drop source.
     class:conflict={conflicted}
     class:context={dragging || $currentContext == operand}
     class:hint={dragHint}
+    class:marked
     tabindex="-1"
     draggable="true"
     role="option"
@@ -142,5 +155,9 @@ Core component for direct-manipulation objects. A drag&drop source.
 
     .hint {
         color: var(--ctp-peach);
+    }
+
+    .marked {
+        background: var(--ctp-mauve);
     }
 </style>

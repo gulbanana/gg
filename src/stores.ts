@@ -14,6 +14,8 @@ export const repoStatusEvent = await event<RepoStatus | undefined>("gg://repo/st
 export const revisionSelectEvent = await event<RevHeader | undefined>("gg://revision/select", undefined);
 export const changeSelectEvent = await event<RevChange | undefined>("gg://change/select", undefined);
 
+export const revisionSetEvent = writable<Set<string>>(new Set());
+
 export const currentMutation = writable<Query<MutationResult> | null>(null);
 export const currentContext = writable<Operand | null>();
 export const currentSource = writable<Operand | null>();
