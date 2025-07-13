@@ -4,7 +4,7 @@
     import {
         currentTarget,
         revisionSelectEvent,
-        revisionSetEvent,
+        currentRevisionSet,
         currentSource,
     } from "../stores.js";
     import IdSpan from "../controls/IdSpan.svelte";
@@ -24,15 +24,15 @@
 
     function onSelect(event: CustomEvent<MouseEvent>) {
         if (event.detail.ctrlKey) {
-            if ($revisionSetEvent.has(header.id.commit.hex)) {
-                $revisionSetEvent.delete(header.id.commit.hex);
+            if ($currentRevisionSet.has(header.id.change)) {
+                $currentRevisionSet.delete(header.id.change);
             } else {
-                $revisionSetEvent.add(header.id.commit.hex);
+                $currentRevisionSet.add(header.id.change);
             }
-            revisionSetEvent.set($revisionSetEvent);
+            currentRevisionSet.set($currentRevisionSet);
         } else {
             revisionSelectEvent.set(header);
-            revisionSetEvent.set(new Set());
+            currentRevisionSet.set(new Set());
         }
     }
 
@@ -46,7 +46,7 @@
     suffix={header.id.commit.prefix}
     conflicted={header.has_conflict}
     {selected}
-    marked={$revisionSetEvent.has(header.id.commit.hex)}
+    marked={$currentRevisionSet.has(header.id.change)}
     label={header.description.lines[0]}
     on:click={onSelect}
     on:dblclick={onEdit}
