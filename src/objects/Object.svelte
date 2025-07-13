@@ -66,6 +66,15 @@ Core component for direct-manipulation objects. A drag&drop source.
                 dragHint = canDrag.hint;
                 let empty = document.createElement("div");
                 event.dataTransfer?.setDragImage(empty, 0, 0);
+            } else if (operand.type == "Revision") {
+                const clone = (event.currentTarget as HTMLElement).cloneNode(true) as HTMLElement;
+                clone.style.position = "absolute";
+                clone.style.top = "0";
+                clone.style.left = "-1000px";
+                clone.style.width = (event.currentTarget as HTMLElement).clientWidth + "px";
+                document.body.appendChild(clone);
+                event.dataTransfer?.setDragImage(clone, 20, 15);
+                setTimeout(() => clone.remove());
             }
         }
     }
