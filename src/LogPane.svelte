@@ -198,6 +198,11 @@
             <div>Loading changes...</div>
         {/if}
     </ListWidget>
+
+    <div slot="footer" class="log-revset">
+        <label for="revset">Revset:</label>
+        <input type="text" id="revset" />
+    </div>
 </Pane>
 
 <style>
@@ -211,5 +216,13 @@
     input {
         font-family: var(--stack-code);
         font-size: 14px;
+    }
+
+    .log-revset {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 3px;
+        align-items: center;
+        padding: 3px;
     }
 </style>
