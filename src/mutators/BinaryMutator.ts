@@ -42,17 +42,19 @@ export default class BinaryMutator {
         // can change these listed things (XXX add modes?)
         if (from.type == "Revision") {
             const revs = get(currentRevisionSet);
+            var hint;
             if (revs.size == 2) {
                 let r = [...revs];
-                return { type: "yes", hint: ["Rebasing revisions ", r[0], " & ", r[1]] };
+                hint = ["Rebasing revisions ", r[0], " & ", r[1]];
             } else if (revs.size == 3) {
                 let r = [...revs];
-                return { type: "yes", hint: ["Rebasing revisions ", r[0], " & ", r[1], " & ", r[2]] };
+                hint = ["Rebasing revisions ", r[0], " & ", r[1], " & ", r[2]];
             } else if (revs.size > 3) {
-                return { type: "yes", hint: ["Rebasing revision ", from.header.id.change, ` and ${revs.size - 1} more`] };
+                hint = ["Rebasing revision ", from.header.id.change, ` and ${revs.size - 1} more`];
             } else {
-                return { type: "yes", hint: ["Rebasing revision ", from.header.id.change] };
+                hint = ["Rebasing revision ", from.header.id.change];
             }
+            return { type: "yes", hint: hint };
         } else if (from.type == "Parent") {
             return { type: "yes", hint: ["Removing parent from revision ", from.child.id.change] };
         } else if (from.type == "Change") {

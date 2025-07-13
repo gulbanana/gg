@@ -125,6 +125,10 @@ Core component for direct-manipulation objects. A drag&drop source.
         align-items: center;
     }
 
+    .marked {
+        background: var(--ctp-mantle);
+    }
+    
     .selected {
         background: var(--ctp-base);
     }
@@ -156,8 +160,5 @@ Core component for direct-manipulation objects. A drag&drop source.
     .hint {
         color: var(--ctp-peach);
     }
-
-    .marked {
-        background: var(--ctp-mantle);
-    }
+    
 </style>

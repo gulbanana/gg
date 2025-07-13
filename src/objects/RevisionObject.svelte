@@ -32,7 +32,7 @@
             currentRevisionSet.set($currentRevisionSet);
         } else {
             revisionSelectEvent.set(header);
-            currentRevisionSet.set(new Set());
+            currentRevisionSet.set(new Set([header.id.change]));
         }
     }
 
