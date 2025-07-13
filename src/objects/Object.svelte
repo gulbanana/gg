@@ -9,7 +9,7 @@ Core component for direct-manipulation objects. A drag&drop source.
     import {
         currentContext,
         currentSource,
-        revisionSetEvent,
+        currentRevisionSet,
         revisionSelectEvent,
     } from "../stores";
     import { createEventDispatcher } from "svelte";
@@ -62,7 +62,7 @@ Core component for direct-manipulation objects. A drag&drop source.
         // Clearing the revision set when dragging an un-marked revision
         // matches the behavior of common file managers.
         if (!marked) {
-            revisionSetEvent.set(new Set());
+            currentRevisionSet.set(new Set());
         }
 
         let canDrag = BinaryMutator.canDrag(operand);
@@ -158,6 +158,6 @@ Core component for direct-manipulation objects. A drag&drop source.
     }
 
     .marked {
-        background: var(--ctp-mauve);
+        background: var(--ctp-mantle);
     }
 </style>
