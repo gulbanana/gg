@@ -3,7 +3,7 @@
     import type { LogPage } from "./messages/LogPage.js";
     import type { LogRow } from "./messages/LogRow.js";
     import { query } from "./ipc.js";
-    import { repoStatusEvent, revisionSelectEvent } from "./stores.js";
+    import { repoStatusEvent, revisionSelectEvent, currentRevisionSet } from "./stores.js";
     import Pane from "./shell/Pane.svelte";
     import RevisionObject from "./objects/RevisionObject.svelte";
     import SelectWidget from "./controls/SelectWidget.svelte";
@@ -27,6 +27,8 @@
     let choices: ReturnType<typeof getChoices>;
     let entered_query = latest_query;
     let graphRows: EnhancedRow[] | undefined;
+    let revsetValue = "";
+    let isUserEditing = false;
 
     let logHeight = 0;
     let logWidth = 0;
@@ -58,6 +60,62 @@
 
     $: if (entered_query) choices = getChoices();
     $: if ($repoStatusEvent) reloadLog();
+    
+    // Update revset input when currentRevisionSet changes (with proper timing)
+    $: if ($currentRevisionSet && !isUserEditing) {
+        console.log("currentRevisionSet changed, size:", $currentRevisionSet.size);
+        console.log("currentRevisionSet contents:", Array.from($currentRevisionSet));
+        console.log("currentRevisionSet type:", typeof $currentRevisionSet, $currentRevisionSet);
+        setTimeout(() => {
+            if (!isUserEditing) {
+                const changeIds = Array.from($currentRevisionSet).map(changeId => changeId.prefix);
+                revsetValue = changeIds.length > 0 ? changeIds.join(" | ") : "";
+            }
+        }, 0);
+    }
+    
+    // Update currentRevisionSet when revset input changes
+    async function updateRevisionSet() {
+        if (revsetValue.trim() === "") {
+            currentRevisionSet.set(new Set());
+            return;
+        }
+
+        console.error("updateRevisionSet() called with: '" + revsetValue + "'");
+        
+        try {
+            let page = await query<LogPage>(
+                "query_log",
+                { revset: revsetValue },
+                () => {}
+            );
+            console.log("updateRevisionSet() queried log with: '" + revsetValue + "'" + "; saw page.type = " + page.type);
+            if (page.type == "data") {
+                const newSet = new Set(page.value.rows.map(row => row.revision.id.change));
+                console.log("updating currentRevisionSet to set of size " + newSet.size);
+                console.log("newSet contents:", Array.from(newSet));
+                console.log("newSet type:", typeof newSet, newSet);
+                currentRevisionSet.set(newSet);
+            }
+        } catch (error) {
+            console.error("Error updating revision set:", error);
+        }
+    }
+    
+    // Handle Enter key without losing focus
+    function handleKeydown(e: KeyboardEvent) {
+        if (e.key === 'Enter') {
+            console.log("updateRevisionSet() saw enter with: '" + revsetValue + "'");
+            e.preventDefault();
+            updateRevisionSet();
+        }
+    }
+    
+    // Handle blur (when clicking away)
+    function handleBlur() {
+        isUserEditing = false;
+        updateRevisionSet();
+    }
 
     function getChoices() {
         let choices = presets;
@@ -201,7 +259,14 @@
 
     <div slot="footer" class="log-revset">
         <label for="revset">Revset:</label>
-        <input type="text" id="revset" />
+        <input 
+            type="text" 
+            id="revset" 
+            bind:value={revsetValue}
+            on:focus={() => isUserEditing = true}
+            on:blur={handleBlur}
+            on:keydown={handleKeydown}
+        />
     </div>
 </Pane>
 
