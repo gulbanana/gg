@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { createEventDispatcher } from "svelte";
     import type { RevHeader } from "../messages/RevHeader";
     import type { Operand } from "../messages/Operand";
     import {
@@ -21,6 +22,8 @@
     export let selected: boolean; // same as the imported event, but parent may want to force a value
     export let noBranches: boolean = false;
 
+    const dispatch = createEventDispatcher();
+
     let operand: Operand = child ? { type: "Parent", header, child } : { type: "Revision", header };
 
     function onSelect(event: CustomEvent<MouseEvent>) {
@@ -42,6 +45,10 @@
             // It would probably be best to preserve & extend the current
             // revision set, but for now we'll just reset it to extend
             // from the original endpoint to the current object.
+            console.log(`currentTarget = ${$currentTarget}`);
+            console.log(`revisionSelectEvent = ${$revisionSelectEvent?.id.change.prefix}`);
+            console.log(`currentSource = ${$currentSource}`);
+            console.log(`header = ${header.id.change.prefix}`);
             const p0 = header.id.change.prefix;
             const p1 = $revisionSelectEvent?.id.change.prefix;
             if (p1) {
@@ -52,6 +59,11 @@
                 const revset_input = document.getElementById('revset') as HTMLInputElement;
                 if (revset_input) {
                     revset_input.value = newrevsettext;
+                    // event dispatching works in the common case when clicks
+                    // are to revision objects in the log pane, but I think
+                    // this won't work if the user shift-clicks revisions
+                    // outside the log pane, e.g. parent revisions on the RHS.
+                    dispatch('triggerUpdateRevisionSet', { revsetValue: newrevsettext });
                 }
             }
 
