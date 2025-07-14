@@ -58,6 +58,13 @@ pub fn build_main(app_handle: &AppHandle) -> tauri::Result<Menu<Wry>> {
             )?,
             &MenuItem::with_id(
                 app_handle,
+                "menu_revision_new_after_parent_0",
+                "New empty revision before here",
+                true,
+                Some("cmdorctrl+m"),
+            )?,
+            &MenuItem::with_id(
+                app_handle,
                 "menu_revision_edit",
                 "Edit as working copy",
                 true,
@@ -160,6 +167,13 @@ pub fn build_context(
         app_handle,
         &[
             &MenuItem::with_id(app_handle, "revision_new", "New child", true, None::<&str>)?,
+            &MenuItem::with_id(
+                app_handle,
+                "revision_new_after_parent_0",
+                "New empty revision before here",
+                true,
+                None::<&str>
+            )?,
             &MenuItem::with_id(
                 app_handle,
                 "revision_edit",
@@ -275,6 +289,7 @@ pub fn handle_selection(menu: Menu<Wry>, selection: Option<RevHeader>) -> Result
     match selection {
         None => {
             revision_submenu.enable("menu_revision_new", false)?;
+            revision_submenu.enable("menu_revision_new_after_parent_0", false)?;
             revision_submenu.enable("menu_revision_edit", false)?;
             revision_submenu.enable("menu_revision_duplicate", false)?;
             revision_submenu.enable("menu_revision_abandon", false)?;
@@ -283,6 +298,10 @@ pub fn handle_selection(menu: Menu<Wry>, selection: Option<RevHeader>) -> Result
         }
         Some(rev) => {
             revision_submenu.enable("menu_revision_new", true)?;
+            revision_submenu.enable(
+                "menu_revision_new_after_parent_0", 
+                !rev.is_immutable && rev.parent_ids.len() == 1
+            )?;
             revision_submenu.enable(
                 "menu_revision_edit",
                 !rev.is_immutable && !rev.is_working_copy,
@@ -320,6 +339,10 @@ pub fn handle_context(window: Window, ctx: Operand) -> Result<()> {
                 .revision_menu;
 
             context_menu.enable("revision_new", true)?;
+            context_menu.enable(
+                "revision_new_after_parent_0", 
+                !header.is_immutable && header.parent_ids.len() == 1
+            )?;
             context_menu.enable(
                 "revision_edit",
                 !header.is_immutable && !header.is_working_copy,
@@ -446,6 +469,7 @@ pub fn handle_event(window: &Window, event: MenuEvent) -> Result<()> {
         "menu_repo_open" => repo_open(window),
         "menu_repo_reopen" => repo_reopen(window),
         "menu_revision_new" => window.emit("gg://menu/revision", "new")?,
+        "menu_revision_new_after_parent_0" => window.emit("gg://menu/revision", "new_after_parent_0")?,
         "menu_revision_edit" => window.emit("gg://menu/revision", "edit")?,
         "menu_revision_backout" => window.emit("gg://menu/revision", "backout")?,
         "menu_revision_duplicate" => window.emit("gg://menu/revision", "duplicate")?,
@@ -454,6 +478,7 @@ pub fn handle_event(window: &Window, event: MenuEvent) -> Result<()> {
         "menu_revision_restore" => window.emit("gg://menu/revision", "restore")?,
         "menu_revision_branch" => window.emit("gg://menu/revision", "branch")?,
         "revision_new" => window.emit("gg://context/revision", "new")?,
+        "revision_new_after_parent_0" => window.emit("gg://context/revision", "new_after_parent_0")?,
         "revision_edit" => window.emit("gg://context/revision", "edit")?,
         "revision_backout" => window.emit("gg://context/revision", "backout")?,
         "revision_duplicate" => window.emit("gg://context/revision", "duplicate")?,

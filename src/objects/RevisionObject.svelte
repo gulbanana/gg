@@ -1,7 +1,14 @@
 <script lang="ts">
+    import { createEventDispatcher } from "svelte";
     import type { RevHeader } from "../messages/RevHeader";
     import type { Operand } from "../messages/Operand";
-    import { currentTarget, revisionSelectEvent } from "../stores.js";
+    import {
+        currentTarget,
+        revisionSelectEvent,
+        currentRevisionSet,
+        currentRevisionSetHex,
+        currentSource,
+    } from "../stores.js";
     import IdSpan from "../controls/IdSpan.svelte";
     import BranchObject from "./BranchObject.svelte";
     import Object from "./Object.svelte";
@@ -15,10 +22,57 @@
     export let selected: boolean; // same as the imported event, but parent may want to force a value
     export let noBranches: boolean = false;
 
+    const dispatch = createEventDispatcher();
+
     let operand: Operand = child ? { type: "Parent", header, child } : { type: "Revision", header };
 
-    function onSelect() {
-        revisionSelectEvent.set(header);
+    function onSelect(event: CustomEvent<MouseEvent>) {
+        if (event.detail.ctrlKey) {
+            if ($currentRevisionSet.has(header.id.change)) {
+                $currentRevisionSet.delete(header.id.change);
+            } else {
+                $currentRevisionSet.add(header.id.change);
+            }
+            // The prefixes are subject to change as new revisions are added,
+            // so they do not make for stable keys. However, we do want to
+            // easily render the prefixes of the current set. So we keep a
+            // parallel set of strings, and get the current prefixes from
+            // the corresponding ChangeId objects.
+            let hexes = new Set([...$currentRevisionSet].map(c => c.hex));
+            currentRevisionSet.set($currentRevisionSet);
+            currentRevisionSetHex.set(hexes);
+        } else if (event.detail.shiftKey) {
+            // It would probably be best to preserve & extend the current
+            // revision set, but for now we'll just reset it to extend
+            // from the original endpoint to the current object.
+            console.log(`currentTarget = ${$currentTarget}`);
+            console.log(`revisionSelectEvent = ${$revisionSelectEvent?.id.change.prefix}`);
+            console.log(`currentSource = ${$currentSource}`);
+            console.log(`header = ${header.id.change.prefix}`);
+            const p0 = header.id.change.prefix;
+            const p1 = $revisionSelectEvent?.id.change.prefix;
+            if (p1) {
+                // I guess the cleaner thing would be to query ancestor-vs-descendent
+                // relations in each direction and emit the minimal applicable revset.
+                // This is OK for a quick hack!
+                const newrevsettext = `(${p0}::${p1} | ${p1}::${p0})`
+                const revset_input = document.getElementById('revset') as HTMLInputElement;
+                if (revset_input) {
+                    revset_input.value = newrevsettext;
+                    // event dispatching works in the common case when clicks
+                    // are to revision objects in the log pane, but I think
+                    // this won't work if the user shift-clicks revisions
+                    // outside the log pane, e.g. parent revisions on the RHS.
+                    dispatch('triggerUpdateRevisionSet', { revsetValue: newrevsettext });
+                }
+            }
+
+            event.preventDefault();
+        } else {
+            revisionSelectEvent.set(header);
+            currentRevisionSet.set(new Set([header.id.change]));
+            currentRevisionSetHex.set(new Set([header.id.change.hex]));
+        }
     }
 
     function onEdit() {
@@ -31,6 +85,7 @@
     suffix={header.id.commit.prefix}
     conflicted={header.has_conflict}
     {selected}
+    marked={$currentRevisionSetHex.has(header.id.change.hex)}
     label={header.description.lines[0]}
     on:click={onSelect}
     on:dblclick={onEdit}

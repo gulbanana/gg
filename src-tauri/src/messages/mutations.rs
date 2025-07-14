@@ -47,6 +47,18 @@ pub struct CreateRevision {
     pub parent_ids: Vec<RevId>,
 }
 
+/// Creates a new revision between two changes and makes it the working copy
+#[derive(Deserialize, Debug)]
+#[cfg_attr(
+    feature = "ts-rs",
+    derive(TS),
+    ts(export, export_to = "../src/messages/")
+)]
+pub struct CreateRevisionBetween {
+    pub after_id: CommitId,
+    pub before_id: RevId,
+}
+
 #[derive(Deserialize, Debug)]
 #[cfg_attr(
     feature = "ts-rs",
