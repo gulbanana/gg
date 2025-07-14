@@ -1,4 +1,6 @@
+import { get } from "svelte/store";
 import { mutate } from "../ipc";
+import { currentRevisionSet } from "../stores";
 import type { Operand } from "../messages/Operand";
 import type { MoveChanges } from "../messages/MoveChanges";
 import type { MoveRef } from "../messages/MoveRef";
@@ -39,7 +41,20 @@ export default class BinaryMutator {
 
         // can change these listed things (XXX add modes?)
         if (from.type == "Revision") {
-            return { type: "yes", hint: ["Rebasing revision ", from.header.id.change] };
+            const revs = get(currentRevisionSet);
+            var hint;
+            if (revs.size == 2) {
+                let r = [...revs];
+                hint = ["Rebasing revisions ", r[0], " & ", r[1]];
+            } else if (revs.size == 3) {
+                let r = [...revs];
+                hint = ["Rebasing revisions ", r[0], " & ", r[1], " & ", r[2]];
+            } else if (revs.size > 3) {
+                hint = ["Rebasing revision ", from.header.id.change, ` and ${revs.size - 1} more`];
+            } else {
+                hint = ["Rebasing revision ", from.header.id.change];
+            }
+            return { type: "yes", hint: hint };
         } else if (from.type == "Parent") {
             return { type: "yes", hint: ["Removing parent from revision ", from.child.id.change] };
         } else if (from.type == "Change") {

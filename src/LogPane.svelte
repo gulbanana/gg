@@ -3,7 +3,7 @@
     import type { LogPage } from "./messages/LogPage.js";
     import type { LogRow } from "./messages/LogRow.js";
     import { query } from "./ipc.js";
-    import { repoStatusEvent, revisionSelectEvent } from "./stores.js";
+    import { repoStatusEvent, revisionSelectEvent, currentRevisionSet, currentRevisionSetHex } from "./stores.js";
     import Pane from "./shell/Pane.svelte";
     import RevisionObject from "./objects/RevisionObject.svelte";
     import SelectWidget from "./controls/SelectWidget.svelte";
@@ -27,6 +27,8 @@
     let choices: ReturnType<typeof getChoices>;
     let entered_query = latest_query;
     let graphRows: EnhancedRow[] | undefined;
+    let revsetValue = "";
+    let isUserEditing = false;
 
     let logHeight = 0;
     let logWidth = 0;
@@ -58,6 +60,68 @@
 
     $: if (entered_query) choices = getChoices();
     $: if ($repoStatusEvent) reloadLog();
+    
+    // Update revset input when currentRevisionSet changes (with proper timing)
+    $: if ($currentRevisionSet && !isUserEditing) {
+        console.log("currentRevisionSet reactive change, size:", $currentRevisionSet.size);
+        setTimeout(() => {
+            if (!isUserEditing) {
+                const changeIds = Array.from($currentRevisionSet).map(changeId => changeId.prefix);
+                revsetValue = changeIds.length > 0 ? changeIds.join(" | ") : "";
+            }
+        }, 0);
+    }
+    
+    // Update currentRevisionSet when revset input changes
+    async function updateRevisionSet(event?: CustomEvent) {
+        const queryValue = event?.detail?.revsetValue || revsetValue;
+        console.error("updateRevisionSet() called with: '" + queryValue + "'");
+        
+        if (queryValue.trim() === "") {
+            currentRevisionSet.set(new Set());
+            currentRevisionSetHex.set(new Set());
+            return;
+        }
+
+        console.error("updateRevisionSet() called with nonempty: '" + queryValue + "'");
+        
+        try {
+            let page = await query<LogPage>(
+                "query_log",
+                { revset: queryValue },
+                () => {}
+            );
+            console.log("updateRevisionSet() queried log with: '" + queryValue + "'" + "; saw page.type = " + page.type);
+            if (page.type == "data") {
+                const newSet = new Set(page.value.rows.map(row => row.revision.id.change));
+                console.log("updateRevisionSet() updating currentRevisionSet to set of size " + newSet.size);
+                currentRevisionSet.set(newSet);
+                currentRevisionSetHex.set(new Set([...newSet].map(c => c.hex)));
+            }
+            
+            // Update the input binding to match the query value
+            if (event?.detail?.revsetValue) {
+                revsetValue = event.detail.revsetValue;
+            }
+        } catch (error) {
+            console.error("Error updating revision set:", error);
+        }
+    }
+    
+    // Handle Enter key without losing focus
+    function handleKeydown(e: KeyboardEvent) {
+        if (e.key === 'Enter') {
+            console.log("updateRevisionSet() saw enter with: '" + revsetValue + "'");
+            e.preventDefault();
+            updateRevisionSet();
+        }
+    }
+    
+    // Handle blur (when clicking away)
+    function handleBlur() {
+        isUserEditing = false;
+        updateRevisionSet();
+    }
 
     function getChoices() {
         let choices = presets;
@@ -191,13 +255,26 @@
                 {#if row}
                     <RevisionObject
                         header={row.revision}
-                        selected={$revisionSelectEvent?.id.commit.hex == row.revision.id.commit.hex} />
+                        selected={$revisionSelectEvent?.id.commit.hex == row.revision.id.commit.hex}
+                        on:triggerUpdateRevisionSet={updateRevisionSet} />
                 {/if}
             </GraphLog>
         {:else}
             <div>Loading changes...</div>
         {/if}
     </ListWidget>
+
+    <div slot="footer" class="log-revset">
+        <label for="revset">Revset:</label>
+        <input 
+            type="text" 
+            id="revset" 
+            bind:value={revsetValue}
+            on:focus={() => isUserEditing = true}
+            on:blur={handleBlur}
+            on:keydown={handleKeydown}
+        />
+    </div>
 </Pane>
 
 <style>
@@ -211,5 +288,13 @@
     input {
         font-family: var(--stack-code);
         font-size: 14px;
+    }
+
+    .log-revset {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 3px;
+        align-items: center;
+        padding: 3px;
     }
 </style>
