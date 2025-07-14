@@ -38,6 +38,24 @@
             let hexes = new Set([...$currentRevisionSet].map(c => c.hex));
             currentRevisionSet.set($currentRevisionSet);
             currentRevisionSetHex.set(hexes);
+        } else if (event.detail.shiftKey) {
+            // It would probably be best to preserve & extend the current
+            // revision set, but for now we'll just reset it to extend
+            // from the original endpoint to the current object.
+            const p0 = header.id.change.prefix;
+            const p1 = $revisionSelectEvent?.id.change.prefix;
+            if (p1) {
+                // I guess the cleaner thing would be to query ancestor-vs-descendent
+                // relations in each direction and emit the minimal applicable revset.
+                // This is OK for a quick hack!
+                const newrevsettext = `(${p0}::${p1} | ${p1}::${p0})`
+                const revset_input = document.getElementById('revset') as HTMLInputElement;
+                if (revset_input) {
+                    revset_input.value = newrevsettext;
+                }
+            }
+
+            event.preventDefault();
         } else {
             revisionSelectEvent.set(header);
             currentRevisionSet.set(new Set([header.id.change]));
