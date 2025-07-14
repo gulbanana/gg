@@ -63,9 +63,7 @@
     
     // Update revset input when currentRevisionSet changes (with proper timing)
     $: if ($currentRevisionSet && !isUserEditing) {
-        console.log("currentRevisionSet changed, size:", $currentRevisionSet.size);
-        console.log("currentRevisionSet contents:", Array.from($currentRevisionSet));
-        console.log("currentRevisionSet type:", typeof $currentRevisionSet, $currentRevisionSet);
+        console.log("currentRevisionSet reactive change, size:", $currentRevisionSet.size);
         setTimeout(() => {
             if (!isUserEditing) {
                 const changeIds = Array.from($currentRevisionSet).map(changeId => changeId.prefix);
@@ -75,29 +73,35 @@
     }
     
     // Update currentRevisionSet when revset input changes
-    async function updateRevisionSet() {
-        if (revsetValue.trim() === "") {
+    async function updateRevisionSet(event?: CustomEvent) {
+        const queryValue = event?.detail?.revsetValue || revsetValue;
+        console.error("updateRevisionSet() called with: '" + queryValue + "'");
+        
+        if (queryValue.trim() === "") {
             currentRevisionSet.set(new Set());
             currentRevisionSetHex.set(new Set());
             return;
         }
 
-        console.error("updateRevisionSet() called with: '" + revsetValue + "'");
+        console.error("updateRevisionSet() called with nonempty: '" + queryValue + "'");
         
         try {
             let page = await query<LogPage>(
                 "query_log",
-                { revset: revsetValue },
+                { revset: queryValue },
                 () => {}
             );
-            console.log("updateRevisionSet() queried log with: '" + revsetValue + "'" + "; saw page.type = " + page.type);
+            console.log("updateRevisionSet() queried log with: '" + queryValue + "'" + "; saw page.type = " + page.type);
             if (page.type == "data") {
                 const newSet = new Set(page.value.rows.map(row => row.revision.id.change));
-                console.log("updating currentRevisionSet to set of size " + newSet.size);
-                console.log("newSet contents:", Array.from(newSet));
-                console.log("newSet type:", typeof newSet, newSet);
+                console.log("updateRevisionSet() updating currentRevisionSet to set of size " + newSet.size);
                 currentRevisionSet.set(newSet);
                 currentRevisionSetHex.set(new Set([...newSet].map(c => c.hex)));
+            }
+            
+            // Update the input binding to match the query value
+            if (event?.detail?.revsetValue) {
+                revsetValue = event.detail.revsetValue;
             }
         } catch (error) {
             console.error("Error updating revision set:", error);
@@ -251,7 +255,8 @@
                 {#if row}
                     <RevisionObject
                         header={row.revision}
-                        selected={$revisionSelectEvent?.id.commit.hex == row.revision.id.commit.hex} />
+                        selected={$revisionSelectEvent?.id.commit.hex == row.revision.id.commit.hex}
+                        on:triggerUpdateRevisionSet={updateRevisionSet} />
                 {/if}
             </GraphLog>
         {:else}
