@@ -16,6 +16,7 @@ export const revisionSelectEvent = await event<RevHeader | undefined>("gg://revi
 export const changeSelectEvent = await event<RevChange | undefined>("gg://change/select", undefined);
 
 export const currentRevisionSet = writable<Set<ChangeId>>(new Set());
+export const currentRevisionSetHex = writable<Set<string>>(new Set());
 
 export const currentMutation = writable<Query<MutationResult> | null>(null);
 export const currentContext = writable<Operand | null>();

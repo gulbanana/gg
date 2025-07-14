@@ -3,7 +3,7 @@
     import type { LogPage } from "./messages/LogPage.js";
     import type { LogRow } from "./messages/LogRow.js";
     import { query } from "./ipc.js";
-    import { repoStatusEvent, revisionSelectEvent, currentRevisionSet } from "./stores.js";
+    import { repoStatusEvent, revisionSelectEvent, currentRevisionSet, currentRevisionSetHex } from "./stores.js";
     import Pane from "./shell/Pane.svelte";
     import RevisionObject from "./objects/RevisionObject.svelte";
     import SelectWidget from "./controls/SelectWidget.svelte";
@@ -78,6 +78,7 @@
     async function updateRevisionSet() {
         if (revsetValue.trim() === "") {
             currentRevisionSet.set(new Set());
+            currentRevisionSetHex.set(new Set());
             return;
         }
 
@@ -96,6 +97,7 @@
                 console.log("newSet contents:", Array.from(newSet));
                 console.log("newSet type:", typeof newSet, newSet);
                 currentRevisionSet.set(newSet);
+                currentRevisionSetHex.set(new Set([...newSet].map(c => c.hex)));
             }
         } catch (error) {
             console.error("Error updating revision set:", error);

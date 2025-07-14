@@ -5,6 +5,7 @@
         currentTarget,
         revisionSelectEvent,
         currentRevisionSet,
+        currentRevisionSetHex,
         currentSource,
     } from "../stores.js";
     import IdSpan from "../controls/IdSpan.svelte";
@@ -29,10 +30,18 @@
             } else {
                 $currentRevisionSet.add(header.id.change);
             }
+            // The prefixes are subject to change as new revisions are added,
+            // so they do not make for stable keys. However, we do want to
+            // easily render the prefixes of the current set. So we keep a
+            // parallel set of strings, and get the current prefixes from
+            // the corresponding ChangeId objects.
+            let hexes = new Set([...$currentRevisionSet].map(c => c.hex));
             currentRevisionSet.set($currentRevisionSet);
+            currentRevisionSetHex.set(hexes);
         } else {
             revisionSelectEvent.set(header);
             currentRevisionSet.set(new Set([header.id.change]));
+            currentRevisionSetHex.set(new Set([header.id.change.hex]));
         }
     }
 
@@ -46,7 +55,7 @@
     suffix={header.id.commit.prefix}
     conflicted={header.has_conflict}
     {selected}
-    marked={$currentRevisionSet.has(header.id.change)}
+    marked={$currentRevisionSetHex.has(header.id.change.hex)}
     label={header.description.lines[0]}
     on:click={onSelect}
     on:dblclick={onEdit}
