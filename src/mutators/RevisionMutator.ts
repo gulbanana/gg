@@ -1,9 +1,11 @@
 import type { RevHeader } from "../messages/RevHeader";
+import type { RevId } from "../messages/RevId";
 import type { AbandonRevisions } from "../messages/AbandonRevisions";
 import type { BackoutRevisions } from "../messages/BackoutRevisions";
 import type { CheckoutRevision } from "../messages/CheckoutRevision";
 import type { CopyChanges } from "../messages/CopyChanges";
 import type { CreateRevision } from "../messages/CreateRevision";
+import type { CreateRevisionBetween } from "../messages/CreateRevisionBetween";
 import type { DescribeRevision } from "../messages/DescribeRevision";
 import type { DuplicateRevisions } from "../messages/DuplicateRevisions";
 import type { MoveChanges } from "../messages/MoveChanges";
@@ -27,6 +29,10 @@ export default class RevisionMutator {
         switch (event) {
             case "new":
                 this.onNew();
+                break;
+            case "new_after_parent_0":
+                console.log("new_after_parent_0 invoking");
+                this.onNewAfterParent0();
                 break;
             case "edit":
                 if (!this.#revision.is_immutable) {
@@ -65,6 +71,20 @@ export default class RevisionMutator {
     onNew = () => {
         mutate<CreateRevision>("create_revision", {
             parent_ids: [this.#revision.id],
+        });
+    };
+
+    onNewBefore = (successor: RevId) => {
+        mutate<CreateRevisionBetween>("create_revision_between", {
+            after_id: this.#revision.id,
+            before_id: successor
+        });
+    };
+
+    onNewAfterParent0 = () => {
+        mutate<CreateRevisionBetween>("create_revision_between", {
+            before_id: this.#revision.id,
+            after_id: this.#revision.parent_ids[0]
         });
     };
 
