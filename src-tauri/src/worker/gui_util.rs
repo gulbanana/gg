@@ -97,7 +97,7 @@ impl From<BackendError> for RevsetError {
 }
 
 impl WorkerSession {
-    pub fn load_directory(&mut self, cwd: &Path) -> Result<WorkspaceSession> {
+    pub fn load_directory(&mut self, cwd: &Path) -> Result<WorkspaceSession<'_>> {
         let factory = DefaultWorkspaceLoaderFactory;
         let loader = factory.create(find_workspace_dir(cwd))?;
 
@@ -397,7 +397,7 @@ impl WorkspaceSession<'_> {
             .expect("prefix context disambiguate_within()")
     }
 
-    fn resolver(&self) -> SymbolResolver {
+    fn resolver(&self) -> SymbolResolver<'_> {
         SymbolResolver::new(
             self.operation.repo.as_ref(),
             &([] as [Box<dyn SymbolResolverExtension>; 0]),
