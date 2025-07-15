@@ -275,10 +275,18 @@ impl Session for WorkspaceSession<'_> {
                         _ => Err(anyhow!("Can't get path for config source {scope:?}")),
                     }
                     .and_then(|path| {
-                        let toml_array: toml_edit::Value =
-                            toml_edit::Value::Array(values.iter().collect());
+                        let toml_array = toml_edit::Array::from_iter(values.iter());
                         let mut file = jj_lib::config::ConfigFile::load_or_empty(scope, &path)?;
-                        file.set_value(&name, toml_array)?;
+                        let config_values: Vec<jj_lib::config::ConfigValue> = toml_array
+                            .into_iter()
+                            .map(|v| {
+                                jj_lib::config::ConfigValue::String(toml_edit::Formatted::new(
+                                    v.to_string(),
+                                ))
+                            })
+                            .collect();
+                        let config_array = toml_edit::Array::from_iter(config_values);
+                        file.set_value(&name, jj_lib::config::ConfigValue::Array(config_array))?;
                         file.save()?;
                         Ok(())
                     });

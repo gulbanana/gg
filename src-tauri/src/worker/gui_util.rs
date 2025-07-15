@@ -32,10 +32,9 @@ use jj_lib::{
     repo::{ReadonlyRepo, Repo, RepoLoaderError, StoreFactories},
     repo_path::{RepoPath, RepoPathUiConverter},
     revset::{
-        self, DefaultSymbolResolver, Revset, RevsetAliasesMap, RevsetDiagnostics,
-        RevsetEvaluationError, RevsetExpression, RevsetExtensions, RevsetIteratorExt,
-        RevsetParseContext, RevsetResolutionError, RevsetWorkspaceContext, SymbolResolverExtension,
-        UserRevsetExpression,
+        self, Revset, RevsetAliasesMap, RevsetDiagnostics, RevsetEvaluationError, RevsetExpression,
+        RevsetExtensions, RevsetIteratorExt, RevsetParseContext, RevsetResolutionError,
+        RevsetWorkspaceContext, SymbolResolver, SymbolResolverExtension, UserRevsetExpression,
     },
     rewrite::{self, RebaseOptions, RebasedCommit},
     settings::{HumanByteSize, UserSettings},
@@ -398,8 +397,8 @@ impl WorkspaceSession<'_> {
             .expect("prefix context disambiguate_within()")
     }
 
-    fn resolver(&self) -> DefaultSymbolResolver {
-        DefaultSymbolResolver::new(
+    fn resolver(&self) -> SymbolResolver {
+        SymbolResolver::new(
             self.operation.repo.as_ref(),
             &([] as [Box<dyn SymbolResolverExtension>; 0]),
         )
@@ -961,7 +960,9 @@ impl SessionOperation {
         let mut git_ignores = GitIgnoreFile::empty();
         if let Some(git_backend) = self.git_backend() {
             let git_repo = git_backend.git_repo();
-            if let Some(excludes_file_path) = get_excludes_file_path(&git_repo.config_snapshot()) {
+            if let Some(excludes_file_path) =
+                get_excludes_file_path(git_repo.config_snapshot().plumbing())
+            {
                 git_ignores = git_ignores.chain_with_file("", excludes_file_path)?;
             }
             git_ignores = git_ignores
