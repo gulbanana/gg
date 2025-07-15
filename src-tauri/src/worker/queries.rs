@@ -29,6 +29,7 @@ use jj_lib::{
     rewrite,
 };
 use pollster::FutureExt;
+use tokio::io::AsyncReadExt;
 
 use crate::messages::{
     ChangeHunk, ChangeKind, FileRange, HunkLocation, LogCoordinates, LogLine, LogPage, LogRow,
@@ -73,6 +74,7 @@ pub struct QuerySession<'q, 'w: 'q> {
         Skip<
             TopoGroupedGraphIterator<
                 CommitId,
+                CommitId,
                 Box<
                     dyn Iterator<
                             Item = Result<
@@ -81,6 +83,7 @@ pub struct QuerySession<'q, 'w: 'q> {
                             >,
                         > + 'q,
                 >,
+                for<'a> fn(&'a CommitId) -> &'a CommitId,
             >,
         >,
     >,
@@ -93,9 +96,15 @@ impl<'q, 'w> QuerySession<'q, 'w> {
         revset: &'q dyn Revset,
         state: QueryState,
     ) -> QuerySession<'q, 'w> {
-        let iter = TopoGroupedGraphIterator::new(revset.iter_graph())
-            .skip(state.next_row)
-            .peekable();
+        fn identity(id: &CommitId) -> &CommitId {
+            id
+        }
+        let iter = TopoGroupedGraphIterator::new(
+            revset.iter_graph(),
+            identity as for<'a> fn(&'a CommitId) -> &'a CommitId,
+        )
+        .skip(state.next_row)
+        .peekable();
 
         let immutable_revset = ws.evaluate_immutable().unwrap();
         let is_immutable = immutable_revset.containing_fn();
@@ -455,7 +464,7 @@ fn get_value_contents(path: &RepoPath, value: MaterializedTreeValue) -> Result<V
         )),
         MaterializedTreeValue::File(MaterializedFileValue { mut reader, .. }) => {
             let mut contents = vec![];
-            reader.read_to_end(&mut contents)?;
+            pollster::block_on(reader.read_to_end(&mut contents))?;
 
             let start = &contents[..8000.min(contents.len())]; // same heuristic git uses
             let is_binary = start.contains(&b'\0');
