@@ -170,13 +170,13 @@
                     tip="move all changes to parent"
                     onClick={mutator.onSquash}
                     disabled={rev.header.is_immutable || rev.header.parent_ids.length != 1}>
-                    <Icon name="upload" /> Squash
+                    <Icon name="download" /> Squash
                 </ActionWidget>
                 <ActionWidget
                     tip="copy all changes from parent"
                     onClick={mutator.onRestore}
                     disabled={rev.header.is_immutable || rev.header.parent_ids.length != 1}>
-                    <Icon name="download" /> Restore
+                    <Icon name="upload" /> Restore
                 </ActionWidget>
             </div>
 
