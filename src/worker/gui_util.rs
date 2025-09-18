@@ -197,11 +197,11 @@ impl WorkspaceSession<'_> {
 
     pub fn evaluate_revset_expr<'op>(
         &'op self,
+        repo: &'op dyn Repo,
         revset_expr: Arc<UserRevsetExpression>,
     ) -> Result<Box<dyn Revset + 'op>, RevsetError> {
-        let resolved_expression =
-            revset_expr.resolve_user_expression(self.operation.repo.as_ref(), &self.resolver())?;
-        let revset = resolved_expression.evaluate(self.operation.repo.as_ref())?;
+        let resolved_expression = revset_expr.resolve_user_expression(repo, &self.resolver())?;
+        let revset = resolved_expression.evaluate(repo)?;
         Ok(revset)
     }
 
@@ -210,7 +210,7 @@ impl WorkspaceSession<'_> {
         revset_str: &str,
     ) -> Result<Box<dyn Revset + 'op>, RevsetError> {
         let revset_expr = parse_revset(&self.parse_context(), revset_str)?;
-        self.evaluate_revset_expr(revset_expr)
+        self.evaluate_revset_expr(self.operation.repo.as_ref(), revset_expr)
     }
 
     pub fn evaluate_revset_commits<'op>(
@@ -222,7 +222,7 @@ impl WorkspaceSession<'_> {
                 .map(|id| CommitId::try_from_hex(id.hex.as_str()).expect("frontend-validated id"))
                 .collect(),
         );
-        self.evaluate_revset_expr(expr)
+        self.evaluate_revset_expr(self.operation.repo.as_ref(), expr)
     }
 
     pub fn evaluate_revset_changes<'op>(
@@ -233,14 +233,14 @@ impl WorkspaceSession<'_> {
         for id in ids.iter() {
             expr = expr.union(&RevsetExpression::symbol(id.hex.clone()))
         }
-        self.evaluate_revset_expr(expr)
+        self.evaluate_revset_expr(self.operation.repo.as_ref(), expr)
     }
 
     pub fn evaluate_immutable(&self) -> Result<Box<dyn Revset + '_>> {
         let mut diagnostics = RevsetDiagnostics::new(); // XXX pass this down, then include it in the Result
         let expr =
             revset_util::parse_immutable_heads_expression(&mut diagnostics, &self.parse_context())?;
-        let revset = self.evaluate_revset_expr(expr)?;
+        let revset = self.evaluate_revset_expr(self.operation.repo.as_ref(), expr)?;
         Ok(revset)
     }
 
@@ -349,7 +349,7 @@ impl WorkspaceSession<'_> {
         let expr = RevsetExpression::commit(
             CommitId::try_from_hex(&id.hex).expect("frontend-validated id"),
         );
-        let revset = self.evaluate_revset_expr(expr)?;
+        let revset = self.evaluate_revset_expr(self.operation.repo.as_ref(), expr)?;
         self.resolve_single(revset)
     }
 
@@ -540,7 +540,11 @@ impl WorkspaceSession<'_> {
         })
     }
 
-    pub fn check_immutable(&self, ids: impl IntoIterator<Item = CommitId>) -> Result<bool> {
+    pub fn check_immutable_with_repo<'r>(
+        &'r self,
+        repo: &'r dyn Repo,
+        ids: impl IntoIterator<Item = CommitId>,
+    ) -> Result<bool> {
         let check_revset = RevsetExpression::commits(ids.into_iter().collect());
 
         let mut diagnostics = RevsetDiagnostics::new();
@@ -550,10 +554,14 @@ impl WorkspaceSession<'_> {
 
         // note: slow! jj has added a caching contains_fn to revsets, but this codepath is used in one-offs where
         // nothing is cached. this should be checked at some point to ensure we aren't calling it unnecessarily
-        let immutable_revs = self.evaluate_revset_expr(intersection_revset)?;
+        let immutable_revs = self.evaluate_revset_expr(repo, intersection_revset)?;
         let first = immutable_revs.iter().next();
 
         Ok(first.is_some())
+    }
+
+    pub fn check_immutable(&self, ids: impl IntoIterator<Item = CommitId>) -> Result<bool> {
+        self.check_immutable_with_repo(self.operation.repo.as_ref(), ids)
     }
 
     /*********************************************************************
@@ -576,6 +584,17 @@ impl WorkspaceSession<'_> {
         }
 
         tx.repo_mut().rebase_descendants()?;
+        for (name, wc_commit_id) in &tx.repo().view().wc_commit_ids().clone() {
+            if self.check_immutable_with_repo(tx.repo(), [wc_commit_id.clone()])? {
+                let wc_commit = tx.repo().store().get_commit(wc_commit_id)?;
+                tx.repo_mut().check_out(name.clone(), &wc_commit)?;
+                log::debug!(
+                    "The working-copy commit in workspace '{name}' became immutable, so a new \
+                                 commit has been created on top of it.",
+                    name = name.as_symbol()
+                );
+            }
+        }
 
         let old_repo = tx.base_repo().clone();
 
