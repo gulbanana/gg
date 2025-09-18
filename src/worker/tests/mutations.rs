@@ -162,6 +162,67 @@ async fn immutability_of_bookmark() -> Result<()> {
 }
 
 #[tokio::test]
+async fn immutable_workspace_head() -> Result<()> {
+    let repo = mkrepo();
+
+    let mut session = WorkerSession::default();
+    let mut ws = session.load_directory(repo.path())?;
+
+    let immutable_matcher = StringMatcher::Exact("immutable_bookmark".to_string());
+
+    let RevResult::Detail {
+        header: RevHeader { refs, .. },
+        ..
+    } = queries::query_revision(&ws, revs::immutable_bookmark()).await?
+    else {
+        panic!("Bookmark immutable_bookmark not found");
+    };
+    let immutable_bm = refs
+        .as_slice()
+        .iter()
+        .find(|r| {
+            matches!(
+                r,
+                StoreRef::LocalBookmark {
+                    branch_name,
+                    ..
+                    } if branch_name == "immutable_bookmark"
+            )
+        })
+        .unwrap();
+
+    let working_copy = revs::working_copy();
+    MoveRef {
+        r#ref: immutable_bm.clone(),
+        to_id: working_copy,
+    }
+    .execute_unboxed(&mut ws)
+    .await?;
+
+    let (_, after_change) = ws
+        .view()
+        .local_bookmarks_matching(&immutable_matcher)
+        .next()
+        .unwrap();
+    let after_change = after_change.as_normal().unwrap().clone();
+
+    // rev containing the bookmark is now immutable:
+    assert_matches!(ws.check_immutable([after_change]), Ok(true));
+
+    // checked-out rev is not immutable (because we made a new one):
+    let current_ws_heads: Vec<jj_lib::backend::CommitId> = ws
+        .repo()
+        .view()
+        .wc_commit_ids()
+        .iter()
+        .map(|(_, id)| id.clone())
+        .collect();
+    assert_matches!(ws.check_immutable(current_ws_heads), Ok(false));
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn create_revision_single_parent() -> Result<()> {
     let repo = mkrepo();
 
