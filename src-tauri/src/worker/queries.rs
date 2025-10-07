@@ -532,7 +532,7 @@ fn get_unified_hunks(
                 }
             }
 
-            lines.push(std::str::from_utf8(&formatter)?.into());
+            lines.push(String::from_utf8_lossy(&formatter).into_owned());
         }
 
         hunks.push(ChangeHunk {
