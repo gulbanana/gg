@@ -85,8 +85,8 @@
 </script>
 
 <svg class="graph" style="width: 100%; height: {graphHeight}px;">
-    {#each visibleSlice.rows as row}
-        {#key row}
+    {#each visibleSlice.rows as row, i}
+        {#key row?.revision.id.commit.hex ?? i}
             <g transform="translate({(row?.location[0] ?? 0) * columnWidth} {(row?.location[1] ?? 0) * rowHeight})">
                 <foreignObject
                     class:placeholder={row === null}
@@ -103,8 +103,8 @@
         {/key}
     {/each}
 
-    {#each visibleSlice.rows as row}
-        {#key row}
+    {#each visibleSlice.rows as row, i}
+        {#key row?.revision.id.commit.hex ?? i}
             {#each distinctLines(visibleSlice.keys, row) as line}
                 <GraphLine {line} />
             {/each}

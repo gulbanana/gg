@@ -1,5 +1,10 @@
 # GG Changelog
 
+## Unreleased
+
+### Fixed
+- Memory leak in the log pane (thanks to @brk).
+
 ## [0.29.1](releases/tag/v0.29.1)
 
 ### Added
