@@ -23,9 +23,9 @@ use jj_lib::{
 
 use crate::messages::{
     AbandonRevisions, BackoutRevisions, CheckoutRevision, CopyChanges, CreateRef, CreateRevision,
-    DeleteRef, DescribeRevision, DuplicateRevisions, GitFetch, GitPush, InsertRevision,
-    MoveChanges, MoveRef, MoveRevision, MoveSource, MutationResult, RenameBranch, StoreRef,
-    TrackBranch, TreePath, UndoOperation, UntrackBranch,
+    CreateRevisionBetween, DeleteRef, DescribeRevision, DuplicateRevisions, GitFetch, GitPush,
+    InsertRevision, MoveChanges, MoveRef, MoveRevision, MoveSource, MutationResult, RenameBranch,
+    StoreRef, TrackBranch, TreePath, UndoOperation, UntrackBranch,
 };
 
 use super::Mutation;
@@ -156,6 +156,47 @@ impl Mutation for CreateRevision {
             .repo_mut()
             .new_commit(parent_ids?, merged_tree.id())
             .write()?;
+
+        tx.repo_mut().edit(ws.name().to_owned(), &new_commit)?;
+
+        match ws.finish_transaction(tx, "new empty commit")? {
+            Some(new_status) => {
+                let new_selection = ws.format_header(&new_commit, Some(false))?;
+                Ok(MutationResult::UpdatedSelection {
+                    new_status,
+                    new_selection,
+                })
+            }
+            None => Ok(MutationResult::Unchanged),
+        }
+    }
+}
+
+impl Mutation for CreateRevisionBetween {
+    fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
+        eprintln!("CreateREvisionBetween execute()");
+        let mut tx = ws.start_transaction()?;
+
+        let parent_id = ws
+            .resolve_single_commit(&self.after_id)
+            .context("resolve after_id")?;
+        let parent_ids = vec![parent_id.id().clone()];
+        let parent_commits = vec![parent_id];
+        let merged_tree = rewrite::merge_commit_trees(tx.repo(), &parent_commits)?;
+
+        let new_commit = tx
+            .repo_mut()
+            .new_commit(parent_ids, merged_tree.id())
+            .write()?;
+
+        let before_commit = ws
+            .resolve_single_change(&self.before_id)
+            .context("resolve before_id")?;
+        if ws.check_immutable(vec![before_commit.id().clone()])? {
+            precondition!("'Before' revision is immutable");
+        }
+
+        rewrite::rebase_commit(tx.repo_mut(), before_commit, vec![new_commit.id().clone()])?;
 
         tx.repo_mut().edit(ws.name().to_owned(), &new_commit)?;
 

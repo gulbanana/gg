@@ -26,9 +26,9 @@ use tauri_plugin_window_state::StateFlags;
 
 use messages::{
     AbandonRevisions, BackoutRevisions, CheckoutRevision, CopyChanges, CreateRef, CreateRevision,
-    DeleteRef, DescribeRevision, DuplicateRevisions, GitFetch, GitPush, InputResponse,
-    InsertRevision, MoveChanges, MoveRef, MoveRevision, MoveSource, MutationResult, RenameBranch,
-    RevId, TrackBranch, UndoOperation, UntrackBranch,
+    CreateRevisionBetween, DeleteRef, DescribeRevision, DuplicateRevisions, GitFetch, GitPush,
+    InputResponse, InsertRevision, MoveChanges, MoveRef, MoveRevision, MoveSource, MutationResult,
+    RenameBranch, RevId, TrackBranch, UndoOperation, UntrackBranch,
 };
 use worker::{Mutation, Session, SessionEvent, WorkerSession};
 
@@ -145,6 +145,7 @@ fn main() -> Result<()> {
             backout_revisions,
             checkout_revision,
             create_revision,
+            create_revision_between,
             describe_revision,
             duplicate_revisions,
             insert_revision,
@@ -371,6 +372,15 @@ fn create_revision(
     window: Window,
     app_state: State<AppState>,
     mutation: CreateRevision,
+) -> Result<MutationResult, InvokeError> {
+    try_mutate(window, app_state, mutation)
+}
+
+#[tauri::command(async)]
+fn create_revision_between(
+    window: Window,
+    app_state: State<AppState>,
+    mutation: CreateRevisionBetween,
 ) -> Result<MutationResult, InvokeError> {
     try_mutate(window, app_state, mutation)
 }

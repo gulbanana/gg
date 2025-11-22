@@ -117,7 +117,7 @@
                 disabled={rev.header.is_immutable || rev.header.is_working_copy}>
                 <Icon name="edit-2" /> Edit
             </ActionWidget>
-            <ActionWidget tip="create a child" onClick={mutator.onNew}>
+            <ActionWidget tip="create a child" onClick={mutator.onNewChild}>
                 <Icon name="edit" /> New
             </ActionWidget>
         </div>
