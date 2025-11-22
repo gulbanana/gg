@@ -17,7 +17,7 @@ jobs:
             cache: 'npm'
       
       - name: install packages
-        run: npm install --package-lock=false 
+        run: npm ci 
 
       - name: run check
         run: npm run check

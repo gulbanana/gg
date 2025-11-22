@@ -22,6 +22,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: 'npm'
 
       - name: install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -37,13 +38,16 @@ jobs:
         run: |
           rustup target add aarch64-apple-darwin
           rustup target add x86_64-apple-darwin
-          
-      - name: install signtool (windows)
+
+      - uses: KamaranL/add-signtool-action@v1
         if: matrix.platform == 'windows-latest'
-        run: cargo install trusted-signing-cli@0.3.0
+          
+      - name: trusted-signing-cli (windows)
+        if: matrix.platform == 'windows-latest'
+        run: cargo install trusted-signing-cli@0.8.0
 
       - name: install frontend dependencies
-        run: npm install --package-lock=false 
+        run: npm ci 
 
       - uses: tauri-apps/tauri-action@v0
         env:
@@ -58,7 +62,7 @@ jobs:
           AZURE_CLIENT_ID: ${{ matrix.platform == 'windows-latest' && secrets.AZURE_CLIENT_ID }}
           AZURE_CLIENT_SECRET: ${{ matrix.platform == 'windows-latest' && secrets.AZURE_CLIENT_SECRET }}
         with:
-          args: ${{ matrix.platform == 'macos-latest' && '--target universal-apple-darwin' || ''}}
+          args: ${{ matrix.platform == 'macos-latest' && '--target universal-apple-darwin --verbose' || '--verbose'}}
           tagName: v__VERSION__
           releaseName: 'GG __VERSION__'
           releaseBody: 'See the assets to download this version and install.'
