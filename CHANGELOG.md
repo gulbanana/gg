@@ -1,4 +1,19 @@
 # GG Changelog
+
+## [0.29.1](releases/tag/v0.29.1)
+
+### Added
+- "New inserted parent" menu item (thanks to @brk).
+- Move sub-file hunks from the right pane (thanks to @nightscape).
+- Show recent workspaces if opening a workspace failed (thanks to @Natural-selection1).
+- Change and commit ID can be selected for copying.
+
+### Fixed
+- Fix overscroll on MacOS (thanks to @mernen).
+- Compress path and action info when window is too narrow (thanks to @Natural-selection1).
+- Use from_utf8_lossy to prevent invalid utf-8 sequence errors (thanks to @jmole).
+- Enabled LTO for release builds, smaller and faster binary (thanks to @berkus).
+
 ## [0.29.0](releases/tag/v0.29.0) 
 This version is based on Jujutsu 0.29.
 

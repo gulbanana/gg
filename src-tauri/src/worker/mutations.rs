@@ -28,10 +28,10 @@ use jj_lib::{
 use pollster::block_on;
 
 use crate::messages::{
-    AbandonRevisions, BackoutRevisions, CheckoutRevision, CopyChanges, CreateRef, CreateRevision,
-    CreateRevisionBetween, DeleteRef, DescribeRevision, DuplicateRevisions, GitFetch, GitPush,
-    InsertRevision, MoveChanges, MoveHunk, MoveRef, MoveRevision, MoveSource, MutationResult,
-    RenameBranch, StoreRef, TrackBranch, TreePath, UndoOperation, UntrackBranch,
+    AbandonRevisions, BackoutRevisions, CheckoutRevision, CopyChanges, CopyHunk, CreateRef,
+    CreateRevision, CreateRevisionBetween, DeleteRef, DescribeRevision, DuplicateRevisions,
+    GitFetch, GitPush, InsertRevision, MoveChanges, MoveHunk, MoveRef, MoveRevision, MoveSource,
+    MutationResult, RenameBranch, StoreRef, TrackBranch, TreePath, UndoOperation, UntrackBranch,
 };
 
 use super::Mutation;
