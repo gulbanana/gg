@@ -33,6 +33,7 @@ use messages::{
 use worker::{Mutation, Session, SessionEvent, WorkerSession};
 
 use crate::callbacks::FrontendCallbacks;
+use crate::messages::CopyHunk;
 
 #[derive(Parser, Debug)]
 #[command(version, author)]
@@ -152,13 +153,14 @@ fn main() -> Result<()> {
             move_source,
             move_changes,
             copy_changes,
+            move_hunk,
+            copy_hunk,
             track_branch,
             untrack_branch,
             rename_branch,
             create_ref,
             delete_ref,
             move_ref,
-            move_hunk,
             git_push,
             git_fetch,
             undo_operation
@@ -440,6 +442,24 @@ fn copy_changes(
 }
 
 #[tauri::command(async)]
+fn move_hunk(
+    window: Window,
+    app_state: State<AppState>,
+    mutation: MoveHunk,
+) -> Result<MutationResult, InvokeError> {
+    try_mutate(window, app_state, mutation)
+}
+
+#[tauri::command(async)]
+fn copy_hunk(
+    window: Window,
+    app_state: State<AppState>,
+    mutation: CopyHunk,
+) -> Result<MutationResult, InvokeError> {
+    try_mutate(window, app_state, mutation)
+}
+
+#[tauri::command(async)]
 fn track_branch(
     window: Window,
     app_state: State<AppState>,
@@ -489,15 +509,6 @@ fn move_ref(
     window: Window,
     app_state: State<AppState>,
     mutation: MoveRef,
-) -> Result<MutationResult, InvokeError> {
-    try_mutate(window, app_state, mutation)
-}
-
-#[tauri::command(async)]
-fn move_hunk(
-    window: Window,
-    app_state: State<AppState>,
-    mutation: MoveHunk,
 ) -> Result<MutationResult, InvokeError> {
     try_mutate(window, app_state, mutation)
 }

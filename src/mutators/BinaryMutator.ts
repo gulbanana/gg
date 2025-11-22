@@ -12,6 +12,8 @@ import RevisionMutator from "./RevisionMutator";
 import ChangeMutator from "./ChangeMutator";
 import RefMutator from "./RefMutator";
 import type { StoreRef } from "../messages/StoreRef";
+import type { CopyHunk } from "../messages/CopyHunk";
+import type { CopyChanges } from "../messages/CopyChanges";
 
 export type RichHint = (string | ChangeId | CommitId | Extract<StoreRef, { type: "LocalBookmark" } | { type: "RemoteBookmark" }>)[];
 export type Eligibility = { type: "yes", hint: RichHint } | { type: "maybe", hint: string } | { type: "no" };
@@ -194,22 +196,18 @@ export default class BinaryMutator {
             } else if (this.#to.type == "Repository") {
                 // restore path or subpath from source parent to source
                 if (this.#from.hunk) {
-                    mutate<MoveHunk>("move_hunk", {
-                        from_id: {
-                            change: {
-                                hex: this.#from.header.parent_ids[0].hex,
-                                prefix: this.#from.header.parent_ids[0].prefix,
-                                rest: this.#from.header.parent_ids[0].rest,
-                                type: "ChangeId"
-                            },
-                            commit: this.#from.header.parent_ids[0]
-                        },
-                        to_id: this.#from.header.id.commit,
+                    mutate<CopyHunk>("copy_hunk", {
+                        from_id: this.#from.header.parent_ids[0],
+                        to_id: this.#from.header.id,
                         path: this.#from.path,
                         hunk: this.#from.hunk
                     });
                 } else {
-                    new ChangeMutator(this.#from.header, this.#from.path).onRestore();
+                    mutate<CopyChanges>("copy_changes", {
+                        from_id: this.#from.header.parent_ids[0],
+                        to_id: this.#from.header.id,
+                        paths: [this.#from.path]
+                    });
                 }
                 return;
             }

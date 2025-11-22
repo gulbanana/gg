@@ -1,9 +1,10 @@
 use super::{mkid, mkrepo, revs};
 use crate::{
     messages::{
-        AbandonRevisions, ChangeHunk, CheckoutRevision, CopyChanges, CreateRevision,
-        DescribeRevision, DuplicateRevisions, FileRange, HunkLocation, InsertRevision, MoveChanges,
-        MoveHunk, MoveSource, MultilineString, MutationResult, RevResult, TreePath,
+        AbandonRevisions, ChangeHunk, CheckoutRevision, CommitId, CopyChanges, CopyHunk,
+        CreateRevision, DescribeRevision, DuplicateRevisions, FileRange, HunkLocation,
+        InsertRevision, MoveChanges, MoveHunk, MoveSource, MultilineString, MutationResult,
+        RevResult, TreePath,
     },
     worker::{Mutation, WorkerSession, queries},
 };
@@ -747,6 +748,367 @@ fn move_hunk_unrelated() -> anyhow::Result<()> {
             );
         }
         _ => panic!("Expected test.txt to be a file in commit B"),
+    }
+
+    Ok(())
+}
+
+#[test]
+fn copy_hunk_from_parent() -> anyhow::Result<()> {
+    use jj_lib::repo::Repo;
+
+    let repo = mkrepo();
+    let mut session = WorkerSession::default();
+    let mut ws = session.load_directory(repo.path())?;
+
+    // Create a base commit with original content
+    fs::write(repo.path().join("test.txt"), "line1\nline2\nline3\n")?;
+    ws.import_and_snapshot(false)?;
+    DescribeRevision {
+        id: revs::working_copy(),
+        new_description: "base".to_owned(),
+        reset_author: false,
+    }
+    .execute_unboxed(&mut ws)?;
+
+    let parent_id = ws.wc_id().clone();
+
+    // Create a child commit with modifications
+    CreateRevision {
+        parent_ids: vec![mkid(&parent_id.hex(), &parent_id.hex())],
+    }
+    .execute_unboxed(&mut ws)?;
+
+    // Modify the file (change line2 to "modified")
+    fs::write(repo.path().join("test.txt"), "line1\nmodified\nline3\n")?;
+    ws.import_and_snapshot(false)?;
+
+    let child_id = ws.wc_id().clone();
+
+    // Now restore the middle hunk from parent to child
+    let hunk = ChangeHunk {
+        location: HunkLocation {
+            from_file: FileRange { start: 1, len: 3 }, // Lines 1-3 in parent
+            to_file: FileRange { start: 1, len: 3 },   // Lines 1-3 in child (context + added)
+        },
+        lines: MultilineString {
+            lines: vec![
+                " line1".to_owned(),
+                "-line2".to_owned(),    // In parent
+                "+modified".to_owned(), // In child
+                " line3".to_owned(),
+            ],
+        },
+    };
+
+    let mutation = CopyHunk {
+        from_id: CommitId {
+            hex: parent_id.hex(),
+            prefix: parent_id.hex()[..2].to_string(),
+            rest: parent_id.hex()[2..].to_string(),
+        },
+        to_id: mkid(&child_id.hex(), &child_id.hex()),
+        path: TreePath {
+            repo_path: "test.txt".to_owned(),
+            relative_path: "".into(),
+        },
+        hunk,
+    };
+
+    let result = mutation.execute_unboxed(&mut ws)?;
+    assert_matches!(result, MutationResult::Updated { .. });
+
+    // Verify: child should now have parent's content (restoration)
+    let new_wc_id = ws.wc_id().clone();
+    let child_commit = ws.get_commit(&new_wc_id)?;
+    let child_tree = child_commit.tree()?;
+    let repo_path = jj_lib::repo_path::RepoPath::from_internal_string("test.txt")?;
+
+    match child_tree.path_value(&repo_path)?.into_resolved() {
+        Ok(Some(jj_lib::backend::TreeValue::File { id, .. })) => {
+            let mut reader = ws.repo().store().read_file(&repo_path, &id)?;
+            let mut content = Vec::new();
+            std::io::Read::read_to_end(&mut reader, &mut content)?;
+            let content_str = String::from_utf8_lossy(&content);
+            assert_eq!(
+                content_str, "line1\nline2\nline3\n",
+                "Child should have parent's content after restore"
+            );
+        }
+        _ => panic!("Expected test.txt to be a file"),
+    }
+
+    // Verify: parent unchanged
+    let parent_commit = ws.get_commit(&parent_id)?;
+    let parent_tree = parent_commit.tree()?;
+    match parent_tree.path_value(&repo_path)?.into_resolved() {
+        Ok(Some(jj_lib::backend::TreeValue::File { id, .. })) => {
+            let mut reader = ws.repo().store().read_file(&repo_path, &id)?;
+            let mut content = Vec::new();
+            std::io::Read::read_to_end(&mut reader, &mut content)?;
+            let content_str = String::from_utf8_lossy(&content);
+            assert_eq!(
+                content_str, "line1\nline2\nline3\n",
+                "Parent should be unchanged"
+            );
+        }
+        _ => panic!("Expected test.txt to be a file in parent"),
+    }
+
+    Ok(())
+}
+
+#[test]
+fn copy_hunk_to_conflict() -> anyhow::Result<()> {
+    let repo = mkrepo();
+    let mut session = WorkerSession::default();
+    let mut ws = session.load_directory(repo.path())?;
+
+    // Use the existing conflict_bookmark from test repo
+    let conflict_commit = revs::conflict_bookmark();
+    let parent_commit = revs::main_bookmark();
+
+    // Try to copy a hunk to the conflicted commit
+    let hunk = ChangeHunk {
+        location: HunkLocation {
+            from_file: FileRange { start: 1, len: 1 },
+            to_file: FileRange { start: 1, len: 1 },
+        },
+        lines: MultilineString {
+            lines: vec!["-original".to_owned(), "+changed".to_owned()],
+        },
+    };
+
+    let mutation = CopyHunk {
+        from_id: parent_commit.commit.clone(),
+        to_id: conflict_commit.clone(),
+        path: TreePath {
+            repo_path: "b.txt".to_owned(), // This file has conflicts
+            relative_path: "".into(),
+        },
+        hunk,
+    };
+
+    let result = mutation.execute_unboxed(&mut ws);
+
+    // Should fail with precondition error about conflicts
+    match result {
+        Ok(MutationResult::PreconditionError { message }) => {
+            assert!(
+                message.contains("conflict"),
+                "Expected error message about conflicts, got: {}",
+                message
+            );
+        }
+        Ok(_) => panic!("Expected precondition error for conflicted file"),
+        Err(e) => panic!("Expected precondition error, got hard error: {}", e),
+    }
+
+    Ok(())
+}
+
+#[test]
+fn copy_hunk_out_of_bounds() -> anyhow::Result<()> {
+    let repo = mkrepo();
+    let mut session = WorkerSession::default();
+    let mut ws = session.load_directory(repo.path())?;
+
+    // Create a small file
+    fs::write(repo.path().join("small.txt"), "line1\nline2\n")?;
+    ws.import_and_snapshot(false)?;
+
+    let parent_id = ws.wc_id().clone();
+
+    CreateRevision {
+        parent_ids: vec![mkid(&parent_id.hex(), &parent_id.hex())],
+    }
+    .execute_unboxed(&mut ws)?;
+
+    fs::write(repo.path().join("small.txt"), "line1\nchanged\n")?;
+    ws.import_and_snapshot(false)?;
+
+    let child_id = ws.wc_id().clone();
+
+    // Try to copy a hunk with out-of-bounds location
+    let hunk = ChangeHunk {
+        location: HunkLocation {
+            from_file: FileRange { start: 1, len: 1 },
+            to_file: FileRange { start: 10, len: 5 }, // Way out of bounds
+        },
+        lines: MultilineString {
+            lines: vec!["-something".to_owned(), "+else".to_owned()],
+        },
+    };
+
+    let mutation = CopyHunk {
+        from_id: CommitId {
+            hex: parent_id.hex(),
+            prefix: parent_id.hex()[..2].to_string(),
+            rest: parent_id.hex()[2..].to_string(),
+        },
+        to_id: mkid(&child_id.hex(), &child_id.hex()),
+        path: TreePath {
+            repo_path: "small.txt".to_owned(),
+            relative_path: "".into(),
+        },
+        hunk,
+    };
+
+    let result = mutation.execute_unboxed(&mut ws);
+
+    match result {
+        Ok(MutationResult::PreconditionError { message }) => {
+            assert!(
+                message.contains("out of bounds"),
+                "Expected error about bounds, got: {}",
+                message
+            );
+        }
+        Ok(_) => panic!("Expected precondition error for out of bounds"),
+        Err(e) => panic!("Expected precondition error, got hard error: {}", e),
+    }
+
+    Ok(())
+}
+
+#[test]
+fn copy_hunk_unchanged() -> anyhow::Result<()> {
+    let repo = mkrepo();
+    let mut session = WorkerSession::default();
+    let mut ws = session.load_directory(repo.path())?;
+
+    // Create parent and child with identical content
+    fs::write(repo.path().join("same.txt"), "line1\nline2\nline3\n")?;
+    ws.import_and_snapshot(false)?;
+
+    let parent_id = ws.wc_id().clone();
+
+    CreateRevision {
+        parent_ids: vec![mkid(&parent_id.hex(), &parent_id.hex())],
+    }
+    .execute_unboxed(&mut ws)?;
+
+    // Child has same content
+    fs::write(repo.path().join("same.txt"), "line1\nline2\nline3\n")?;
+    ws.import_and_snapshot(false)?;
+
+    let child_id = ws.wc_id().clone();
+
+    // Try to restore a hunk that's already identical
+    let hunk = ChangeHunk {
+        location: HunkLocation {
+            from_file: FileRange { start: 1, len: 3 },
+            to_file: FileRange { start: 1, len: 3 },
+        },
+        lines: MultilineString {
+            lines: vec![
+                " line1".to_owned(),
+                " line2".to_owned(),
+                " line3".to_owned(),
+            ],
+        },
+    };
+
+    let mutation = CopyHunk {
+        from_id: CommitId {
+            hex: parent_id.hex(),
+            prefix: parent_id.hex()[..2].to_string(),
+            rest: parent_id.hex()[2..].to_string(),
+        },
+        to_id: mkid(&child_id.hex(), &child_id.hex()),
+        path: TreePath {
+            repo_path: "same.txt".to_owned(),
+            relative_path: "".into(),
+        },
+        hunk,
+    };
+
+    let result = mutation.execute_unboxed(&mut ws)?;
+    assert_matches!(result, MutationResult::Unchanged);
+
+    Ok(())
+}
+
+#[test]
+fn copy_hunk_multiple_hunks() -> anyhow::Result<()> {
+    use jj_lib::repo::Repo;
+
+    let repo = mkrepo();
+    let mut session = WorkerSession::default();
+    let mut ws = session.load_directory(repo.path())?;
+
+    // Create parent with original content
+    fs::write(
+        repo.path().join("multi.txt"),
+        "line1\nline2\nline3\nline4\nline5\n",
+    )?;
+    ws.import_and_snapshot(false)?;
+    let parent_id = ws.wc_id().clone();
+
+    CreateRevision {
+        parent_ids: vec![mkid(&parent_id.hex(), &parent_id.hex())],
+    }
+    .execute_unboxed(&mut ws)?;
+
+    // Child modifies multiple lines
+    fs::write(
+        repo.path().join("multi.txt"),
+        "line1\nmodified2\nline3\nmodified4\nline5\n",
+    )?;
+    ws.import_and_snapshot(false)?;
+    let child_id = ws.wc_id().clone();
+
+    // Restore only the second hunk (line 4)
+    let hunk = ChangeHunk {
+        location: HunkLocation {
+            from_file: FileRange { start: 3, len: 3 }, // Lines 3-5 in parent
+            to_file: FileRange { start: 3, len: 3 },   // Lines 3-5 in child (context + added)
+        },
+        lines: MultilineString {
+            lines: vec![
+                " line3".to_owned(),
+                "-line4".to_owned(),
+                "+modified4".to_owned(),
+                " line5".to_owned(),
+            ],
+        },
+    };
+
+    let mutation = CopyHunk {
+        from_id: CommitId {
+            hex: parent_id.hex(),
+            prefix: parent_id.hex()[..2].to_string(),
+            rest: parent_id.hex()[2..].to_string(),
+        },
+        to_id: mkid(&child_id.hex(), &child_id.hex()),
+        path: TreePath {
+            repo_path: "multi.txt".to_owned(),
+            relative_path: "".into(),
+        },
+        hunk,
+    };
+
+    let result = mutation.execute_unboxed(&mut ws)?;
+    assert_matches!(result, MutationResult::Updated { .. });
+
+    // Verify: line 2 still modified, line 4 restored
+    let new_wc_id = ws.wc_id().clone();
+    let child_commit = ws.get_commit(&new_wc_id)?;
+    let child_tree = child_commit.tree()?;
+    let repo_path = jj_lib::repo_path::RepoPath::from_internal_string("multi.txt")?;
+
+    match child_tree.path_value(&repo_path)?.into_resolved() {
+        Ok(Some(jj_lib::backend::TreeValue::File { id, .. })) => {
+            let mut reader = ws.repo().store().read_file(&repo_path, &id)?;
+            let mut content = Vec::new();
+            std::io::Read::read_to_end(&mut reader, &mut content)?;
+            let content_str = String::from_utf8_lossy(&content);
+            assert_eq!(
+                content_str, "line1\nmodified2\nline3\nline4\nline5\n",
+                "Line 2 should remain modified, line 4 should be restored"
+            );
+        }
+        _ => panic!("Expected multi.txt to be a file"),
     }
 
     Ok(())
