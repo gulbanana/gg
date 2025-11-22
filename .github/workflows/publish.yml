@@ -27,6 +27,10 @@ jobs:
       - name: install Rust stable
         uses: dtolnay/rust-toolchain@stable
 
+      - uses: Swatinem/rust-cache@v2
+        with:
+            workspaces: "src-tauri"
+
       - name: install dependencies (ubuntu)
         if: matrix.platform == 'ubuntu-22.04'
         run: |
