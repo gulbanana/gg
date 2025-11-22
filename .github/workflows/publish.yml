@@ -22,6 +22,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: 'npm'
 
       - name: install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -43,7 +44,7 @@ jobs:
         run: cargo install trusted-signing-cli@0.3.0
 
       - name: install frontend dependencies
-        run: npm install --package-lock=false 
+        run: npm ci 
 
       - uses: tauri-apps/tauri-action@v0
         env:

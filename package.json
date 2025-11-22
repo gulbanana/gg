@@ -14,7 +14,7 @@
   },
   "dependencies": {
     "@catppuccin/palette": "^1.0.3",
-    "@tauri-apps/api": "~2.5.0",
+    "@tauri-apps/api": "~2.4.0",
     "@tauri-apps/plugin-shell": "~2.2.0",
     "feather-icons": "^4.29.1",
     "modern-normalize": "^2.0.0"
