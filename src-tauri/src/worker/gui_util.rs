@@ -7,6 +7,7 @@ use std::{
     env::VarError,
     path::{Path, PathBuf},
     rc::Rc,
+    slice,
     sync::Arc,
 };
 
@@ -292,7 +293,7 @@ impl WorkspaceSession<'_> {
             (Some(commit), None) => Ok(Some(commit?)),
             (None, _) => Ok(None),
             (Some(_), Some(_)) => {
-                let commit_revset = self.evaluate_revset_commits(&[id.commit.clone()])?;
+                let commit_revset = self.evaluate_revset_commits(slice::from_ref(&id.commit))?;
                 let mut commit_iter = commit_revset
                     .as_ref()
                     .iter()
@@ -950,10 +951,10 @@ impl SessionOperation {
         }
 
         fn xdg_config_home() -> Result<PathBuf, VarError> {
-            if let Ok(x) = std::env::var("XDG_CONFIG_HOME") {
-                if !x.is_empty() {
-                    return Ok(PathBuf::from(x));
-                }
+            if let Ok(x) = std::env::var("XDG_CONFIG_HOME")
+                && !x.is_empty()
+            {
+                return Ok(PathBuf::from(x));
             }
             std::env::var("HOME").map(|x| Path::new(&x).join(".config"))
         }
@@ -966,10 +967,10 @@ impl SessionOperation {
             }
             git_ignores = git_ignores
                 .chain_with_file("", git_backend.git_repo_path().join("info").join("exclude"))?;
-        } else if let Ok(git_config) = gix::config::File::from_globals() {
-            if let Some(excludes_file_path) = get_excludes_file_path(&git_config) {
-                git_ignores = git_ignores.chain_with_file("", excludes_file_path)?;
-            }
+        } else if let Ok(git_config) = gix::config::File::from_globals()
+            && let Some(excludes_file_path) = get_excludes_file_path(&git_config)
+        {
+            git_ignores = git_ignores.chain_with_file("", excludes_file_path)?;
         }
         Ok(git_ignores)
     }

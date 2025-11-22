@@ -897,7 +897,7 @@ impl Mutation for GitPush {
                     .view()
                     .all_remote_bookmarks()
                     .filter_map(|(remote_ref_symbol, remote_ref)| {
-                        if remote_ref.is_tracked() && remote_ref_symbol.name == &branch_name_ref {
+                        if remote_ref.is_tracked() && remote_ref_symbol.name == branch_name_ref {
                             Some((remote_ref_symbol.remote, remote_ref))
                         } else {
                             None
@@ -1179,7 +1179,7 @@ fn combine_bookmarks(branch_names: &[impl Display]) -> String {
     }
 }
 
-fn build_matcher(paths: &Vec<TreePath>) -> Result<Box<dyn Matcher>> {
+fn build_matcher(paths: &[TreePath]) -> Result<Box<dyn Matcher>> {
     if paths.is_empty() {
         Ok(Box::new(EverythingMatcher))
     } else {

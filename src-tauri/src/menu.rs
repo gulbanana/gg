@@ -160,6 +160,7 @@ pub fn build_main(app_handle: &AppHandle) -> tauri::Result<Menu<Wry>> {
     Ok(menu)
 }
 
+#[allow(clippy::type_complexity)]
 pub fn build_context(
     app_handle: &AppHandle<Wry>,
 ) -> Result<(Menu<Wry>, Menu<Wry>, Menu<Wry>), tauri::Error> {
@@ -424,21 +425,21 @@ pub fn handle_context(window: Window, ctx: Operand) -> Result<()> {
             )?;
 
             // push a local to its remotes, or finish a CLI delete
-            context_menu.enable("branch_push_all", 
-                matches!(r#ref, StoreRef::LocalBookmark { ref tracking_remotes, .. } if !tracking_remotes.is_empty()) || 
+            context_menu.enable("branch_push_all",
+                matches!(r#ref, StoreRef::LocalBookmark { ref tracking_remotes, .. } if !tracking_remotes.is_empty()) ||
                 matches!(r#ref, StoreRef::RemoteBookmark { is_tracked: true, is_absent: true, .. }))?;
 
             // push a local to a selected remote, tracking first if necessary
-            context_menu.enable("branch_push_single", 
+            context_menu.enable("branch_push_single",
                 matches!(r#ref, StoreRef::LocalBookmark { potential_remotes, .. } if potential_remotes > 0))?;
 
             // fetch a local's remotes, or just a remote (unless we're deleting it; that would be silly)
-            context_menu.enable("branch_fetch_all", 
-                matches!(r#ref, StoreRef::LocalBookmark { ref tracking_remotes, .. } if !tracking_remotes.is_empty()) || 
+            context_menu.enable("branch_fetch_all",
+                matches!(r#ref, StoreRef::LocalBookmark { ref tracking_remotes, .. } if !tracking_remotes.is_empty()) ||
                 matches!(r#ref, StoreRef::RemoteBookmark { is_tracked, is_absent, .. } if (!is_tracked || !is_absent)))?;
 
             // fetch a local, tracking first if necessary
-            context_menu.enable("branch_fetch_single", 
+            context_menu.enable("branch_fetch_single",
                 matches!(r#ref, StoreRef::LocalBookmark { available_remotes, .. } if available_remotes > 0))?;
 
             // rename a local, which also untracks remotes

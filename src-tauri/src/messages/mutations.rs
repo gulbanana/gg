@@ -8,6 +8,7 @@ use super::*;
     derive(TS),
     ts(export, export_to = "../src/messages/")
 )]
+#[allow(clippy::large_enum_variant)]
 pub enum MutationResult {
     Unchanged,
     Updated {
