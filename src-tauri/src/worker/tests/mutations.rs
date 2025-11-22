@@ -1,15 +1,15 @@
 use super::{mkrepo, revs};
 use crate::{
     messages::{
-        AbandonRevisions, CheckoutRevision, CopyChanges, CreateRevision, DescribeRevision,
-        DuplicateRevisions, InsertRevision, MoveChanges, MoveSource, MutationResult, RevResult,
-        TreePath, MoveHunk, ChangeHunk, HunkLocation, FileRange, MultilineString,
+        AbandonRevisions, ChangeHunk, CheckoutRevision, CopyChanges, CreateRevision,
+        DescribeRevision, DuplicateRevisions, FileRange, HunkLocation, InsertRevision, MoveChanges,
+        MoveHunk, MoveSource, MultilineString, MutationResult, RevResult, TreePath,
     },
     worker::{Mutation, WorkerSession, queries},
 };
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use assert_matches::assert_matches;
-use jj_lib::{backend::CommitId, commit::Commit, repo::Repo, repo_path::RepoPath, backend::TreeValue};
+use jj_lib::{backend::TreeValue, commit::Commit, repo::Repo, repo_path::RepoPath};
 use std::fs;
 
 // Helper function to read file content from a specific commit's tree
@@ -30,7 +30,7 @@ fn read_commit_file_content(
             Ok(Some(String::from_utf8(content)?))
         }
         Ok(Some(_)) => Ok(None), // Not a file (symlink, tree, git submodule, etc.)
-        Ok(None) => Ok(None), // Not found or not a file
+        Ok(None) => Ok(None),    // Not found or not a file
         Err(conflict) => {
             // Handle conflict when reading file content
             Err(anyhow!(
@@ -365,21 +365,27 @@ fn move_hunk_single_line() -> anyhow::Result<()> {
     let mutation = MoveHunk {
         from_id: revs::resolve_conflict(),
         to_id: revs::conflict_bookmark().commit,
-        path: TreePath { repo_path: "b.txt".to_owned(), relative_path: "".into() },
+        path: TreePath {
+            repo_path: "b.txt".to_owned(),
+            relative_path: "".into(),
+        },
         hunk: ChangeHunk {
             location: HunkLocation {
                 from_file: FileRange { start: 1, len: 1 },
                 to_file: FileRange { start: 1, len: 6 },
             },
-            lines: MultilineString { lines: vec!["-<<<<<<< Conflict 1 of 1".to_owned(),
-              "-+++++++ Contents of side #1".to_owned(),
-              " 11".to_owned(),
-              "-%%%%%%% Changes from base to side #2".to_owned(),
-              "- 1".to_owned(),
-              "-2".to_owned(),
-              "->>>>>>> Conflict 1 of 1 ends".to_owned(),
-              "+2".to_owned(),
-            ] },
+            lines: MultilineString {
+                lines: vec![
+                    "-<<<<<<< Conflict 1 of 1".to_owned(),
+                    "-+++++++ Contents of side #1".to_owned(),
+                    " 11".to_owned(),
+                    "-%%%%%%% Changes from base to side #2".to_owned(),
+                    "- 1".to_owned(),
+                    "-2".to_owned(),
+                    "->>>>>>> Conflict 1 of 1 ends".to_owned(),
+                    "+2".to_owned(),
+                ],
+            },
         },
     };
 
@@ -389,8 +395,14 @@ fn move_hunk_single_line() -> anyhow::Result<()> {
     // Verify that the file content of b.txt in the working directory now reflects the mutation
     let file_path = repo.path().join("b.txt");
     let content = std::fs::read_to_string(&file_path)?;
-    assert!(!content.contains("old line"), "File should not contain 'old line'");
-    assert!(content.contains("new line"), "File should contain 'new line'");
+    assert!(
+        !content.contains("old line"),
+        "File should not contain 'old line'"
+    );
+    assert!(
+        content.contains("new line"),
+        "File should contain 'new line'"
+    );
 
     Ok(())
 }
@@ -403,7 +415,7 @@ fn move_hunk_insertion_position() -> anyhow::Result<()> {
 
     // Define the source and target commits (using known IDs from mkrepo)
     let from_commit_info = revs::main_bookmark(); // Commit that added c.txt and modified b.txt
-    let to_commit_info = revs::working_copy();    // Child of main_bookmark
+    let to_commit_info = revs::working_copy(); // Child of main_bookmark
 
     // Define the path and the hunk to move
     // Hunk represents adding "2" and removing "1\n2" in b.txt (from main_bookmark commit)
@@ -422,7 +434,10 @@ fn move_hunk_insertion_position() -> anyhow::Result<()> {
     let mutation = MoveHunk {
         from_id: from_commit_info.clone(), // Use the original commit info
         to_id: to_commit_info.clone().commit,
-        path: TreePath { repo_path: file_path_str.to_owned(), relative_path: "".into() },
+        path: TreePath {
+            repo_path: file_path_str.to_owned(),
+            relative_path: "".into(),
+        },
         hunk: hunk.clone(),
     };
     let result = mutation.execute_unboxed(&mut ws)?;
@@ -440,10 +455,22 @@ fn move_hunk_insertion_position() -> anyhow::Result<()> {
         .expect("b.txt should exist in target commit");
 
     // Assertions
-    assert!(!from_content.contains("\n2"), "Source content should not contain the moved hunk part ('2')");
-    assert!(from_content.contains("1"), "Source content should still contain the original line '1'"); // Assumes original content was "1\n2"
-    assert!(to_content.contains("\n2"), "Target content should contain the moved hunk part ('2')");
-    assert!(!to_content.contains("1\n"), "Target content should not contain the removed line '1' from the hunk");
+    assert!(
+        !from_content.contains("\n2"),
+        "Source content should not contain the moved hunk part ('2')"
+    );
+    assert!(
+        from_content.contains("1"),
+        "Source content should still contain the original line '1'"
+    ); // Assumes original content was "1\n2"
+    assert!(
+        to_content.contains("\n2"),
+        "Target content should contain the moved hunk part ('2')"
+    );
+    assert!(
+        !to_content.contains("1\n"),
+        "Target content should not contain the removed line '1' from the hunk"
+    );
 
     // Check parent relationship if needed (especially for descendant case)
     // let to_parents = rewritten_to_commit.parents()?;
@@ -480,7 +507,10 @@ fn move_hunk_to_descendant() -> anyhow::Result<()> {
     let mutation = MoveHunk {
         from_id: commit_a_info.clone(),
         to_id: commit_b_info.clone().commit,
-        path: TreePath { repo_path: file_path_str.to_owned(), relative_path: "".into() },
+        path: TreePath {
+            repo_path: file_path_str.to_owned(),
+            relative_path: "".into(),
+        },
         hunk: hunk_a.clone(),
     };
     let result = mutation.execute_unboxed(&mut ws)?;
@@ -499,19 +529,38 @@ fn move_hunk_to_descendant() -> anyhow::Result<()> {
 
     // Assertions
     // A' (source) should now look like its parent (root commit) regarding b.txt
-    assert!(!a_prime_content.contains("\n2"), "A' content should not contain the moved hunk part ('2')");
-    assert!(a_prime_content.contains("1"), "A' content should revert to the base state ('1')");
+    assert!(
+        !a_prime_content.contains("\n2"),
+        "A' content should not contain the moved hunk part ('2')"
+    );
+    assert!(
+        a_prime_content.contains("1"),
+        "A' content should revert to the base state ('1')"
+    );
 
     // B' (target) should retain the original content of B (which included the hunk from A)
-    assert!(b_prime_content.contains("\n2"), "B' content should still contain the hunk part ('2')");
-    assert!(!b_prime_content.contains("1\n"), "B' content should still not contain the line '1' removed by the hunk");
+    assert!(
+        b_prime_content.contains("\n2"),
+        "B' content should still contain the hunk part ('2')"
+    );
+    assert!(
+        !b_prime_content.contains("1\n"),
+        "B' content should still not contain the line '1' removed by the hunk"
+    );
 
     // Verify parent relationship: B's parent should now be A'
-    let parent_id = commit_b_prime.parents().next()
+    let parent_id = commit_b_prime
+        .parents()
+        .next()
         .ok_or_else(|| anyhow!("No parent found"))?
         .map_err(|e| anyhow!(e))?
-        .id().clone();
-    assert_eq!(parent_id, commit_a_prime.id().to_owned(), "B\'s parent should be A\'");
+        .id()
+        .clone();
+    assert_eq!(
+        parent_id,
+        commit_a_prime.id().to_owned(),
+        "B\'s parent should be A\'"
+    );
 
     Ok(())
 }

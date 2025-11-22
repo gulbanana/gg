@@ -27,8 +27,8 @@ use tauri_plugin_window_state::StateFlags;
 use messages::{
     AbandonRevisions, BackoutRevisions, CheckoutRevision, CopyChanges, CreateRef, CreateRevision,
     DeleteRef, DescribeRevision, DuplicateRevisions, GitFetch, GitPush, InputResponse,
-    InsertRevision, MoveChanges, MoveRef, MoveRevision, MoveSource, MoveHunk, MutationResult, RenameBranch,
-    RevId, TrackBranch, UndoOperation, UntrackBranch,
+    InsertRevision, MoveChanges, MoveHunk, MoveRef, MoveRevision, MoveSource, MutationResult,
+    RenameBranch, RevId, TrackBranch, UndoOperation, UntrackBranch,
 };
 use worker::{Mutation, Session, SessionEvent, WorkerSession};
 

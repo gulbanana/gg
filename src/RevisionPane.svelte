@@ -192,7 +192,7 @@
                             <div class="change" style="--lines: {minLines(change)}">
                                 {#each change.hunks as hunk}
                                     <div class="hunk">
-                                        <HunkObject header={rev.header} path={change.path.repo_path} {hunk} />
+                                        <HunkObject header={rev.header} path={change.path} {hunk} />
                                     </div>
                                     <pre class="diff">{#each hunk.lines.lines as line}<span class={lineColour(line)}
                                                 >{line}</span

@@ -11,7 +11,7 @@
     export let change: RevChange;
     export let selected: boolean;
 
-    let operand: Operand = { type: "Change", header, path: change.path };
+    let operand: Operand = { type: "Change", header, path: change.path, hunk: null };
 
     let icon = "file";
     let state: "add" | "change" | "remove" | null = null;
@@ -57,7 +57,6 @@
         height: 30px;
         display: flex;
         align-items: center;
-        cursor: pointer;
         gap: 6px;
         padding-left: 3px;
     }

@@ -22,16 +22,16 @@ use jj_lib::{
     revset::{self, RevsetIteratorExt},
     rewrite::{self, RebaseOptions, RebasedCommit},
     settings::UserSettings,
-    str_util::StringPattern,
     store::Store,
+    str_util::StringPattern,
 };
 use pollster::block_on;
 
 use crate::messages::{
     AbandonRevisions, BackoutRevisions, CheckoutRevision, CopyChanges, CreateRef, CreateRevision,
     DeleteRef, DescribeRevision, DuplicateRevisions, GitFetch, GitPush, InsertRevision,
-    MoveChanges, MoveHunk, MoveRef, MoveRevision, MoveSource, MutationResult, RenameBranch, StoreRef,
-    TrackBranch, TreePath, UndoOperation, UntrackBranch,
+    MoveChanges, MoveHunk, MoveRef, MoveRevision, MoveSource, MutationResult, RenameBranch,
+    StoreRef, TrackBranch, TreePath, UndoOperation, UntrackBranch,
 };
 
 use super::Mutation;
@@ -824,6 +824,7 @@ impl Mutation for MoveRef {
     }
 }
 
+// XXX LLM code; needs refactoring
 impl Mutation for MoveHunk {
     fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         // Resolve the source (from), target, and parent commits
@@ -831,7 +832,8 @@ impl Mutation for MoveHunk {
         let target_commit = ws.resolve_single_commit(&self.to_id)?;
 
         // Get parent commit - error if merge commit for now
-        let from_parents: Result<Vec<Commit>, jj_lib::backend::BackendError> = from_commit.parents().collect();
+        let from_parents: Result<Vec<Commit>, jj_lib::backend::BackendError> =
+            from_commit.parents().collect();
         let from_parents = from_parents?; // Handle potential error
         if from_parents.len() != 1 {
             precondition!("Cannot move hunk from a merge commit yet");
@@ -847,11 +849,10 @@ impl Mutation for MoveHunk {
         let parent_tree = parent_commit.tree()?;
 
         // --- Check relationship ---
-        let is_descendant= ws
+        let is_descendant = ws
             .repo()
             .index()
             .is_ancestor(from_commit.id(), target_commit.id());
-
 
         // --- Calculate intermediate trees ---
 
@@ -862,7 +863,13 @@ impl Mutation for MoveHunk {
         // Resolve potential conflicts in source tree path to determine executable status
         let hunk_executable = match from_tree.path_value(&repo_path)?.into_resolved() {
             Ok(Some(tree_value)) => {
-                matches!(tree_value, TreeValue::File { executable: true, .. })
+                matches!(
+                    tree_value,
+                    TreeValue::File {
+                        executable: true,
+                        ..
+                    }
+                )
             }
             Ok(None) => false, // Not present or resolved to nothing
             Err(conflict) => {
@@ -875,7 +882,13 @@ impl Mutation for MoveHunk {
                 ));
             }
         };
-        let hunk_tree_id = update_tree_entry(store, &parent_tree, &repo_path, hunk_blob_id, hunk_executable)?;
+        let hunk_tree_id = update_tree_entry(
+            store,
+            &parent_tree,
+            &repo_path,
+            hunk_blob_id,
+            hunk_executable,
+        )?;
         let hunk_tree = ws.repo().store().get_root_tree(&hunk_tree_id)?;
 
         // 2. Calculate `remainder_tree`: from_tree with hunk reverted.
@@ -895,7 +908,9 @@ impl Mutation for MoveHunk {
         if abandon_source {
             if is_descendant {
                 // To simplify parent mapping for B later, disallow this for now.
-                 precondition!("Moving a hunk from a commit that becomes empty to a descendant is not yet supported.");
+                precondition!(
+                    "Moving a hunk from a commit that becomes empty to a descendant is not yet supported."
+                );
             }
             tx.repo_mut().record_abandoned_commit(&from_commit);
         } else {
@@ -915,8 +930,9 @@ impl Mutation for MoveHunk {
                 precondition!("Moving a hunk to a descendant merge commit is not yet supported.");
             }
 
-            let a_prime_id = rewritten_source_id
-                .ok_or_else(|| anyhow!("Source commit was abandoned, cannot reparent descendant"))?;
+            let a_prime_id = rewritten_source_id.ok_or_else(|| {
+                anyhow!("Source commit was abandoned, cannot reparent descendant")
+            })?;
 
             // Assuming A was the only parent for simplicity (enforced by check above)
             let new_parent_ids = vec![a_prime_id];
@@ -971,7 +987,7 @@ fn read_file_content(store: &Arc<Store>, tree: &MergedTree, path: &RepoPath) -> 
             Ok(content)
         }
         Ok(Some(_)) => Ok(Vec::new()), // Found, but not a file (Tree, Symlink, Conflict, GitSubmodule)
-        Ok(None) => Ok(Vec::new()), // Not found
+        Ok(None) => Ok(Vec::new()),    // Not found
         Err(conflict) => {
             // Handle conflict when reading file content
             Err(anyhow!(
@@ -999,7 +1015,11 @@ fn apply_hunk(content: &[u8], hunk: &crate::messages::ChangeHunk) -> Result<Vec<
     // 1. Add lines from base content before the hunk starts.
     //    hunk.location.from_file.start is 1-based index of the *first context/removed line*.
     let hunk_start_line_0_based = hunk.location.from_file.start.saturating_sub(1);
-    result_lines.extend(base_lines[..hunk_start_line_0_based].iter().map(|s| s.to_string()));
+    result_lines.extend(
+        base_lines[..hunk_start_line_0_based]
+            .iter()
+            .map(|s| s.to_string()),
+    );
     base_line_idx = hunk_start_line_0_based;
 
     // 2. Process the hunk lines.
@@ -1008,7 +1028,9 @@ fn apply_hunk(content: &[u8], hunk: &crate::messages::ChangeHunk) -> Result<Vec<
             // Context line (' ') or removed line ('-'): consume from base.
             // Check if base content matches context/removed line, ignoring trailing whitespace.
             let hunk_content_part = &hunk_line[1..];
-            if base_line_idx < base_lines.len() && base_lines[base_line_idx].trim_end() == hunk_content_part.trim_end() {
+            if base_line_idx < base_lines.len()
+                && base_lines[base_line_idx].trim_end() == hunk_content_part.trim_end()
+            {
                 // Only add context lines to the result
                 if hunk_line.starts_with(' ') {
                     // Add the original base line, preserving its exact whitespace
@@ -1021,7 +1043,9 @@ fn apply_hunk(content: &[u8], hunk: &crate::messages::ChangeHunk) -> Result<Vec<
                     "Hunk mismatch: context/removed line does not match base content at index {}. Expected (trimmed): '{}', Found (trimmed): '{}'",
                     base_line_idx,
                     hunk_content_part.trim_end(), // Show trimmed in error for clarity
-                    base_lines.get(base_line_idx).map_or("<EOF>", |l| l.trim_end())
+                    base_lines
+                        .get(base_line_idx)
+                        .map_or("<EOF>", |l| l.trim_end())
                 ));
             }
         } else if hunk_line.starts_with('+') {
@@ -1030,7 +1054,7 @@ fn apply_hunk(content: &[u8], hunk: &crate::messages::ChangeHunk) -> Result<Vec<
             result_lines.push(added_content.to_string());
         } else {
             // Malformed hunk line
-             return Err(anyhow!("Malformed hunk line: {}", hunk_line));
+            return Err(anyhow!("Malformed hunk line: {}", hunk_line));
         }
     }
 
@@ -1053,7 +1077,7 @@ fn apply_hunk(content: &[u8], hunk: &crate::messages::ChangeHunk) -> Result<Vec<
         // Ensure we don't add a *double* newline if the last line already ended with one
         // (unlikely with lines() iterator, but safer to check)
         if !result_bytes.ends_with(b"\n") {
-             result_bytes.push(b'\n');
+            result_bytes.push(b'\n');
         }
     }
 

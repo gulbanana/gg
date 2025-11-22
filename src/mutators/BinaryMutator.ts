@@ -1,6 +1,7 @@
 import { mutate } from "../ipc";
 import type { Operand } from "../messages/Operand";
 import type { MoveChanges } from "../messages/MoveChanges";
+import type { MoveHunk } from "../messages/MoveHunk";
 import type { MoveRef } from "../messages/MoveRef";
 import type { InsertRevision } from "../messages/InsertRevision";
 import type { MoveRevision } from "../messages/MoveRevision";
@@ -43,11 +44,13 @@ export default class BinaryMutator {
         } else if (from.type == "Parent") {
             return { type: "yes", hint: ["Removing parent from revision ", from.child.id.change] };
         } else if (from.type == "Change") {
-            return { type: "yes", hint: [`Squashing changes at ${from.path.relative_path}`] };
+            if (from.hunk) {
+                return { type: "yes", hint: [`Squashing hunk ${from.hunk.location.from_file.start}:${from.hunk.location.from_file.start + from.hunk.location.from_file.len}@${from.path.relative_path} from revision `, from.header.id.change] };
+            } else {
+                return { type: "yes", hint: [`Squashing file ${from.path.relative_path} from revision `, from.header.id.change] };
+            }
         } else if (from.type == "Ref" && from.ref.type != "Tag") {
             return { type: "yes", hint: ["Moving bookmark ", from.ref] };
-        } else if (from.type == "Hunk") {
-            return { type: "yes", hint: ["Moving hunk at ", from.path] };
         }
 
         return { type: "no" };
@@ -96,29 +99,11 @@ export default class BinaryMutator {
                 } else if (this.#to.header.is_immutable) {
                     return { type: "maybe", hint: "(revision is immutable)" };
                 } else {
-                    return { type: "yes", hint: [`Squashing changes at ${this.#from.path.relative_path} into `, this.#to.header.id.change] };
+                    return { type: "yes", hint: [`Squashing changes from ${this.#from.path.relative_path} into `, this.#to.header.id.change] };
                 }
             } else if (this.#to.type == "Repository") {
                 if (this.#from.header.parent_ids.length == 1) {
                     return { type: "yes", hint: [`Restoring changes at ${this.#from.path.relative_path} from parent `, this.#from.header.parent_ids[0]] };
-                } else {
-                    return { type: "maybe", hint: "Can't restore (revision has multiple parents)" };
-                }
-            }
-        }
-
-        if (this.#from.type == "Hunk") {
-            if (this.#to.type == "Revision") {
-                if (this.#to.header.id.change.hex == this.#from.header.id.change.hex) {
-                    return { type: "no" };
-                } else if (this.#to.header.is_immutable) {
-                    return { type: "maybe", hint: "(revision is immutable)" };
-                } else {
-                    return { type: "yes", hint: [`Moving hunk at ${this.#from.path} to `, this.#to.header.id.change] };
-                }
-            } else if (this.#to.type == "Repository") {
-                if (this.#from.header.parent_ids.length == 1) {
-                    return { type: "yes", hint: [`Restoring hunk at ${this.#from.path} from parent `, this.#from.header.parent_ids[0]] };
                 } else {
                     return { type: "maybe", hint: "Can't restore (revision has multiple parents)" };
                 }
@@ -194,49 +179,41 @@ export default class BinaryMutator {
 
         if (this.#from.type == "Change") {
             if (this.#to.type == "Revision") {
-                // squash path to target
-                mutate<MoveChanges>("move_changes", { from_id: this.#from.header.id, to_id: this.#to.header.id.commit, paths: [this.#from.path] });
+                // squash path or subpath to target
+                if (this.#from.hunk) {
+                    mutate<MoveHunk>("move_hunk", {
+                        from_id: this.#from.header.id,
+                        to_id: this.#to.header.id.commit,
+                        path: this.#from.path,
+                        hunk: this.#from.hunk
+                    });
+                } else {
+                    mutate<MoveChanges>("move_changes", { from_id: this.#from.header.id, to_id: this.#to.header.id.commit, paths: [this.#from.path] });
+                }
                 return;
             } else if (this.#to.type == "Repository") {
-                // restore path from source parent to source
-                new ChangeMutator(this.#from.header, this.#from.path).onRestore();
-                return;
-            }
-        }
-
-        if (this.#from.type == "Hunk") {
-            if (this.#to.type == "Revision") {
-                // Perform MoveHunk from from_id to to_id with given path and hunk
-                mutate("move_hunk", {
-                    from_id: this.#from.header.id,
-                    to_id: this.#to.header.id.commit,
-                    path: { repo_path: this.#from.path, relative_path: this.#from.path }, // reuse the same path
-                    hunk: this.#from.hunk
-                });
-                return;
-            } else if (this.#to.type == "Repository") {
-                // Restore hunk from parent to source (similar to Change restore)
-                // We'll just copy the hunk from parent to source. Or effectively revert it.
-                // In this scenario, maybe use MoveHunk with to=source's parent?
-                // For simplicity, let's treat it as restore: means from parent's hunk to current revision:
-                mutate("move_hunk", {
-                    from_id: {
-                        change: {
-                            hex: this.#from.header.parent_ids[0].hex,
-                            prefix: this.#from.header.parent_ids[0].prefix,
-                            rest: this.#from.header.parent_ids[0].rest,
-                            type: "ChangeId"
+                // restore path or subpath from source parent to source
+                if (this.#from.hunk) {
+                    mutate<MoveHunk>("move_hunk", {
+                        from_id: {
+                            change: {
+                                hex: this.#from.header.parent_ids[0].hex,
+                                prefix: this.#from.header.parent_ids[0].prefix,
+                                rest: this.#from.header.parent_ids[0].rest,
+                                type: "ChangeId"
+                            },
+                            commit: this.#from.header.parent_ids[0]
                         },
-                        commit: this.#from.header.parent_ids[0]
-                    },
-                    to_id: this.#from.header.id.commit,
-                    path: { repo_path: this.#from.path, relative_path: this.#from.path },
-                    hunk: this.#from.hunk
-                });
+                        to_id: this.#from.header.id.commit,
+                        path: this.#from.path,
+                        hunk: this.#from.hunk
+                    });
+                } else {
+                    new ChangeMutator(this.#from.header, this.#from.path).onRestore();
+                }
                 return;
             }
         }
-
 
         if (this.#from.type == "Ref") {
             if (this.#to.type == "Revision") {

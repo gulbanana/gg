@@ -106,7 +106,7 @@ Core component for direct-manipulation objects. A drag&drop source.
         color: inherit;
         text-align: left;
 
-        cursor: pointer;
+        cursor: grab;
         width: 100%;
         display: flex;
         align-items: center;

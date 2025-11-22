@@ -175,17 +175,12 @@ pub enum Operand {
     },
     Change {
         header: RevHeader,
-        path: TreePath, // someday: hunks
+        path: TreePath,
+        hunk: Option<ChangeHunk>,
     },
     Ref {
         header: RevHeader,
         r#ref: StoreRef,
-    },
-    Hunk {
-        header: RevHeader,
-        path: String,
-        hunk: ChangeHunk,
-        conflicted: bool,
     },
 }
 
