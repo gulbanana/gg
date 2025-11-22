@@ -1,6 +1,5 @@
 <script lang="ts">
     import ActionWidget from "../controls/ActionWidget.svelte";
-    import Icon from "../controls/Icon.svelte";
     import ModalDialog from "./ModalDialog.svelte";
 
     export let title: string;

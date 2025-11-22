@@ -1019,7 +1019,7 @@ impl Mutation for GitPush {
         // push to each remote
         for (remote_name, branch_updates) in remote_branch_updates.into_iter() {
             let targets = GitBranchPushTargets { branch_updates };
-            let git_settings = ws.data.settings.git_settings()?;
+            let git_settings = ws.data.workspace_settings.git_settings()?;
 
             ws.session.callbacks.with_git(tx.repo_mut(), &|repo, cb| {
                 git::push_branches(
@@ -1095,7 +1095,7 @@ impl Mutation for GitFetch {
                 remote_patterns.push((remote_name, Some(branch_name.to_owned())));
             }
         }
-        let git_settings = ws.data.settings.git_settings()?;
+        let git_settings = ws.data.workspace_settings.git_settings()?;
 
         for (remote_name, pattern) in remote_patterns {
             ws.session.callbacks.with_git(tx.repo_mut(), &|repo, cb| {
