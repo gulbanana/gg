@@ -102,7 +102,7 @@
 <Pane>
     <h2 slot="header" class="header">
         <span class="title">
-            <IdSpan id={rev.header.id.change} /> | <IdSpan id={rev.header.id.commit} />
+            <IdSpan selectable id={rev.header.id.change} /> | <IdSpan selectable id={rev.header.id.commit} />
             {#if rev.header.is_working_copy}
                 | Working copy
             {/if}
@@ -118,7 +118,7 @@
                 disabled={rev.header.is_immutable || rev.header.is_working_copy}>
                 <Icon name="edit-2" /> Edit
             </ActionWidget>
-            <ActionWidget tip="create a child" onClick={mutator.onNew}>
+            <ActionWidget tip="create a child" onClick={mutator.onNewChild}>
                 <Icon name="edit" /> New
             </ActionWidget>
         </div>

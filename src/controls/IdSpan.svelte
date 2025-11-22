@@ -4,11 +4,12 @@
     import { currentTarget } from "../stores";
     export let id: ChangeId | CommitId;
     export let pronoun: boolean = false;
+    export let selectable: boolean = false;
 
     let suffix = id.rest.substring(0, 8 - id.prefix.length);
 </script>
 
-<span class="id" class:pronoun={pronoun || $currentTarget?.type == "Repository"}>
+<span class="id" class:pronoun={pronoun || $currentTarget?.type == "Repository"} class:selectable>
     <span class="prefix {id.type}">{id.prefix}</span>{suffix}
 </span>
 
@@ -35,5 +36,9 @@
     .pronoun > .prefix {
         color: inherit;
         font-weight: bold;
+    }
+
+    .selectable {
+        user-select: text;
     }
 </style>

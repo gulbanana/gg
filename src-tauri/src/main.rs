@@ -26,9 +26,9 @@ use tauri_plugin_window_state::StateFlags;
 
 use messages::{
     AbandonRevisions, BackoutRevisions, CheckoutRevision, CopyChanges, CreateRef, CreateRevision,
-    DeleteRef, DescribeRevision, DuplicateRevisions, GitFetch, GitPush, InputResponse,
-    InsertRevision, MoveChanges, MoveHunk, MoveRef, MoveRevision, MoveSource, MutationResult,
-    RenameBranch, RevId, TrackBranch, UndoOperation, UntrackBranch,
+    CreateRevisionBetween, DeleteRef, DescribeRevision, DuplicateRevisions, GitFetch, GitPush,
+    InputResponse, InsertRevision, MoveChanges, MoveHunk, MoveRef, MoveRevision, MoveSource,
+    MutationResult, RenameBranch, RevId, TrackBranch, UndoOperation, UntrackBranch,
 };
 use worker::{Mutation, Session, SessionEvent, WorkerSession};
 
@@ -146,6 +146,7 @@ fn main() -> Result<()> {
             backout_revisions,
             checkout_revision,
             create_revision,
+            create_revision_between,
             describe_revision,
             duplicate_revisions,
             insert_revision,
@@ -163,7 +164,9 @@ fn main() -> Result<()> {
             move_ref,
             git_push,
             git_fetch,
-            undo_operation
+            undo_operation,
+            query_recent_workspaces,
+            open_workspace_at_path,
         ])
         .menu(menu::build_main)
         .setup(|app| {
@@ -202,10 +205,10 @@ fn main() -> Result<()> {
             window.listen("gg://revision/select", move |event| {
                 let payload: Result<Option<messages::RevHeader>, serde_json::Error> =
                     serde_json::from_str(event.payload());
-                if let Some(menu) = handle.menu() {
-                    if let Ok(selection) = payload {
-                        handler::fatal!(menu::handle_selection(menu, selection));
-                    }
+                if let Some(menu) = handle.menu()
+                    && let Ok(selection) = payload
+                {
+                    handler::fatal!(menu::handle_selection(menu, selection));
                 }
             });
 
@@ -374,6 +377,15 @@ fn create_revision(
     window: Window,
     app_state: State<AppState>,
     mutation: CreateRevision,
+) -> Result<MutationResult, InvokeError> {
+    try_mutate(window, app_state, mutation)
+}
+
+#[tauri::command(async)]
+fn create_revision_between(
+    window: Window,
+    app_state: State<AppState>,
+    mutation: CreateRevisionBetween,
 ) -> Result<MutationResult, InvokeError> {
     try_mutate(window, app_state, mutation)
 }
@@ -560,16 +572,11 @@ fn try_open_repository(window: &Window, cwd: Option<PathBuf>) -> Result<()> {
                     let repo_path = absolute_path.0.clone();
                     window.set_title((String::from("GG - ") + repo_path.as_str()).as_str())?;
 
-                    // on windows, update the shell jumplist; this can be slow
-                    #[cfg(windows)]
-                    {
-                        let window = window.clone();
-                        thread::spawn(move || {
-                            handler::nonfatal!(with_recent_workspaces(window, |recent| {
-                                windows::update_jump_list(recent, &repo_path)
-                            }));
-                        });
-                    }
+                    // update config and jump lists - this can be slow
+                    let window = window.clone();
+                    thread::spawn(move || {
+                        handler::nonfatal!(add_recent_workspaces(window, &repo_path));
+                    });
                 }
                 _ => {
                     window.set_title("GG - Gui for JJ")?;
@@ -632,10 +639,7 @@ fn handle_window_event(window: &Window, event: &WindowEvent) {
     }
 }
 
-fn with_recent_workspaces(
-    window: Window,
-    f: impl FnOnce(&mut Vec<String>) -> Result<()>,
-) -> Result<()> {
+fn add_recent_workspaces(window: Window, repo_path: &str) -> Result<()> {
     let app_state = window.state::<AppState>();
     let session_tx: Sender<SessionEvent> = app_state.get_session(window.label());
 
@@ -649,8 +653,14 @@ fn with_recent_workspaces(
         tx: read_tx,
     })?;
     let mut recent = read_rx.recv()??;
+    recent.retain(|x| x != repo_path);
+    recent.insert(0, repo_path.to_owned());
+    recent.truncate(10);
 
-    f(&mut recent)?;
+    #[cfg(windows)]
+    {
+        windows::update_jump_list(&mut recent)?;
+    }
 
     session_tx.send(SessionEvent::WriteConfigArray {
         key: vec![
@@ -663,4 +673,42 @@ fn with_recent_workspaces(
     })?;
 
     Ok(())
+}
+
+#[tauri::command(async)]
+fn query_recent_workspaces(
+    window: Window,
+    app_state: State<AppState>,
+) -> Result<Vec<String>, InvokeError> {
+    let session_tx: Sender<SessionEvent> = app_state.get_session(window.label());
+    let (call_tx, call_rx) = channel();
+    session_tx
+        .send(SessionEvent::ReadConfigArray {
+            key: vec![
+                "gg".to_string(),
+                "ui".to_string(),
+                "recent-workspaces".to_string(),
+            ],
+            tx: call_tx,
+        })
+        .map_err(InvokeError::from_error)?;
+
+    match call_rx.recv().map_err(InvokeError::from_error)? {
+        Ok(mut workspaces) => {
+            workspaces.truncate(10);
+            Ok(workspaces)
+        }
+        Err(_) => Ok(vec![]),
+    }
+}
+
+#[tauri::command]
+fn open_workspace_at_path(window: Window, path: String) -> Result<(), InvokeError> {
+    match try_open_repository(&window, Some(PathBuf::from(path))) {
+        Ok(_) => Ok(()),
+        Err(err) => {
+            log::error!("try_open_repository: {:#}", err);
+            Err(InvokeError::from_anyhow(err))
+        }
+    }
 }

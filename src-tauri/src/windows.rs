@@ -19,7 +19,7 @@ pub fn reattach_console() {
 }
 
 #[cfg_attr(not(windows), allow(dead_code))]
-pub fn update_jump_list(recent: &mut Vec<String>, path: &String) -> Result<()> {
+pub fn update_jump_list(recent: &mut Vec<String>) -> Result<()> {
     // create a jump list
     // safety: FFI
     let jump_list: ICustomDestinationList =
@@ -42,10 +42,6 @@ pub fn update_jump_list(recent: &mut Vec<String>, path: &String) -> Result<()> {
             }
         }
     };
-
-    // add the new path as most-recent and trim to the configured max size
-    recent.retain(|x| x != path);
-    recent.insert(0, path.to_owned());
 
     // safety: FFI
     let items: IObjectCollection =

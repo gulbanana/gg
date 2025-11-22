@@ -7,6 +7,7 @@ use std::{
     env::VarError,
     path::{Path, PathBuf},
     rc::Rc,
+    slice,
     sync::Arc,
 };
 
@@ -69,7 +70,7 @@ pub struct WorkspaceSession<'a> {
 pub struct WorkspaceData {
     path_converter: RepoPathUiConverter,
     extensions: RevsetExtensions,
-    pub settings: UserSettings,
+    pub workspace_settings: UserSettings,
     pub aliases_map: RevsetAliasesMap,
 }
 
@@ -98,11 +99,11 @@ impl From<BackendError> for RevsetError {
 }
 
 impl WorkerSession {
-    pub fn load_directory(&mut self, cwd: &Path) -> Result<WorkspaceSession> {
+    pub fn load_directory(&mut self, cwd: &Path) -> Result<WorkspaceSession<'_>> {
         let factory = DefaultWorkspaceLoaderFactory;
         let loader = factory.create(find_workspace_dir(cwd))?;
 
-        let (settings, aliases_map) = read_config(loader.repo_path())?;
+        let (settings, aliases_map) = read_config(Some(loader.repo_path()))?;
 
         let workspace = loader.load(
             &settings,
@@ -116,7 +117,7 @@ impl WorkerSession {
         };
 
         let data: WorkspaceData = WorkspaceData {
-            settings,
+            workspace_settings: settings,
             path_converter,
             aliases_map,
             extensions: Default::default(),
@@ -130,7 +131,7 @@ impl WorkerSession {
         let is_large =
             if let Some(default_index) = index.as_any().downcast_ref::<DefaultReadonlyIndex>() {
                 let stats = default_index.as_composite().stats();
-                stats.num_commits as i64 >= data.settings.query_large_repo_heuristic()
+                stats.num_commits as i64 >= data.workspace_settings.query_large_repo_heuristic()
             } else {
                 true
             };
@@ -292,7 +293,7 @@ impl WorkspaceSession<'_> {
             (Some(commit), None) => Ok(Some(commit?)),
             (None, _) => Ok(None),
             (Some(_), Some(_)) => {
-                let commit_revset = self.evaluate_revset_commits(&[id.commit.clone()])?;
+                let commit_revset = self.evaluate_revset_commits(slice::from_ref(&id.commit))?;
                 let mut commit_iter = commit_revset
                     .as_ref()
                     .iter()
@@ -398,7 +399,7 @@ impl WorkspaceSession<'_> {
             .expect("prefix context disambiguate_within()")
     }
 
-    fn resolver(&self) -> DefaultSymbolResolver {
+    fn resolver(&self) -> DefaultSymbolResolver<'_> {
         DefaultSymbolResolver::new(
             self.operation.repo.as_ref(),
             &([] as [Box<dyn SymbolResolverExtension>; 0]),
@@ -431,7 +432,7 @@ impl WorkspaceSession<'_> {
 
         let default_query = self
             .data
-            .settings
+            .workspace_settings
             .get_string("revsets.log")
             .unwrap_or_default();
 
@@ -448,8 +449,8 @@ impl WorkspaceSession<'_> {
             default_query,
             latest_query,
             status: self.format_status(),
-            theme_override: self.data.settings.ui_theme_override(),
-            mark_unpushed_branches: self.data.settings.ui_mark_unpushed_bookmarks(),
+            theme_override: self.data.workspace_settings.ui_theme_override(),
+            mark_unpushed_branches: self.data.workspace_settings.ui_mark_unpushed_bookmarks(),
         })
     }
 
@@ -610,7 +611,7 @@ impl WorkspaceSession<'_> {
         if !(force
             || self
                 .data
-                .settings
+                .workspace_settings
                 .query_auto_snapshot()
                 .unwrap_or(!self.is_large))
         {
@@ -680,14 +681,14 @@ impl WorkspaceSession<'_> {
 
         let HumanByteSize(mut max_new_file_size) = self
             .data
-            .settings
+            .workspace_settings
             .get_value_with("snapshot.max-new-file-size", TryInto::try_into)?;
         if max_new_file_size == 0 {
             max_new_file_size = u64::MAX;
         }
         let (new_tree_id, _) = locked_ws.locked_wc().snapshot(&SnapshotOptions {
             base_ignores,
-            fsmonitor_settings: self.data.settings.fsmonitor_settings()?,
+            fsmonitor_settings: self.data.workspace_settings.fsmonitor_settings()?,
             progress: None,
             max_new_file_size,
             start_tracking_matcher: &EverythingMatcher,
@@ -784,7 +785,7 @@ impl WorkspaceSession<'_> {
     }
 
     fn import_git_refs(&mut self) -> Result<()> {
-        let git_settings = self.data.settings.git_settings()?;
+        let git_settings = self.data.workspace_settings.git_settings()?;
         let mut tx = self.operation.repo.start_transaction();
         // Automated import shouldn't fail because of reserved remote name.
         let stats = jj_lib::git::import_refs(tx.repo_mut(), &git_settings)?;
@@ -879,7 +880,7 @@ impl WorkspaceData {
             path_converter: &self.path_converter,
             workspace_name: name,
         };
-        let now = if let Some(timestamp) = self.settings.commit_timestamp() {
+        let now = if let Some(timestamp) = self.workspace_settings.commit_timestamp() {
             chrono::Local
                 .timestamp_millis_opt(timestamp.timestamp.0)
                 .unwrap()
@@ -889,7 +890,7 @@ impl WorkspaceData {
         RevsetParseContext {
             aliases_map: &self.aliases_map,
             local_variables: HashMap::new(),
-            user_email: self.settings.user_email(),
+            user_email: self.workspace_settings.user_email(),
             date_pattern_context: now.into(),
             extensions: &self.extensions,
             workspace: Some(workspace_context),
@@ -910,9 +911,13 @@ impl SessionOperation {
             .clone();
 
         let revset_string: String = data
-            .settings
+            .workspace_settings
             .get_string("revsets.short-prefixes")
-            .unwrap_or_else(|_| data.settings.get_string("revsets.log").unwrap_or_default());
+            .unwrap_or_else(|_| {
+                data.workspace_settings
+                    .get_string("revsets.log")
+                    .unwrap_or_default()
+            });
 
         // guarantee that an index can be populated - we will unwrap later
         let prefix_context =
@@ -950,10 +955,10 @@ impl SessionOperation {
         }
 
         fn xdg_config_home() -> Result<PathBuf, VarError> {
-            if let Ok(x) = std::env::var("XDG_CONFIG_HOME") {
-                if !x.is_empty() {
-                    return Ok(PathBuf::from(x));
-                }
+            if let Ok(x) = std::env::var("XDG_CONFIG_HOME")
+                && !x.is_empty()
+            {
+                return Ok(PathBuf::from(x));
             }
             std::env::var("HOME").map(|x| Path::new(&x).join(".config"))
         }
@@ -966,10 +971,10 @@ impl SessionOperation {
             }
             git_ignores = git_ignores
                 .chain_with_file("", git_backend.git_repo_path().join("info").join("exclude"))?;
-        } else if let Ok(git_config) = gix::config::File::from_globals() {
-            if let Some(excludes_file_path) = get_excludes_file_path(&git_config) {
-                git_ignores = git_ignores.chain_with_file("", excludes_file_path)?;
-            }
+        } else if let Ok(git_config) = gix::config::File::from_globals()
+            && let Some(excludes_file_path) = get_excludes_file_path(&git_config)
+        {
+            git_ignores = git_ignores.chain_with_file("", excludes_file_path)?;
         }
         Ok(git_ignores)
     }

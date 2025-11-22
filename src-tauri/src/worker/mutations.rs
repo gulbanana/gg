@@ -28,8 +28,8 @@ use jj_lib::{
 use pollster::block_on;
 
 use crate::messages::{
-    AbandonRevisions, BackoutRevisions, CheckoutRevision, CopyChanges, CopyHunk, CreateRef,
-    CreateRevision, DeleteRef, DescribeRevision, DuplicateRevisions, GitFetch, GitPush,
+    AbandonRevisions, BackoutRevisions, CheckoutRevision, CopyChanges, CreateRef, CreateRevision,
+    CreateRevisionBetween, DeleteRef, DescribeRevision, DuplicateRevisions, GitFetch, GitPush,
     InsertRevision, MoveChanges, MoveHunk, MoveRef, MoveRevision, MoveSource, MutationResult,
     RenameBranch, StoreRef, TrackBranch, TreePath, UndoOperation, UntrackBranch,
 };
@@ -162,6 +162,47 @@ impl Mutation for CreateRevision {
             .repo_mut()
             .new_commit(parent_ids?, merged_tree.id())
             .write()?;
+
+        tx.repo_mut().edit(ws.name().to_owned(), &new_commit)?;
+
+        match ws.finish_transaction(tx, "new empty commit")? {
+            Some(new_status) => {
+                let new_selection = ws.format_header(&new_commit, Some(false))?;
+                Ok(MutationResult::UpdatedSelection {
+                    new_status,
+                    new_selection,
+                })
+            }
+            None => Ok(MutationResult::Unchanged),
+        }
+    }
+}
+
+impl Mutation for CreateRevisionBetween {
+    fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
+        eprintln!("CreateREvisionBetween execute()");
+        let mut tx = ws.start_transaction()?;
+
+        let parent_id = ws
+            .resolve_single_commit(&self.after_id)
+            .context("resolve after_id")?;
+        let parent_ids = vec![parent_id.id().clone()];
+        let parent_commits = vec![parent_id];
+        let merged_tree = rewrite::merge_commit_trees(tx.repo(), &parent_commits)?;
+
+        let new_commit = tx
+            .repo_mut()
+            .new_commit(parent_ids, merged_tree.id())
+            .write()?;
+
+        let before_commit = ws
+            .resolve_single_change(&self.before_id)
+            .context("resolve before_id")?;
+        if ws.check_immutable(vec![before_commit.id().clone()])? {
+            precondition!("'Before' revision is immutable");
+        }
+
+        rewrite::rebase_commit(tx.repo_mut(), before_commit, vec![new_commit.id().clone()])?;
 
         tx.repo_mut().edit(ws.name().to_owned(), &new_commit)?;
 
@@ -1211,7 +1252,7 @@ impl Mutation for GitPush {
                     .view()
                     .all_remote_bookmarks()
                     .filter_map(|(remote_ref_symbol, remote_ref)| {
-                        if remote_ref.is_tracked() && remote_ref_symbol.name == &branch_name_ref {
+                        if remote_ref.is_tracked() && remote_ref_symbol.name == branch_name_ref {
                             Some((remote_ref_symbol.remote, remote_ref))
                         } else {
                             None
@@ -1333,7 +1374,7 @@ impl Mutation for GitPush {
         // push to each remote
         for (remote_name, branch_updates) in remote_branch_updates.into_iter() {
             let targets = GitBranchPushTargets { branch_updates };
-            let git_settings = ws.data.settings.git_settings()?;
+            let git_settings = ws.data.workspace_settings.git_settings()?;
 
             ws.session.callbacks.with_git(tx.repo_mut(), &|repo, cb| {
                 git::push_branches(
@@ -1409,7 +1450,7 @@ impl Mutation for GitFetch {
                 remote_patterns.push((remote_name, Some(branch_name.to_owned())));
             }
         }
-        let git_settings = ws.data.settings.git_settings()?;
+        let git_settings = ws.data.workspace_settings.git_settings()?;
 
         for (remote_name, pattern) in remote_patterns {
             ws.session.callbacks.with_git(tx.repo_mut(), &|repo, cb| {
@@ -1493,7 +1534,7 @@ fn combine_bookmarks(branch_names: &[impl Display]) -> String {
     }
 }
 
-fn build_matcher(paths: &Vec<TreePath>) -> Result<Box<dyn Matcher>> {
+fn build_matcher(paths: &[TreePath]) -> Result<Box<dyn Matcher>> {
     if paths.is_empty() {
         Ok(Box::new(EverythingMatcher))
     } else {

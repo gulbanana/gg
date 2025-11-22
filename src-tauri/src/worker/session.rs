@@ -94,6 +94,29 @@ impl Session for WorkerSession {
             match evt {
                 Ok(SessionEvent::EndSession) => return Ok(()),
                 Ok(SessionEvent::ExecuteSnapshot { .. }) => (),
+                Ok(SessionEvent::ReadConfigArray { key, tx }) => {
+                    let name: ConfigNamePathBuf = key.iter().collect();
+                    if let Some(global_settings) = self.user_settings.as_ref() {
+                        tx.send(
+                            global_settings
+                                .config()
+                                .get_value_with(&name, |value| {
+                                    value
+                                        .as_array()
+                                        .map(|values| {
+                                            values
+                                                .into_iter()
+                                                .flat_map(|v| v.as_str().map(|s| s.to_string()))
+                                                .collect::<Vec<String>>()
+                                        })
+                                        .ok_or(anyhow!("config value is not an array"))
+                                })
+                                .context("read config"),
+                        )?;
+                    } else {
+                        tx.send(Err(anyhow!("global settings not found")))?;
+                    }
+                }
                 Ok(SessionEvent::OpenWorkspace { mut tx, mut wd }) => loop {
                     let resolved_wd = match wd.clone().or(latest_wd) {
                         Some(wd) => wd,
@@ -184,7 +207,7 @@ impl Session for WorkspaceSession<'_> {
                     let log_page_size = self
                         .session
                         .force_log_page_size
-                        .unwrap_or(self.data.settings.query_log_page_size());
+                        .unwrap_or(self.data.workspace_settings.query_log_page_size());
                     handle_query(
                         &mut state,
                         &self,
@@ -244,7 +267,7 @@ impl Session for WorkspaceSession<'_> {
 
                     tx.send(
                         self.data
-                            .settings
+                            .workspace_settings
                             .config()
                             .get_value_with(&name, |value| {
                                 value
@@ -285,8 +308,8 @@ impl Session for WorkspaceSession<'_> {
 
                     handler::optional!(path);
 
-                    (self.data.settings, self.data.aliases_map) =
-                        read_config(self.workspace.repo_path())?;
+                    (self.data.workspace_settings, self.data.aliases_map) =
+                        read_config(Some(self.workspace.repo_path()))?;
                 }
             };
         }

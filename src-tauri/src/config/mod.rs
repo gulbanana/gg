@@ -60,25 +60,27 @@ impl GGSettings for UserSettings {
     }
 }
 
-pub fn read_config(repo_path: &Path) -> Result<(UserSettings, RevsetAliasesMap)> {
-    let mut default_layers = default_config_layers();
-    let gg_layer = ConfigLayer::parse(ConfigSource::Default, include_str!("../config/gg.toml"))?;
-    default_layers.push(gg_layer);
-    let mut raw_config = config_from_environment(default_layers);
-
+pub fn read_config(repo_path: Option<&Path>) -> Result<(UserSettings, RevsetAliasesMap)> {
+    let mut layers = vec![];
     let mut config_env = ConfigEnv::from_environment(&Ui::null());
 
-    config_env.reload_user_config(&mut raw_config)?;
+    let default_layers = default_config_layers();
+    let gg_layer = ConfigLayer::parse(ConfigSource::Default, include_str!("../config/gg.toml"))?;
+    layers.extend(default_layers);
+    layers.push(gg_layer);
 
-    config_env.reset_repo_path(repo_path);
-    config_env.reload_repo_config(&mut raw_config)?;
+    let mut raw_config = config_from_environment(layers);
+    config_env.reload_user_config(&mut raw_config)?;
+    if let Some(repo_path) = repo_path {
+        config_env.reset_repo_path(repo_path);
+        config_env.reload_repo_config(&mut raw_config)?;
+    }
 
     let config = config_env.resolve_config(&raw_config)?;
-
     let aliases_map = build_aliases_map(&config)?;
-    let settings = UserSettings::from_config(config)?;
+    let workspace_settings = UserSettings::from_config(config)?;
 
-    Ok((settings, aliases_map))
+    Ok((workspace_settings, aliases_map))
 }
 
 pub fn build_aliases_map(stacked_config: &StackedConfig) -> Result<RevsetAliasesMap> {

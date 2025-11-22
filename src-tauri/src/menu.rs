@@ -51,10 +51,17 @@ pub fn build_main(app_handle: &AppHandle) -> tauri::Result<Menu<Wry>> {
         &[
             &MenuItem::with_id(
                 app_handle,
-                "menu_revision_new",
+                "menu_revision_new_child",
                 "New child",
                 true,
                 Some("cmdorctrl+n"),
+            )?,
+            &MenuItem::with_id(
+                app_handle,
+                "menu_revision_new_parent",
+                "New inserted parent",
+                true,
+                Some("cmdorctrl+m"),
             )?,
             &MenuItem::with_id(
                 app_handle,
@@ -153,13 +160,27 @@ pub fn build_main(app_handle: &AppHandle) -> tauri::Result<Menu<Wry>> {
     Ok(menu)
 }
 
+#[allow(clippy::type_complexity)]
 pub fn build_context(
     app_handle: &AppHandle<Wry>,
 ) -> Result<(Menu<Wry>, Menu<Wry>, Menu<Wry>), tauri::Error> {
     let revision_menu = Menu::with_items(
         app_handle,
         &[
-            &MenuItem::with_id(app_handle, "revision_new", "New child", true, None::<&str>)?,
+            &MenuItem::with_id(
+                app_handle,
+                "revision_new_child",
+                "New child",
+                true,
+                None::<&str>,
+            )?,
+            &MenuItem::with_id(
+                app_handle,
+                "revision_new_parent",
+                "New inserted parent",
+                true,
+                None::<&str>,
+            )?,
             &MenuItem::with_id(
                 app_handle,
                 "revision_edit",
@@ -274,7 +295,8 @@ pub fn handle_selection(menu: Menu<Wry>, selection: Option<RevHeader>) -> Result
 
     match selection {
         None => {
-            revision_submenu.enable("menu_revision_new", false)?;
+            revision_submenu.enable("menu_revision_new_child", false)?;
+            revision_submenu.enable("menu_revision_new_parent", false)?;
             revision_submenu.enable("menu_revision_edit", false)?;
             revision_submenu.enable("menu_revision_duplicate", false)?;
             revision_submenu.enable("menu_revision_abandon", false)?;
@@ -282,7 +304,11 @@ pub fn handle_selection(menu: Menu<Wry>, selection: Option<RevHeader>) -> Result
             revision_submenu.enable("menu_revision_restore", false)?;
         }
         Some(rev) => {
-            revision_submenu.enable("menu_revision_new", true)?;
+            revision_submenu.enable("menu_revision_new_child", true)?;
+            revision_submenu.enable(
+                "menu_revision_new_parent",
+                !rev.is_immutable && rev.parent_ids.len() == 1,
+            )?;
             revision_submenu.enable(
                 "menu_revision_edit",
                 !rev.is_immutable && !rev.is_working_copy,
@@ -319,7 +345,11 @@ pub fn handle_context(window: Window, ctx: Operand) -> Result<()> {
                 .expect("session not found")
                 .revision_menu;
 
-            context_menu.enable("revision_new", true)?;
+            context_menu.enable("revision_new_child", true)?;
+            context_menu.enable(
+                "revision_new_parent",
+                !header.is_immutable && header.parent_ids.len() == 1,
+            )?;
             context_menu.enable(
                 "revision_edit",
                 !header.is_immutable && !header.is_working_copy,
@@ -395,21 +425,21 @@ pub fn handle_context(window: Window, ctx: Operand) -> Result<()> {
             )?;
 
             // push a local to its remotes, or finish a CLI delete
-            context_menu.enable("branch_push_all", 
-                matches!(r#ref, StoreRef::LocalBookmark { ref tracking_remotes, .. } if !tracking_remotes.is_empty()) || 
+            context_menu.enable("branch_push_all",
+                matches!(r#ref, StoreRef::LocalBookmark { ref tracking_remotes, .. } if !tracking_remotes.is_empty()) ||
                 matches!(r#ref, StoreRef::RemoteBookmark { is_tracked: true, is_absent: true, .. }))?;
 
             // push a local to a selected remote, tracking first if necessary
-            context_menu.enable("branch_push_single", 
+            context_menu.enable("branch_push_single",
                 matches!(r#ref, StoreRef::LocalBookmark { potential_remotes, .. } if potential_remotes > 0))?;
 
             // fetch a local's remotes, or just a remote (unless we're deleting it; that would be silly)
-            context_menu.enable("branch_fetch_all", 
-                matches!(r#ref, StoreRef::LocalBookmark { ref tracking_remotes, .. } if !tracking_remotes.is_empty()) || 
+            context_menu.enable("branch_fetch_all",
+                matches!(r#ref, StoreRef::LocalBookmark { ref tracking_remotes, .. } if !tracking_remotes.is_empty()) ||
                 matches!(r#ref, StoreRef::RemoteBookmark { is_tracked, is_absent, .. } if (!is_tracked || !is_absent)))?;
 
             // fetch a local, tracking first if necessary
-            context_menu.enable("branch_fetch_single", 
+            context_menu.enable("branch_fetch_single",
                 matches!(r#ref, StoreRef::LocalBookmark { available_remotes, .. } if available_remotes > 0))?;
 
             // rename a local, which also untracks remotes
@@ -445,7 +475,8 @@ pub fn handle_event(window: &Window, event: MenuEvent) -> Result<()> {
     match event.id.0.as_str() {
         "menu_repo_open" => repo_open(window),
         "menu_repo_reopen" => repo_reopen(window),
-        "menu_revision_new" => window.emit("gg://menu/revision", "new")?,
+        "menu_revision_new_child" => window.emit("gg://menu/revision", "new_child")?,
+        "menu_revision_new_parent" => window.emit("gg://menu/revision", "new_parent")?,
         "menu_revision_edit" => window.emit("gg://menu/revision", "edit")?,
         "menu_revision_backout" => window.emit("gg://menu/revision", "backout")?,
         "menu_revision_duplicate" => window.emit("gg://menu/revision", "duplicate")?,
@@ -453,7 +484,8 @@ pub fn handle_event(window: &Window, event: MenuEvent) -> Result<()> {
         "menu_revision_squash" => window.emit("gg://menu/revision", "squash")?,
         "menu_revision_restore" => window.emit("gg://menu/revision", "restore")?,
         "menu_revision_branch" => window.emit("gg://menu/revision", "branch")?,
-        "revision_new" => window.emit("gg://context/revision", "new")?,
+        "revision_new_child" => window.emit("gg://context/revision", "new_child")?,
+        "revision_new_parent" => window.emit("gg://context/revision", "new_parent")?,
         "revision_edit" => window.emit("gg://context/revision", "edit")?,
         "revision_backout" => window.emit("gg://context/revision", "backout")?,
         "revision_duplicate" => window.emit("gg://context/revision", "duplicate")?,

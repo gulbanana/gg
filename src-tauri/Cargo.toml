@@ -6,23 +6,23 @@ authors = ["Thomas Castiglione"]
 edition = "2024"
 
 [build-dependencies]
-tauri-build = { version = "2.0.0", features = [] }
+tauri-build = { version = "2.0.0", features = ["config-toml"] }
 
 [dev-dependencies]
-tempfile = "3.10.1"
-zip = "0.6"
+tempfile = "3.23"
+zip = "6.0"
 assert_matches = "1.5"
 
 [dependencies]
-tauri = { version = "2.0.0", features = [] }
+tauri = { version = "2.0.0", features = ["config-toml"] }
 tauri-codegen = "2.0.0"
 tauri-macros = "2.0.0"
 tauri-plugin = "2.0.0"
-tauri-runtime = "2.0.0"
+tauri-runtime = "~2.5.0"
 tauri-runtime-wry = "2.0.0"
-tauri-utils = "2.0.0"
+tauri-utils = "~2.3.0"
 tauri-plugin-dialog = "2.0.0"
-tauri-plugin-shell = "2.0.0"
+tauri-plugin-shell = "~2.2.0"
 tauri-plugin-window-state = "2.0.0"
 tauri-plugin-log = "2.0.0"
 
@@ -43,14 +43,14 @@ clap = { version = "4.5.20", features = [
 config = { version = "0.13.4", default-features = false, features = ["toml"] }
 dirs = "5.0.1"
 dunce = "1.0.5"
-itertools = "0.13.0"
-indexmap = "2.6.0"
-gix = { version = "0.71.0", default-features = false, features = [
+itertools = "0.14"
+indexmap = "2.6"
+gix = { version = "0.71", default-features = false, features = [
     "index",
     "max-performance-safe",
     "blob-diff",
 ] }
-pollster = "0.3.0"
+pollster = "0.3"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0.132"
 toml_edit = { version = "0.22.23", features = ["serde"] }
@@ -66,7 +66,7 @@ futures-util = "0.3.30"
 ts-rs = { version = "7.1.1", features = ["chrono-impl"], optional = true }
 
 [target."cfg(windows)".dependencies]
-windows = { version = "0.54.0", features = [
+windows = { version = "0.54", features = [
     "Win32_Foundation",
     "Win32_System_Com",
     "Win32_System_Com_StructuredStorage",
@@ -75,3 +75,7 @@ windows = { version = "0.54.0", features = [
     "Win32_UI_Shell_Common",
     "Win32_UI_Shell_PropertiesSystem",
 ] }
+
+[profile.release]
+lto = true
+codegen-units = 1
