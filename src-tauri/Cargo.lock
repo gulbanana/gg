@@ -3344,9 +3344,9 @@ dependencies = [
 
 [[package]]
 name = "jj-cli"
-version = "0.33.0"
+version = "0.34.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "24d32754d46e1ddaa28c8b599f845065e2086d0ef7910a69f6a80299e29cc31d"
+checksum = "60dab48d5202ab747a1a61dc56702dc708c6b343ffe980ccef81a194afe58abd"
 dependencies = [
  "bstr",
  "chrono",
@@ -3369,7 +3369,6 @@ dependencies = [
  "libc",
  "maplit",
  "once_cell",
- "os_pipe",
  "pest",
  "pest_derive",
  "pollster",
@@ -3399,9 +3398,9 @@ dependencies = [
 
 [[package]]
 name = "jj-lib"
-version = "0.33.0"
+version = "0.34.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5206c3e572151650aa8cfe9059cf29741ada058e9e321a7a2919274b97f4d214"
+checksum = "94dcee2ca80dd39fb5edb17518aa6979048e2b433877be0a75334eecf20f7374"
 dependencies = [
  "async-trait",
  "blake2",
@@ -3414,7 +3413,7 @@ dependencies = [
  "futures 0.3.31",
  "gix",
  "globset",
- "hashbrown 0.15.5",
+ "hashbrown 0.16.1",
  "ignore",
  "indexmap 2.12.1",
  "interim",
@@ -3434,7 +3433,6 @@ dependencies = [
  "rustix 1.1.2",
  "same-file",
  "serde",
- "serde_json",
  "smallvec",
  "strsim",
  "tempfile",
@@ -3449,9 +3447,9 @@ dependencies = [
 
 [[package]]
 name = "jj-lib-proc-macros"
-version = "0.33.0"
+version = "0.34.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "38e4828f3332028c1db0c8f254bf799aa335cc60a18be18d8f0ba2d3cff2a2d7"
+checksum = "41d6c998e900aa8b3aebab8225f061ce6627ab08e509481108409af132867949"
 dependencies = [
  "proc-macro2",
  "quote",

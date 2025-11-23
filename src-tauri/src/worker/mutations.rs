@@ -8,9 +8,11 @@ use jj_lib::backend::{CopyId, FileId, MergedTreeId, TreeValue};
 use jj_lib::conflicts::{
     self, ConflictMarkerStyle, ConflictMaterializeOptions, MaterializedTreeValue,
 };
-use jj_lib::merge::Merge;
+use jj_lib::files::FileMergeHunkLevel;
+use jj_lib::merge::{Merge, SameChange};
 use jj_lib::merged_tree::{MergedTree, MergedTreeBuilder};
 use jj_lib::ref_name::{RefNameBuf, RemoteName, RemoteNameBuf, RemoteRefSymbol};
+use jj_lib::tree_merge::MergeOptions;
 use jj_lib::{
     backend::{BackendError, CommitId},
     commit::Commit,
@@ -735,13 +737,13 @@ impl Mutation for CreateRef {
             }
             StoreRef::Tag { tag_name, .. } => {
                 let tag_name_ref = RefNameBuf::from(tag_name);
-                let existing_tag = ws.view().get_tag(&tag_name_ref);
+                let existing_tag = ws.view().get_local_tag(&tag_name_ref);
                 if existing_tag.is_present() {
                     precondition!("{} already exists", tag_name_ref.as_str());
                 }
 
                 tx.repo_mut()
-                    .set_tag_target(&tag_name_ref, RefTarget::normal(commit.id().clone()));
+                    .set_local_tag_target(&tag_name_ref, RefTarget::normal(commit.id().clone()));
 
                 match ws.finish_transaction(
                     tx,
@@ -814,7 +816,7 @@ impl Mutation for DeleteRef {
                 let mut tx = ws.start_transaction()?;
 
                 tx.repo_mut()
-                    .set_tag_target(&tag_name_ref, RefTarget::absent());
+                    .set_local_tag_target(&tag_name_ref, RefTarget::absent());
 
                 match ws.finish_transaction(tx, format!("forget tag {}", tag_name_ref.as_str()))? {
                     Some(new_status) => Ok(MutationResult::Updated { new_status }),
@@ -867,13 +869,13 @@ impl Mutation for MoveRef {
             }
             StoreRef::Tag { tag_name } => {
                 let tag_name_ref = RefNameBuf::from(tag_name);
-                let old_target = ws.view().get_tag(&tag_name_ref);
+                let old_target = ws.view().get_local_tag(&tag_name_ref);
                 if old_target.is_absent() {
                     precondition!("No such tag: {:?}", tag_name_ref.as_str());
                 }
 
                 tx.repo_mut()
-                    .set_tag_target(&tag_name_ref, RefTarget::normal(commit.id().clone()));
+                    .set_local_tag_target(&tag_name_ref, RefTarget::normal(commit.id().clone()));
 
                 match ws.finish_transaction(
                     tx,
@@ -1635,8 +1637,12 @@ async fn read_file_content(
                         &file.contents,
                         &mut content,
                         &ConflictMaterializeOptions {
-                            marker_style: ConflictMarkerStyle::default(),
+                            marker_style: ConflictMarkerStyle::Git,
                             marker_len: None,
+                            merge: MergeOptions {
+                                hunk_level: FileMergeHunkLevel::Line,
+                                same_change: SameChange::Accept,
+                            },
                         },
                     )?;
                     Ok(content)

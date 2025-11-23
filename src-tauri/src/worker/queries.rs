@@ -20,16 +20,19 @@ use jj_lib::{
     },
     diff::{
         CompareBytesExactly, CompareBytesIgnoreAllWhitespace, CompareBytesIgnoreWhitespaceAmount,
-        Diff, DiffHunk, DiffHunkKind, find_line_ranges,
+        ContentDiff, DiffHunk, DiffHunkKind, find_line_ranges,
     },
+    files::FileMergeHunkLevel,
     graph::{GraphEdge, GraphEdgeType, TopoGroupedGraphIterator},
     matchers::EverythingMatcher,
+    merge::SameChange,
     merged_tree::{TreeDiffEntry, TreeDiffStream},
     ref_name::{RefNameBuf, RemoteNameBuf, RemoteRefSymbol},
     repo::Repo,
     repo_path::RepoPath,
     revset::{Revset, RevsetEvaluationError},
     rewrite,
+    tree_merge::MergeOptions,
 };
 use pollster::{FutureExt, block_on};
 
@@ -318,8 +321,12 @@ pub fn query_revision(ws: &WorkspaceSession, id: RevId) -> Result<RevResult> {
                         &file.contents,
                         &mut hunk_content,
                         &ConflictMaterializeOptions {
-                            marker_style: ConflictMarkerStyle::default(),
+                            marker_style: ConflictMarkerStyle::Git,
                             marker_len: None,
+                            merge: MergeOptions {
+                                hunk_level: FileMergeHunkLevel::Line,
+                                same_change: SameChange::Accept,
+                            },
                         },
                     )?;
                     let mut hunks = get_unified_hunks(3, &hunk_content, &[])?;
@@ -410,7 +417,9 @@ async fn format_tree_changes(
     let store = ws.repo().store();
 
     while let Some(TreeDiffEntry { path, values }) = tree_diff.next().await {
-        let (before, after) = values?;
+        let diff = values?;
+        let before = &diff.before;
+        let after = &diff.after;
 
         let kind = if before.is_present() && after.is_present() {
             ChangeKind::Modified
@@ -422,8 +431,8 @@ async fn format_tree_changes(
 
         let has_conflict = !after.is_resolved();
 
-        let before_future = conflicts::materialize_tree_value(store, &path, before);
-        let after_future = conflicts::materialize_tree_value(store, &path, after);
+        let before_future = conflicts::materialize_tree_value(store, &path, before.clone());
+        let after_future = conflicts::materialize_tree_value(store, &path, after.clone());
         let (before_value, after_value) = try_join!(before_future, after_future)?;
 
         let hunks = get_value_hunks(3, &path, before_value, after_value)?;
@@ -484,8 +493,12 @@ fn get_value_contents(path: &RepoPath, value: MaterializedTreeValue) -> Result<V
                 &file.contents,
                 &mut hunk_content,
                 &ConflictMaterializeOptions {
-                    marker_style: ConflictMarkerStyle::default(),
+                    marker_style: ConflictMarkerStyle::Git,
                     marker_len: None,
+                    merge: MergeOptions {
+                        hunk_level: FileMergeHunkLevel::Line,
+                        same_change: SameChange::Accept,
+                    },
                 },
             )?;
             Ok(hunk_content)
@@ -665,7 +678,7 @@ fn unified_diff_hunks<'content>(
             }
             DiffHunkKind::Different => {
                 let (left_lines, right_lines) =
-                    unzip_diff_hunks_to_lines(Diff::by_word(hunk.contents).hunks());
+                    unzip_diff_hunks_to_lines(ContentDiff::by_word(hunk.contents).hunks());
                 current_hunk.extend_removed_lines(left_lines);
                 current_hunk.extend_added_lines(right_lines);
             }
@@ -678,6 +691,7 @@ fn unified_diff_hunks<'content>(
 }
 
 /// Splits `(left, right)` hunk pairs into `(left_lines, right_lines)`.
+#[allow(dead_code)]
 fn unzip_diff_hunks_to_lines<'content, I>(
     diff_hunks: I,
 ) -> (Vec<DiffTokenVec<'content>>, Vec<DiffTokenVec<'content>>)
@@ -737,20 +751,21 @@ where
 fn diff_by_line<'input, T: AsRef<[u8]> + ?Sized + 'input>(
     inputs: impl IntoIterator<Item = &'input T>,
     options: &LineDiffOptions,
-) -> Diff<'input> {
+) -> jj_lib::diff::ContentDiff<'input> {
     // TODO: If we add --ignore-blank-lines, its tokenizer will have to attach
     // blank lines to the preceding range. Maybe it can also be implemented as a
     // post-process (similar to refine_changed_regions()) that expands unchanged
     // regions across blank lines.
+    use jj_lib::diff::ContentDiff;
     match options.compare_mode {
         LineCompareMode::Exact => {
-            Diff::for_tokenizer(inputs, find_line_ranges, CompareBytesExactly)
+            ContentDiff::for_tokenizer(inputs, find_line_ranges, CompareBytesExactly)
         }
         LineCompareMode::IgnoreAllSpace => {
-            Diff::for_tokenizer(inputs, find_line_ranges, CompareBytesIgnoreAllWhitespace)
+            ContentDiff::for_tokenizer(inputs, find_line_ranges, CompareBytesIgnoreAllWhitespace)
         }
         LineCompareMode::IgnoreSpaceChange => {
-            Diff::for_tokenizer(inputs, find_line_ranges, CompareBytesIgnoreWhitespaceAmount)
+            ContentDiff::for_tokenizer(inputs, find_line_ranges, CompareBytesIgnoreWhitespaceAmount)
         }
     }
 }
