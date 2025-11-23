@@ -234,7 +234,8 @@ impl Session for WorkspaceSession<'_> {
                 SessionEvent::ExecuteMutation { tx, mutation } => {
                     let name = mutation.as_ref().describe();
                     match catch_unwind(AssertUnwindSafe(|| {
-                        mutation.execute(&mut self).with_context(|| name.clone())
+                        pollster::block_on(mutation.execute(&mut self))
+                            .with_context(|| name.clone())
                     })) {
                         Ok(result) => {
                             tx.send(match result {

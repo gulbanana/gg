@@ -26,7 +26,6 @@ use jj_lib::{
     store::Store,
     str_util::StringPattern,
 };
-use pollster::block_on;
 use tokio::io::AsyncReadExt;
 
 use crate::messages::{
@@ -45,8 +44,9 @@ macro_rules! precondition {
     }
 }
 
+#[async_trait::async_trait(?Send)]
 impl Mutation for AbandonRevisions {
-    fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
+    async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction()?;
 
         let abandoned_ids = self
@@ -86,8 +86,9 @@ impl Mutation for AbandonRevisions {
     }
 }
 
+#[async_trait::async_trait(?Send)]
 impl Mutation for BackoutRevisions {
-    fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
+    async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         if self.ids.len() != 1 {
             precondition!("Not implemented for >1 rev");
         }
@@ -98,10 +99,10 @@ impl Mutation for BackoutRevisions {
         let reverted = ws.resolve_multiple_changes(self.ids)?;
         let reverted_parents: Result<Vec<_>, BackendError> = reverted[0].parents().collect();
 
-        let old_base_tree = block_on(rewrite::merge_commit_trees(tx.repo(), &reverted_parents?))?;
+        let old_base_tree = rewrite::merge_commit_trees(tx.repo(), &reverted_parents?).await?;
         let new_base_tree = working_copy.tree()?;
         let old_tree = reverted[0].tree()?;
-        let new_tree = block_on(new_base_tree.merge(old_tree, old_base_tree))?;
+        let new_tree = new_base_tree.merge(old_tree, old_base_tree).await?;
 
         tx.repo_mut()
             .rewrite_commit(&working_copy)
@@ -115,8 +116,9 @@ impl Mutation for BackoutRevisions {
     }
 }
 
+#[async_trait::async_trait(?Send)]
 impl Mutation for CheckoutRevision {
-    fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
+    async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction()?;
 
         let edited = ws.resolve_single_change(&self.id)?;
@@ -144,8 +146,9 @@ impl Mutation for CheckoutRevision {
     }
 }
 
+#[async_trait::async_trait(?Send)]
 impl Mutation for CreateRevision {
-    fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
+    async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction()?;
 
         let parents_revset = ws.evaluate_revset_changes(
@@ -158,7 +161,7 @@ impl Mutation for CreateRevision {
 
         let parent_ids: Result<_, _> = parents_revset.iter().collect();
         let parent_commits = ws.resolve_multiple(parents_revset)?;
-        let merged_tree = block_on(rewrite::merge_commit_trees(tx.repo(), &parent_commits))?;
+        let merged_tree = rewrite::merge_commit_trees(tx.repo(), &parent_commits).await?;
 
         let new_commit = tx
             .repo_mut()
@@ -180,8 +183,9 @@ impl Mutation for CreateRevision {
     }
 }
 
+#[async_trait::async_trait(?Send)]
 impl Mutation for CreateRevisionBetween {
-    fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
+    async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         eprintln!("CreateREvisionBetween execute()");
         let mut tx = ws.start_transaction()?;
 
@@ -190,7 +194,7 @@ impl Mutation for CreateRevisionBetween {
             .context("resolve after_id")?;
         let parent_ids = vec![parent_id.id().clone()];
         let parent_commits = vec![parent_id];
-        let merged_tree = block_on(rewrite::merge_commit_trees(tx.repo(), &parent_commits))?;
+        let merged_tree = rewrite::merge_commit_trees(tx.repo(), &parent_commits).await?;
 
         let new_commit = tx
             .repo_mut()
@@ -204,11 +208,7 @@ impl Mutation for CreateRevisionBetween {
             precondition!("'Before' revision is immutable");
         }
 
-        block_on(rewrite::rebase_commit(
-            tx.repo_mut(),
-            before_commit,
-            vec![new_commit.id().clone()],
-        ))?;
+        rewrite::rebase_commit(tx.repo_mut(), before_commit, vec![new_commit.id().clone()]).await?;
 
         tx.repo_mut().edit(ws.name().to_owned(), &new_commit)?;
 
@@ -225,8 +225,9 @@ impl Mutation for CreateRevisionBetween {
     }
 }
 
+#[async_trait::async_trait(?Send)]
 impl Mutation for DescribeRevision {
-    fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
+    async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction()?;
 
         let described = ws.resolve_single_change(&self.id)?;
@@ -258,8 +259,9 @@ impl Mutation for DescribeRevision {
     }
 }
 
+#[async_trait::async_trait(?Send)]
 impl Mutation for DuplicateRevisions {
-    fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
+    async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction()?;
 
         let clonees = ws.resolve_multiple_changes(self.ids)?; // in reverse topological order
@@ -310,8 +312,9 @@ impl Mutation for DuplicateRevisions {
     }
 }
 
+#[async_trait::async_trait(?Send)]
 impl Mutation for InsertRevision {
-    fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
+    async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction()?;
 
         let target = ws
@@ -339,16 +342,8 @@ impl Mutation for InsertRevision {
 
         // rebase the target (which now has no children), then the new post-target tree atop it
         let rebased_id = target.id().hex();
-        let target = block_on(rewrite::rebase_commit(
-            tx.repo_mut(),
-            target,
-            vec![after_id],
-        ))?;
-        block_on(rewrite::rebase_commit(
-            tx.repo_mut(),
-            before,
-            vec![target.id().clone()],
-        ))?;
+        let target = rewrite::rebase_commit(tx.repo_mut(), target, vec![after_id]).await?;
+        rewrite::rebase_commit(tx.repo_mut(), before, vec![target.id().clone()]).await?;
 
         match ws.finish_transaction(tx, format!("rebase commit {}", rebased_id))? {
             Some(new_status) => Ok(MutationResult::Updated { new_status }),
@@ -357,8 +352,9 @@ impl Mutation for InsertRevision {
     }
 }
 
+#[async_trait::async_trait(?Send)]
 impl Mutation for MoveRevision {
-    fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
+    async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction()?;
 
         let target = ws.resolve_single_change(&self.id)?;
@@ -384,7 +380,7 @@ impl Mutation for MoveRevision {
 
         // rebase the target itself
         let rebased_id = target.id().hex();
-        block_on(rewrite::rebase_commit(tx.repo_mut(), target, parent_ids))?;
+        rewrite::rebase_commit(tx.repo_mut(), target, parent_ids).await?;
 
         match ws.finish_transaction(tx, format!("rebase commit {}", rebased_id))? {
             Some(new_status) => Ok(MutationResult::Updated { new_status }),
@@ -393,8 +389,9 @@ impl Mutation for MoveRevision {
     }
 }
 
+#[async_trait::async_trait(?Send)]
 impl Mutation for MoveSource {
-    fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
+    async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction()?;
 
         let target = ws.resolve_single_change(&self.id)?;
@@ -410,7 +407,7 @@ impl Mutation for MoveSource {
 
         // just rebase the target, which will also rebase its descendants
         let rebased_id = target.id().hex();
-        block_on(rewrite::rebase_commit(tx.repo_mut(), target, parent_ids))?;
+        rewrite::rebase_commit(tx.repo_mut(), target, parent_ids).await?;
 
         match ws.finish_transaction(tx, format!("rebase commit {}", rebased_id))? {
             Some(new_status) => Ok(MutationResult::Updated { new_status }),
@@ -419,8 +416,9 @@ impl Mutation for MoveSource {
     }
 }
 
+#[async_trait::async_trait(?Send)]
 impl Mutation for MoveChanges {
-    fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
+    async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction()?;
 
         let from = ws.resolve_single_change(&self.from_id)?;
@@ -434,18 +432,12 @@ impl Mutation for MoveChanges {
         // construct a split tree and a remainder tree by copying changes from child to parent and from parent to child
         let from_tree = from.tree()?;
         let from_parents: Result<Vec<_>, _> = from.parents().collect();
-        let parent_tree = block_on(rewrite::merge_commit_trees(tx.repo(), &from_parents?))?;
-        let split_tree_id = block_on(rewrite::restore_tree(
-            &from_tree,
-            &parent_tree,
-            matcher.as_ref(),
-        ))?;
+        let parent_tree = rewrite::merge_commit_trees(tx.repo(), &from_parents?).await?;
+        let split_tree_id =
+            rewrite::restore_tree(&from_tree, &parent_tree, matcher.as_ref()).await?;
         let split_tree = tx.repo().store().get_root_tree(&split_tree_id)?;
-        let remainder_tree_id = block_on(rewrite::restore_tree(
-            &parent_tree,
-            &from_tree,
-            matcher.as_ref(),
-        ))?;
+        let remainder_tree_id =
+            rewrite::restore_tree(&parent_tree, &from_tree, matcher.as_ref()).await?;
         let remainder_tree = tx.repo().store().get_root_tree(&remainder_tree_id)?;
 
         // abandon or rewrite source
@@ -483,7 +475,9 @@ impl Mutation for MoveChanges {
 
         // apply changes to destination
         let to_tree = to.tree()?;
-        let new_to_tree = block_on(to_tree.merge(parent_tree.clone(), split_tree.clone()))?;
+        let new_to_tree = to_tree
+            .merge(parent_tree.clone(), split_tree.clone())
+            .await?;
         let description = combine_messages(&from, &to, abandon_source);
         tx.repo_mut()
             .rewrite_commit(&to)
@@ -501,8 +495,9 @@ impl Mutation for MoveChanges {
     }
 }
 
+#[async_trait::async_trait(?Send)]
 impl Mutation for CopyChanges {
-    fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
+    async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction()?;
 
         let from_tree = ws.resolve_single_commit(&self.from_id)?.tree()?;
@@ -515,11 +510,7 @@ impl Mutation for CopyChanges {
 
         // construct a restore tree - the destination with some portions overwritten by the source
         let to_tree = to.tree()?;
-        let new_to_tree_id = block_on(rewrite::restore_tree(
-            &from_tree,
-            &to_tree,
-            matcher.as_ref(),
-        ))?;
+        let new_to_tree_id = rewrite::restore_tree(&from_tree, &to_tree, matcher.as_ref()).await?;
         if &new_to_tree_id == to.tree_id() {
             Ok(MutationResult::Unchanged)
         } else {
@@ -538,8 +529,9 @@ impl Mutation for CopyChanges {
     }
 }
 
+#[async_trait::async_trait(?Send)]
 impl Mutation for TrackBranch {
-    fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
+    async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         match self.r#ref {
             StoreRef::Tag { tag_name } => {
                 precondition!("{} is a tag and cannot be tracked", tag_name);
@@ -589,8 +581,9 @@ impl Mutation for TrackBranch {
     }
 }
 
+#[async_trait::async_trait(?Send)]
 impl Mutation for UntrackBranch {
-    fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
+    async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction()?;
 
         let mut untracked = Vec::new();
@@ -657,8 +650,9 @@ impl Mutation for UntrackBranch {
     }
 }
 
+#[async_trait::async_trait(?Send)]
 impl Mutation for RenameBranch {
-    fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
+    async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let old_name = self.r#ref.as_branch()?;
         let old_name_ref = RefNameBuf::from(old_name);
 
@@ -693,8 +687,9 @@ impl Mutation for RenameBranch {
     }
 }
 
+#[async_trait::async_trait(?Send)]
 impl Mutation for CreateRef {
-    fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
+    async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction()?;
 
         let commit = ws.resolve_single_change(&self.id)?;
@@ -761,8 +756,9 @@ impl Mutation for CreateRef {
     }
 }
 
+#[async_trait::async_trait(?Send)]
 impl Mutation for DeleteRef {
-    fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
+    async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         match self.r#ref {
             StoreRef::RemoteBookmark {
                 branch_name,
@@ -827,8 +823,9 @@ impl Mutation for DeleteRef {
 }
 
 // does not currently enforce fast-forwards
+#[async_trait::async_trait(?Send)]
 impl Mutation for MoveRef {
-    fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
+    async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction()?;
 
         let commit = ws.resolve_single_change(&self.to_id)?;
@@ -891,8 +888,9 @@ impl Mutation for MoveRef {
     }
 }
 
+#[async_trait::async_trait(?Send)]
 impl Mutation for MoveHunk {
-    fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
+    async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction()?;
 
         let from = ws.resolve_single_change(&self.from_id)?;
@@ -917,9 +915,11 @@ impl Mutation for MoveHunk {
 
         // construct hunk_tree: parent_tree with the hunk applied
         let store = tx.repo().store();
-        let parent_content = read_file_content(store, &parent_tree, &repo_path)?;
+        let parent_content = read_file_content(store, &parent_tree, &repo_path).await?;
         let hunk_content = apply_hunk(&parent_content, &self.hunk)?;
-        let hunk_blob_id = block_on(store.write_file(&repo_path, &mut hunk_content.as_slice()))?;
+        let hunk_blob_id = store
+            .write_file(&repo_path, &mut hunk_content.as_slice())
+            .await?;
         let hunk_executable = match from_tree.path_value(&repo_path)?.into_resolved() {
             Ok(Some(TreeValue::File { executable, .. })) => executable,
             Ok(_) => false,
@@ -941,21 +941,23 @@ impl Mutation for MoveHunk {
 
         let (remainder_tree, new_to_tree) = if is_related {
             // for related commits, we need 3-way merge (may create conflicts)
-            let remainder = block_on(
-                from_tree
-                    .clone()
-                    .merge(hunk_tree.clone(), parent_tree.clone()),
-            )?;
+            let remainder = from_tree
+                .clone()
+                .merge(hunk_tree.clone(), parent_tree.clone())
+                .await?;
             let to_tree = to.tree()?;
-            let new_to = block_on(to_tree.merge(parent_tree.clone(), hunk_tree.clone()))?;
+            let new_to = to_tree
+                .merge(parent_tree.clone(), hunk_tree.clone())
+                .await?;
             (remainder, new_to)
         } else {
             // for unrelated commits, apply hunk directly to avoid conflicts
             let to_tree = to.tree()?;
-            let to_content = read_file_content(store, &to_tree, &repo_path)?;
+            let to_content = read_file_content(store, &to_tree, &repo_path).await?;
             let new_to_content = apply_hunk(&to_content, &self.hunk)?;
-            let new_to_blob_id =
-                block_on(store.write_file(&repo_path, &mut new_to_content.as_slice()))?;
+            let new_to_blob_id = store
+                .write_file(&repo_path, &mut new_to_content.as_slice())
+                .await?;
             let new_to_tree_id =
                 update_tree_entry(store, &to_tree, &repo_path, new_to_blob_id, hunk_executable)?;
             let new_to = store.get_root_tree(&new_to_tree_id)?;
@@ -981,10 +983,11 @@ impl Mutation for MoveHunk {
                         .collect(),
                 },
             };
-            let from_content = read_file_content(store, &from_tree, &repo_path)?;
+            let from_content = read_file_content(store, &from_tree, &repo_path).await?;
             let remainder_content = apply_hunk(&from_content, &reverse_hunk)?;
-            let remainder_blob_id =
-                block_on(store.write_file(&repo_path, &mut remainder_content.as_slice()))?;
+            let remainder_blob_id = store
+                .write_file(&repo_path, &mut remainder_content.as_slice())
+                .await?;
             let remainder_tree_id = update_tree_entry(
                 store,
                 &from_tree,
@@ -1028,7 +1031,7 @@ impl Mutation for MoveHunk {
                 .write()?;
 
             // recompute the source's tree after the destination has the hunk applied
-            let child_new_tree = block_on(new_to_tree.clone().merge(parent_tree, from_tree))?;
+            let child_new_tree = new_to_tree.clone().merge(parent_tree, from_tree).await?;
 
             // rebase source
             tx.repo_mut()
@@ -1092,8 +1095,9 @@ impl Mutation for MoveHunk {
     }
 }
 
+#[async_trait::async_trait(?Send)]
 impl Mutation for CopyHunk {
-    fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
+    async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction()?;
 
         let from = ws.resolve_single_commit(&self.from_id)?;
@@ -1114,7 +1118,7 @@ impl Mutation for CopyHunk {
         }
 
         // read destination content
-        let to_content = read_file_content(store, &to_tree, &repo_path)?;
+        let to_content = read_file_content(store, &to_tree, &repo_path).await?;
         let to_text = String::from_utf8_lossy(&to_content);
         let to_lines: Vec<&str> = to_text.lines().collect();
 
@@ -1169,7 +1173,7 @@ impl Mutation for CopyHunk {
 
         // read source content
         let from_tree = from.tree()?;
-        let from_content = read_file_content(store, &from_tree, &repo_path)?;
+        let from_content = read_file_content(store, &from_tree, &repo_path).await?;
         let from_text = String::from_utf8_lossy(&from_content);
         let from_lines: Vec<&str> = from_text.lines().collect();
 
@@ -1212,8 +1216,9 @@ impl Mutation for CopyHunk {
         }
 
         // create new destination tree with preserved executable bit
-        let new_to_blob_id =
-            block_on(store.write_file(&repo_path, &mut new_to_content.as_slice()))?;
+        let new_to_blob_id = store
+            .write_file(&repo_path, &mut new_to_content.as_slice())
+            .await?;
 
         let to_executable = match to_tree.path_value(&repo_path)?.into_resolved() {
             Ok(Some(TreeValue::File { executable, .. })) => executable,
@@ -1244,8 +1249,9 @@ impl Mutation for CopyHunk {
     }
 }
 
+#[async_trait::async_trait(?Send)]
 impl Mutation for GitPush {
-    fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
+    async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction()?;
 
         // determine bookmarks to push, recording the old and new commits
@@ -1448,8 +1454,9 @@ impl Mutation for GitPush {
     }
 }
 
+#[async_trait::async_trait(?Send)]
 impl Mutation for GitFetch {
-    fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
+    async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction()?;
 
         let git_repo = match ws.git_repo() {
@@ -1508,8 +1515,9 @@ impl Mutation for GitFetch {
 }
 
 // this is another case where it would be nice if we could reuse jj-cli's error messages
+#[async_trait::async_trait(?Send)]
 impl Mutation for UndoOperation {
-    fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
+    async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let head_op = op_walk::resolve_op_with_repo(ws.repo(), "@")?; // XXX this should be behind an abstraction, maybe reused in snapshot
         let mut parent_ops = head_op.parents();
 
@@ -1599,24 +1607,24 @@ fn classify_branch_push(
     }
 }
 
-fn read_file_content(store: &Arc<Store>, tree: &MergedTree, path: &RepoPath) -> Result<Vec<u8>> {
+async fn read_file_content(
+    store: &Arc<Store>,
+    tree: &MergedTree,
+    path: &RepoPath,
+) -> Result<Vec<u8>> {
     let entry = tree.path_value(path)?;
     match entry.into_resolved() {
         Ok(Some(TreeValue::File { id, .. })) => {
-            let mut reader = block_on(store.read_file(path, &id))?;
+            let mut reader = store.read_file(path, &id).await?;
             let mut content = Vec::new();
-            block_on(reader.read_to_end(&mut content))?;
+            reader.read_to_end(&mut content).await?;
             Ok(content)
         }
         Ok(Some(_)) => Ok(Vec::new()),
         Ok(None) => Ok(Vec::new()),
         Err(_) => {
             // handle conflicts by materializing them
-            match block_on(conflicts::materialize_tree_value(
-                store,
-                path,
-                tree.path_value(path)?,
-            ))? {
+            match conflicts::materialize_tree_value(store, path, tree.path_value(path)?).await? {
                 MaterializedTreeValue::FileConflict(file) => {
                     let mut content = Vec::new();
                     conflicts::materialize_merge_result(

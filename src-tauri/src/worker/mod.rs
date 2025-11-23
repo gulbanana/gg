@@ -23,19 +23,23 @@ use gui_util::WorkspaceSession;
 pub use session::{Session, SessionEvent};
 
 /// implemented by structured-change commands
+#[async_trait::async_trait(?Send)]
 pub trait Mutation: Debug {
     fn describe(&self) -> String {
         std::any::type_name::<Self>().to_owned()
     }
 
-    fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<messages::MutationResult>;
+    async fn execute(
+        self: Box<Self>,
+        ws: &mut WorkspaceSession,
+    ) -> Result<messages::MutationResult>;
 
     #[cfg(test)]
     fn execute_unboxed(self, ws: &mut WorkspaceSession) -> Result<messages::MutationResult>
     where
         Self: Sized,
     {
-        Box::new(self).execute(ws)
+        pollster::block_on(Box::new(self).execute(ws))
     }
 }
 
