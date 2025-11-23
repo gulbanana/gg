@@ -74,6 +74,7 @@ pub struct QuerySession<'q, 'w: 'q> {
         Skip<
             TopoGroupedGraphIterator<
                 CommitId,
+                CommitId,
                 Box<
                     dyn Iterator<
                             Item = Result<
@@ -82,6 +83,7 @@ pub struct QuerySession<'q, 'w: 'q> {
                             >,
                         > + 'q,
                 >,
+                for<'a> fn(&'a CommitId) -> &'a CommitId,
             >,
         >,
     >,
@@ -95,7 +97,8 @@ impl<'q, 'w> QuerySession<'q, 'w> {
         revset: &'q dyn Revset,
         state: QueryState,
     ) -> QuerySession<'q, 'w> {
-        let iter = TopoGroupedGraphIterator::new(revset.iter_graph())
+        let as_id: for<'a> fn(&'a CommitId) -> &'a CommitId = commit_id_identity;
+        let iter = TopoGroupedGraphIterator::new(revset.iter_graph(), as_id)
             .skip(state.next_row)
             .peekable();
 
@@ -741,4 +744,8 @@ fn diff_by_line<'input, T: AsRef<[u8]> + ?Sized + 'input>(
             Diff::for_tokenizer(inputs, find_line_ranges, CompareBytesIgnoreWhitespaceAmount)
         }
     }
+}
+
+fn commit_id_identity(commit_id: &CommitId) -> &CommitId {
+    commit_id
 }

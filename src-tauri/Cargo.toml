@@ -26,8 +26,8 @@ tauri-plugin-shell = "~2.2.0"
 tauri-plugin-window-state = "2.0.0"
 tauri-plugin-log = "2.0.0"
 
-jj-lib = { version = "0.30", features = ["watchman"] }
-jj-cli = { version = "0.30" }
+jj-lib = { version = "0.31", features = ["watchman"] }
+jj-cli = { version = "0.31" }
 
 # deps shared with JJ, which we try to keep on the same version
 anyhow = "1.0.100"
@@ -38,11 +38,11 @@ clap = { version = "4.5.53", features = [
     "string",
 ] }
 config = { version = "0.13.4", default-features = false, features = ["toml"] }
-dirs = "5.0.1"
+dirs = "6"
 dunce = "1.0.5"
 itertools = "0.14"
 indexmap = "2.12"
-gix = { version = "0.71", default-features = false, features = [
+gix = { version = "0.72", default-features = false, features = [
     "index",
     "max-performance-safe",
     "blob-diff",
@@ -50,6 +50,7 @@ gix = { version = "0.71", default-features = false, features = [
 pollster = "0.4"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0.145"
+tokio = { version = "1.45.1", features = ["io-util"] }
 toml_edit = { version = "0.22.27", features = ["serde"] }
 thiserror = "2.0.17"
 
@@ -59,7 +60,6 @@ chrono = { version = "0.4.42", features = ["serde"] }
 # extra deps not used by JJ
 log = "0.4"
 futures-util = "0.3.31"
-tokio = { version = "1.48", features = ["io-util"] }
 ts-rs = { version = "7.1.1", features = ["chrono-impl"], optional = true }
 
 [target."cfg(windows)".dependencies]

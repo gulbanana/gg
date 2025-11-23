@@ -423,9 +423,17 @@ impl Mutation for MoveChanges {
         let from_tree = from.tree()?;
         let from_parents: Result<Vec<_>, _> = from.parents().collect();
         let parent_tree = rewrite::merge_commit_trees(tx.repo(), &from_parents?)?;
-        let split_tree_id = rewrite::restore_tree(&from_tree, &parent_tree, matcher.as_ref())?;
+        let split_tree_id = block_on(rewrite::restore_tree(
+            &from_tree,
+            &parent_tree,
+            matcher.as_ref(),
+        ))?;
         let split_tree = tx.repo().store().get_root_tree(&split_tree_id)?;
-        let remainder_tree_id = rewrite::restore_tree(&parent_tree, &from_tree, matcher.as_ref())?;
+        let remainder_tree_id = block_on(rewrite::restore_tree(
+            &parent_tree,
+            &from_tree,
+            matcher.as_ref(),
+        ))?;
         let remainder_tree = tx.repo().store().get_root_tree(&remainder_tree_id)?;
 
         // abandon or rewrite source
@@ -495,7 +503,11 @@ impl Mutation for CopyChanges {
 
         // construct a restore tree - the destination with some portions overwritten by the source
         let to_tree = to.tree()?;
-        let new_to_tree_id = rewrite::restore_tree(&from_tree, &to_tree, matcher.as_ref())?;
+        let new_to_tree_id = block_on(rewrite::restore_tree(
+            &from_tree,
+            &to_tree,
+            matcher.as_ref(),
+        ))?;
         if &new_to_tree_id == to.tree_id() {
             Ok(MutationResult::Unchanged)
         } else {

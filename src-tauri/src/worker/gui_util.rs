@@ -32,10 +32,9 @@ use jj_lib::{
     repo::{ReadonlyRepo, Repo, RepoLoaderError, StoreFactories},
     repo_path::{RepoPath, RepoPathUiConverter},
     revset::{
-        self, DefaultSymbolResolver, Revset, RevsetAliasesMap, RevsetDiagnostics,
-        RevsetEvaluationError, RevsetExpression, RevsetExtensions, RevsetIteratorExt,
-        RevsetParseContext, RevsetResolutionError, RevsetWorkspaceContext, SymbolResolverExtension,
-        UserRevsetExpression,
+        self, Revset, RevsetAliasesMap, RevsetDiagnostics, RevsetEvaluationError, RevsetExpression,
+        RevsetExtensions, RevsetIteratorExt, RevsetParseContext, RevsetResolutionError,
+        RevsetWorkspaceContext, SymbolResolverExtension, UserRevsetExpression,
     },
     rewrite::{self, RebaseOptions, RebasedCommit},
     settings::{HumanByteSize, UserSettings},
@@ -173,7 +172,7 @@ impl WorkspaceSession<'_> {
     pub fn git_repo(&self) -> Option<gix::Repository> {
         self.operation
             .git_backend()
-            .map(|backend| backend.git_repo())
+            .map(|backend| backend.git_repo().to_owned())
     }
 
     pub fn load_at_head(&mut self) -> Result<bool> {
@@ -397,8 +396,8 @@ impl WorkspaceSession<'_> {
             .expect("prefix context disambiguate_within()")
     }
 
-    fn resolver(&self) -> DefaultSymbolResolver<'_> {
-        DefaultSymbolResolver::new(
+    fn resolver(&self) -> revset::SymbolResolver<'_> {
+        revset::SymbolResolver::new(
             self.operation.repo.as_ref(),
             &([] as [Box<dyn SymbolResolverExtension>; 0]),
         )
@@ -939,7 +938,7 @@ impl SessionOperation {
 
     // XXX out of snyc with jj-cli version
     pub fn base_ignores(&self) -> Result<Arc<GitIgnoreFile>> {
-        fn get_excludes_file_path(config: &gix::config::File) -> Option<PathBuf> {
+        let get_excludes_file_path = |config: &gix::config::File| -> Option<PathBuf> {
             // TODO: maybe use path() and interpolate(), which can process non-utf-8
             // path on Unix.
             if let Some(value) = config.string("core.excludesFile") {
@@ -949,7 +948,7 @@ impl SessionOperation {
             } else {
                 xdg_config_home().ok().map(|x| x.join("git").join("ignore"))
             }
-        }
+        };
 
         fn xdg_config_home() -> Result<PathBuf, VarError> {
             if let Ok(x) = std::env::var("XDG_CONFIG_HOME")
@@ -968,10 +967,10 @@ impl SessionOperation {
             }
             git_ignores = git_ignores
                 .chain_with_file("", git_backend.git_repo_path().join("info").join("exclude"))?;
-        } else if let Ok(git_config) = gix::config::File::from_globals()
-            && let Some(excludes_file_path) = get_excludes_file_path(&git_config)
-        {
-            git_ignores = git_ignores.chain_with_file("", excludes_file_path)?;
+        } else if let Ok(git_config) = gix::config::File::from_globals() {
+            if let Some(excludes_file_path) = get_excludes_file_path(&git_config) {
+                git_ignores = git_ignores.chain_with_file("", excludes_file_path)?;
+            }
         }
         Ok(git_ignores)
     }
