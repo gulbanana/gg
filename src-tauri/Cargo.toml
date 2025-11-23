@@ -18,11 +18,11 @@ tauri = { version = "2.0.0", features = ["config-toml"] }
 tauri-codegen = "2.0.0"
 tauri-macros = "2.0.0"
 tauri-plugin = "2.0.0"
-tauri-runtime = "~2.5.0"
+tauri-runtime = "2.0.0"
 tauri-runtime-wry = "2.0.0"
-tauri-utils = "~2.3.0"
+tauri-utils = "2.0.0"
 tauri-plugin-dialog = "2.0.0"
-tauri-plugin-shell = "~2.2.0"
+tauri-plugin-shell = "2.0.0"
 tauri-plugin-window-state = "2.0.0"
 tauri-plugin-log = "2.0.0"
 
@@ -51,7 +51,7 @@ async-trait = "0.1.89"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0.145"
 tokio = { version = "1.48.0", features = ["io-util"] }
-toml_edit = { version = "0.23.8", features = ["serde"] }
+toml_edit = { version = "0.23.9", features = ["serde"] }
 thiserror = "2.0.17"
 
 # deps used by JJ but with different features
@@ -68,6 +68,7 @@ windows = { version = "0.60", features = [
     "Win32_System_Com",
     "Win32_System_Com_StructuredStorage",
     "Win32_System_Console",
+    "Win32_System_Variant",
     "Win32_UI_Shell",
     "Win32_UI_Shell_Common",
     "Win32_UI_Shell_PropertiesSystem",
