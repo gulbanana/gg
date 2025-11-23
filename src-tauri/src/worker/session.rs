@@ -1,10 +1,11 @@
 use std::{
-    panic::{AssertUnwindSafe, catch_unwind},
+    panic::AssertUnwindSafe,
     path::PathBuf,
     sync::mpsc::{Receiver, Sender},
 };
 
 use anyhow::{Context, Result, anyhow};
+use futures_util::FutureExt;
 use jj_cli::{config::ConfigEnv, ui::Ui};
 use jj_lib::config::{ConfigNamePathBuf, ConfigSource};
 
@@ -21,7 +22,7 @@ use crate::{
 /// implemented by states of the event loop
 pub trait Session {
     type Transition;
-    fn handle_events(self, rx: &Receiver<SessionEvent>) -> Result<Self::Transition>;
+    async fn handle_events(self, rx: &Receiver<SessionEvent>) -> Result<Self::Transition>;
 }
 
 /// messages sent to a worker from other threads. most come with a channel allowing a response
@@ -85,7 +86,7 @@ struct WorkspaceState {
 impl Session for WorkerSession {
     type Transition = ();
 
-    fn handle_events(mut self, rx: &Receiver<SessionEvent>) -> Result<()> {
+    async fn handle_events(mut self, rx: &Receiver<SessionEvent>) -> Result<()> {
         let mut latest_wd: Option<PathBuf> = None;
 
         loop {
@@ -151,7 +152,7 @@ impl Session for WorkerSession {
 
                     tx.send(ws.format_config())?;
 
-                    match ws.handle_events(rx).context("WorkspaceSession")? {
+                    match ws.handle_events(rx).await.context("WorkspaceSession")? {
                         WorkspaceResult::Reopen(new_tx, new_cwd) => (tx, wd) = (new_tx, new_cwd),
                         WorkspaceResult::SessionComplete => return Ok(()),
                     }
@@ -176,7 +177,7 @@ impl Session for WorkerSession {
 impl Session for WorkspaceSession<'_> {
     type Transition = WorkspaceResult;
 
-    fn handle_events(mut self, rx: &Receiver<SessionEvent>) -> Result<WorkspaceResult> {
+    async fn handle_events(mut self, rx: &Receiver<SessionEvent>) -> Result<WorkspaceResult> {
         let mut state = WorkspaceState::default();
 
         loop {
@@ -215,13 +216,14 @@ impl Session for WorkspaceSession<'_> {
                         rx,
                         Some(&revset_string),
                         Some(QueryState::new(log_page_size)),
-                    )?;
+                    )
+                    .await?;
 
                     self.session.latest_query = Some(revset_string);
                 }
                 SessionEvent::QueryLogNextPage { tx } => {
                     let revset_string = self.session.latest_query.as_deref();
-                    handle_query(&mut state, &self, tx, rx, revset_string, None)?;
+                    handle_query(&mut state, &self, tx, rx, revset_string, None).await?;
                 }
                 SessionEvent::ExecuteSnapshot { tx } => {
                     let updated_head = self.load_at_head()?; // alternatively, this could be folded into snapshot so that it's done by all mutations
@@ -233,10 +235,15 @@ impl Session for WorkspaceSession<'_> {
                 }
                 SessionEvent::ExecuteMutation { tx, mutation } => {
                     let name = mutation.as_ref().describe();
-                    match catch_unwind(AssertUnwindSafe(|| {
-                        pollster::block_on(mutation.execute(&mut self))
+                    match AssertUnwindSafe(async {
+                        mutation
+                            .execute(&mut self)
+                            .await
                             .with_context(|| name.clone())
-                    })) {
+                    })
+                    .catch_unwind()
+                    .await
+                    {
                         Ok(result) => {
                             tx.send(match result {
                                 Ok(result) => result,
@@ -320,7 +327,7 @@ impl Session for WorkspaceSession<'_> {
 impl Session for queries::QuerySession<'_, '_> {
     type Transition = QueryResult;
 
-    fn handle_events(mut self, rx: &Receiver<SessionEvent>) -> Result<Self::Transition> {
+    async fn handle_events(mut self, rx: &Receiver<SessionEvent>) -> Result<Self::Transition> {
         loop {
             let evt = rx.recv();
             log::debug!("LogQuery handling {evt:?}");
@@ -341,9 +348,9 @@ impl Session for queries::QuerySession<'_, '_> {
 }
 
 /// helper function for transitioning from workspace state to query state
-fn handle_query(
+async fn handle_query(
     state: &mut WorkspaceState,
-    ws: &WorkspaceSession,
+    ws: &WorkspaceSession<'_>,
     tx: Sender<Result<messages::LogPage>>,
     rx: &Receiver<SessionEvent>,
     revset_str: Option<&str>,
@@ -391,7 +398,7 @@ fn handle_query(
     let page = query.get_page();
     tx.send(page)?;
 
-    let QueryResult(next_event, next_query) = query.handle_events(rx).context("LogQuery")?;
+    let QueryResult(next_event, next_query) = query.handle_events(rx).await.context("LogQuery")?;
 
     state.unhandled_event = Some(next_event);
     state.unpaged_query = Some(next_query);

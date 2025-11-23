@@ -5,13 +5,14 @@ use crate::{
 };
 use anyhow::Result;
 use jj_lib::config::ConfigSource;
+use pollster::block_on;
 use std::{path::PathBuf, sync::mpsc::channel};
 
 #[test]
 fn start_and_stop() -> Result<()> {
     let (tx, rx) = channel::<SessionEvent>();
     tx.send(SessionEvent::EndSession)?;
-    WorkerSession::default().handle_events(&rx)?;
+    block_on(WorkerSession::default().handle_events(&rx))?;
     Ok(())
 }
 
@@ -33,7 +34,7 @@ fn load_repo() -> Result<()> {
     })?;
     tx.send(SessionEvent::EndSession)?;
 
-    WorkerSession::default().handle_events(&rx)?;
+    block_on(WorkerSession::default().handle_events(&rx))?;
 
     let config = rx_good_repo.recv()??;
     assert!(matches!(config, RepoConfig::Workspace { .. }));
@@ -63,7 +64,7 @@ fn reload_repo() -> Result<()> {
     })?;
     tx.send(SessionEvent::EndSession)?;
 
-    WorkerSession::default().handle_events(&rx)?;
+    block_on(WorkerSession::default().handle_events(&rx))?;
 
     let config = rx_first_repo.recv()??;
     assert!(matches!(config, RepoConfig::Workspace { .. }));
@@ -97,7 +98,7 @@ fn reload_with_default_query() -> Result<()> {
     })?;
     tx.send(SessionEvent::EndSession)?;
 
-    WorkerSession::default().handle_events(&rx)?;
+    block_on(WorkerSession::default().handle_events(&rx))?;
 
     _ = rx_load.recv()??;
     _ = rx_query.recv()??;
@@ -127,7 +128,7 @@ fn query_log_single() -> Result<()> {
     })?;
     tx.send(SessionEvent::EndSession)?;
 
-    WorkerSession::default().handle_events(&rx)?;
+    block_on(WorkerSession::default().handle_events(&rx))?;
 
     _ = rx_load.recv()??;
     let page = rx_query.recv()??;
@@ -156,11 +157,13 @@ fn query_log_multi() -> Result<()> {
     tx.send(SessionEvent::QueryLogNextPage { tx: tx_page2 })?;
     tx.send(SessionEvent::EndSession)?;
 
-    WorkerSession {
-        force_log_page_size: Some(7),
-        ..Default::default()
-    }
-    .handle_events(&rx)?;
+    block_on(
+        WorkerSession {
+            force_log_page_size: Some(7),
+            ..Default::default()
+        }
+        .handle_events(&rx),
+    )?;
 
     rx_load.recv()??;
 
@@ -199,11 +202,13 @@ fn query_log_multi_restart() -> Result<()> {
     tx.send(SessionEvent::QueryLogNextPage { tx: tx_page2 })?;
     tx.send(SessionEvent::EndSession)?;
 
-    WorkerSession {
-        force_log_page_size: Some(7),
-        ..Default::default()
-    }
-    .handle_events(&rx)?;
+    block_on(
+        WorkerSession {
+            force_log_page_size: Some(7),
+            ..Default::default()
+        }
+        .handle_events(&rx),
+    )?;
 
     rx_load.recv()??;
 
@@ -246,11 +251,13 @@ fn query_log_multi_interrupt() -> Result<()> {
     tx.send(SessionEvent::QueryLogNextPage { tx: tx_page2 })?;
     tx.send(SessionEvent::EndSession)?;
 
-    WorkerSession {
-        force_log_page_size: Some(7),
-        ..Default::default()
-    }
-    .handle_events(&rx)?;
+    block_on(
+        WorkerSession {
+            force_log_page_size: Some(7),
+            ..Default::default()
+        }
+        .handle_events(&rx),
+    )?;
 
     rx_load.recv()??;
 
@@ -285,11 +292,13 @@ fn query_check_immutable() -> Result<()> {
     })?;
     tx.send(SessionEvent::EndSession)?;
 
-    WorkerSession {
-        force_log_page_size: Some(2),
-        ..Default::default()
-    }
-    .handle_events(&rx)?;
+    block_on(
+        WorkerSession {
+            force_log_page_size: Some(2),
+            ..Default::default()
+        }
+        .handle_events(&rx),
+    )?;
 
     rx_load.recv()??;
 
@@ -319,7 +328,7 @@ fn query_rev_not_found() -> Result<()> {
     })?;
     tx.send(SessionEvent::EndSession)?;
 
-    WorkerSession::default().handle_events(&rx)?;
+    block_on(WorkerSession::default().handle_events(&rx))?;
 
     _ = rx_load.recv()??;
     let result = rx_query.recv()??;
@@ -349,7 +358,7 @@ fn config_read() -> Result<()> {
     })?;
     tx.send(SessionEvent::EndSession)?;
 
-    WorkerSession::default().handle_events(&rx)?;
+    block_on(WorkerSession::default().handle_events(&rx))?;
 
     _ = rx_load.recv()??;
     let result = rx_read.recv()?;
@@ -382,7 +391,7 @@ fn config_write() -> Result<()> {
     })?;
     tx.send(SessionEvent::EndSession)?;
 
-    WorkerSession::default().handle_events(&rx)?;
+    block_on(WorkerSession::default().handle_events(&rx))?;
 
     _ = rx_load.recv()??;
     let result = rx_read.recv()??;

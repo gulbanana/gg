@@ -13,7 +13,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Mutex;
 use std::sync::mpsc::{Sender, channel};
-use std::thread::{self, JoinHandle};
+use std::thread::{self};
 
 use anyhow::{Context, Result, anyhow};
 use clap::Parser;
@@ -51,7 +51,7 @@ struct Args {
 struct AppState(Mutex<HashMap<String, WindowState>>);
 
 struct WindowState {
-    _worker: JoinHandle<()>,
+    _worker: tauri::async_runtime::JoinHandle<()>,
     worker_channel: Sender<SessionEvent>,
     input_channel: Option<Sender<InputResponse>>,
     revision_menu: Menu<Wry>,
@@ -176,12 +176,13 @@ fn main() -> Result<()> {
             let (sender, receiver) = channel();
 
             let mut handle = window.as_ref().window();
-            let window_worker = thread::spawn(move || {
+            let window_worker = tauri::async_runtime::spawn(async move {
                 log::info!("start worker");
 
                 while let Err(err) =
                     WorkerSession::new(FrontendCallbacks(handle.clone()), args.workspace.clone())
                         .handle_events(&receiver)
+                        .await
                         .context("worker")
                 {
                     log::info!("restart worker: {err:#}");
