@@ -1,8 +1,6 @@
-use std::{
-    panic::AssertUnwindSafe,
-    path::PathBuf,
-    sync::mpsc::{Receiver, Sender},
-};
+use std::{panic::AssertUnwindSafe, path::PathBuf};
+
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 
 use anyhow::{Context, Result, anyhow};
 use futures_util::FutureExt;
@@ -22,7 +20,10 @@ use crate::{
 /// implemented by states of the event loop
 pub trait Session {
     type Transition;
-    async fn handle_events(self, rx: &Receiver<SessionEvent>) -> Result<Self::Transition>;
+    async fn handle_events(
+        self,
+        rx: &mut UnboundedReceiver<SessionEvent>,
+    ) -> Result<Self::Transition>;
 }
 
 /// messages sent to a worker from other threads. most come with a channel allowing a response
@@ -31,33 +32,33 @@ pub enum SessionEvent {
     #[allow(dead_code)] // used by tests
     EndSession,
     OpenWorkspace {
-        tx: Sender<Result<messages::RepoConfig>>,
+        tx: UnboundedSender<Result<messages::RepoConfig>>,
         wd: Option<PathBuf>,
     },
     QueryRevision {
-        tx: Sender<Result<messages::RevResult>>,
+        tx: UnboundedSender<Result<messages::RevResult>>,
         id: messages::RevId,
     },
     QueryRemotes {
-        tx: Sender<Result<Vec<String>>>,
+        tx: UnboundedSender<Result<Vec<String>>>,
         tracking_branch: Option<String>,
     },
     QueryLog {
-        tx: Sender<Result<messages::LogPage>>,
+        tx: UnboundedSender<Result<messages::LogPage>>,
         query: String,
     },
     QueryLogNextPage {
-        tx: Sender<Result<messages::LogPage>>,
+        tx: UnboundedSender<Result<messages::LogPage>>,
     },
     ExecuteSnapshot {
-        tx: Sender<Option<messages::RepoStatus>>,
+        tx: UnboundedSender<Option<messages::RepoStatus>>,
     },
     ExecuteMutation {
-        tx: Sender<messages::MutationResult>,
+        tx: UnboundedSender<messages::MutationResult>,
         mutation: Box<dyn Mutation + Send + Sync>,
     },
     ReadConfigArray {
-        tx: Sender<Result<Vec<String>>>,
+        tx: UnboundedSender<Result<Vec<String>>>,
         key: Vec<String>,
     },
     WriteConfigArray {
@@ -69,8 +70,11 @@ pub enum SessionEvent {
 
 /// transitions for a workspace session
 pub enum WorkspaceResult {
-    Reopen(Sender<Result<messages::RepoConfig>>, Option<PathBuf>), // workspace -> workspace
-    SessionComplete,                                               // workspace -> worker
+    Reopen(
+        UnboundedSender<Result<messages::RepoConfig>>,
+        Option<PathBuf>,
+    ), // workspace -> workspace
+    SessionComplete, // workspace -> worker
 }
 
 /// transition for a query session
@@ -86,16 +90,16 @@ struct WorkspaceState {
 impl Session for WorkerSession {
     type Transition = ();
 
-    async fn handle_events(mut self, rx: &Receiver<SessionEvent>) -> Result<()> {
+    async fn handle_events(mut self, rx: &mut UnboundedReceiver<SessionEvent>) -> Result<()> {
         let mut latest_wd: Option<PathBuf> = None;
 
         loop {
-            let evt = rx.recv();
+            let evt = rx.recv().await;
             log::debug!("WorkerSession handling {evt:?}");
             match evt {
-                Ok(SessionEvent::EndSession) => return Ok(()),
-                Ok(SessionEvent::ExecuteSnapshot { .. }) => (),
-                Ok(SessionEvent::ReadConfigArray { key, tx }) => {
+                Some(SessionEvent::EndSession) => return Ok(()),
+                Some(SessionEvent::ExecuteSnapshot { .. }) => (),
+                Some(SessionEvent::ReadConfigArray { key, tx }) => {
                     let name: ConfigNamePathBuf = key.iter().collect();
                     if let Some(global_settings) = self.user_settings.as_ref() {
                         tx.send(
@@ -118,7 +122,7 @@ impl Session for WorkerSession {
                         tx.send(Err(anyhow!("global settings not found")))?;
                     }
                 }
-                Ok(SessionEvent::OpenWorkspace { mut tx, mut wd }) => loop {
+                Some(SessionEvent::OpenWorkspace { mut tx, mut wd }) => loop {
                     let resolved_wd = match wd.clone().or(latest_wd) {
                         Some(wd) => wd,
                         None => match self.get_cwd() {
@@ -157,7 +161,7 @@ impl Session for WorkerSession {
                         WorkspaceResult::SessionComplete => return Ok(()),
                     }
                 },
-                Ok(evt) => {
+                Some(evt) => {
                     log::error!(
                         "WorkerSession::handle_events(): repo not loaded when receiving {evt:?}"
                     );
@@ -165,9 +169,9 @@ impl Session for WorkerSession {
                         "A repo must be loaded before any other operations"
                     ));
                 }
-                Err(err) => {
-                    log::error!("WorkerSession::handle_events(): {err}");
-                    return Err(anyhow!(err));
+                None => {
+                    log::error!("WorkerSession::handle_events(): channel closed");
+                    return Err(anyhow!("channel closed"));
                 }
             };
         }
@@ -177,16 +181,19 @@ impl Session for WorkerSession {
 impl Session for WorkspaceSession<'_> {
     type Transition = WorkspaceResult;
 
-    async fn handle_events(mut self, rx: &Receiver<SessionEvent>) -> Result<WorkspaceResult> {
+    async fn handle_events(
+        mut self,
+        rx: &mut UnboundedReceiver<SessionEvent>,
+    ) -> Result<WorkspaceResult> {
         let mut state = WorkspaceState::default();
 
         loop {
             let next_event = if state.unhandled_event.is_some() {
                 state.unhandled_event.take().unwrap()
             } else {
-                let evt = rx.recv();
+                let evt = rx.recv().await;
                 log::debug!("WorkspaceSession handling {evt:?}");
-                evt?
+                evt.ok_or_else(|| anyhow!("channel closed"))?
             };
 
             match next_event {
@@ -327,21 +334,24 @@ impl Session for WorkspaceSession<'_> {
 impl Session for queries::QuerySession<'_, '_> {
     type Transition = QueryResult;
 
-    async fn handle_events(mut self, rx: &Receiver<SessionEvent>) -> Result<Self::Transition> {
+    async fn handle_events(
+        mut self,
+        rx: &mut UnboundedReceiver<SessionEvent>,
+    ) -> Result<Self::Transition> {
         loop {
-            let evt = rx.recv();
+            let evt = rx.recv().await;
             log::debug!("LogQuery handling {evt:?}");
             match evt {
-                Ok(SessionEvent::QueryRevision { tx, id }) => {
+                Some(SessionEvent::QueryRevision { tx, id }) => {
                     tx.send(queries::query_revision(self.ws, id))?
                 }
-                Ok(SessionEvent::QueryRemotes {
+                Some(SessionEvent::QueryRemotes {
                     tx,
                     tracking_branch,
                 }) => tx.send(queries::query_remotes(self.ws, tracking_branch))?,
-                Ok(SessionEvent::QueryLogNextPage { tx }) => tx.send(self.get_page())?,
-                Ok(unhandled) => return Ok(QueryResult(unhandled, self.state)),
-                Err(err) => return Err(anyhow!(err)),
+                Some(SessionEvent::QueryLogNextPage { tx }) => tx.send(self.get_page())?,
+                Some(unhandled) => return Ok(QueryResult(unhandled, self.state)),
+                None => return Err(anyhow!("channel closed")),
             };
         }
     }
@@ -351,8 +361,8 @@ impl Session for queries::QuerySession<'_, '_> {
 async fn handle_query(
     state: &mut WorkspaceState,
     ws: &WorkspaceSession<'_>,
-    tx: Sender<Result<messages::LogPage>>,
-    rx: &Receiver<SessionEvent>,
+    tx: UnboundedSender<Result<messages::LogPage>>,
+    rx: &mut UnboundedReceiver<SessionEvent>,
     revset_str: Option<&str>,
     query_state: Option<QueryState>,
 ) -> Result<()> {

@@ -6,13 +6,14 @@ use crate::{
 use anyhow::Result;
 use jj_lib::config::ConfigSource;
 use pollster::block_on;
-use std::{path::PathBuf, sync::mpsc::channel};
+use std::path::PathBuf;
+use tokio::sync::mpsc::unbounded_channel;
 
 #[test]
 fn start_and_stop() -> Result<()> {
-    let (tx, rx) = channel::<SessionEvent>();
+    let (tx, mut rx) = unbounded_channel::<SessionEvent>();
     tx.send(SessionEvent::EndSession)?;
-    block_on(WorkerSession::default().handle_events(&rx))?;
+    block_on(WorkerSession::default().handle_events(&mut rx))?;
     Ok(())
 }
 
@@ -20,9 +21,9 @@ fn start_and_stop() -> Result<()> {
 fn load_repo() -> Result<()> {
     let repo = mkrepo();
 
-    let (tx, rx) = channel::<SessionEvent>();
-    let (tx_good_repo, rx_good_repo) = channel::<Result<RepoConfig>>();
-    let (tx_bad_repo, rx_bad_repo) = channel::<Result<RepoConfig>>();
+    let (tx, mut rx) = unbounded_channel::<SessionEvent>();
+    let (tx_good_repo, mut rx_good_repo) = unbounded_channel::<Result<RepoConfig>>();
+    let (tx_bad_repo, mut rx_bad_repo) = unbounded_channel::<Result<RepoConfig>>();
 
     tx.send(SessionEvent::OpenWorkspace {
         tx: tx_good_repo,
@@ -34,12 +35,14 @@ fn load_repo() -> Result<()> {
     })?;
     tx.send(SessionEvent::EndSession)?;
 
-    block_on(WorkerSession::default().handle_events(&rx))?;
+    block_on(WorkerSession::default().handle_events(&mut rx))?;
 
-    let config = rx_good_repo.recv()??;
+    let config =
+        block_on(rx_good_repo.recv()).ok_or_else(|| anyhow::anyhow!("channel closed"))??;
     assert!(matches!(config, RepoConfig::Workspace { .. }));
 
-    let config = rx_bad_repo.recv()??;
+    let config =
+        block_on(rx_bad_repo.recv()).ok_or_else(|| anyhow::anyhow!("channel closed"))??;
     assert!(matches!(config, RepoConfig::LoadError { .. }));
 
     Ok(())
@@ -50,9 +53,9 @@ fn reload_repo() -> Result<()> {
     let repo1 = mkrepo();
     let repo2 = mkrepo();
 
-    let (tx, rx) = channel::<SessionEvent>();
-    let (tx_first_repo, rx_first_repo) = channel::<Result<RepoConfig>>();
-    let (tx_second_repo, rx_second_repo) = channel::<Result<RepoConfig>>();
+    let (tx, mut rx) = unbounded_channel::<SessionEvent>();
+    let (tx_first_repo, mut rx_first_repo) = unbounded_channel::<Result<RepoConfig>>();
+    let (tx_second_repo, mut rx_second_repo) = unbounded_channel::<Result<RepoConfig>>();
 
     tx.send(SessionEvent::OpenWorkspace {
         tx: tx_first_repo,
@@ -64,12 +67,14 @@ fn reload_repo() -> Result<()> {
     })?;
     tx.send(SessionEvent::EndSession)?;
 
-    block_on(WorkerSession::default().handle_events(&rx))?;
+    block_on(WorkerSession::default().handle_events(&mut rx))?;
 
-    let config = rx_first_repo.recv()??;
+    let config =
+        block_on(rx_first_repo.recv()).ok_or_else(|| anyhow::anyhow!("channel closed"))??;
     assert!(matches!(config, RepoConfig::Workspace { .. }));
 
-    let config = rx_second_repo.recv()??;
+    let config =
+        block_on(rx_second_repo.recv()).ok_or_else(|| anyhow::anyhow!("channel closed"))??;
     assert!(matches!(config, RepoConfig::Workspace { .. }));
 
     Ok(())
@@ -79,10 +84,10 @@ fn reload_repo() -> Result<()> {
 fn reload_with_default_query() -> Result<()> {
     let repo = mkrepo();
 
-    let (tx, rx) = channel::<SessionEvent>();
-    let (tx_load, rx_load) = channel::<Result<RepoConfig>>();
-    let (tx_query, rx_query) = channel::<Result<LogPage>>();
-    let (tx_reload, rx_reload) = channel::<Result<RepoConfig>>();
+    let (tx, mut rx) = unbounded_channel::<SessionEvent>();
+    let (tx_load, mut rx_load) = unbounded_channel::<Result<RepoConfig>>();
+    let (tx_query, mut rx_query) = unbounded_channel::<Result<LogPage>>();
+    let (tx_reload, mut rx_reload) = unbounded_channel::<Result<RepoConfig>>();
 
     tx.send(SessionEvent::OpenWorkspace {
         tx: tx_load,
@@ -98,11 +103,11 @@ fn reload_with_default_query() -> Result<()> {
     })?;
     tx.send(SessionEvent::EndSession)?;
 
-    block_on(WorkerSession::default().handle_events(&rx))?;
+    block_on(WorkerSession::default().handle_events(&mut rx))?;
 
-    _ = rx_load.recv()??;
-    _ = rx_query.recv()??;
-    let config = rx_reload.recv()??;
+    _ = block_on(rx_load.recv()).ok_or_else(|| anyhow::anyhow!("channel closed"))??;
+    _ = block_on(rx_query.recv()).ok_or_else(|| anyhow::anyhow!("channel closed"))??;
+    let config = block_on(rx_reload.recv()).ok_or_else(|| anyhow::anyhow!("channel closed"))??;
     assert!(
         matches!(config, RepoConfig::Workspace { latest_query, .. } if latest_query == "none()")
     );
@@ -114,9 +119,9 @@ fn reload_with_default_query() -> Result<()> {
 fn query_log_single() -> Result<()> {
     let repo = mkrepo();
 
-    let (tx, rx) = channel::<SessionEvent>();
-    let (tx_load, rx_load) = channel::<Result<RepoConfig>>();
-    let (tx_query, rx_query) = channel::<Result<LogPage>>();
+    let (tx, mut rx) = unbounded_channel::<SessionEvent>();
+    let (tx_load, mut rx_load) = unbounded_channel::<Result<RepoConfig>>();
+    let (tx_query, mut rx_query) = unbounded_channel::<Result<LogPage>>();
 
     tx.send(SessionEvent::OpenWorkspace {
         tx: tx_load,
@@ -128,10 +133,10 @@ fn query_log_single() -> Result<()> {
     })?;
     tx.send(SessionEvent::EndSession)?;
 
-    block_on(WorkerSession::default().handle_events(&rx))?;
+    block_on(WorkerSession::default().handle_events(&mut rx))?;
 
-    _ = rx_load.recv()??;
-    let page = rx_query.recv()??;
+    _ = block_on(rx_load.recv()).ok_or_else(|| anyhow::anyhow!("channel closed"))??;
+    let page = block_on(rx_query.recv()).ok_or_else(|| anyhow::anyhow!("channel closed"))??;
     assert_eq!(1, page.rows.len());
     assert!(!page.has_more);
 
@@ -141,10 +146,10 @@ fn query_log_single() -> Result<()> {
 #[test]
 fn query_log_multi() -> Result<()> {
     let repo = mkrepo();
-    let (tx, rx) = channel::<SessionEvent>();
-    let (tx_load, rx_load) = channel::<Result<RepoConfig>>();
-    let (tx_page1, rx_page1) = channel::<Result<LogPage>>();
-    let (tx_page2, rx_page2) = channel::<Result<LogPage>>();
+    let (tx, mut rx) = unbounded_channel::<SessionEvent>();
+    let (tx_load, mut rx_load) = unbounded_channel::<Result<RepoConfig>>();
+    let (tx_page1, mut rx_page1) = unbounded_channel::<Result<LogPage>>();
+    let (tx_page2, mut rx_page2) = unbounded_channel::<Result<LogPage>>();
 
     tx.send(SessionEvent::OpenWorkspace {
         tx: tx_load,
@@ -162,16 +167,16 @@ fn query_log_multi() -> Result<()> {
             force_log_page_size: Some(7),
             ..Default::default()
         }
-        .handle_events(&rx),
+        .handle_events(&mut rx),
     )?;
 
-    rx_load.recv()??;
+    block_on(rx_load.recv()).ok_or_else(|| anyhow::anyhow!("channel closed"))??;
 
-    let page1 = rx_page1.recv()??;
+    let page1 = block_on(rx_page1.recv()).ok_or_else(|| anyhow::anyhow!("channel closed"))??;
     assert_eq!(7, page1.rows.len());
     assert!(page1.has_more);
 
-    let page2 = rx_page2.recv()??;
+    let page2 = block_on(rx_page2.recv()).ok_or_else(|| anyhow::anyhow!("channel closed"))??;
     assert_eq!(5, page2.rows.len());
     assert!(!page2.has_more);
 
@@ -181,11 +186,11 @@ fn query_log_multi() -> Result<()> {
 #[test]
 fn query_log_multi_restart() -> Result<()> {
     let repo = mkrepo();
-    let (tx, rx) = channel::<SessionEvent>();
-    let (tx_load, rx_load) = channel::<Result<RepoConfig>>();
-    let (tx_page1, rx_page1) = channel::<Result<LogPage>>();
-    let (tx_page1b, rx_page1b) = channel::<Result<LogPage>>();
-    let (tx_page2, rx_page2) = channel::<Result<LogPage>>();
+    let (tx, mut rx) = unbounded_channel::<SessionEvent>();
+    let (tx_load, mut rx_load) = unbounded_channel::<Result<RepoConfig>>();
+    let (tx_page1, mut rx_page1) = unbounded_channel::<Result<LogPage>>();
+    let (tx_page1b, mut rx_page1b) = unbounded_channel::<Result<LogPage>>();
+    let (tx_page2, mut rx_page2) = unbounded_channel::<Result<LogPage>>();
 
     tx.send(SessionEvent::OpenWorkspace {
         tx: tx_load,
@@ -207,20 +212,20 @@ fn query_log_multi_restart() -> Result<()> {
             force_log_page_size: Some(7),
             ..Default::default()
         }
-        .handle_events(&rx),
+        .handle_events(&mut rx),
     )?;
 
-    rx_load.recv()??;
+    block_on(rx_load.recv()).ok_or_else(|| anyhow::anyhow!("channel closed"))??;
 
-    let page1 = rx_page1.recv()??;
+    let page1 = block_on(rx_page1.recv()).ok_or_else(|| anyhow::anyhow!("channel closed"))??;
     assert_eq!(7, page1.rows.len());
     assert!(page1.has_more);
 
-    let page1b = rx_page1b.recv()??;
+    let page1b = block_on(rx_page1b.recv()).ok_or_else(|| anyhow::anyhow!("channel closed"))??;
     assert_eq!(7, page1b.rows.len());
     assert!(page1b.has_more);
 
-    let page2 = rx_page2.recv()??;
+    let page2 = block_on(rx_page2.recv()).ok_or_else(|| anyhow::anyhow!("channel closed"))??;
     assert_eq!(5, page2.rows.len());
     assert!(!page2.has_more);
 
@@ -230,11 +235,11 @@ fn query_log_multi_restart() -> Result<()> {
 #[test]
 fn query_log_multi_interrupt() -> Result<()> {
     let repo = mkrepo();
-    let (tx, rx) = channel::<SessionEvent>();
-    let (tx_load, rx_load) = channel::<Result<RepoConfig>>();
-    let (tx_page1, rx_page1) = channel::<Result<LogPage>>();
-    let (tx_rev, rx_rev) = channel::<Result<RevResult>>();
-    let (tx_page2, rx_page2) = channel::<Result<LogPage>>();
+    let (tx, mut rx) = unbounded_channel::<SessionEvent>();
+    let (tx_load, mut rx_load) = unbounded_channel::<Result<RepoConfig>>();
+    let (tx_page1, mut rx_page1) = unbounded_channel::<Result<LogPage>>();
+    let (tx_rev, mut rx_rev) = unbounded_channel::<Result<RevResult>>();
+    let (tx_page2, mut rx_page2) = unbounded_channel::<Result<LogPage>>();
 
     tx.send(SessionEvent::OpenWorkspace {
         tx: tx_load,
@@ -256,19 +261,19 @@ fn query_log_multi_interrupt() -> Result<()> {
             force_log_page_size: Some(7),
             ..Default::default()
         }
-        .handle_events(&rx),
+        .handle_events(&mut rx),
     )?;
 
-    rx_load.recv()??;
+    block_on(rx_load.recv()).ok_or_else(|| anyhow::anyhow!("channel closed"))??;
 
-    let page1 = rx_page1.recv()??;
+    let page1 = block_on(rx_page1.recv()).ok_or_else(|| anyhow::anyhow!("channel closed"))??;
     assert_eq!(7, page1.rows.len());
     assert!(page1.has_more);
 
-    let rev = rx_rev.recv()??;
+    let rev = block_on(rx_rev.recv()).ok_or_else(|| anyhow::anyhow!("channel closed"))??;
     assert!(matches!(rev, RevResult::Detail { header, .. } if header.is_working_copy));
 
-    let page2 = rx_page2.recv()??;
+    let page2 = block_on(rx_page2.recv()).ok_or_else(|| anyhow::anyhow!("channel closed"))??;
     assert_eq!(5, page2.rows.len());
     assert!(!page2.has_more);
 
@@ -278,9 +283,9 @@ fn query_log_multi_interrupt() -> Result<()> {
 #[test]
 fn query_check_immutable() -> Result<()> {
     let repo = mkrepo();
-    let (tx, rx) = channel::<SessionEvent>();
-    let (tx_load, rx_load) = channel::<Result<RepoConfig>>();
-    let (tx_page, rx_page) = channel::<Result<LogPage>>();
+    let (tx, mut rx) = unbounded_channel::<SessionEvent>();
+    let (tx_load, mut rx_load) = unbounded_channel::<Result<RepoConfig>>();
+    let (tx_page, mut rx_page) = unbounded_channel::<Result<LogPage>>();
 
     tx.send(SessionEvent::OpenWorkspace {
         tx: tx_load,
@@ -297,12 +302,12 @@ fn query_check_immutable() -> Result<()> {
             force_log_page_size: Some(2),
             ..Default::default()
         }
-        .handle_events(&rx),
+        .handle_events(&mut rx),
     )?;
 
-    rx_load.recv()??;
+    block_on(rx_load.recv()).ok_or_else(|| anyhow::anyhow!("channel closed"))??;
 
-    let page = rx_page.recv()??;
+    let page = block_on(rx_page.recv()).ok_or_else(|| anyhow::anyhow!("channel closed"))??;
     assert_eq!(2, page.rows.len());
     assert!(!page.rows[0].revision.is_immutable);
     assert!(page.rows[1].revision.is_immutable);
@@ -314,9 +319,9 @@ fn query_check_immutable() -> Result<()> {
 fn query_rev_not_found() -> Result<()> {
     let repo = mkrepo();
 
-    let (tx, rx) = channel::<SessionEvent>();
-    let (tx_load, rx_load) = channel::<Result<RepoConfig>>();
-    let (tx_query, rx_query) = channel::<Result<RevResult>>();
+    let (tx, mut rx) = unbounded_channel::<SessionEvent>();
+    let (tx_load, mut rx_load) = unbounded_channel::<Result<RepoConfig>>();
+    let (tx_query, mut rx_query) = unbounded_channel::<Result<RevResult>>();
 
     tx.send(SessionEvent::OpenWorkspace {
         tx: tx_load,
@@ -328,10 +333,10 @@ fn query_rev_not_found() -> Result<()> {
     })?;
     tx.send(SessionEvent::EndSession)?;
 
-    block_on(WorkerSession::default().handle_events(&rx))?;
+    block_on(WorkerSession::default().handle_events(&mut rx))?;
 
-    _ = rx_load.recv()??;
-    let result = rx_query.recv()??;
+    _ = block_on(rx_load.recv()).ok_or_else(|| anyhow::anyhow!("channel closed"))??;
+    let result = block_on(rx_query.recv()).ok_or_else(|| anyhow::anyhow!("channel closed"))??;
 
     assert!(
         matches!(result, RevResult::NotFound { id } if id.change.hex == "abcdefghijklmnopqrstuvwxyz")
@@ -344,9 +349,9 @@ fn query_rev_not_found() -> Result<()> {
 fn config_read() -> Result<()> {
     let repo = mkrepo();
 
-    let (tx, rx) = channel::<SessionEvent>();
-    let (tx_load, rx_load) = channel::<Result<RepoConfig>>();
-    let (tx_read, rx_read) = channel::<Result<Vec<String>>>();
+    let (tx, mut rx) = unbounded_channel::<SessionEvent>();
+    let (tx_load, mut rx_load) = unbounded_channel::<Result<RepoConfig>>();
+    let (tx_read, mut rx_read) = unbounded_channel::<Result<Vec<String>>>();
 
     tx.send(SessionEvent::OpenWorkspace {
         tx: tx_load,
@@ -358,10 +363,10 @@ fn config_read() -> Result<()> {
     })?;
     tx.send(SessionEvent::EndSession)?;
 
-    block_on(WorkerSession::default().handle_events(&rx))?;
+    block_on(WorkerSession::default().handle_events(&mut rx))?;
 
-    _ = rx_load.recv()??;
-    let result = rx_read.recv()?;
+    _ = block_on(rx_load.recv()).ok_or_else(|| anyhow::anyhow!("channel closed"))??;
+    let result = block_on(rx_read.recv()).ok_or_else(|| anyhow::anyhow!("channel closed"))?;
 
     assert!(result.is_ok()); // key may be empty, but should exist due to defaults
 
@@ -372,9 +377,9 @@ fn config_read() -> Result<()> {
 fn config_write() -> Result<()> {
     let repo = mkrepo();
 
-    let (tx, rx) = channel::<SessionEvent>();
-    let (tx_load, rx_load) = channel::<Result<RepoConfig>>();
-    let (tx_read, rx_read) = channel::<Result<Vec<String>>>();
+    let (tx, mut rx) = unbounded_channel::<SessionEvent>();
+    let (tx_load, mut rx_load) = unbounded_channel::<Result<RepoConfig>>();
+    let (tx_read, mut rx_read) = unbounded_channel::<Result<Vec<String>>>();
 
     tx.send(SessionEvent::OpenWorkspace {
         tx: tx_load,
@@ -391,10 +396,10 @@ fn config_write() -> Result<()> {
     })?;
     tx.send(SessionEvent::EndSession)?;
 
-    block_on(WorkerSession::default().handle_events(&rx))?;
+    block_on(WorkerSession::default().handle_events(&mut rx))?;
 
-    _ = rx_load.recv()??;
-    let result = rx_read.recv()??;
+    _ = block_on(rx_load.recv()).ok_or_else(|| anyhow::anyhow!("channel closed"))??;
+    let result = block_on(rx_read.recv()).ok_or_else(|| anyhow::anyhow!("channel closed"))??;
 
     assert_eq!(vec!["a".to_string(), "b".to_string()], result);
 

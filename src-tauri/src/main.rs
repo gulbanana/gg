@@ -12,8 +12,9 @@ mod worker;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Mutex;
-use std::sync::mpsc::{Sender, channel};
 use std::thread::{self};
+
+use tokio::sync::mpsc::{UnboundedSender, unbounded_channel};
 
 use anyhow::{Context, Result, anyhow};
 use clap::Parser;
@@ -52,15 +53,15 @@ struct AppState(Mutex<HashMap<String, WindowState>>);
 
 struct WindowState {
     _worker: tauri::async_runtime::JoinHandle<()>,
-    worker_channel: Sender<SessionEvent>,
-    input_channel: Option<Sender<InputResponse>>,
+    worker_channel: UnboundedSender<SessionEvent>,
+    input_channel: Option<std::sync::mpsc::Sender<InputResponse>>,
     revision_menu: Menu<Wry>,
     tree_menu: Menu<Wry>,
     ref_menu: Menu<Wry>,
 }
 
 impl AppState {
-    fn get_session(&self, window_label: &str) -> Sender<SessionEvent> {
+    fn get_session(&self, window_label: &str) -> UnboundedSender<SessionEvent> {
         self.0
             .lock()
             .expect("state mutex poisoned")
@@ -70,7 +71,7 @@ impl AppState {
             .clone()
     }
 
-    fn set_input(&self, window_label: &str, tx: Sender<InputResponse>) {
+    fn set_input(&self, window_label: &str, tx: std::sync::mpsc::Sender<InputResponse>) {
         self.0
             .lock()
             .expect("state mutex poisoned")
@@ -79,7 +80,7 @@ impl AppState {
             .input_channel = Some(tx);
     }
 
-    fn take_input(&self, window_label: &str) -> Option<Sender<InputResponse>> {
+    fn take_input(&self, window_label: &str) -> Option<std::sync::mpsc::Sender<InputResponse>> {
         self.0
             .lock()
             .expect("state mutex poisoned")
@@ -173,7 +174,7 @@ fn main() -> Result<()> {
             let window = app
                 .get_webview_window("main")
                 .ok_or(anyhow!("preconfigured window not found"))?;
-            let (sender, receiver) = channel();
+            let (sender, mut receiver) = unbounded_channel();
 
             let mut handle = window.as_ref().window();
             let window_worker = tauri::async_runtime::spawn(async move {
@@ -181,7 +182,7 @@ fn main() -> Result<()> {
 
                 while let Err(err) =
                     WorkerSession::new(FrontendCallbacks(handle.clone()), args.workspace.clone())
-                        .handle_events(&receiver)
+                        .handle_events(&mut receiver)
                         .await
                         .context("worker")
                 {
@@ -246,7 +247,7 @@ fn notify_window_ready(window: Window) {
 #[tauri::command(async)]
 fn notify_input(
     window: Window,
-    app_state: State<AppState>,
+    app_state: State<'_, AppState>,
     response: InputResponse,
 ) -> Result<(), InvokeError> {
     let response_tx = app_state
@@ -270,13 +271,13 @@ fn forward_context_menu(window: Window, context: messages::Operand) -> Result<()
 }
 
 #[tauri::command(async)]
-fn query_log(
+async fn query_log(
     window: Window,
-    app_state: State<AppState>,
+    app_state: State<'_, AppState>,
     revset: String,
 ) -> Result<messages::LogPage, InvokeError> {
-    let session_tx: Sender<SessionEvent> = app_state.get_session(window.label());
-    let (call_tx, call_rx) = channel();
+    let session_tx = app_state.get_session(window.label());
+    let (call_tx, mut call_rx) = unbounded_channel();
 
     session_tx
         .send(SessionEvent::QueryLog {
@@ -286,53 +287,56 @@ fn query_log(
         .map_err(InvokeError::from_error)?;
     call_rx
         .recv()
-        .map_err(InvokeError::from_error)?
+        .await
+        .ok_or_else(|| InvokeError::from_anyhow(anyhow!("channel closed")))?
         .map_err(InvokeError::from_anyhow)
 }
 
 #[tauri::command(async)]
-fn query_log_next_page(
+async fn query_log_next_page(
     window: Window,
-    app_state: State<AppState>,
+    app_state: State<'_, AppState>,
 ) -> Result<messages::LogPage, InvokeError> {
-    let session_tx: Sender<SessionEvent> = app_state.get_session(window.label());
-    let (call_tx, call_rx) = channel();
+    let session_tx = app_state.get_session(window.label());
+    let (call_tx, mut call_rx) = unbounded_channel();
 
     session_tx
         .send(SessionEvent::QueryLogNextPage { tx: call_tx })
         .map_err(InvokeError::from_error)?;
     call_rx
         .recv()
-        .map_err(InvokeError::from_error)?
+        .await
+        .ok_or_else(|| InvokeError::from_anyhow(anyhow!("channel closed")))?
         .map_err(InvokeError::from_anyhow)
 }
 
 #[tauri::command(async)]
-fn query_revision(
+async fn query_revision(
     window: Window,
-    app_state: State<AppState>,
+    app_state: State<'_, AppState>,
     id: RevId,
 ) -> Result<messages::RevResult, InvokeError> {
-    let session_tx: Sender<SessionEvent> = app_state.get_session(window.label());
-    let (call_tx, call_rx) = channel();
+    let session_tx = app_state.get_session(window.label());
+    let (call_tx, mut call_rx) = unbounded_channel();
 
     session_tx
         .send(SessionEvent::QueryRevision { tx: call_tx, id })
         .map_err(InvokeError::from_error)?;
     call_rx
         .recv()
-        .map_err(InvokeError::from_error)?
+        .await
+        .ok_or_else(|| InvokeError::from_anyhow(anyhow!("channel closed")))?
         .map_err(InvokeError::from_anyhow)
 }
 
 #[tauri::command(async)]
-fn query_remotes(
+async fn query_remotes(
     window: Window,
-    app_state: State<AppState>,
+    app_state: State<'_, AppState>,
     tracking_branch: Option<String>,
 ) -> Result<Vec<String>, InvokeError> {
-    let session_tx: Sender<SessionEvent> = app_state.get_session(window.label());
-    let (call_tx, call_rx) = channel();
+    let session_tx = app_state.get_session(window.label());
+    let (call_tx, mut call_rx) = unbounded_channel();
 
     session_tx
         .send(SessionEvent::QueryRemotes {
@@ -342,214 +346,215 @@ fn query_remotes(
         .map_err(InvokeError::from_error)?;
     call_rx
         .recv()
-        .map_err(InvokeError::from_error)?
+        .await
+        .ok_or_else(|| InvokeError::from_anyhow(anyhow!("channel closed")))?
         .map_err(InvokeError::from_anyhow)
 }
 
 #[tauri::command(async)]
-fn abandon_revisions(
+async fn abandon_revisions(
     window: Window,
-    app_state: State<AppState>,
+    app_state: State<'_, AppState>,
     mutation: AbandonRevisions,
 ) -> Result<MutationResult, InvokeError> {
-    try_mutate(window, app_state, mutation)
+    try_mutate(window, app_state, mutation).await
 }
 
 #[tauri::command(async)]
-fn backout_revisions(
+async fn backout_revisions(
     window: Window,
-    app_state: State<AppState>,
+    app_state: State<'_, AppState>,
     mutation: BackoutRevisions,
 ) -> Result<MutationResult, InvokeError> {
-    try_mutate(window, app_state, mutation)
+    try_mutate(window, app_state, mutation).await
 }
 
 #[tauri::command(async)]
-fn checkout_revision(
+async fn checkout_revision(
     window: Window,
-    app_state: State<AppState>,
+    app_state: State<'_, AppState>,
     mutation: CheckoutRevision,
 ) -> Result<MutationResult, InvokeError> {
-    try_mutate(window, app_state, mutation)
+    try_mutate(window, app_state, mutation).await
 }
 
 #[tauri::command(async)]
-fn create_revision(
+async fn create_revision(
     window: Window,
-    app_state: State<AppState>,
+    app_state: State<'_, AppState>,
     mutation: CreateRevision,
 ) -> Result<MutationResult, InvokeError> {
-    try_mutate(window, app_state, mutation)
+    try_mutate(window, app_state, mutation).await
 }
 
 #[tauri::command(async)]
-fn create_revision_between(
+async fn create_revision_between(
     window: Window,
-    app_state: State<AppState>,
+    app_state: State<'_, AppState>,
     mutation: CreateRevisionBetween,
 ) -> Result<MutationResult, InvokeError> {
-    try_mutate(window, app_state, mutation)
+    try_mutate(window, app_state, mutation).await
 }
 
 #[tauri::command(async)]
-fn insert_revision(
+async fn insert_revision(
     window: Window,
-    app_state: State<AppState>,
+    app_state: State<'_, AppState>,
     mutation: InsertRevision,
 ) -> Result<MutationResult, InvokeError> {
-    try_mutate(window, app_state, mutation)
+    try_mutate(window, app_state, mutation).await
 }
 
 #[tauri::command(async)]
-fn describe_revision(
+async fn describe_revision(
     window: Window,
-    app_state: State<AppState>,
+    app_state: State<'_, AppState>,
     mutation: DescribeRevision,
 ) -> Result<MutationResult, InvokeError> {
-    try_mutate(window, app_state, mutation)
+    try_mutate(window, app_state, mutation).await
 }
 
 #[tauri::command(async)]
-fn duplicate_revisions(
+async fn duplicate_revisions(
     window: Window,
-    app_state: State<AppState>,
+    app_state: State<'_, AppState>,
     mutation: DuplicateRevisions,
 ) -> Result<MutationResult, InvokeError> {
-    try_mutate(window, app_state, mutation)
+    try_mutate(window, app_state, mutation).await
 }
 
 #[tauri::command(async)]
-fn move_revision(
+async fn move_revision(
     window: Window,
-    app_state: State<AppState>,
+    app_state: State<'_, AppState>,
     mutation: MoveRevision,
 ) -> Result<MutationResult, InvokeError> {
-    try_mutate(window, app_state, mutation)
+    try_mutate(window, app_state, mutation).await
 }
 
 #[tauri::command(async)]
-fn move_source(
+async fn move_source(
     window: Window,
-    app_state: State<AppState>,
+    app_state: State<'_, AppState>,
     mutation: MoveSource,
 ) -> Result<MutationResult, InvokeError> {
-    try_mutate(window, app_state, mutation)
+    try_mutate(window, app_state, mutation).await
 }
 
 #[tauri::command(async)]
-fn move_changes(
+async fn move_changes(
     window: Window,
-    app_state: State<AppState>,
+    app_state: State<'_, AppState>,
     mutation: MoveChanges,
 ) -> Result<MutationResult, InvokeError> {
-    try_mutate(window, app_state, mutation)
+    try_mutate(window, app_state, mutation).await
 }
 
 #[tauri::command(async)]
-fn copy_changes(
+async fn copy_changes(
     window: Window,
-    app_state: State<AppState>,
+    app_state: State<'_, AppState>,
     mutation: CopyChanges,
 ) -> Result<MutationResult, InvokeError> {
-    try_mutate(window, app_state, mutation)
+    try_mutate(window, app_state, mutation).await
 }
 
 #[tauri::command(async)]
-fn move_hunk(
+async fn move_hunk(
     window: Window,
-    app_state: State<AppState>,
+    app_state: State<'_, AppState>,
     mutation: MoveHunk,
 ) -> Result<MutationResult, InvokeError> {
-    try_mutate(window, app_state, mutation)
+    try_mutate(window, app_state, mutation).await
 }
 
 #[tauri::command(async)]
-fn copy_hunk(
+async fn copy_hunk(
     window: Window,
-    app_state: State<AppState>,
+    app_state: State<'_, AppState>,
     mutation: CopyHunk,
 ) -> Result<MutationResult, InvokeError> {
-    try_mutate(window, app_state, mutation)
+    try_mutate(window, app_state, mutation).await
 }
 
 #[tauri::command(async)]
-fn track_branch(
+async fn track_branch(
     window: Window,
-    app_state: State<AppState>,
+    app_state: State<'_, AppState>,
     mutation: TrackBranch,
 ) -> Result<MutationResult, InvokeError> {
-    try_mutate(window, app_state, mutation)
+    try_mutate(window, app_state, mutation).await
 }
 
 #[tauri::command(async)]
-fn untrack_branch(
+async fn untrack_branch(
     window: Window,
-    app_state: State<AppState>,
+    app_state: State<'_, AppState>,
     mutation: UntrackBranch,
 ) -> Result<MutationResult, InvokeError> {
-    try_mutate(window, app_state, mutation)
+    try_mutate(window, app_state, mutation).await
 }
 
 #[tauri::command(async)]
-fn rename_branch(
+async fn rename_branch(
     window: Window,
-    app_state: State<AppState>,
+    app_state: State<'_, AppState>,
     mutation: RenameBranch,
 ) -> Result<MutationResult, InvokeError> {
-    try_mutate(window, app_state, mutation)
+    try_mutate(window, app_state, mutation).await
 }
 
 #[tauri::command(async)]
-fn create_ref(
+async fn create_ref(
     window: Window,
-    app_state: State<AppState>,
+    app_state: State<'_, AppState>,
     mutation: CreateRef,
 ) -> Result<MutationResult, InvokeError> {
-    try_mutate(window, app_state, mutation)
+    try_mutate(window, app_state, mutation).await
 }
 
 #[tauri::command(async)]
-fn delete_ref(
+async fn delete_ref(
     window: Window,
-    app_state: State<AppState>,
+    app_state: State<'_, AppState>,
     mutation: DeleteRef,
 ) -> Result<MutationResult, InvokeError> {
-    try_mutate(window, app_state, mutation)
+    try_mutate(window, app_state, mutation).await
 }
 
 #[tauri::command(async)]
-fn move_ref(
+async fn move_ref(
     window: Window,
-    app_state: State<AppState>,
+    app_state: State<'_, AppState>,
     mutation: MoveRef,
 ) -> Result<MutationResult, InvokeError> {
-    try_mutate(window, app_state, mutation)
+    try_mutate(window, app_state, mutation).await
 }
 
 #[tauri::command(async)]
-fn git_push(
+async fn git_push(
     window: Window,
-    app_state: State<AppState>,
+    app_state: State<'_, AppState>,
     mutation: GitPush,
 ) -> Result<MutationResult, InvokeError> {
-    try_mutate(window, app_state, mutation)
+    try_mutate(window, app_state, mutation).await
 }
 
 #[tauri::command(async)]
-fn git_fetch(
+async fn git_fetch(
     window: Window,
-    app_state: State<AppState>,
+    app_state: State<'_, AppState>,
     mutation: GitFetch,
 ) -> Result<MutationResult, InvokeError> {
-    try_mutate(window, app_state, mutation)
+    try_mutate(window, app_state, mutation).await
 }
 
 #[tauri::command(async)]
-fn undo_operation(
+async fn undo_operation(
     window: Window,
-    app_state: State<AppState>,
+    app_state: State<'_, AppState>,
 ) -> Result<MutationResult, InvokeError> {
-    try_mutate(window, app_state, UndoOperation)
+    try_mutate(window, app_state, UndoOperation).await
 }
 
 fn try_open_repository(window: &Window, cwd: Option<PathBuf>) -> Result<()> {
@@ -557,15 +562,15 @@ fn try_open_repository(window: &Window, cwd: Option<PathBuf>) -> Result<()> {
 
     let app_state = window.state::<AppState>();
 
-    let session_tx: Sender<SessionEvent> = app_state.get_session(window.label());
-    let (call_tx, call_rx) = channel();
+    let session_tx = app_state.get_session(window.label());
+    let (call_tx, mut call_rx) = unbounded_channel();
 
     session_tx.send(SessionEvent::OpenWorkspace {
         tx: call_tx,
         wd: cwd.clone(),
     })?;
 
-    match call_rx.recv()? {
+    match pollster::block_on(call_rx.recv()).ok_or_else(|| anyhow!("channel closed"))? {
         Ok(config) => {
             log::debug!("load workspace succeeded");
             match &config {
@@ -601,13 +606,13 @@ fn try_open_repository(window: &Window, cwd: Option<PathBuf>) -> Result<()> {
     Ok(())
 }
 
-fn try_mutate<T: Mutation + Send + Sync + 'static>(
+async fn try_mutate<T: Mutation + Send + Sync + 'static>(
     window: Window,
-    app_state: State<AppState>,
+    app_state: State<'_, AppState>,
     mutation: T,
 ) -> Result<MutationResult, InvokeError> {
-    let session_tx: Sender<SessionEvent> = app_state.get_session(window.label());
-    let (call_tx, call_rx) = channel();
+    let session_tx = app_state.get_session(window.label());
+    let (call_tx, mut call_rx) = unbounded_channel();
 
     session_tx
         .send(SessionEvent::ExecuteMutation {
@@ -615,7 +620,10 @@ fn try_mutate<T: Mutation + Send + Sync + 'static>(
             mutation: Box::new(mutation),
         })
         .map_err(InvokeError::from_error)?;
-    call_rx.recv().map_err(InvokeError::from_error)
+    call_rx
+        .recv()
+        .await
+        .ok_or_else(|| InvokeError::from_anyhow(anyhow!("channel closed")))
 }
 
 fn handle_window_event(window: &Window, event: &WindowEvent) {
@@ -624,16 +632,16 @@ fn handle_window_event(window: &Window, event: &WindowEvent) {
 
         let app_state = window.state::<AppState>();
 
-        let session_tx: Sender<SessionEvent> = app_state.get_session(window.label());
-        let (call_tx, call_rx) = channel();
+        let session_tx = app_state.get_session(window.label());
+        let (call_tx, mut call_rx) = unbounded_channel();
 
         handler::nonfatal!(session_tx.send(SessionEvent::ExecuteSnapshot { tx: call_tx }));
 
         // events are handled on the main thread, so don't wait for
         // a worker response - that's a recipe for deadlock
         let window = window.clone();
-        thread::spawn(move || {
-            if let Some(status) = handler::nonfatal!(call_rx.recv()) {
+        tauri::async_runtime::spawn(async move {
+            if let Some(Some(status)) = call_rx.recv().await {
                 handler::nonfatal!(window.emit("gg://repo/status", status));
             }
         });
@@ -642,9 +650,9 @@ fn handle_window_event(window: &Window, event: &WindowEvent) {
 
 fn add_recent_workspaces(window: Window, repo_path: &str) -> Result<()> {
     let app_state = window.state::<AppState>();
-    let session_tx: Sender<SessionEvent> = app_state.get_session(window.label());
+    let session_tx = app_state.get_session(window.label());
 
-    let (read_tx, read_rx) = channel();
+    let (read_tx, mut read_rx) = unbounded_channel();
     session_tx.send(SessionEvent::ReadConfigArray {
         key: vec![
             "gg".to_string(),
@@ -653,7 +661,8 @@ fn add_recent_workspaces(window: Window, repo_path: &str) -> Result<()> {
         ],
         tx: read_tx,
     })?;
-    let mut recent = read_rx.recv()??;
+    let mut recent =
+        pollster::block_on(read_rx.recv()).ok_or_else(|| anyhow!("channel closed"))??;
     recent.retain(|x| x != repo_path);
     recent.insert(0, repo_path.to_owned());
     recent.truncate(10);
@@ -677,12 +686,12 @@ fn add_recent_workspaces(window: Window, repo_path: &str) -> Result<()> {
 }
 
 #[tauri::command(async)]
-fn query_recent_workspaces(
+async fn query_recent_workspaces(
     window: Window,
-    app_state: State<AppState>,
+    app_state: State<'_, AppState>,
 ) -> Result<Vec<String>, InvokeError> {
-    let session_tx: Sender<SessionEvent> = app_state.get_session(window.label());
-    let (call_tx, call_rx) = channel();
+    let session_tx = app_state.get_session(window.label());
+    let (call_tx, mut call_rx) = unbounded_channel();
     session_tx
         .send(SessionEvent::ReadConfigArray {
             key: vec![
@@ -694,7 +703,11 @@ fn query_recent_workspaces(
         })
         .map_err(InvokeError::from_error)?;
 
-    match call_rx.recv().map_err(InvokeError::from_error)? {
+    match call_rx
+        .recv()
+        .await
+        .ok_or_else(|| InvokeError::from_anyhow(anyhow!("channel closed")))?
+    {
         Ok(mut workspaces) => {
             workspaces.truncate(10);
             Ok(workspaces)

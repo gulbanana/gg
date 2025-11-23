@@ -44,7 +44,7 @@ pub trait Mutation: Debug {
 }
 
 /// implemented by UI layers to request user input and receive progress
-pub trait WorkerCallbacks {
+pub trait WorkerCallbacks: Send {
     fn with_git(
         &self,
         repo: &mut MutableRepo,
