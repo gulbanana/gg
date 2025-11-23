@@ -11,7 +11,9 @@ use crate::{
 use anyhow::Result;
 use assert_matches::assert_matches;
 use jj_lib::object_id::ObjectId;
+use pollster::block_on;
 use std::fs;
+use tokio::io::AsyncReadExt;
 
 #[test]
 fn abandon_revisions() -> Result<()> {
@@ -403,9 +405,9 @@ fn move_hunk_content() -> anyhow::Result<()> {
     // Verify the content is correct
     match path_value.into_resolved() {
         Ok(Some(jj_lib::backend::TreeValue::File { id, .. })) => {
-            let mut reader = ws.repo().store().read_file(&repo_path, &id)?;
+            let mut reader = block_on(ws.repo().store().read_file(&repo_path, &id))?;
             let mut content = Vec::new();
-            std::io::Read::read_to_end(&mut reader, &mut content)?;
+            block_on(reader.read_to_end(&mut content))?;
             let content_str = String::from_utf8_lossy(&content);
             assert_eq!(
                 content_str, "11\n2\n",
@@ -583,9 +585,9 @@ fn move_hunk_descendant() -> anyhow::Result<()> {
 
     match parent_tree.path_value(&repo_path)?.into_resolved() {
         Ok(Some(jj_lib::backend::TreeValue::File { id, .. })) => {
-            let mut reader = ws.repo().store().read_file(&repo_path, &id)?;
+            let mut reader = block_on(ws.repo().store().read_file(&repo_path, &id))?;
             let mut content = Vec::new();
-            std::io::Read::read_to_end(&mut reader, &mut content)?;
+            block_on(reader.read_to_end(&mut content))?;
             let content_str = String::from_utf8_lossy(&content);
             assert_eq!(
                 content_str, "line1\nline2\nline3\nline4\nline5\nline6\n",
@@ -602,9 +604,9 @@ fn move_hunk_descendant() -> anyhow::Result<()> {
     match child_tree.path_value(&repo_path)?.into_resolved() {
         Ok(Some(jj_lib::backend::TreeValue::File { id, .. })) => {
             // Clean resolution - child should have hunk removed
-            let mut reader = ws.repo().store().read_file(&repo_path, &id)?;
+            let mut reader = block_on(ws.repo().store().read_file(&repo_path, &id))?;
             let mut content = Vec::new();
-            std::io::Read::read_to_end(&mut reader, &mut content)?;
+            block_on(reader.read_to_end(&mut content))?;
             let content_str = String::from_utf8_lossy(&content);
             assert_eq!(
                 content_str, "line1\nline2\nline3\nline7\nline8\nline9\nline10\n",
@@ -720,9 +722,9 @@ fn move_hunk_unrelated() -> anyhow::Result<()> {
 
     match tree_a.path_value(&test_path)?.into_resolved() {
         Ok(Some(jj_lib::backend::TreeValue::File { id, .. })) => {
-            let mut reader = ws.repo().store().read_file(&test_path, &id)?;
+            let mut reader = block_on(ws.repo().store().read_file(&test_path, &id))?;
             let mut content = Vec::new();
-            std::io::Read::read_to_end(&mut reader, &mut content)?;
+            block_on(reader.read_to_end(&mut content))?;
             let content_str = String::from_utf8_lossy(&content);
             assert_eq!(
                 content_str, "line1\nline2\nline3\nline4\nline5\nline6\n",
@@ -738,9 +740,9 @@ fn move_hunk_unrelated() -> anyhow::Result<()> {
 
     match tree_b.path_value(&test_path)?.into_resolved() {
         Ok(Some(jj_lib::backend::TreeValue::File { id, .. })) => {
-            let mut reader = ws.repo().store().read_file(&test_path, &id)?;
+            let mut reader = block_on(ws.repo().store().read_file(&test_path, &id))?;
             let mut content = Vec::new();
-            std::io::Read::read_to_end(&mut reader, &mut content)?;
+            block_on(reader.read_to_end(&mut content))?;
             let content_str = String::from_utf8_lossy(&content);
             assert_eq!(
                 content_str, "line1\nline2\nline3\nline7\nline8\nline9\nline10\n",
@@ -826,9 +828,9 @@ fn copy_hunk_from_parent() -> anyhow::Result<()> {
 
     match child_tree.path_value(&repo_path)?.into_resolved() {
         Ok(Some(jj_lib::backend::TreeValue::File { id, .. })) => {
-            let mut reader = ws.repo().store().read_file(&repo_path, &id)?;
+            let mut reader = block_on(ws.repo().store().read_file(&repo_path, &id))?;
             let mut content = Vec::new();
-            std::io::Read::read_to_end(&mut reader, &mut content)?;
+            block_on(reader.read_to_end(&mut content))?;
             let content_str = String::from_utf8_lossy(&content);
             assert_eq!(
                 content_str, "line1\nline2\nline3\n",
@@ -843,9 +845,9 @@ fn copy_hunk_from_parent() -> anyhow::Result<()> {
     let parent_tree = parent_commit.tree()?;
     match parent_tree.path_value(&repo_path)?.into_resolved() {
         Ok(Some(jj_lib::backend::TreeValue::File { id, .. })) => {
-            let mut reader = ws.repo().store().read_file(&repo_path, &id)?;
+            let mut reader = block_on(ws.repo().store().read_file(&repo_path, &id))?;
             let mut content = Vec::new();
-            std::io::Read::read_to_end(&mut reader, &mut content)?;
+            block_on(reader.read_to_end(&mut content))?;
             let content_str = String::from_utf8_lossy(&content);
             assert_eq!(
                 content_str, "line1\nline2\nline3\n",
@@ -1099,9 +1101,9 @@ fn copy_hunk_multiple_hunks() -> anyhow::Result<()> {
 
     match child_tree.path_value(&repo_path)?.into_resolved() {
         Ok(Some(jj_lib::backend::TreeValue::File { id, .. })) => {
-            let mut reader = ws.repo().store().read_file(&repo_path, &id)?;
+            let mut reader = block_on(ws.repo().store().read_file(&repo_path, &id))?;
             let mut content = Vec::new();
-            std::io::Read::read_to_end(&mut reader, &mut content)?;
+            block_on(reader.read_to_end(&mut content))?;
             let content_str = String::from_utf8_lossy(&content);
             assert_eq!(
                 content_str, "line1\nmodified2\nline3\nline4\nline5\n",
@@ -1207,9 +1209,9 @@ fn move_hunk_second_of_two_hunks() -> anyhow::Result<()> {
 
     match source_tree.path_value(&test_path)?.into_resolved() {
         Ok(Some(jj_lib::backend::TreeValue::File { id, .. })) => {
-            let mut reader = ws.repo().store().read_file(&test_path, &id)?;
+            let mut reader = block_on(ws.repo().store().read_file(&test_path, &id))?;
             let mut content = Vec::new();
-            std::io::Read::read_to_end(&mut reader, &mut content)?;
+            block_on(reader.read_to_end(&mut content))?;
             let content_str = String::from_utf8_lossy(&content);
             assert_eq!(
                 content_str, "line1\ninserted1\nline2\nline3\nline4\nline5\n",
@@ -1225,9 +1227,9 @@ fn move_hunk_second_of_two_hunks() -> anyhow::Result<()> {
 
     match target_tree.path_value(&test_path)?.into_resolved() {
         Ok(Some(jj_lib::backend::TreeValue::File { id, .. })) => {
-            let mut reader = ws.repo().store().read_file(&test_path, &id)?;
+            let mut reader = block_on(ws.repo().store().read_file(&test_path, &id))?;
             let mut content = Vec::new();
-            std::io::Read::read_to_end(&mut reader, &mut content)?;
+            block_on(reader.read_to_end(&mut content))?;
             let content_str = String::from_utf8_lossy(&content);
             assert_eq!(
                 content_str, "line1\nline2\nline3\nline4\ninserted2\nline5\n",

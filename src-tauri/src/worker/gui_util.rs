@@ -13,7 +13,6 @@ use std::{
 
 use anyhow::{Context, Result, anyhow};
 use chrono::TimeZone;
-use git2::Repository;
 use itertools::Itertools;
 use jj_cli::{cli_util::short_operation_hash, git_util::is_colocated_git_workspace, revset_util};
 use jj_lib::{
@@ -171,11 +170,10 @@ impl WorkspaceSession<'_> {
         Ok(self.operation.repo.store().get_commit(id)?)
     }
 
-    pub fn git_repo(&self) -> Result<Option<Repository>> {
-        match self.operation.git_backend() {
-            Some(backend) => Ok(Some(Repository::open(backend.git_repo_path())?)),
-            None => Ok(None),
-        }
+    pub fn git_repo(&self) -> Option<gix::Repository> {
+        self.operation
+            .git_backend()
+            .map(|backend| backend.git_repo())
     }
 
     pub fn load_at_head(&mut self) -> Result<bool> {
@@ -420,12 +418,11 @@ impl WorkspaceSession<'_> {
     pub fn format_config(&self) -> Result<messages::RepoConfig> {
         let absolute_path = self.workspace.workspace_root().into();
 
-        let git_remotes = match self.git_repo()? {
+        let git_remotes = match self.git_repo() {
             Some(repo) => repo
-                .remotes()?
-                .iter()
-                .flatten()
-                .map(|s| s.to_owned())
+                .remote_names()
+                .into_iter()
+                .map(|s| s.to_string())
                 .collect(),
             None => vec![],
         };

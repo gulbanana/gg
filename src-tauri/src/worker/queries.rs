@@ -362,15 +362,15 @@ pub fn query_remotes(
     ws: &WorkspaceSession,
     tracking_branch: Option<String>,
 ) -> Result<Vec<String>> {
-    let git_repo = match ws.git_repo()? {
+    let git_repo = match ws.git_repo() {
         Some(git_repo) => git_repo,
         None => return Err(anyhow!("No git backend")),
     };
 
     let all_remotes: Vec<String> = git_repo
-        .remotes()?
+        .remote_names()
         .into_iter()
-        .filter_map(|remote| remote.map(|remote| remote.to_owned()))
+        .map(|remote| remote.to_string())
         .collect();
 
     let matching_remotes = match tracking_branch {
@@ -449,13 +449,15 @@ fn get_value_hunks(
 }
 
 fn get_value_contents(path: &RepoPath, value: MaterializedTreeValue) -> Result<Vec<u8>> {
+    use tokio::io::AsyncReadExt;
+
     match value {
         MaterializedTreeValue::Absent => Err(anyhow!(
             "Absent path {path:?} in diff should have been handled by caller"
         )),
         MaterializedTreeValue::File(MaterializedFileValue { mut reader, .. }) => {
             let mut contents = vec![];
-            reader.read_to_end(&mut contents)?;
+            reader.read_to_end(&mut contents).block_on()?;
 
             let start = &contents[..8000.min(contents.len())]; // same heuristic git uses
             let is_binary = start.contains(&b'\0');

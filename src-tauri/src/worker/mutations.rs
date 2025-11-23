@@ -4,7 +4,8 @@ use std::sync::Arc;
 use anyhow::{Context, Result, anyhow};
 use indexmap::IndexMap;
 use itertools::Itertools;
-use jj_lib::backend::{FileId, MergedTreeId, TreeValue};
+use jj_lib::backend::{CopyId, FileId, MergedTreeId, TreeValue};
+use jj_lib::conflicts::{self, ConflictMarkerStyle, MaterializedTreeValue};
 use jj_lib::merge::Merge;
 use jj_lib::merged_tree::{MergedTree, MergedTreeBuilder};
 use jj_lib::ref_name::{RefNameBuf, RemoteName, RemoteNameBuf, RemoteRefSymbol};
@@ -26,6 +27,7 @@ use jj_lib::{
     str_util::StringPattern,
 };
 use pollster::block_on;
+use tokio::io::AsyncReadExt;
 
 use crate::messages::{
     AbandonRevisions, BackoutRevisions, CheckoutRevision, CopyChanges, CopyHunk, CreateRef,
@@ -1422,7 +1424,7 @@ impl Mutation for GitFetch {
     fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction()?;
 
-        let git_repo = match ws.git_repo()? {
+        let git_repo = match ws.git_repo() {
             Some(git_repo) => git_repo,
             None => precondition!("No git backend"),
         };
@@ -1435,9 +1437,9 @@ impl Mutation for GitFetch {
             GitFetch::AllRemotes { branch_ref } => {
                 let branch_name = branch_ref.as_branch()?;
                 for remote_name in git_repo
-                    .remotes()?
+                    .remote_names()
                     .into_iter()
-                    .filter_map(|remote| remote.map(|remote| remote.to_owned()))
+                    .map(|remote| remote.to_string())
                 {
                     remote_patterns.push((remote_name, Some(branch_name.to_owned())));
                 }
@@ -1570,14 +1572,12 @@ fn classify_branch_push(
 }
 
 fn read_file_content(store: &Arc<Store>, tree: &MergedTree, path: &RepoPath) -> Result<Vec<u8>> {
-    use jj_lib::conflicts::{self, ConflictMarkerStyle, MaterializedTreeValue};
-
     let entry = tree.path_value(path)?;
     match entry.into_resolved() {
         Ok(Some(TreeValue::File { id, .. })) => {
-            let mut reader = store.read_file(path, &id)?;
+            let mut reader = block_on(store.read_file(path, &id))?;
             let mut content = Vec::new();
-            reader.read_to_end(&mut content)?;
+            block_on(reader.read_to_end(&mut content))?;
             Ok(content)
         }
         Ok(Some(_)) => Ok(Vec::new()),
@@ -1718,6 +1718,7 @@ fn update_tree_entry(
         Merge::normal(TreeValue::File {
             id: new_blob,
             executable,
+            copy_id: CopyId::placeholder(),
         }),
     );
     let new_tree_id = builder.write_tree(store)?;
