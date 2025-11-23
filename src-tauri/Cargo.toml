@@ -63,7 +63,7 @@ futures-util = "0.3.31"
 ts-rs = { version = "7.1.1", features = ["chrono-impl"], optional = true }
 
 [target."cfg(windows)".dependencies]
-windows = { version = "0.54", features = [
+windows = { version = "0.60", features = [
     "Win32_Foundation",
     "Win32_System_Com",
     "Win32_System_Com_StructuredStorage",

@@ -2,16 +2,16 @@ use std::path::Path;
 
 use anyhow::{Result, anyhow};
 use windows::Win32::Foundation::MAX_PATH;
+use windows::Win32::Foundation::PROPERTYKEY;
+use windows::Win32::System::Com::StructuredStorage::PROPVARIANT;
 use windows::Win32::System::Com::{CLSCTX_INPROC_SERVER, CoCreateInstance};
 use windows::Win32::System::Console::{ATTACH_PARENT_PROCESS, AttachConsole};
 use windows::Win32::UI::Shell::Common::{IObjectArray, IObjectCollection};
-use windows::Win32::UI::Shell::PropertiesSystem::{
-    IPropertyStore, PROPERTYKEY, PSGetPropertyKeyFromName,
-};
+use windows::Win32::UI::Shell::PropertiesSystem::{IPropertyStore, PSGetPropertyKeyFromName};
 use windows::Win32::UI::Shell::{
     DestinationList, EnumerableObjectCollection, ICustomDestinationList, IShellLinkW, ShellLink,
 };
-use windows::core::{BSTR, HSTRING, Interface, PROPVARIANT, PWSTR, w};
+use windows::core::{BSTR, HSTRING, Interface, PWSTR, w};
 
 pub fn reattach_console() {
     // safety: FFI
@@ -55,7 +55,7 @@ pub fn update_jump_list(recent: &mut Vec<String>) -> Result<()> {
             .file_name()
             .ok_or(anyhow!("repo path is not a directory"))?
             .into();
-        let dir_wstr = BSTR::from_wide(dir_wstr.as_wide())?;
+        let dir_wstr = BSTR::from_wide(dir_wstr.as_ref());
 
         // safety: FFI
         unsafe {
