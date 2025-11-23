@@ -28,7 +28,7 @@ use jj_lib::{
     revset::{Revset, RevsetEvaluationError},
     rewrite,
 };
-use pollster::FutureExt;
+use pollster::{FutureExt, block_on};
 
 use crate::messages::{
     ChangeHunk, ChangeKind, FileRange, HunkLocation, LogCoordinates, LogLine, LogPage, LogRow,
@@ -300,7 +300,7 @@ pub fn query_revision(ws: &WorkspaceSession, id: RevId) -> Result<RevResult> {
     };
 
     let commit_parents: Result<Vec<_>, _> = commit.parents().collect();
-    let parent_tree = rewrite::merge_commit_trees(ws.repo(), &commit_parents?)?;
+    let parent_tree = block_on(rewrite::merge_commit_trees(ws.repo(), &commit_parents?))?;
     let tree = commit.tree()?;
 
     let mut conflicts = Vec::new();

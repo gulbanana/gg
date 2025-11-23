@@ -19,7 +19,7 @@ use jj_lib::{
     backend::{BackendError, ChangeId, CommitId},
     commit::Commit,
     conflicts::ConflictMarkerStyle,
-    default_index::{AsCompositeIndex, DefaultReadonlyIndex},
+    default_index::DefaultReadonlyIndex,
     file_util, git,
     git_backend::GitBackend,
     gitignore::GitIgnoreFile,
@@ -43,6 +43,7 @@ use jj_lib::{
     working_copy::{CheckoutOptions, CheckoutStats, SnapshotOptions, WorkingCopyFreshness},
     workspace::{self, DefaultWorkspaceLoaderFactory, Workspace, WorkspaceLoaderFactory},
 };
+use pollster::block_on;
 use thiserror::Error;
 
 use super::WorkerSession;
@@ -128,7 +129,7 @@ impl WorkerSession {
             .get_index_at_op(operation.repo.operation(), workspace.repo_loader().store())?;
         let is_large =
             if let Some(default_index) = index.as_any().downcast_ref::<DefaultReadonlyIndex>() {
-                let stats = default_index.as_composite().stats();
+                let stats = default_index.stats();
                 stats.num_commits as i64 >= data.workspace_settings.query_large_repo_heuristic()
             } else {
                 true
@@ -843,9 +844,13 @@ impl WorkspaceSession<'_> {
 
             rebased_commit_ids.insert(
                 child_commit.id().clone(),
-                rewrite::rebase_commit(tx.repo_mut(), child_commit, new_child_parents?)?
-                    .id()
-                    .clone(),
+                block_on(rewrite::rebase_commit(
+                    tx.repo_mut(),
+                    child_commit,
+                    new_child_parents?,
+                ))?
+                .id()
+                .clone(),
             );
         }
         {
@@ -962,7 +967,9 @@ impl SessionOperation {
         let mut git_ignores = GitIgnoreFile::empty();
         if let Some(git_backend) = self.git_backend() {
             let git_repo = git_backend.git_repo();
-            if let Some(excludes_file_path) = get_excludes_file_path(&git_repo.config_snapshot()) {
+            if let Some(excludes_file_path) =
+                get_excludes_file_path(&git_repo.config_snapshot().plumbing())
+            {
                 git_ignores = git_ignores.chain_with_file("", excludes_file_path)?;
             }
             git_ignores = git_ignores

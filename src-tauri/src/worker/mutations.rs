@@ -98,10 +98,10 @@ impl Mutation for BackoutRevisions {
         let reverted = ws.resolve_multiple_changes(self.ids)?;
         let reverted_parents: Result<Vec<_>, BackendError> = reverted[0].parents().collect();
 
-        let old_base_tree = rewrite::merge_commit_trees(tx.repo(), &reverted_parents?)?;
+        let old_base_tree = block_on(rewrite::merge_commit_trees(tx.repo(), &reverted_parents?))?;
         let new_base_tree = working_copy.tree()?;
         let old_tree = reverted[0].tree()?;
-        let new_tree = new_base_tree.merge(&old_tree, &old_base_tree)?;
+        let new_tree = block_on(new_base_tree.merge(old_tree, old_base_tree))?;
 
         tx.repo_mut()
             .rewrite_commit(&working_copy)
@@ -158,7 +158,7 @@ impl Mutation for CreateRevision {
 
         let parent_ids: Result<_, _> = parents_revset.iter().collect();
         let parent_commits = ws.resolve_multiple(parents_revset)?;
-        let merged_tree = rewrite::merge_commit_trees(tx.repo(), &parent_commits)?;
+        let merged_tree = block_on(rewrite::merge_commit_trees(tx.repo(), &parent_commits))?;
 
         let new_commit = tx
             .repo_mut()
@@ -190,7 +190,7 @@ impl Mutation for CreateRevisionBetween {
             .context("resolve after_id")?;
         let parent_ids = vec![parent_id.id().clone()];
         let parent_commits = vec![parent_id];
-        let merged_tree = rewrite::merge_commit_trees(tx.repo(), &parent_commits)?;
+        let merged_tree = block_on(rewrite::merge_commit_trees(tx.repo(), &parent_commits))?;
 
         let new_commit = tx
             .repo_mut()
@@ -204,7 +204,11 @@ impl Mutation for CreateRevisionBetween {
             precondition!("'Before' revision is immutable");
         }
 
-        rewrite::rebase_commit(tx.repo_mut(), before_commit, vec![new_commit.id().clone()])?;
+        block_on(rewrite::rebase_commit(
+            tx.repo_mut(),
+            before_commit,
+            vec![new_commit.id().clone()],
+        ))?;
 
         tx.repo_mut().edit(ws.name().to_owned(), &new_commit)?;
 
@@ -335,8 +339,16 @@ impl Mutation for InsertRevision {
 
         // rebase the target (which now has no children), then the new post-target tree atop it
         let rebased_id = target.id().hex();
-        let target = rewrite::rebase_commit(tx.repo_mut(), target, vec![after_id])?;
-        rewrite::rebase_commit(tx.repo_mut(), before, vec![target.id().clone()])?;
+        let target = block_on(rewrite::rebase_commit(
+            tx.repo_mut(),
+            target,
+            vec![after_id],
+        ))?;
+        block_on(rewrite::rebase_commit(
+            tx.repo_mut(),
+            before,
+            vec![target.id().clone()],
+        ))?;
 
         match ws.finish_transaction(tx, format!("rebase commit {}", rebased_id))? {
             Some(new_status) => Ok(MutationResult::Updated { new_status }),
@@ -372,7 +384,7 @@ impl Mutation for MoveRevision {
 
         // rebase the target itself
         let rebased_id = target.id().hex();
-        rewrite::rebase_commit(tx.repo_mut(), target, parent_ids)?;
+        block_on(rewrite::rebase_commit(tx.repo_mut(), target, parent_ids))?;
 
         match ws.finish_transaction(tx, format!("rebase commit {}", rebased_id))? {
             Some(new_status) => Ok(MutationResult::Updated { new_status }),
@@ -398,7 +410,7 @@ impl Mutation for MoveSource {
 
         // just rebase the target, which will also rebase its descendants
         let rebased_id = target.id().hex();
-        rewrite::rebase_commit(tx.repo_mut(), target, parent_ids)?;
+        block_on(rewrite::rebase_commit(tx.repo_mut(), target, parent_ids))?;
 
         match ws.finish_transaction(tx, format!("rebase commit {}", rebased_id))? {
             Some(new_status) => Ok(MutationResult::Updated { new_status }),
@@ -422,7 +434,7 @@ impl Mutation for MoveChanges {
         // construct a split tree and a remainder tree by copying changes from child to parent and from parent to child
         let from_tree = from.tree()?;
         let from_parents: Result<Vec<_>, _> = from.parents().collect();
-        let parent_tree = rewrite::merge_commit_trees(tx.repo(), &from_parents?)?;
+        let parent_tree = block_on(rewrite::merge_commit_trees(tx.repo(), &from_parents?))?;
         let split_tree_id = block_on(rewrite::restore_tree(
             &from_tree,
             &parent_tree,
@@ -471,7 +483,7 @@ impl Mutation for MoveChanges {
 
         // apply changes to destination
         let to_tree = to.tree()?;
-        let new_to_tree = to_tree.merge(&parent_tree, &split_tree)?;
+        let new_to_tree = block_on(to_tree.merge(parent_tree.clone(), split_tree.clone()))?;
         let description = combine_messages(&from, &to, abandon_source);
         tx.repo_mut()
             .rewrite_commit(&to)
@@ -929,9 +941,13 @@ impl Mutation for MoveHunk {
 
         let (remainder_tree, new_to_tree) = if is_related {
             // for related commits, we need 3-way merge (may create conflicts)
-            let remainder = from_tree.merge(&hunk_tree, &parent_tree)?;
+            let remainder = block_on(
+                from_tree
+                    .clone()
+                    .merge(hunk_tree.clone(), parent_tree.clone()),
+            )?;
             let to_tree = to.tree()?;
-            let new_to = to_tree.merge(&parent_tree, &hunk_tree)?;
+            let new_to = block_on(to_tree.merge(parent_tree.clone(), hunk_tree.clone()))?;
             (remainder, new_to)
         } else {
             // for unrelated commits, apply hunk directly to avoid conflicts
@@ -1012,7 +1028,7 @@ impl Mutation for MoveHunk {
                 .write()?;
 
             // recompute the source's tree after the destination has the hunk applied
-            let child_new_tree = new_to_tree.merge(&parent_tree, &from_tree)?;
+            let child_new_tree = block_on(new_to_tree.clone().merge(parent_tree, from_tree))?;
 
             // rebase source
             tx.repo_mut()
