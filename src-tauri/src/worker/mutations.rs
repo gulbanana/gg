@@ -457,7 +457,7 @@ impl Mutation for MoveChanges {
         }
 
         // rebase descendants of source, which may include destination
-        if tx.repo().index().is_ancestor(from.id(), to.id()) {
+        if tx.repo().index().is_ancestor(from.id(), to.id())? {
             let mut rebase_map = std::collections::HashMap::new();
             tx.repo_mut().rebase_descendants_with_options(
                 &RebaseOptions::default(),
@@ -568,7 +568,7 @@ impl Mutation for TrackBranch {
                     );
                 }
 
-                tx.repo_mut().track_remote_bookmark(remote_ref_symbol);
+                tx.repo_mut().track_remote_bookmark(remote_ref_symbol)?;
 
                 match ws.finish_transaction(
                     tx,
@@ -599,8 +599,8 @@ impl Mutation for UntrackBranch {
             StoreRef::LocalBookmark { branch_name, .. } => {
                 // untrack all remotes
                 for (remote_ref_symbol, remote_ref) in ws.view().remote_bookmarks_matching(
-                    &StringPattern::exact(branch_name),
-                    &StringPattern::everything(),
+                    &StringPattern::exact(branch_name).to_matcher(),
+                    &StringPattern::all().to_matcher(),
                 ) {
                     if remote_ref_symbol.remote != REMOTE_NAME_FOR_LOCAL_GIT_REPO
                         && remote_ref.is_tracked()
@@ -940,8 +940,8 @@ impl Mutation for MoveHunk {
         let hunk_tree = store.get_root_tree(&hunk_tree_id)?;
 
         // check if commits are related, which disallows conflict-free copies
-        let from_is_ancestor = tx.repo().index().is_ancestor(from.id(), to.id());
-        let to_is_ancestor = tx.repo().index().is_ancestor(to.id(), from.id());
+        let from_is_ancestor = tx.repo().index().is_ancestor(from.id(), to.id())?;
+        let to_is_ancestor = tx.repo().index().is_ancestor(to.id(), from.id())?;
         let is_related = from_is_ancestor || to_is_ancestor;
 
         let (remainder_tree, new_to_tree) = if is_related {
@@ -1400,7 +1400,7 @@ impl Mutation for GitPush {
             {
                 reasons.push("it has no author and/or committer set");
             }
-            if commit.has_conflict()? {
+            if commit.has_conflict() {
                 reasons.push("it has conflicts");
             }
             if !reasons.is_empty() {
@@ -1503,7 +1503,7 @@ impl Mutation for GitFetch {
                         pattern
                             .clone()
                             .map(StringPattern::exact)
-                            .unwrap_or_else(StringPattern::everything),
+                            .unwrap_or_else(StringPattern::all),
                     ],
                 )?;
                 fetcher

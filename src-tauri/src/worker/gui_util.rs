@@ -14,7 +14,11 @@ use std::{
 use anyhow::{Context, Result, anyhow};
 use chrono::TimeZone;
 use itertools::Itertools;
-use jj_cli::{cli_util::short_operation_hash, git_util::is_colocated_git_workspace, revset_util};
+use jj_cli::{
+    cli_util::{default_ignored_remote_name, short_operation_hash},
+    git_util::is_colocated_git_workspace,
+    revset_util,
+};
 use jj_lib::{
     backend::{BackendError, ChangeId, CommitId},
     commit::Commit,
@@ -126,13 +130,12 @@ impl WorkerSession {
         let index_store = workspace.repo_loader().index_store();
         let index = index_store
             .get_index_at_op(operation.repo.operation(), workspace.repo_loader().store())?;
-        let is_large =
-            if let Some(default_index) = index.downcast_ref::<DefaultReadonlyIndex>() {
-                let stats = default_index.stats();
-                stats.num_commits as i64 >= data.workspace_settings.query_large_repo_heuristic()
-            } else {
-                true
-            };
+        let is_large = if let Some(default_index) = index.downcast_ref::<DefaultReadonlyIndex>() {
+            let stats = default_index.stats();
+            stats.num_commits as i64 >= data.workspace_settings.query_large_repo_heuristic()
+        } else {
+            true
+        };
 
         let is_colocated = is_colocated_git_workspace(&workspace, &operation.repo);
 
@@ -385,7 +388,8 @@ impl WorkspaceSession<'_> {
      *************************************************************/
 
     pub fn parse_context(&self) -> RevsetParseContext<'_> {
-        self.data.parse_context(self.workspace.workspace_name())
+        self.data
+            .parse_context(self.workspace.workspace_name(), self.repo().store())
     }
 
     // the prefix context caches this itself, but the way it does so is not convenient for us - you need a fallible method and the &dyn Repo
@@ -467,7 +471,8 @@ impl WorkspaceSession<'_> {
     pub fn format_commit_id(&self, id: &CommitId) -> messages::CommitId {
         let prefix_len = self
             .prefix_index()
-            .shortest_commit_prefix_len(self.operation.repo.as_ref(), id);
+            .shortest_commit_prefix_len(self.operation.repo.as_ref(), id)
+            .unwrap_or(id.hex().len());
 
         let hex = id.hex();
         let mut prefix = hex.clone();
@@ -478,7 +483,8 @@ impl WorkspaceSession<'_> {
     pub fn format_change_id(&self, id: &ChangeId) -> messages::ChangeId {
         let prefix_len = self
             .prefix_index()
-            .shortest_change_prefix_len(self.operation.repo.as_ref(), id);
+            .shortest_change_prefix_len(self.operation.repo.as_ref(), id)
+            .unwrap_or_else(|_| id.reverse_hex().len());
 
         let hex = &id.reverse_hex();
         let mut prefix = hex.clone();
@@ -513,7 +519,7 @@ impl WorkspaceSession<'_> {
             id: self.format_id(commit),
             description: commit.description().into(),
             author: commit.author().try_into()?,
-            has_conflict: commit.has_conflict()?,
+            has_conflict: commit.has_conflict(),
             is_working_copy: *commit.id() == self.operation.wc_id,
             is_immutable,
             refs: branches,
@@ -682,12 +688,12 @@ impl WorkspaceSession<'_> {
         if max_new_file_size == 0 {
             max_new_file_size = u64::MAX;
         }
-        let (new_tree_id, _) = locked_ws.locked_wc().snapshot(&SnapshotOptions {
+        let (new_tree_id, _) = block_on(locked_ws.locked_wc().snapshot(&SnapshotOptions {
             base_ignores,
             progress: None,
             max_new_file_size,
             start_tracking_matcher: &EverythingMatcher,
-        })?;
+        }))?;
 
         let did_anything = new_tree_id != *wc_commit.tree_id();
 
@@ -762,7 +768,7 @@ impl WorkspaceSession<'_> {
 
             let mut locked_ws = self.workspace.start_working_copy_mutation()?;
 
-            locked_ws.locked_wc().reset(&new_git_head_commit)?;
+            block_on(locked_ws.locked_wc().reset(&new_git_head_commit))?;
             tx.repo_mut().rebase_descendants()?;
 
             self.operation =
@@ -870,7 +876,11 @@ impl WorkspaceSession<'_> {
 
 impl WorkspaceData {
     // unfortunately not cached as it borrows from everything
-    fn parse_context<'a>(&'a self, name: &'a WorkspaceName) -> RevsetParseContext<'a> {
+    fn parse_context<'a>(
+        &'a self,
+        name: &'a WorkspaceName,
+        store: &'a jj_lib::store::Store,
+    ) -> RevsetParseContext<'a> {
         let workspace_context = RevsetWorkspaceContext {
             path_converter: &self.path_converter,
             workspace_name: name,
@@ -887,6 +897,7 @@ impl WorkspaceData {
             local_variables: HashMap::new(),
             user_email: self.workspace_settings.user_email(),
             date_pattern_context: now.into(),
+            default_ignored_remote: default_ignored_remote_name(store),
             extensions: &self.extensions,
             workspace: Some(workspace_context),
         }
@@ -917,7 +928,7 @@ impl SessionOperation {
         // guarantee that an index can be populated - we will unwrap later
         let prefix_context =
             IdPrefixContext::default().disambiguate_within(if !revset_string.is_empty() {
-                parse_revset(&data.parse_context(id), &revset_string)
+                parse_revset(&data.parse_context(id, repo.store()), &revset_string)
                     .expect("init prefix context: parse revsets.short-prefixes")
             } else {
                 RevsetExpression::all()

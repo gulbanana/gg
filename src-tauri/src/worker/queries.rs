@@ -11,7 +11,7 @@ use anyhow::{Result, anyhow};
 use futures_util::{StreamExt, try_join};
 use gix::bstr::ByteVec;
 use itertools::Itertools;
-use jj_cli::diff_util::{LineCompareMode, LineDiffOptions};
+use jj_cli::diff_util::LineDiffOptions;
 use jj_lib::{
     backend::CommitId,
     conflicts::{
@@ -22,6 +22,7 @@ use jj_lib::{
         CompareBytesExactly, CompareBytesIgnoreAllWhitespace, CompareBytesIgnoreWhitespaceAmount,
         ContentDiff, DiffHunk, DiffHunkKind, find_line_ranges,
     },
+    diff_presentation::LineCompareMode,
     files::FileMergeHunkLevel,
     graph::{GraphEdge, GraphEdgeType, TopoGroupedGraphIterator},
     matchers::EverythingMatcher,

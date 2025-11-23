@@ -572,11 +572,11 @@ fn move_hunk_descendant() -> anyhow::Result<()> {
     // Get the new commit IDs after rewriting (change IDs stay constant)
     let new_parent_commit_ids = ws
         .repo()
-        .resolve_change_id(&parent_change_id)
+        .resolve_change_id(&parent_change_id)?
         .ok_or_else(|| anyhow::anyhow!("Failed to resolve parent change ID"))?;
     let new_child_commit_ids = ws
         .repo()
-        .resolve_change_id(&child_change_id)
+        .resolve_change_id(&child_change_id)?
         .ok_or_else(|| anyhow::anyhow!("Failed to resolve child change ID"))?;
 
     // Verify parent has the hunk applied
@@ -615,15 +615,10 @@ fn move_hunk_descendant() -> anyhow::Result<()> {
         }
         Err(_) => {
             // Conflict case - verify the tree has conflicts
-            match child_tree.id() {
-                jj_lib::backend::MergedTreeId::Merge(merge) => {
-                    assert!(
-                        !merge.is_resolved(),
-                        "Child commit should have conflicts when merge creates them"
-                    );
-                }
-                _ => panic!("Expected conflicted tree"),
-            }
+            assert!(
+                !child_tree.id().as_merge().is_resolved(),
+                "Child commit should have conflicts when merge creates them"
+            );
         }
         _ => panic!("Expected test.txt to exist in child commit"),
     }
@@ -709,11 +704,11 @@ fn move_hunk_unrelated() -> anyhow::Result<()> {
     // Get the new commit IDs after rewriting
     let new_commit_a_ids = ws
         .repo()
-        .resolve_change_id(&commit_a_change_id)
+        .resolve_change_id(&commit_a_change_id)?
         .ok_or_else(|| anyhow::anyhow!("Failed to resolve commit A change ID"))?;
     let new_commit_b_ids = ws
         .repo()
-        .resolve_change_id(&commit_b_change_id)
+        .resolve_change_id(&commit_b_change_id)?
         .ok_or_else(|| anyhow::anyhow!("Failed to resolve commit B change ID"))?;
 
     // Verify A now has test.txt with lines 1-6 (hunk added)
@@ -1196,11 +1191,11 @@ fn move_hunk_second_of_two_hunks() -> anyhow::Result<()> {
 
     let new_source_commit_ids = ws
         .repo()
-        .resolve_change_id(&source_change_id)
+        .resolve_change_id(&source_change_id)?
         .ok_or_else(|| anyhow::anyhow!("Failed to resolve source change ID"))?;
     let new_target_commit_ids = ws
         .repo()
-        .resolve_change_id(&target_change_id)
+        .resolve_change_id(&target_change_id)?
         .ok_or_else(|| anyhow::anyhow!("Failed to resolve target change ID"))?;
 
     // Verify source commit has the second hunk removed (only first hunk remains)
