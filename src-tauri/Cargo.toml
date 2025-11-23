@@ -50,7 +50,7 @@ gix = { version = "0.71", default-features = false, features = [
     "max-performance-safe",
     "blob-diff",
 ] }
-pollster = "0.3"
+pollster = "0.4"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0.132"
 toml_edit = { version = "0.22.23", features = ["serde"] }
@@ -62,7 +62,7 @@ git2 = { version = "0.20.1", features = ["vendored-libgit2"] }
 
 # extra deps not used by JJ
 log = "0.4"
-futures-util = "0.3.30"
+futures-util = "0.3.31"
 ts-rs = { version = "7.1.1", features = ["chrono-impl"], optional = true }
 
 [target."cfg(windows)".dependencies]
