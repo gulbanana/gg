@@ -5,7 +5,9 @@ use anyhow::{Context, Result, anyhow};
 use indexmap::IndexMap;
 use itertools::Itertools;
 use jj_lib::backend::{CopyId, FileId, MergedTreeId, TreeValue};
-use jj_lib::conflicts::{self, ConflictMarkerStyle, MaterializedTreeValue};
+use jj_lib::conflicts::{
+    self, ConflictMarkerStyle, ConflictMaterializeOptions, MaterializedTreeValue,
+};
 use jj_lib::merge::Merge;
 use jj_lib::merged_tree::{MergedTree, MergedTreeBuilder};
 use jj_lib::ref_name::{RefNameBuf, RemoteName, RemoteNameBuf, RemoteRefSymbol};
@@ -285,6 +287,7 @@ impl Mutation for DuplicateRevisions {
             let clone = tx
                 .repo_mut()
                 .rewrite_commit(&clonee)
+                .clear_rewrite_source()
                 .generate_new_change_id()
                 .set_parents(clone_parents?)
                 .write()?;
@@ -1492,16 +1495,17 @@ impl Mutation for GitFetch {
         for (remote_name, pattern) in remote_patterns {
             ws.session.callbacks.with_git(tx.repo_mut(), &|repo, cb| {
                 let mut fetcher = git::GitFetch::new(repo, &git_settings)?;
-                fetcher
-                    .fetch(
-                        RemoteName::new(&remote_name),
-                        &[pattern
+                let refspecs = git::expand_fetch_refspecs(
+                    &RemoteName::new(&remote_name),
+                    vec![
+                        pattern
                             .clone()
                             .map(StringPattern::exact)
-                            .unwrap_or_else(StringPattern::everything)],
-                        cb,
-                        None,
-                    )
+                            .unwrap_or_else(StringPattern::everything),
+                    ],
+                )?;
+                fetcher
+                    .fetch(RemoteName::new(&remote_name), refspecs, cb, None, None)
                     .context("failed to fetch")?;
                 Ok(())
             })?;
@@ -1629,8 +1633,11 @@ async fn read_file_content(
                     let mut content = Vec::new();
                     conflicts::materialize_merge_result(
                         &file.contents,
-                        ConflictMarkerStyle::default(),
                         &mut content,
+                        &ConflictMaterializeOptions {
+                            marker_style: ConflictMarkerStyle::default(),
+                            marker_len: None,
+                        },
                     )?;
                     Ok(content)
                 }

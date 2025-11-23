@@ -14,7 +14,10 @@ use itertools::Itertools;
 use jj_cli::diff_util::{LineCompareMode, LineDiffOptions};
 use jj_lib::{
     backend::CommitId,
-    conflicts::{self, ConflictMarkerStyle, MaterializedFileValue, MaterializedTreeValue},
+    conflicts::{
+        self, ConflictMarkerStyle, ConflictMaterializeOptions, MaterializedFileValue,
+        MaterializedTreeValue,
+    },
     diff::{
         CompareBytesExactly, CompareBytesIgnoreAllWhitespace, CompareBytesIgnoreWhitespaceAmount,
         Diff, DiffHunk, DiffHunkKind, find_line_ranges,
@@ -313,8 +316,11 @@ pub fn query_revision(ws: &WorkspaceSession, id: RevId) -> Result<RevResult> {
                     let mut hunk_content = vec![];
                     conflicts::materialize_merge_result(
                         &file.contents,
-                        ConflictMarkerStyle::default(),
                         &mut hunk_content,
+                        &ConflictMaterializeOptions {
+                            marker_style: ConflictMarkerStyle::default(),
+                            marker_len: None,
+                        },
                     )?;
                     let mut hunks = get_unified_hunks(3, &hunk_content, &[])?;
                     if let Some(hunk) = hunks.pop() {
@@ -476,8 +482,11 @@ fn get_value_contents(path: &RepoPath, value: MaterializedTreeValue) -> Result<V
             let mut hunk_content = vec![];
             conflicts::materialize_merge_result(
                 &file.contents,
-                ConflictMarkerStyle::default(),
                 &mut hunk_content,
+                &ConflictMaterializeOptions {
+                    marker_style: ConflictMarkerStyle::default(),
+                    marker_len: None,
+                },
             )?;
             Ok(hunk_content)
         }

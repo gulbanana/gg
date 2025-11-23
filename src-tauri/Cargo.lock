@@ -1900,7 +1900,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.17",
  "tokio",
- "toml_edit 0.22.27",
+ "toml_edit 0.23.7",
  "ts-rs",
  "windows",
  "zip",
@@ -3344,9 +3344,9 @@ dependencies = [
 
 [[package]]
 name = "jj-cli"
-version = "0.32.0"
+version = "0.33.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0da3d60dd07326b9a1296cd3b5073910f502eae8543e1347d244be6f062a08ec"
+checksum = "24d32754d46e1ddaa28c8b599f845065e2086d0ef7910a69f6a80299e29cc31d"
 dependencies = [
  "bstr",
  "chrono",
@@ -3388,7 +3388,8 @@ dependencies = [
  "thiserror 2.0.17",
  "timeago",
  "tokio",
- "toml_edit 0.22.27",
+ "toml 0.9.8",
+ "toml_edit 0.23.7",
  "tracing",
  "tracing-chrome",
  "tracing-subscriber",
@@ -3398,9 +3399,9 @@ dependencies = [
 
 [[package]]
 name = "jj-lib"
-version = "0.32.0"
+version = "0.33.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c2982778b798457281280cf54a86a1e937296b2ad5846bd8c742864c89baf0e9"
+checksum = "5206c3e572151650aa8cfe9059cf29741ada058e9e321a7a2919274b97f4d214"
 dependencies = [
  "async-trait",
  "blake2",
@@ -3439,7 +3440,7 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.17",
  "tokio",
- "toml_edit 0.22.27",
+ "toml_edit 0.23.7",
  "tracing",
  "version_check",
  "watchman_client",
@@ -3448,9 +3449,9 @@ dependencies = [
 
 [[package]]
 name = "jj-lib-proc-macros"
-version = "0.32.0"
+version = "0.33.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8d3ce4182899d39998aec1821b4cd482a07c49af7afcc53d9c5d7253f3648204"
+checksum = "38e4828f3332028c1db0c8f254bf799aa335cc60a18be18d8f0ba2d3cff2a2d7"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -6750,8 +6751,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6485ef6d0d9b5d0ec17244ff7eb05310113c3f316f2d14200d4de56b3cb98f8d"
 dependencies = [
  "indexmap 2.12.1",
+ "serde_core",
+ "serde_spanned 1.0.3",
  "toml_datetime 0.7.3",
  "toml_parser",
+ "toml_writer",
  "winnow 0.7.13",
 ]
 

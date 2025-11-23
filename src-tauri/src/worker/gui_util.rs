@@ -18,7 +18,6 @@ use jj_cli::{cli_util::short_operation_hash, git_util::is_colocated_git_workspac
 use jj_lib::{
     backend::{BackendError, ChangeId, CommitId},
     commit::Commit,
-    conflicts::ConflictMarkerStyle,
     default_index::DefaultReadonlyIndex,
     file_util, git,
     git_backend::GitBackend,
@@ -40,7 +39,7 @@ use jj_lib::{
     settings::{HumanByteSize, UserSettings},
     transaction::Transaction,
     view::View,
-    working_copy::{CheckoutOptions, CheckoutStats, SnapshotOptions, WorkingCopyFreshness},
+    working_copy::{CheckoutStats, SnapshotOptions, WorkingCopyFreshness},
     workspace::{self, DefaultWorkspaceLoaderFactory, Workspace, WorkspaceLoaderFactory},
 };
 use pollster::block_on;
@@ -689,7 +688,6 @@ impl WorkspaceSession<'_> {
             progress: None,
             max_new_file_size,
             start_tracking_matcher: &EverythingMatcher,
-            conflict_marker_style: ConflictMarkerStyle::default(),
         })?;
 
         let did_anything = new_tree_id != *wc_commit.tree_id();
@@ -733,9 +731,6 @@ impl WorkspaceSession<'_> {
                 self.operation.repo.op_id().clone(),
                 old_tree_id.as_ref(),
                 new_commit,
-                &CheckoutOptions {
-                    conflict_marker_style: ConflictMarkerStyle::default(),
-                },
             )?)
         } else {
             let locked_ws = self.workspace.start_working_copy_mutation()?;
