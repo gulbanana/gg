@@ -1,6 +1,6 @@
 # GG Changelog
 
-## Unreleased
+## [0.35.1](releases/tag/v0.35.0)
 
 ### Added
 - New config option `gg.ui.track-recent-workspaces`, which can be set to false to disable saving recent workspaces to the config file.
