@@ -117,9 +117,17 @@ See `DESIGN.md` "Branch Objects" section for the full state machine.
 Key settings:
 - `gg.queries.log-page-size` - controls paging (default 1000)
 - `gg.queries.large-repo-heuristic` - disables features when repo is "too large" (default 100k)
+- `gg.ui.track-recent-workspaces` - disable to prevent config file updates (default true)
 - `revset-aliases.immutable_heads()` - determines editable history boundary
 
 Access via `GGSettings` trait methods in `src-tauri/src/config/mod.rs`.
+
+### Adding New GG Settings
+
+1. Add default value with comment in `src-tauri/src/config/gg.toml`
+2. Add trait method to `GGSettings` and implement for `UserSettings` in `src-tauri/src/config/mod.rs`
+3. If frontend needs the value: add field to message struct (e.g., `RepoConfig::Workspace`), populate in worker, run `npm run gen`
+4. Add tests using `settings_with_gg_defaults()` / `settings_with_overrides()` helpers in `config/mod.rs`
 
 ### Error Handling in Workers
 

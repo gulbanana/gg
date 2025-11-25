@@ -1,3 +1,6 @@
+#[cfg(all(test, not(feature = "ts-rs")))]
+mod tests;
+
 use std::path::Path;
 
 use anyhow::{Result, anyhow};
