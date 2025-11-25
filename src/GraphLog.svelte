@@ -73,6 +73,12 @@
             });
     }
 
+    function getKey(row: EnhancedRow | null) {
+        if (!row) return null;
+        const lineKeys = row.passingLines.map((l) => l.key).join(":");
+        return `${row.revision.id.commit.hex}:${lineKeys}`;
+    }
+
     $: graphHeight = Math.max(containerHeight, rows.length * rowHeight);
     $: visibleRows = Math.ceil(containerHeight / rowHeight) + 1;
     $: startIndex = Math.floor(Math.max(scrollTop, 0) / rowHeight);
@@ -86,7 +92,7 @@
 
 <svg class="graph" style="width: 100%; height: {graphHeight}px;">
     {#each visibleSlice.rows as row, i}
-        {#key row?.revision.id.commit.hex ?? i}
+        {#key getKey(row) ?? i}
             <g transform="translate({(row?.location[0] ?? 0) * columnWidth} {(row?.location[1] ?? 0) * rowHeight})">
                 <foreignObject
                     class:placeholder={row === null}
@@ -104,7 +110,7 @@
     {/each}
 
     {#each visibleSlice.rows as row, i}
-        {#key row?.revision.id.commit.hex ?? i}
+        {#key getKey(row) ?? i}
             {#each distinctLines(visibleSlice.keys, row) as line}
                 <GraphLine {line} />
             {/each}

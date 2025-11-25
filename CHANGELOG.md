@@ -1,5 +1,11 @@
 # GG Changelog
 
+## Unreleased
+
+### Fixed
+- Another memory leak (failure to deregister RAF callbacks).
+- Some broken graph rendering (which was relying on the previous leak!).
+
 ## [0.35.0](releases/tag/v0.35.0)
 This release is based on Jujutsu 0.35.
 

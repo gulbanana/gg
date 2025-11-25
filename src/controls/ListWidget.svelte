@@ -29,6 +29,9 @@
 
     onMount(() => {
         pollFrame = requestAnimationFrame(pollScroll);
+        return () => {
+            if (pollFrame) cancelAnimationFrame(pollFrame);
+        };
     });
 
     function pollScroll() {
