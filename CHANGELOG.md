@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Added
+- New config option `gg.ui.track-recent-workspaces`, which can be set to false to disable saving recent workspaces to the config file.
+
 ### Fixed
 - Another memory leak (failure to deregister RAF callbacks).
 - Some broken graph rendering (which was relying on the previous leak!).

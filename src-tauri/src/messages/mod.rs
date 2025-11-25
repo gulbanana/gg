@@ -84,6 +84,7 @@ pub enum RepoConfig {
         status: RepoStatus,
         theme_override: Option<String>,
         mark_unpushed_branches: bool,
+        track_recent_workspaces: bool,
     },
     #[allow(dead_code)] // used by frontend
     TimeoutError,

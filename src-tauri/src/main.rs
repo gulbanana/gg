@@ -568,15 +568,21 @@ fn try_open_repository(window: &Window, cwd: Option<PathBuf>) -> Result<()> {
         Ok(config) => {
             log::debug!("load workspace succeeded");
             match &config {
-                messages::RepoConfig::Workspace { absolute_path, .. } => {
+                messages::RepoConfig::Workspace {
+                    absolute_path,
+                    track_recent_workspaces,
+                    ..
+                } => {
                     let repo_path = absolute_path.0.clone();
                     window.set_title((String::from("GG - ") + repo_path.as_str()).as_str())?;
 
                     // update config and jump lists - this can be slow
-                    let window = window.clone();
-                    thread::spawn(move || {
-                        handler::nonfatal!(add_recent_workspaces(window, &repo_path));
-                    });
+                    if *track_recent_workspaces {
+                        let window = window.clone();
+                        thread::spawn(move || {
+                            handler::nonfatal!(add_recent_workspaces(window, &repo_path));
+                        });
+                    }
                 }
                 _ => {
                     window.set_title("GG - Gui for JJ")?;

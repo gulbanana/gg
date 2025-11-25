@@ -451,6 +451,7 @@ impl WorkspaceSession<'_> {
             status: self.format_status(),
             theme_override: self.data.workspace_settings.ui_theme_override(),
             mark_unpushed_branches: self.data.workspace_settings.ui_mark_unpushed_bookmarks(),
+            track_recent_workspaces: self.data.workspace_settings.ui_track_recent_workspaces(),
         })
     }
 
