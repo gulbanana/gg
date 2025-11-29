@@ -76,27 +76,27 @@ mod revs {
 
     /// The working copy commit (empty, child of main)
     pub fn working_copy() -> RevId {
-        mkid("nnloouly", "56018b94eb61a9acddc58ad7974aa51c3368eadd")
+        mkid("mntpnnrk", "fda5d21b8711fcbe578dee6f5b3fa37f54e39ea5")
     }
 
     /// The main bookmark commit (renamed c.txt)
     pub fn main_bookmark() -> RevId {
-        mkid("mnkoropy", "87e9c6c03e1b727ff712d962c03b32fffb704bc0")
+        mkid("mnkoropy", "5f4dc18dd03158f9ec72e528ffaca2f4c73d3b4b")
     }
 
     /// A commit with a conflict in b.txt
     pub fn conflict_bookmark() -> RevId {
-        mkid("nwrnuwyp", "880abeefdd3ac344e2a0901c5f486d02d34053da")
+        mkid("nwrnuwyp", "702f1b97e561953e44ad254fa1a4e59e0e31cf16")
     }
 
     /// Child of conflict_bookmark that resolves the conflict
     pub fn resolve_conflict() -> RevId {
-        mkid("rrxroxys", "db297552443bcafc0f0715b7ace7fb4488d7954d")
+        mkid("rrxroxys", "28b2d99e4b39a7aea7277c4408427c7733f4f626")
     }
 
     /// Mutable commit that changed b.txt from "1" to "11"
     pub fn hunk_source() -> RevId {
-        mkid("kmtstztw", "7ef013217e74fce9ff04743ee9f1543fe9419675")
+        mkid("kmtstztw", "25f44e213721c7be11ac1d3f5d26bea2b7d472db")
     }
 
     /// Contains hunk_test.txt with 5 lines: line1-line5
