@@ -885,161 +885,103 @@ impl Mutation for MoveRef {
 #[async_trait::async_trait(?Send)]
 impl Mutation for MoveHunk {
     async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
-        let mut tx = ws.start_transaction().await?;
-
         let from = ws.resolve_single_change(&self.from_id)?;
-        let to = ws.resolve_single_commit(&self.to_id)?;
-        let repo_path = RepoPath::from_internal_string(&self.path.repo_path)?;
-
-        let from_id = from.id().clone();
-        let to_id = to.id().clone();
+        let mut to = ws.resolve_single_commit(&self.to_id)?;
 
         if ws.check_immutable(vec![from.id().clone(), to.id().clone()])? {
             precondition!("Revisions are immutable");
         }
 
-        // get parent tree from which to calculate split and remainder trees
+        // Split-rebase-squash algorithm:
+        // - sibling_tree represents a virtual commit with just the hunk (like jj split)
+        // - from_tree is modified by extracting the hunk, and its descendants updated (like jj rebase)
+        // - to_tree is given the added hunk by doing a 3-way merge (like jj squash)
+        let mut tx: jj_lib::transaction::Transaction = ws.start_transaction().await?;
+        let repo_path = RepoPath::from_internal_string(&self.path.repo_path)?;
+
+        // Get the base tree (from's parent) - this is the tree the hunk was computed against
         let from_tree = from.tree();
         let from_parents: Result<Vec<_>, _> = from.parents().collect();
         let from_parents = from_parents?;
         if from_parents.len() != 1 {
             precondition!("Cannot move hunk from a merge commit");
         }
-        let parent_tree = from_parents[0].tree();
+        let base_tree = from_parents[0].tree();
 
-        // construct hunk_tree: parent_tree with the hunk applied
+        // Construct the "sibling tree": base_tree with just this hunk applied.
+        // This represents a virtual sibling commit containing only the hunk.
         let store = tx.repo().store();
-        let parent_content = read_file_content(store, &parent_tree, &repo_path).await?;
-        let hunk_content = apply_hunk(&parent_content, &self.hunk)?;
-        let hunk_blob_id = store
-            .write_file(&repo_path, &mut hunk_content.as_slice())
+        let base_content = read_file_content(store, &base_tree, &repo_path).await?;
+        let sibling_content = apply_hunk_to_base(&base_content, &self.hunk)?;
+        let sibling_blob_id = store
+            .write_file(&repo_path, &mut sibling_content.as_slice())
             .await?;
-        let hunk_executable = match from_tree.path_value(&repo_path)?.into_resolved() {
+        let sibling_executable = match from_tree.path_value(&repo_path)?.into_resolved() {
             Ok(Some(TreeValue::File { executable, .. })) => executable,
             Ok(_) => false,
             Err(_) => false,
         };
-        let hunk_tree = update_tree_entry(
+        let sibling_tree = update_tree_entry(
             store,
-            &parent_tree,
+            &base_tree,
             &repo_path,
-            hunk_blob_id,
-            hunk_executable,
+            sibling_blob_id,
+            sibling_executable,
         )?;
 
-        // check if commits are related, which disallows conflict-free copies
+        // Remove hunk from source: backout the base→sibling diff from from_tree
+        let remainder_tree = from_tree
+            .clone()
+            .merge(sibling_tree.clone(), base_tree.clone())
+            .await?;
+
+        // Apply hunk to destination: merge the base→sibling diff into to_tree
+        // (may be recomputed after rebase in the from_is_ancestor case)
+        let to_tree = to.tree();
+        let mut new_to_tree = to_tree
+            .merge(base_tree.clone(), sibling_tree.clone())
+            .await?;
+
+        let abandon_source = remainder_tree.tree_ids() == base_tree.tree_ids();
+        let description = combine_messages(&from, &to, abandon_source);
+
+        // Check ancestry to determine rebase strategy. The hunk must be applied to the destination's
+        // tree AFTER any ancestry-related rebasing, so we do it early if moving from an ancestor.
         let from_is_ancestor = tx.repo().index().is_ancestor(from.id(), to.id())?;
         let to_is_ancestor = tx.repo().index().is_ancestor(to.id(), from.id())?;
-        let is_related = from_is_ancestor || to_is_ancestor;
 
-        let (remainder_tree, new_to_tree) = if is_related {
-            // for related commits, we need 3-way merge (may create conflicts)
-            let remainder = from_tree
-                .clone()
-                .merge(hunk_tree.clone(), parent_tree.clone())
-                .await?;
-            let to_tree = to.tree();
-            let new_to = to_tree.merge(parent_tree.clone(), hunk_tree).await?;
-            (remainder, new_to)
-        } else {
-            // for unrelated commits, apply hunk directly to avoid conflicts
-            let to_tree = to.tree();
-            let to_content = read_file_content(store, &to_tree, &repo_path).await?;
-            let new_to_content = apply_hunk(&to_content, &self.hunk)?;
-            let new_to_blob_id = store
-                .write_file(&repo_path, &mut new_to_content.as_slice())
-                .await?;
-            let new_to =
-                update_tree_entry(store, &to_tree, &repo_path, new_to_blob_id, hunk_executable)?;
-
-            // remove hunk from source with reverse hunk
-            let reverse_hunk = crate::messages::ChangeHunk {
-                location: self.hunk.location.clone(),
-                lines: crate::messages::MultilineString {
-                    lines: self
-                        .hunk
-                        .lines
-                        .lines
-                        .iter()
-                        .filter_map(|line| {
-                            if line.starts_with('+') {
-                                Some(format!("-{}", &line[1..]))
-                            } else if line.starts_with('-') {
-                                Some(format!("+{}", &line[1..]))
-                            } else {
-                                Some(line.clone())
-                            }
-                        })
-                        .collect(),
-                },
-            };
-            let from_content = read_file_content(store, &from_tree, &repo_path).await?;
-            let remainder_content = apply_hunk(&from_content, &reverse_hunk)?;
-            let remainder_blob_id = store
-                .write_file(&repo_path, &mut remainder_content.as_slice())
-                .await?;
-            let remainder = update_tree_entry(
-                store,
-                &from_tree,
-                &repo_path,
-                remainder_blob_id,
-                hunk_executable,
-            )?;
-
-            (remainder, new_to)
-        };
-
-        // abandon or rewrite source and destination based on ancestry
-        let abandon_source = remainder_tree.tree_ids() == parent_tree.tree_ids();
-
-        if abandon_source {
-            // simple case: no source left
-            if to_is_ancestor {
-                precondition!(
-                    "Moving a hunk from a commit that becomes empty to an ancestor is not supported"
-                );
-            }
-            tx.repo_mut().record_abandoned_commit(&from);
-
-            // apply hunk to destination
-            let description = combine_messages(&from, &to, abandon_source);
+        if to_is_ancestor {
+            // Child→Parent: apply hunk to ancestor, then handle source
             tx.repo_mut()
                 .rewrite_commit(&to)
                 .set_tree(new_to_tree)
                 .set_description(description)
                 .write()?;
-        } else if to_is_ancestor {
-            // special case: descendant-to-ancestor
 
-            let description = combine_messages(&from, &to, abandon_source);
-            let new_to = tx
-                .repo_mut()
-                .rewrite_commit(&to)
-                .set_tree(new_to_tree.clone())
-                .set_description(description)
-                .write()?;
+            if abandon_source {
+                tx.repo_mut().record_abandoned_commit(&from);
+            } else {
+                tx.repo_mut()
+                    .rewrite_commit(&from)
+                    .set_tree(remainder_tree)
+                    .write()?;
+            }
 
-            // recompute the source's tree after the destination has the hunk applied
-            let child_new_tree = new_to_tree.merge(parent_tree, from_tree).await?;
-
-            // rebase source
-            tx.repo_mut()
-                .rewrite_commit(&from)
-                .set_parents(vec![new_to.id().clone()])
-                .set_tree(child_new_tree)
-                .write()?;
+            // Rebase all descendants, which includes rebasing source's descendants onto modified ancestor
+            tx.repo_mut().rebase_descendants()?;
         } else {
-            // general case: unrelated or ancestor-to-descendant
-            tx.repo_mut()
-                .rewrite_commit(&from)
-                .set_tree(remainder_tree)
-                .write()?;
+            // Parent→Child or Unrelated: modify source first
+            if abandon_source {
+                tx.repo_mut().record_abandoned_commit(&from);
+            } else {
+                tx.repo_mut()
+                    .rewrite_commit(&from)
+                    .set_tree(remainder_tree)
+                    .write()?;
+            }
 
-            let description = combine_messages(&from, &to, abandon_source);
-            let mut to = to;
-
-            // if destination is a descendant, rebase it after modifying source
             if from_is_ancestor {
+                // Parent→Child: rebase descendants first, then apply hunk to the rebased destination
                 let mut rebase_map = std::collections::HashMap::new();
                 tx.repo_mut().rebase_descendants_with_options(
                     &RebaseOptions::default(),
@@ -1053,19 +995,28 @@ impl Mutation for MoveHunk {
                         );
                     },
                 )?;
+
+                // The destination was rebased onto the modified source, so its tree changed.
+                // Recompute the hunk application against the rebased tree.
                 let rebased_to_id = rebase_map
                     .get(to.id())
                     .ok_or_else(|| anyhow!("descendant to_commit not found in rebase map"))?
                     .clone();
                 to = tx.repo().store().get_commit(&rebased_to_id)?;
+                new_to_tree = to
+                    .tree()
+                    .merge(base_tree.clone(), sibling_tree.clone())
+                    .await?;
             }
 
+            // Apply hunk to destination
             tx.repo_mut()
                 .rewrite_commit(&to)
                 .set_tree(new_to_tree)
                 .set_description(description)
                 .write()?;
 
+            // Rebase all descendants as usual
             tx.repo_mut().rebase_descendants()?;
         }
 
@@ -1074,8 +1025,8 @@ impl Mutation for MoveHunk {
             format!(
                 "move hunk in {} from {} to {}",
                 self.path.repo_path,
-                from_id.hex(),
-                to_id.hex()
+                from.id().hex(),
+                to.id().hex()
             ),
         )? {
             Some(new_status) => Ok(MutationResult::Updated { new_status }),
@@ -1634,90 +1585,58 @@ async fn read_file_content(
     }
 }
 
-// imperfect, but will work for many real-world moves
-fn find_hunk_position(
-    base_lines: &[&str],
-    hunk: &crate::messages::ChangeHunk,
-    suggested_start: usize,
-) -> Result<usize> {
-    let context_lines: Vec<&str> = hunk
-        .lines
-        .lines
-        .iter()
-        .filter(|line| line.starts_with(' ') || line.starts_with('-'))
-        .map(|line| line[1..].trim_end())
-        .collect();
-
-    if context_lines.is_empty() {
-        return Ok(suggested_start.min(base_lines.len()));
-    }
-
-    if base_lines.len() < context_lines.len() {
-        return Err(anyhow!(
-            "File has {} lines but hunk requires at least {} lines of context",
-            base_lines.len(),
-            context_lines.len()
-        ));
-    }
-
-    for start_idx in 0..=(base_lines.len() - context_lines.len()) {
-        let matches = context_lines
-            .iter()
-            .enumerate()
-            .all(|(i, &context_line)| base_lines[start_idx + i].trim_end() == context_line);
-
-        if matches {
-            return Ok(start_idx);
-        }
-    }
-
-    Err(anyhow!("Couldn't find a good  location to apply the hunk."))
-}
-
-// XXX does not use 3-way merge, which reduces conflicts but is imprecise
-fn apply_hunk(content: &[u8], hunk: &crate::messages::ChangeHunk) -> Result<Vec<u8>> {
-    let base_text = String::from_utf8_lossy(content);
+/// Construct the sibling tree's file content by applying a hunk to its base.
+///
+/// The hunk was computed as a diff between `base` (the source commit's parent) and the
+/// source commit. This function applies that diff to reconstruct the file content that
+/// would exist in a virtual "sibling" commit containing only this hunk.
+///
+/// Line numbers must match exactly since the hunk was computed against this base.
+fn apply_hunk_to_base(base_content: &[u8], hunk: &crate::messages::ChangeHunk) -> Result<Vec<u8>> {
+    let base_text = String::from_utf8_lossy(base_content);
     let base_lines: Vec<&str> = base_text.lines().collect();
-    let ends_with_newline = content.ends_with(b"\n");
+    let ends_with_newline = base_content.ends_with(b"\n");
 
     let mut result_lines: Vec<String> = Vec::new();
-    let mut base_line_idx: usize;
     let mut hunk_lines = hunk.lines.lines.iter().peekable();
 
-    let hunk_start_line_0_based = hunk.location.from_file.start.saturating_sub(1);
-    let actual_start = find_hunk_position(&base_lines, hunk, hunk_start_line_0_based)?;
+    // Convert 1-indexed line number to 0-indexed
+    let hunk_start = hunk.location.from_file.start.saturating_sub(1);
 
-    result_lines.extend(base_lines[..actual_start].iter().map(|s| s.to_string()));
-    base_line_idx = actual_start;
+    // Copy lines before the hunk unchanged
+    result_lines.extend(base_lines[..hunk_start].iter().map(|s| s.to_string()));
+    let mut base_idx = hunk_start;
 
-    while let Some(hunk_line) = hunk_lines.next() {
-        if hunk_line.starts_with(' ') || hunk_line.starts_with('-') {
-            let hunk_content_part = &hunk_line[1..];
-            if base_line_idx < base_lines.len()
-                && base_lines[base_line_idx].trim_end() == hunk_content_part.trim_end()
+    while let Some(diff_line) = hunk_lines.next() {
+        if diff_line.starts_with(' ') || diff_line.starts_with('-') {
+            // Context or deletion: verify the base content matches
+            let expected = &diff_line[1..];
+            if base_idx < base_lines.len() && base_lines[base_idx].trim_end() == expected.trim_end()
             {
-                if hunk_line.starts_with(' ') {
-                    result_lines.push(base_lines[base_line_idx].to_string());
+                if diff_line.starts_with(' ') {
+                    result_lines.push(base_lines[base_idx].to_string());
                 }
-                base_line_idx += 1;
+                // Deletions are consumed but not added to result
+                base_idx += 1;
             } else {
-                return Err(anyhow!(
+                anyhow::bail!(
                     "Hunk mismatch at line {}: expected '{}', found '{}'",
-                    base_line_idx,
-                    hunk_content_part.trim_end(),
-                    base_lines
-                        .get(base_line_idx)
-                        .map_or("<EOF>", |l| l.trim_end())
-                ));
+                    base_idx + 1,
+                    expected.trim_end(),
+                    base_lines.get(base_idx).map_or("<EOF>", |l| l.trim_end())
+                );
             }
-        } else if hunk_line.starts_with('+') {
-            let added_content = hunk_line[1..].trim_end_matches('\n');
-            result_lines.push(added_content.to_string());
+        } else if diff_line.starts_with('+') {
+            // Addition: include in result
+            let added = diff_line[1..].trim_end_matches('\n');
+            result_lines.push(added.to_string());
         } else {
-            return Err(anyhow!("Malformed hunk line: {}", hunk_line));
+            anyhow::bail!("Malformed diff line: {}", diff_line);
         }
     }
-    result_lines.extend(base_lines[base_line_idx..].iter().map(|s| s.to_string()));
+
+    // Copy remaining lines after the hunk unchanged
+    result_lines.extend(base_lines[base_idx..].iter().map(|s| s.to_string()));
 
     let mut result_bytes = Vec::new();
     let num_lines = result_lines.len();

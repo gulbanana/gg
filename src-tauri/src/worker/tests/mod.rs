@@ -76,7 +76,7 @@ mod revs {
 
     /// The working copy commit (empty, child of main)
     pub fn working_copy() -> RevId {
-        mkid("mntpnnrk", "fda5d21b8711fcbe578dee6f5b3fa37f54e39ea5")
+        mkid("qtvuvvns", "79943c33f366b4c5a47ee6aac93a4074ebe155a4")
     }
 
     /// The main bookmark commit (renamed c.txt)
@@ -117,6 +117,12 @@ mod revs {
     /// Child of hunk_base, adds lines 6-8: new6, new7, new8
     pub fn hunk_sibling() -> RevId {
         mkid("xwsxmqwz", "5dd18b61b3e94d60019265a0b6e5e74dff93d482")
+    }
+
+    /// Child of hunk_child_single, modifies line 3: line3 -> grandchild3
+    /// This creates a 3-level hierarchy: hunk_base -> hunk_child_single -> hunk_grandchild
+    pub fn hunk_grandchild() -> RevId {
+        mkid("ywskwwql", "56ec47c934036e08f99c55302d328eb8f163c74e")
     }
 
     /// Contains small.txt with 2 lines: line1, line2

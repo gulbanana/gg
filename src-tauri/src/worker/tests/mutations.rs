@@ -20,7 +20,7 @@ async fn abandon_revisions() -> Result<()> {
     let mut ws = session.load_directory(repo.path())?;
 
     let page = queries::query_log(&ws, "all()", 100)?;
-    assert_eq!(18, page.rows.len());
+    assert_eq!(19, page.rows.len());
 
     AbandonRevisions {
         ids: vec![revs::resolve_conflict().commit],
@@ -29,7 +29,7 @@ async fn abandon_revisions() -> Result<()> {
     .await?;
 
     let page = queries::query_log(&ws, "all()", 100)?;
-    assert_eq!(17, page.rows.len());
+    assert_eq!(18, page.rows.len());
 
     Ok(())
 }
@@ -338,30 +338,36 @@ async fn move_source() -> Result<()> {
 }
 
 #[tokio::test]
-async fn move_hunk_content() -> anyhow::Result<()> {
+async fn move_hunk_descendant_partial() -> anyhow::Result<()> {
     use jj_lib::repo::Repo;
 
     let repo = mkrepo();
     let mut session = WorkerSession::default();
     let mut ws = session.load_directory(repo.path())?;
 
-    // Hunk that changes "1" to "11" in b.txt
+    // Move one of two hunks from descendant (hunk_child_multi) to ancestor (hunk_base)
+    // hunk_child_multi modifies lines 2 and 4: line2 -> changed2, line4 -> changed4
+    // Move only the line 2 change to hunk_base, keeping line 4 change in source
     let hunk = ChangeHunk {
         location: HunkLocation {
-            from_file: FileRange { start: 1, len: 1 },
-            to_file: FileRange { start: 1, len: 1 },
+            from_file: FileRange { start: 1, len: 3 },
+            to_file: FileRange { start: 1, len: 3 },
         },
         lines: MultilineString {
-            lines: vec!["-1".to_owned(), "+11".to_owned()],
+            lines: vec![
+                " line1".to_owned(),
+                "-line2".to_owned(),
+                "+changed2".to_owned(),
+                " line3".to_owned(),
+            ],
         },
     };
 
-    // Move the hunk from hunk_source to working_copy
     let mutation = MoveHunk {
-        from_id: revs::hunk_source(),
-        to_id: revs::working_copy().commit,
+        from_id: revs::hunk_child_multi(),
+        to_id: revs::hunk_base().commit,
         path: TreePath {
-            repo_path: "b.txt".to_owned(),
+            repo_path: "hunk_test.txt".to_owned(),
             relative_path: "".into(),
         },
         hunk,
@@ -370,39 +376,42 @@ async fn move_hunk_content() -> anyhow::Result<()> {
     let result = mutation.execute_unboxed(&mut ws).await?;
     assert_matches!(result, MutationResult::Updated { .. });
 
-    // Verify source commit was abandoned or has minimal changes
-    let from_rev = queries::query_revision(&ws, revs::hunk_source()).await?;
-    match from_rev {
-        RevResult::NotFound { .. } => (),
-        RevResult::Detail {
-            header, changes, ..
-        } if !header.has_conflict && changes.len() <= 1 => {}
-        _ => panic!(
-            "Expected source commit to be abandoned or have minimal changes after hunk removal"
-        ),
-    }
+    // Verify source still has the line 4 change but not line 2
+    let source_commit = get_rev(&ws, &revs::hunk_child_multi())?;
+    let source_tree = source_commit.tree();
+    let repo_path = jj_lib::repo_path::RepoPath::from_internal_string("hunk_test.txt")?;
 
-    // Verify target has the change applied cleanly
-    let new_wc_commit_id = ws.wc_id().clone();
-    let to_commit_obj = ws.get_commit(&new_wc_commit_id)?;
-    let to_tree = to_commit_obj.tree();
-    let repo_path = jj_lib::repo_path::RepoPath::from_internal_string("b.txt")?;
-    let path_value = to_tree.path_value(&repo_path)?;
-
-    assert!(
-        path_value.is_resolved(),
-        "Expected b.txt to be cleanly updated"
-    );
-
-    match path_value.into_resolved() {
+    match source_tree.path_value(&repo_path)?.into_resolved() {
         Ok(Some(jj_lib::backend::TreeValue::File { id, .. })) => {
             let mut reader = ws.repo().store().read_file(&repo_path, &id).await?;
             let mut content = Vec::new();
             reader.read_to_end(&mut content).await?;
             let content_str = String::from_utf8_lossy(&content);
-            assert_eq!(content_str, "11\n2\n", "Target should have hunk applied");
+            // Source should have changed2 (inherited from rebased parent) and changed4 (its own change)
+            assert_eq!(
+                content_str, "line1\nchanged2\nline3\nchanged4\nline5\n",
+                "Source should have both changes after rebase (parent now has changed2)"
+            );
         }
-        _ => panic!("Expected b.txt to be a file in target commit"),
+        _ => panic!("Expected hunk_test.txt to be a file in source commit"),
+    }
+
+    // Verify target (hunk_base) has the line 2 change applied
+    let target_commit = get_rev(&ws, &revs::hunk_base())?;
+    let target_tree = target_commit.tree();
+
+    match target_tree.path_value(&repo_path)?.into_resolved() {
+        Ok(Some(jj_lib::backend::TreeValue::File { id, .. })) => {
+            let mut reader = ws.repo().store().read_file(&repo_path, &id).await?;
+            let mut content = Vec::new();
+            reader.read_to_end(&mut content).await?;
+            let content_str = String::from_utf8_lossy(&content);
+            assert_eq!(
+                content_str, "line1\nchanged2\nline3\nline4\nline5\n",
+                "Target should have line 2 changed but not line 4"
+            );
+        }
+        _ => panic!("Expected hunk_test.txt to be a file in target commit"),
     }
 
     Ok(())
@@ -497,7 +506,9 @@ async fn move_hunk_invalid() -> anyhow::Result<()> {
 }
 
 #[tokio::test]
-async fn move_hunk_descendant() -> anyhow::Result<()> {
+async fn move_hunk_descendant_abandons_source() -> anyhow::Result<()> {
+    use jj_lib::repo::Repo;
+
     let repo = mkrepo();
     let mut session = WorkerSession::default();
     let mut ws = session.load_directory(repo.path())?;
@@ -518,7 +529,7 @@ async fn move_hunk_descendant() -> anyhow::Result<()> {
         },
     };
 
-    // This should fail because it would leave the child empty
+    // Move the only hunk from child to parent - child should be abandoned
     let mutation = MoveHunk {
         from_id: revs::hunk_child_single(),
         to_id: revs::hunk_base().commit,
@@ -530,7 +541,34 @@ async fn move_hunk_descendant() -> anyhow::Result<()> {
     };
 
     let result = mutation.execute_unboxed(&mut ws).await?;
-    assert_matches!(result, MutationResult::PreconditionError { .. });
+    assert_matches!(result, MutationResult::Updated { .. });
+
+    // Source should be abandoned (not found in repo)
+    let source_rev = queries::query_revision(&ws, revs::hunk_child_single()).await?;
+    assert_matches!(
+        source_rev,
+        RevResult::NotFound { .. },
+        "Source should be abandoned"
+    );
+
+    // Target (hunk_base) should have the change
+    let target_commit = get_rev(&ws, &revs::hunk_base())?;
+    let target_tree = target_commit.tree();
+    let repo_path = jj_lib::repo_path::RepoPath::from_internal_string("hunk_test.txt")?;
+
+    match target_tree.path_value(&repo_path)?.into_resolved() {
+        Ok(Some(jj_lib::backend::TreeValue::File { id, .. })) => {
+            let mut reader = ws.repo().store().read_file(&repo_path, &id).await?;
+            let mut content = Vec::new();
+            reader.read_to_end(&mut content).await?;
+            let content_str = String::from_utf8_lossy(&content);
+            assert_eq!(
+                content_str, "line1\nmodified2\nline3\nline4\nline5\n",
+                "Target should have the hunk applied"
+            );
+        }
+        _ => panic!("Expected hunk_test.txt to be a file in target commit"),
+    }
 
     Ok(())
 }
@@ -600,6 +638,398 @@ async fn move_hunk_unrelated() -> anyhow::Result<()> {
         }
         _ => panic!("Expected hunk_test.txt to be a file in sibling commit"),
     }
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn move_hunk_unrelated_different_structure_creates_conflict() -> anyhow::Result<()> {
+    // This test documents that moving a hunk between unrelated commits with different
+    // file structures will create a conflict. This is the correct semantic behavior
+    // of 3-way merge: the hunk was computed against a different file than the target.
+    //
+    // Example: hunk_source's parent has b.txt="1\n", but working_copy has b.txt="1\n2\n"
+    // Moving the "1->11" hunk creates a conflict because the target file has content
+    // (line 2) that wasn't present when the hunk was computed.
+
+    let repo = mkrepo();
+    let mut session = WorkerSession::default();
+    let mut ws = session.load_directory(repo.path())?;
+
+    // Hunk from hunk_source that changes line 1: "1" -> "11"
+    // hunk_source's parent has b.txt = "1\n" (single line)
+    let hunk = ChangeHunk {
+        location: HunkLocation {
+            from_file: FileRange { start: 1, len: 1 },
+            to_file: FileRange { start: 1, len: 1 },
+        },
+        lines: MultilineString {
+            lines: vec!["-1".to_owned(), "+11".to_owned()],
+        },
+    };
+
+    // Move to working_copy which has b.txt = "1\n2\n" (different structure)
+    let mutation = MoveHunk {
+        from_id: revs::hunk_source(),
+        to_id: revs::working_copy().commit,
+        path: TreePath {
+            repo_path: "b.txt".to_owned(),
+            relative_path: "".into(),
+        },
+        hunk,
+    };
+
+    let result = mutation.execute_unboxed(&mut ws).await?;
+    assert_matches!(result, MutationResult::Updated { .. });
+
+    // The target should have a conflict because the file structures differ
+    let to_rev = queries::query_revision(&ws, revs::working_copy()).await?;
+    match to_rev {
+        RevResult::Detail { header, .. } => {
+            assert!(
+                header.has_conflict,
+                "Expected conflict when moving hunk to file with different structure"
+            );
+        }
+        _ => panic!("Expected working copy to exist"),
+    }
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn move_hunk_ancestor_to_descendant() -> anyhow::Result<()> {
+    // Test moving a hunk FROM an ancestor TO a descendant (the from_is_ancestor code path).
+    //
+    // Hierarchy:
+    //   hunk_base: line1, line2, line3, line4, line5
+    //   └─ hunk_child_single: line1, modified2, line3, line4, line5  (changes line2)
+    //      └─ hunk_grandchild: line1, modified2, grandchild3, line4, line5  (changes line3)
+    //
+    // We move the "line3 -> grandchild3" hunk FROM hunk_grandchild TO hunk_child_single.
+    // Wait, that's descendant-to-ancestor which is already tested.
+    //
+    // For a true ancestor-to-descendant test without causing source abandonment,
+    // we use hunk_child_multi (which has 2 hunks) and move one hunk to hunk_sibling.
+    // But they're siblings, not ancestor-descendant.
+    //
+    // Actually, let's test moving hunk_child_single's change to hunk_grandchild.
+    // When the source's only change is moved, the source is abandoned and the
+    // grandchild is rebased. This verifies the rebase-and-apply logic.
+    use jj_lib::repo::Repo;
+
+    let repo = mkrepo();
+    let mut session = WorkerSession::default();
+    let mut ws = session.load_directory(repo.path())?;
+
+    let repo_path = jj_lib::repo_path::RepoPath::from_internal_string("hunk_test.txt")?;
+
+    // Verify initial state
+    let child_before = get_rev(&ws, &revs::hunk_child_single())?;
+    let child_tree_before = child_before.tree();
+    match child_tree_before.path_value(&repo_path)?.into_resolved() {
+        Ok(Some(jj_lib::backend::TreeValue::File { id, .. })) => {
+            let mut reader = ws.repo().store().read_file(&repo_path, &id).await?;
+            let mut content = Vec::new();
+            reader.read_to_end(&mut content).await?;
+            assert_eq!(
+                String::from_utf8_lossy(&content),
+                "line1\nmodified2\nline3\nline4\nline5\n",
+                "hunk_child_single initial state"
+            );
+        }
+        _ => panic!("Expected hunk_test.txt in hunk_child_single"),
+    }
+
+    let grandchild_before = get_rev(&ws, &revs::hunk_grandchild())?;
+    let grandchild_tree_before = grandchild_before.tree();
+    match grandchild_tree_before
+        .path_value(&repo_path)?
+        .into_resolved()
+    {
+        Ok(Some(jj_lib::backend::TreeValue::File { id, .. })) => {
+            let mut reader = ws.repo().store().read_file(&repo_path, &id).await?;
+            let mut content = Vec::new();
+            reader.read_to_end(&mut content).await?;
+            assert_eq!(
+                String::from_utf8_lossy(&content),
+                "line1\nmodified2\ngrandchild3\nline4\nline5\n",
+                "hunk_grandchild initial state"
+            );
+        }
+        _ => panic!("Expected hunk_test.txt in hunk_grandchild"),
+    }
+
+    // The hunk in hunk_child_single's context: parent (hunk_base) has line2, child has modified2
+    let hunk = ChangeHunk {
+        location: HunkLocation {
+            from_file: FileRange { start: 1, len: 3 },
+            to_file: FileRange { start: 1, len: 3 },
+        },
+        lines: MultilineString {
+            lines: vec![
+                " line1".to_owned(),
+                "-line2".to_owned(),
+                "+modified2".to_owned(),
+                " line3".to_owned(),
+            ],
+        },
+    };
+
+    // Move FROM ancestor (hunk_child_single) TO descendant (hunk_grandchild)
+    let mutation = MoveHunk {
+        from_id: revs::hunk_child_single(),
+        to_id: revs::hunk_grandchild().commit,
+        path: TreePath {
+            repo_path: "hunk_test.txt".to_owned(),
+            relative_path: "".into(),
+        },
+        hunk,
+    };
+
+    let result = mutation.execute_unboxed(&mut ws).await?;
+    assert_matches!(result, MutationResult::Updated { .. });
+
+    // Verify source (hunk_child_single) was ABANDONED because its only change was moved
+    let source_rev = queries::query_revision(&ws, revs::hunk_child_single()).await?;
+    assert_matches!(
+        source_rev,
+        RevResult::NotFound { .. },
+        "Source should be abandoned (its only change was moved)"
+    );
+
+    // Verify destination (hunk_grandchild) - should have the hunk applied correctly
+    let dest_after = get_rev(&ws, &revs::hunk_grandchild())?;
+    let dest_tree = dest_after.tree();
+
+    let path_value = dest_tree.path_value(&repo_path)?;
+    match path_value.into_resolved() {
+        Ok(Some(jj_lib::backend::TreeValue::File { id, .. })) => {
+            let mut reader = ws.repo().store().read_file(&repo_path, &id).await?;
+            let mut content = Vec::new();
+            reader.read_to_end(&mut content).await?;
+            let content_str = String::from_utf8_lossy(&content);
+            assert_eq!(
+                content_str, "line1\nmodified2\ngrandchild3\nline4\nline5\n",
+                "Destination should have modified2 (moved) and grandchild3 (own)"
+            );
+        }
+        Ok(None) => panic!("hunk_test.txt does not exist in destination"),
+        Ok(other) => panic!("hunk_test.txt has unexpected type: {:?}", other),
+        Err(_conflict) => {
+            panic!("Destination should not have a conflict after move");
+        }
+    }
+
+    // Verify grandchild is now a direct child of hunk_base (parent was abandoned)
+    let grandchild_parents: Vec<_> = dest_after.parents().collect();
+    assert_eq!(
+        grandchild_parents.len(),
+        1,
+        "Grandchild should have one parent"
+    );
+    let parent = grandchild_parents[0].as_ref().unwrap();
+    let base = get_rev(&ws, &revs::hunk_base())?;
+    assert_eq!(
+        parent.id(),
+        base.id(),
+        "Grandchild's parent should now be hunk_base (skipping abandoned hunk_child_single)"
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn move_hunk_between_siblings() -> anyhow::Result<()> {
+    // Test moving hunks between sibling commits (both children of same parent).
+    // This exercises the general code path where neither commit is ancestor of the other.
+    use jj_lib::repo::Repo;
+
+    let repo = mkrepo();
+    let mut session = WorkerSession::default();
+    let mut ws = session.load_directory(repo.path())?;
+
+    // hunk_child_multi has: line1, changed2, line3, changed4, line5
+    // hunk_sibling has: line1, line2, line3, line4, line5, new6, new7, new8
+    // Both are children of hunk_base (line1, line2, line3, line4, line5)
+    //
+    // Move the line2->changed2 hunk from hunk_child_multi to hunk_sibling
+    let hunk = ChangeHunk {
+        location: HunkLocation {
+            from_file: FileRange { start: 1, len: 3 },
+            to_file: FileRange { start: 1, len: 3 },
+        },
+        lines: MultilineString {
+            lines: vec![
+                " line1".to_owned(),
+                "-line2".to_owned(),
+                "+changed2".to_owned(),
+                " line3".to_owned(),
+            ],
+        },
+    };
+
+    let mutation = MoveHunk {
+        from_id: revs::hunk_child_multi(),
+        to_id: revs::hunk_sibling().commit,
+        path: TreePath {
+            repo_path: "hunk_test.txt".to_owned(),
+            relative_path: "".into(),
+        },
+        hunk,
+    };
+
+    let result = mutation.execute_unboxed(&mut ws).await?;
+    assert_matches!(result, MutationResult::Updated { .. });
+
+    // Verify source has the hunk removed (only changed4 remains)
+    let source_commit = get_rev(&ws, &revs::hunk_child_multi())?;
+    let source_tree = source_commit.tree();
+    let repo_path = jj_lib::repo_path::RepoPath::from_internal_string("hunk_test.txt")?;
+
+    match source_tree.path_value(&repo_path)?.into_resolved() {
+        Ok(Some(jj_lib::backend::TreeValue::File { id, .. })) => {
+            let mut reader = ws.repo().store().read_file(&repo_path, &id).await?;
+            let mut content = Vec::new();
+            reader.read_to_end(&mut content).await?;
+            let content_str = String::from_utf8_lossy(&content);
+            assert_eq!(
+                content_str, "line1\nline2\nline3\nchanged4\nline5\n",
+                "Source should have only changed4 (changed2 was moved)"
+            );
+        }
+        _ => panic!("Expected hunk_test.txt in source"),
+    }
+
+    // Verify target has both the new lines AND the moved hunk
+    let target_commit = get_rev(&ws, &revs::hunk_sibling())?;
+    let target_tree = target_commit.tree();
+
+    match target_tree.path_value(&repo_path)?.into_resolved() {
+        Ok(Some(jj_lib::backend::TreeValue::File { id, .. })) => {
+            let mut reader = ws.repo().store().read_file(&repo_path, &id).await?;
+            let mut content = Vec::new();
+            reader.read_to_end(&mut content).await?;
+            let content_str = String::from_utf8_lossy(&content);
+            assert_eq!(
+                content_str, "line1\nchanged2\nline3\nline4\nline5\nnew6\nnew7\nnew8\n",
+                "Target should have changed2 (moved) plus its own new lines"
+            );
+        }
+        _ => panic!("Expected hunk_test.txt in target"),
+    }
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn move_hunk_does_not_affect_other_files() -> anyhow::Result<()> {
+    // Verify that moving a hunk in one file doesn't affect other files in the same commits.
+    use jj_lib::repo::Repo;
+
+    let repo = mkrepo();
+    let mut session = WorkerSession::default();
+    let mut ws = session.load_directory(repo.path())?;
+
+    // Get the original content of a.txt in hunk_child_multi before the move
+    let child_before = get_rev(&ws, &revs::hunk_child_multi())?;
+    let child_tree_before = child_before.tree();
+    let a_txt_path = jj_lib::repo_path::RepoPath::from_internal_string("a.txt")?;
+
+    let a_txt_content_before = match child_tree_before.path_value(&a_txt_path)?.into_resolved() {
+        Ok(Some(jj_lib::backend::TreeValue::File { id, .. })) => {
+            let mut reader = ws.repo().store().read_file(&a_txt_path, &id).await?;
+            let mut content = Vec::new();
+            reader.read_to_end(&mut content).await?;
+            String::from_utf8_lossy(&content).to_string()
+        }
+        Ok(None) => String::new(), // File doesn't exist
+        _ => panic!("Unexpected state for a.txt"),
+    };
+
+    // Also check hunk_base's a.txt content
+    let parent_before = get_rev(&ws, &revs::hunk_base())?;
+    let parent_tree_before = parent_before.tree();
+
+    let parent_a_txt_before = match parent_tree_before.path_value(&a_txt_path)?.into_resolved() {
+        Ok(Some(jj_lib::backend::TreeValue::File { id, .. })) => {
+            let mut reader = ws.repo().store().read_file(&a_txt_path, &id).await?;
+            let mut content = Vec::new();
+            reader.read_to_end(&mut content).await?;
+            String::from_utf8_lossy(&content).to_string()
+        }
+        Ok(None) => String::new(),
+        _ => panic!("Unexpected state for a.txt in parent"),
+    };
+
+    // Move a hunk in hunk_test.txt from child to parent
+    let hunk = ChangeHunk {
+        location: HunkLocation {
+            from_file: FileRange { start: 1, len: 3 },
+            to_file: FileRange { start: 1, len: 3 },
+        },
+        lines: MultilineString {
+            lines: vec![
+                " line1".to_owned(),
+                "-line2".to_owned(),
+                "+changed2".to_owned(),
+                " line3".to_owned(),
+            ],
+        },
+    };
+
+    let mutation = MoveHunk {
+        from_id: revs::hunk_child_multi(),
+        to_id: revs::hunk_base().commit,
+        path: TreePath {
+            repo_path: "hunk_test.txt".to_owned(),
+            relative_path: "".into(),
+        },
+        hunk,
+    };
+
+    let result = mutation.execute_unboxed(&mut ws).await?;
+    assert_matches!(result, MutationResult::Updated { .. });
+
+    // Verify a.txt in child is unchanged
+    let child_after = get_rev(&ws, &revs::hunk_child_multi())?;
+    let child_tree_after = child_after.tree();
+
+    let a_txt_content_after = match child_tree_after.path_value(&a_txt_path)?.into_resolved() {
+        Ok(Some(jj_lib::backend::TreeValue::File { id, .. })) => {
+            let mut reader = ws.repo().store().read_file(&a_txt_path, &id).await?;
+            let mut content = Vec::new();
+            reader.read_to_end(&mut content).await?;
+            String::from_utf8_lossy(&content).to_string()
+        }
+        Ok(None) => String::new(),
+        _ => panic!("Unexpected state for a.txt after move"),
+    };
+
+    assert_eq!(
+        a_txt_content_before, a_txt_content_after,
+        "a.txt in child should be unchanged after moving hunk in hunk_test.txt"
+    );
+
+    // Verify a.txt in parent is unchanged
+    let parent_after = get_rev(&ws, &revs::hunk_base())?;
+    let parent_tree_after = parent_after.tree();
+
+    let parent_a_txt_after = match parent_tree_after.path_value(&a_txt_path)?.into_resolved() {
+        Ok(Some(jj_lib::backend::TreeValue::File { id, .. })) => {
+            let mut reader = ws.repo().store().read_file(&a_txt_path, &id).await?;
+            let mut content = Vec::new();
+            reader.read_to_end(&mut content).await?;
+            String::from_utf8_lossy(&content).to_string()
+        }
+        Ok(None) => String::new(),
+        _ => panic!("Unexpected state for a.txt in parent after move"),
+    };
+
+    assert_eq!(
+        parent_a_txt_before, parent_a_txt_after,
+        "a.txt in parent should be unchanged after moving hunk in hunk_test.txt"
+    );
 
     Ok(())
 }
