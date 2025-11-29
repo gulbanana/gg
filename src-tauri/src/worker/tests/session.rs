@@ -169,8 +169,8 @@ fn query_log_multi() -> Result<()> {
     assert!(page1.has_more);
 
     let page2 = rx_page2.recv()??;
-    assert_eq!(5, page2.rows.len());
-    assert!(!page2.has_more);
+    assert_eq!(7, page2.rows.len());
+    assert!(page2.has_more); // Still 4 more commits
 
     Ok(())
 }
@@ -216,8 +216,8 @@ fn query_log_multi_restart() -> Result<()> {
     assert!(page1b.has_more);
 
     let page2 = rx_page2.recv()??;
-    assert_eq!(5, page2.rows.len());
-    assert!(!page2.has_more);
+    assert_eq!(7, page2.rows.len());
+    assert!(page2.has_more); // Still 4 more commits
 
     Ok(())
 }
@@ -262,8 +262,8 @@ fn query_log_multi_interrupt() -> Result<()> {
     assert!(matches!(rev, RevResult::Detail { header, .. } if header.is_working_copy));
 
     let page2 = rx_page2.recv()??;
-    assert_eq!(5, page2.rows.len());
-    assert!(!page2.has_more);
+    assert_eq!(7, page2.rows.len());
+    assert!(page2.has_more); // Still 4 more commits
 
     Ok(())
 }

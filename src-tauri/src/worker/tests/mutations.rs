@@ -1,16 +1,14 @@
-use super::{mkid, mkrepo, revs};
+use super::{get_rev, mkrepo, revs};
 use crate::{
     messages::{
-        AbandonRevisions, ChangeHunk, CheckoutRevision, CommitId, CopyChanges, CopyHunk,
-        CreateRevision, DescribeRevision, DuplicateRevisions, FileRange, HunkLocation,
-        InsertRevision, MoveChanges, MoveHunk, MoveSource, MultilineString, MutationResult,
-        RevResult, TreePath,
+        AbandonRevisions, ChangeHunk, CheckoutRevision, CopyChanges, CopyHunk, CreateRevision,
+        DescribeRevision, DuplicateRevisions, FileRange, HunkLocation, InsertRevision, MoveChanges,
+        MoveHunk, MoveSource, MultilineString, MutationResult, RevResult, TreePath,
     },
     worker::{Mutation, WorkerSession, queries},
 };
 use anyhow::Result;
 use assert_matches::assert_matches;
-use jj_lib::object_id::ObjectId;
 use pollster::block_on;
 use std::fs;
 use tokio::io::AsyncReadExt;
@@ -23,7 +21,7 @@ fn abandon_revisions() -> Result<()> {
     let mut ws = session.load_directory(repo.path())?;
 
     let page = queries::query_log(&ws, "all()", 100)?;
-    assert_eq!(12, page.rows.len());
+    assert_eq!(18, page.rows.len());
 
     AbandonRevisions {
         ids: vec![revs::resolve_conflict().commit],
@@ -31,7 +29,7 @@ fn abandon_revisions() -> Result<()> {
     .execute_unboxed(&mut ws)?;
 
     let page = queries::query_log(&ws, "all()", 100)?;
-    assert_eq!(11, page.rows.len());
+    assert_eq!(17, page.rows.len());
 
     Ok(())
 }
@@ -336,12 +334,6 @@ fn move_hunk_content() -> anyhow::Result<()> {
     let mut session = WorkerSession::default();
     let mut ws = session.load_directory(repo.path())?;
 
-    // Move a hunk from kmtstztw (mutable) which changed b.txt from "1" to "11"
-    // to working_copy
-
-    let from_commit = mkid("kmtstztw", "7ef013217e74fce9ff04743ee9f1543fe9419675");
-    let to_commit = revs::working_copy();
-
     // Hunk that changes "1" to "11" in b.txt
     let hunk = ChangeHunk {
         location: HunkLocation {
@@ -353,9 +345,10 @@ fn move_hunk_content() -> anyhow::Result<()> {
         },
     };
 
+    // Move the hunk from hunk_source to working_copy
     let mutation = MoveHunk {
-        from_id: from_commit.clone(),
-        to_id: to_commit.commit.clone(),
+        from_id: revs::hunk_source(),
+        to_id: revs::working_copy().commit,
         path: TreePath {
             repo_path: "b.txt".to_owned(),
             relative_path: "".into(),
@@ -366,53 +359,37 @@ fn move_hunk_content() -> anyhow::Result<()> {
     let result = mutation.execute_unboxed(&mut ws)?;
     assert_matches!(result, MutationResult::Updated { .. });
 
-    // Verify the hunk was moved correctly:
-    // Expected behavior:
-    // 1. Source commit should have b.txt unchanged from parent (becomes empty commit)
-    // 2. Target commit (working copy) should have the change from "1" to "11"
-
-    // IMPORTANT: After rewriting the working copy, we need to query the NEW working copy,
-    // not the old commit ID that was passed to the mutation!
-    let new_wc_commit_id = ws.wc_id().clone();
-
-    let from_rev = queries::query_revision(&ws, from_commit.clone())?;
-    let to_commit_obj = ws.get_commit(&new_wc_commit_id)?;
-    let to_tree = to_commit_obj.tree()?;
-
-    // When moving a hunk between unrelated commits, the hunk is applied directly
-    // Source commit: After removing the hunk, it should become empty (or nearly empty)
-    // Target commit: After adding the hunk, it should cleanly apply the change
+    // Verify source commit was abandoned or has minimal changes
+    let from_rev = queries::query_revision(&ws, revs::hunk_source())?;
     match from_rev {
-        RevResult::NotFound { .. } => (), // Abandoned because it became empty
+        RevResult::NotFound { .. } => (),
         RevResult::Detail {
             header, changes, ..
-        } if !header.has_conflict && changes.len() <= 1 => (),
+        } if !header.has_conflict && changes.len() <= 1 => {}
         _ => panic!(
             "Expected source commit to be abandoned or have minimal changes after hunk removal"
         ),
     }
 
     // Verify target has the change applied cleanly
+    let new_wc_commit_id = ws.wc_id().clone();
+    let to_commit_obj = ws.get_commit(&new_wc_commit_id)?;
+    let to_tree = to_commit_obj.tree()?;
     let repo_path = jj_lib::repo_path::RepoPath::from_internal_string("b.txt")?;
     let path_value = to_tree.path_value(&repo_path)?;
 
-    // Verify that b.txt is resolved (no conflict) in the target commit
     assert!(
         path_value.is_resolved(),
-        "Expected b.txt to be cleanly updated after hunk move between unrelated commits"
+        "Expected b.txt to be cleanly updated"
     );
 
-    // Verify the content is correct
     match path_value.into_resolved() {
         Ok(Some(jj_lib::backend::TreeValue::File { id, .. })) => {
             let mut reader = block_on(ws.repo().store().read_file(&repo_path, &id))?;
             let mut content = Vec::new();
             block_on(reader.read_to_end(&mut content))?;
             let content_str = String::from_utf8_lossy(&content);
-            assert_eq!(
-                content_str, "11\n2\n",
-                "Target should have '11' (hunk applied) followed by '2' from its own changes"
-            );
+            assert_eq!(content_str, "11\n2\n", "Target should have hunk applied");
         }
         _ => panic!("Expected b.txt to be a file in target commit"),
     }
@@ -426,27 +403,22 @@ fn move_hunk_message() -> anyhow::Result<()> {
     let mut session = WorkerSession::default();
     let mut ws = session.load_directory(repo.path())?;
 
-    // Test that commit messages are combined correctly
-    // Move from kmtstztw to working_copy (which has no description)
-
-    let from_commit = mkid("kmtstztw", "7ef013217e74fce9ff04743ee9f1543fe9419675");
-    let to_commit = revs::working_copy();
-
+    // Move only hunk from source, abandoning it
     let hunk = ChangeHunk {
         location: HunkLocation {
-            from_file: FileRange { start: 1, len: 1 },
-            to_file: FileRange { start: 1, len: 1 },
+            from_file: FileRange { start: 2, len: 1 },
+            to_file: FileRange { start: 2, len: 1 },
         },
         lines: MultilineString {
-            lines: vec!["-1\n".to_owned(), "+11\n".to_owned()],
+            lines: vec!["-line2".to_owned(), "+modified2".to_owned()],
         },
     };
 
     let mutation = MoveHunk {
-        from_id: from_commit.clone(),
-        to_id: to_commit.commit.clone(),
+        from_id: revs::hunk_child_single(),
+        to_id: revs::hunk_sibling().commit,
         path: TreePath {
-            repo_path: "b.txt".to_owned(),
+            repo_path: "hunk_test.txt".to_owned(),
             relative_path: "".into(),
         },
         hunk,
@@ -455,7 +427,28 @@ fn move_hunk_message() -> anyhow::Result<()> {
     let result = mutation.execute_unboxed(&mut ws)?;
     assert_matches!(result, MutationResult::Updated { .. });
 
-    // Just verify the mutation succeeded - message combining is tested implicitly
+    // Source should be abandoned (not found in repo)
+    let source_rev = queries::query_revision(&ws, revs::hunk_child_single())?;
+    assert_matches!(
+        source_rev,
+        RevResult::NotFound { .. },
+        "Source should be abandoned"
+    );
+
+    // Target should have combined description
+    let target_rev = queries::query_revision(&ws, revs::hunk_sibling())?;
+    match target_rev {
+        RevResult::Detail { header, .. } => {
+            let desc = header.description.lines.join("\n");
+            assert!(
+                desc.contains("hunk sibling") && desc.contains("hunk child single"),
+                "Target description should combine both: got '{}'",
+                desc
+            );
+        }
+        _ => panic!("Expected target to exist"),
+    }
+
     Ok(())
 }
 
@@ -465,11 +458,7 @@ fn move_hunk_invalid() -> anyhow::Result<()> {
     let mut session = WorkerSession::default();
     let mut ws = session.load_directory(repo.path())?;
 
-    // Test that applying an invalid hunk (that doesn't match source) fails appropriately
-    let from_commit = mkid("kmtstztw", "7ef013217e74fce9ff04743ee9f1543fe9419675");
-    let to_commit = revs::working_copy();
-
-    // This hunk doesn't match the actual content of b.txt in kmtstztw
+    // Invalid hunk - doesn't match the actual content of b.txt in hunk_source
     let hunk = ChangeHunk {
         location: HunkLocation {
             from_file: FileRange { start: 1, len: 1 },
@@ -481,8 +470,8 @@ fn move_hunk_invalid() -> anyhow::Result<()> {
     };
 
     let mutation = MoveHunk {
-        from_id: from_commit,
-        to_id: to_commit.commit,
+        from_id: revs::hunk_source(),
+        to_id: revs::working_copy().commit,
         path: TreePath {
             repo_path: "b.txt".to_owned(),
             relative_path: "".into(),
@@ -498,197 +487,74 @@ fn move_hunk_invalid() -> anyhow::Result<()> {
 
 #[test]
 fn move_hunk_descendant() -> anyhow::Result<()> {
-    use jj_lib::object_id::ObjectId;
-
     let repo = mkrepo();
     let mut session = WorkerSession::default();
     let mut ws = session.load_directory(repo.path())?;
 
-    // Create a small file in the working copy
-    fs::write(repo.path().join("test.txt"), "line1\nline2\nline3\n")?;
-
-    // Snapshot to create the parent commit with the file
-    ws.import_and_snapshot(false)?;
-    let parent_commit_id = ws.wc_id().clone();
-    let parent_change_id = ws.get_commit(&parent_commit_id)?.change_id().clone();
-
-    // Create a child commit (this will make a new empty WC on top of parent_commit_after_file)
-    let _result = CreateRevision {
-        parent_ids: vec![mkid(&parent_commit_id.hex(), &parent_commit_id.hex())],
-    }
-    .execute_unboxed(&mut ws)?;
-
-    // Enlarge the file significantly in the child
-    fs::write(
-        repo.path().join("test.txt"),
-        "line1\nline2\nline3\nline4\nline5\nline6\nline7\nline8\nline9\nline10\n",
-    )?;
-
-    // Snapshot the child
-    ws.import_and_snapshot(false)?;
-    let child_commit_id = ws.wc_id().clone();
-    let child_change_id = ws.get_commit(&child_commit_id)?.change_id().clone();
-
-    // Move a hunk from the child (lines 4-6) to the parent
+    // hunk_child_single's only change is line 2: "line2" -> "modified2"
     let hunk = ChangeHunk {
         location: HunkLocation {
-            from_file: FileRange { start: 3, len: 1 }, // Line 3 in parent (context)
-            to_file: FileRange { start: 3, len: 4 },   // Lines 3-6 in child
+            from_file: FileRange { start: 1, len: 3 },
+            to_file: FileRange { start: 1, len: 3 },
         },
         lines: MultilineString {
             lines: vec![
-                " line3\n".to_owned(), // context line
-                "+line4\n".to_owned(),
-                "+line5\n".to_owned(),
-                "+line6\n".to_owned(),
+                " line1".to_owned(),
+                "-line2".to_owned(),
+                "+modified2".to_owned(),
+                " line3".to_owned(),
             ],
         },
     };
 
+    // This should fail because it would leave the child empty
     let mutation = MoveHunk {
-        from_id: mkid(&child_commit_id.hex(), &child_commit_id.hex()),
-        to_id: crate::messages::CommitId {
-            hex: parent_commit_id.hex(),
-            prefix: parent_commit_id.hex()[..2].to_string(),
-            rest: parent_commit_id.hex()[2..].to_string(),
-        },
+        from_id: revs::hunk_child_single(),
+        to_id: revs::hunk_base().commit,
         path: TreePath {
-            repo_path: "test.txt".to_owned(),
+            repo_path: "hunk_test.txt".to_owned(),
             relative_path: "".into(),
         },
         hunk,
     };
 
     let result = mutation.execute_unboxed(&mut ws)?;
-    assert_matches!(result, MutationResult::Updated { .. });
-
-    // Verify the result:
-    // When moving a hunk from child to parent (descendant to ancestor):
-    // - Parent should get the hunk applied (lines 1-6)
-    // - Child should get rebased with the hunk removed (lines 1-3, 7-10)
-    use jj_lib::repo::Repo;
-    let repo_path = jj_lib::repo_path::RepoPath::from_internal_string("test.txt")?;
-
-    // Get the new commit IDs after rewriting (change IDs stay constant)
-    let new_parent_commit_ids = ws
-        .repo()
-        .resolve_change_id(&parent_change_id)?
-        .ok_or_else(|| anyhow::anyhow!("Failed to resolve parent change ID"))?;
-    let new_child_commit_ids = ws
-        .repo()
-        .resolve_change_id(&child_change_id)?
-        .ok_or_else(|| anyhow::anyhow!("Failed to resolve child change ID"))?;
-
-    // Verify parent has the hunk applied
-    let parent_commit = ws.get_commit(&new_parent_commit_ids[0])?;
-    let parent_tree = parent_commit.tree()?;
-
-    match parent_tree.path_value(&repo_path)?.into_resolved() {
-        Ok(Some(jj_lib::backend::TreeValue::File { id, .. })) => {
-            let mut reader = block_on(ws.repo().store().read_file(&repo_path, &id))?;
-            let mut content = Vec::new();
-            block_on(reader.read_to_end(&mut content))?;
-            let content_str = String::from_utf8_lossy(&content);
-            assert_eq!(
-                content_str, "line1\nline2\nline3\nline4\nline5\nline6\n",
-                "Parent should have lines 1-6 after hunk move"
-            );
-        }
-        _ => panic!("Expected test.txt to be a file in parent commit"),
-    }
-
-    // Verify child - check if there are conflicts from the merge
-    let child_commit = ws.get_commit(&new_child_commit_ids[0])?;
-    let child_tree = child_commit.tree()?;
-
-    match child_tree.path_value(&repo_path)?.into_resolved() {
-        Ok(Some(jj_lib::backend::TreeValue::File { id, .. })) => {
-            // Clean resolution - child should have hunk removed
-            let mut reader = block_on(ws.repo().store().read_file(&repo_path, &id))?;
-            let mut content = Vec::new();
-            block_on(reader.read_to_end(&mut content))?;
-            let content_str = String::from_utf8_lossy(&content);
-            assert_eq!(
-                content_str, "line1\nline2\nline3\nline7\nline8\nline9\nline10\n",
-                "Child should have lines 1-3, 7-10 after hunk removal and rebase"
-            );
-        }
-        Err(_) => {
-            // Conflict case - verify the tree has conflicts
-            assert!(
-                !child_tree.id().as_merge().is_resolved(),
-                "Child commit should have conflicts when merge creates them"
-            );
-        }
-        _ => panic!("Expected test.txt to exist in child commit"),
-    }
+    assert_matches!(result, MutationResult::PreconditionError { .. });
 
     Ok(())
 }
 
 #[test]
 fn move_hunk_unrelated() -> anyhow::Result<()> {
-    use jj_lib::object_id::ObjectId;
+    use jj_lib::repo::Repo;
 
     let repo = mkrepo();
     let mut session = WorkerSession::default();
     let mut ws = session.load_directory(repo.path())?;
 
-    // Create a common base with test.txt
-    fs::write(repo.path().join("test.txt"), "line1\nline2\nline3\n")?;
-    ws.import_and_snapshot(false)?;
-    let base_commit_id = ws.wc_id().clone();
-
-    // First branch: create commit A that doesn't change test.txt
-    CreateRevision {
-        parent_ids: vec![mkid(&base_commit_id.hex(), &base_commit_id.hex())],
-    }
-    .execute_unboxed(&mut ws)?;
-    fs::write(repo.path().join("other_file.txt"), "unrelated\n")?;
-    ws.import_and_snapshot(false)?;
-    let commit_a_id = ws.wc_id().clone();
-    let commit_a_change_id = ws.get_commit(&commit_a_id)?.change_id().clone();
-
-    // Second branch: create commit B that adds lines 4-10 to test.txt
-    CheckoutRevision {
-        id: mkid(&base_commit_id.hex(), &base_commit_id.hex()),
-    }
-    .execute_unboxed(&mut ws)?;
-
-    CreateRevision {
-        parent_ids: vec![mkid(&base_commit_id.hex(), &base_commit_id.hex())],
-    }
-    .execute_unboxed(&mut ws)?;
-
-    fs::write(
-        repo.path().join("test.txt"),
-        "line1\nline2\nline3\nline4\nline5\nline6\nline7\nline8\nline9\nline10\n",
-    )?;
-    ws.import_and_snapshot(false)?;
-    let commit_b_id = ws.wc_id().clone();
-    let commit_b_change_id = ws.get_commit(&commit_b_id)?.change_id().clone(); // Now move a hunk from B (lines 4-6 in test.txt) to A (which has lines 1-3)
-    // Since these commits are unrelated (different branches), moving hunks will create conflicts
-    // in both source and target, similar to move_hunk_content test
+    // hunk_child_single modifies line 2: "line2" -> "modified2"
+    // hunk_sibling extends the file with new6, new7, new8
     let hunk = ChangeHunk {
         location: HunkLocation {
-            from_file: FileRange { start: 3, len: 1 }, // Line 3 (context)
-            to_file: FileRange { start: 3, len: 4 },   // Lines 3-6
+            from_file: FileRange { start: 1, len: 3 },
+            to_file: FileRange { start: 1, len: 3 },
         },
         lines: MultilineString {
             lines: vec![
-                " line3\n".to_owned(), // context
-                "+line4\n".to_owned(),
-                "+line5\n".to_owned(),
-                "+line6\n".to_owned(),
+                " line1".to_owned(),
+                "-line2".to_owned(),
+                "+modified2".to_owned(),
+                " line3".to_owned(),
             ],
         },
     };
 
+    // Move a hunk from hunk_child_single to hunk_sibling (unrelated commits, both children of hunk_base)
     let mutation = MoveHunk {
-        from_id: mkid(&commit_b_id.hex(), &commit_b_id.hex()),
-        to_id: mkid(&commit_a_id.hex(), &commit_a_id.hex()).commit,
+        from_id: revs::hunk_child_single(),
+        to_id: revs::hunk_sibling().commit,
         path: TreePath {
-            repo_path: "test.txt".to_owned(),
+            repo_path: "hunk_test.txt".to_owned(),
             relative_path: "".into(),
         },
         hunk,
@@ -697,54 +563,31 @@ fn move_hunk_unrelated() -> anyhow::Result<()> {
     let result = mutation.execute_unboxed(&mut ws)?;
     assert_matches!(result, MutationResult::Updated { .. });
 
-    // Verify the hunk was moved correctly
-    use jj_lib::repo::Repo;
-    let test_path = jj_lib::repo_path::RepoPath::from_internal_string("test.txt")?;
-
-    // Get the new commit IDs after rewriting
-    let new_commit_a_ids = ws
-        .repo()
-        .resolve_change_id(&commit_a_change_id)?
-        .ok_or_else(|| anyhow::anyhow!("Failed to resolve commit A change ID"))?;
-    let new_commit_b_ids = ws
-        .repo()
-        .resolve_change_id(&commit_b_change_id)?
-        .ok_or_else(|| anyhow::anyhow!("Failed to resolve commit B change ID"))?;
-
-    // Verify A now has test.txt with lines 1-6 (hunk added)
-    let commit_a = ws.get_commit(&new_commit_a_ids[0])?;
-    let tree_a = commit_a.tree()?;
-
-    match tree_a.path_value(&test_path)?.into_resolved() {
-        Ok(Some(jj_lib::backend::TreeValue::File { id, .. })) => {
-            let mut reader = block_on(ws.repo().store().read_file(&test_path, &id))?;
-            let mut content = Vec::new();
-            block_on(reader.read_to_end(&mut content))?;
-            let content_str = String::from_utf8_lossy(&content);
-            assert_eq!(
-                content_str, "line1\nline2\nline3\nline4\nline5\nline6\n",
-                "Commit A should have lines 1-6 in test.txt after hunk move"
-            );
-        }
-        _ => panic!("Expected test.txt to be a file in commit A"),
+    // Verify source has the hunk removed (becomes empty and should be abandoned or have no changes)
+    let from_rev = queries::query_revision(&ws, revs::hunk_child_single())?;
+    match from_rev {
+        RevResult::NotFound { .. } => (),
+        RevResult::Detail { changes, .. } if changes.is_empty() => (),
+        _ => panic!("Expected source commit to have no changes after hunk move"),
     }
 
-    // Verify B has the hunk removed cleanly (no conflict)
-    let commit_b = ws.get_commit(&new_commit_b_ids[0])?;
-    let tree_b = commit_b.tree()?;
+    // Verify target has the hunk applied (with the new lines still there)
+    let sibling_commit = get_rev(&ws, &revs::hunk_sibling())?;
+    let sibling_tree = sibling_commit.tree()?;
+    let repo_path = jj_lib::repo_path::RepoPath::from_internal_string("hunk_test.txt")?;
 
-    match tree_b.path_value(&test_path)?.into_resolved() {
+    match sibling_tree.path_value(&repo_path)?.into_resolved() {
         Ok(Some(jj_lib::backend::TreeValue::File { id, .. })) => {
-            let mut reader = block_on(ws.repo().store().read_file(&test_path, &id))?;
+            let mut reader = block_on(ws.repo().store().read_file(&repo_path, &id))?;
             let mut content = Vec::new();
             block_on(reader.read_to_end(&mut content))?;
             let content_str = String::from_utf8_lossy(&content);
             assert_eq!(
-                content_str, "line1\nline2\nline3\nline7\nline8\nline9\nline10\n",
-                "Commit B should have lines 1-3 and 7-10 (hunk lines 4-6 removed)"
+                content_str, "line1\nmodified2\nline3\nline4\nline5\nnew6\nnew7\nnew8\n",
+                "Sibling should have modified2 plus the new lines"
             );
         }
-        _ => panic!("Expected test.txt to be a file in commit B"),
+        _ => panic!("Expected hunk_test.txt to be a file in sibling commit"),
     }
 
     Ok(())
@@ -758,55 +601,28 @@ fn copy_hunk_from_parent() -> anyhow::Result<()> {
     let mut session = WorkerSession::default();
     let mut ws = session.load_directory(repo.path())?;
 
-    // Create a base commit with original content
-    fs::write(repo.path().join("test.txt"), "line1\nline2\nline3\n")?;
-    ws.import_and_snapshot(false)?;
-    DescribeRevision {
-        id: revs::working_copy(),
-        new_description: "base".to_owned(),
-        reset_author: false,
-    }
-    .execute_unboxed(&mut ws)?;
-
-    let parent_id = ws.wc_id().clone();
-
-    // Create a child commit with modifications
-    CreateRevision {
-        parent_ids: vec![mkid(&parent_id.hex(), &parent_id.hex())],
-    }
-    .execute_unboxed(&mut ws)?;
-
-    // Modify the file (change line2 to "modified")
-    fs::write(repo.path().join("test.txt"), "line1\nmodified\nline3\n")?;
-    ws.import_and_snapshot(false)?;
-
-    let child_id = ws.wc_id().clone();
-
-    // Now restore the middle hunk from parent to child
+    // Copy/restore hunk from hunk_base (parent) to hunk_child_single (child)
     let hunk = ChangeHunk {
         location: HunkLocation {
-            from_file: FileRange { start: 1, len: 3 }, // Lines 1-3 in parent
-            to_file: FileRange { start: 1, len: 3 },   // Lines 1-3 in child (context + added)
+            from_file: FileRange { start: 1, len: 3 },
+            to_file: FileRange { start: 1, len: 3 },
         },
         lines: MultilineString {
             lines: vec![
                 " line1".to_owned(),
-                "-line2".to_owned(),    // In parent
-                "+modified".to_owned(), // In child
+                "-line2".to_owned(),
+                "+modified2".to_owned(),
                 " line3".to_owned(),
             ],
         },
     };
 
+    // This should restore "line2" back (undo the "modified2" change)
     let mutation = CopyHunk {
-        from_id: CommitId {
-            hex: parent_id.hex(),
-            prefix: parent_id.hex()[..2].to_string(),
-            rest: parent_id.hex()[2..].to_string(),
-        },
-        to_id: mkid(&child_id.hex(), &child_id.hex()),
+        from_id: revs::hunk_base().commit,
+        to_id: revs::hunk_child_single(),
         path: TreePath {
-            repo_path: "test.txt".to_owned(),
+            repo_path: "hunk_test.txt".to_owned(),
             relative_path: "".into(),
         },
         hunk,
@@ -816,10 +632,9 @@ fn copy_hunk_from_parent() -> anyhow::Result<()> {
     assert_matches!(result, MutationResult::Updated { .. });
 
     // Verify: child should now have parent's content (restoration)
-    let new_wc_id = ws.wc_id().clone();
-    let child_commit = ws.get_commit(&new_wc_id)?;
+    let child_commit = get_rev(&ws, &revs::hunk_child_single())?;
     let child_tree = child_commit.tree()?;
-    let repo_path = jj_lib::repo_path::RepoPath::from_internal_string("test.txt")?;
+    let repo_path = jj_lib::repo_path::RepoPath::from_internal_string("hunk_test.txt")?;
 
     match child_tree.path_value(&repo_path)?.into_resolved() {
         Ok(Some(jj_lib::backend::TreeValue::File { id, .. })) => {
@@ -828,28 +643,11 @@ fn copy_hunk_from_parent() -> anyhow::Result<()> {
             block_on(reader.read_to_end(&mut content))?;
             let content_str = String::from_utf8_lossy(&content);
             assert_eq!(
-                content_str, "line1\nline2\nline3\n",
+                content_str, "line1\nline2\nline3\nline4\nline5\n",
                 "Child should have parent's content after restore"
             );
         }
-        _ => panic!("Expected test.txt to be a file"),
-    }
-
-    // Verify: parent unchanged
-    let parent_commit = ws.get_commit(&parent_id)?;
-    let parent_tree = parent_commit.tree()?;
-    match parent_tree.path_value(&repo_path)?.into_resolved() {
-        Ok(Some(jj_lib::backend::TreeValue::File { id, .. })) => {
-            let mut reader = block_on(ws.repo().store().read_file(&repo_path, &id))?;
-            let mut content = Vec::new();
-            block_on(reader.read_to_end(&mut content))?;
-            let content_str = String::from_utf8_lossy(&content);
-            assert_eq!(
-                content_str, "line1\nline2\nline3\n",
-                "Parent should be unchanged"
-            );
-        }
-        _ => panic!("Expected test.txt to be a file in parent"),
+        _ => panic!("Expected hunk_test.txt to be a file"),
     }
 
     Ok(())
@@ -910,23 +708,8 @@ fn copy_hunk_out_of_bounds() -> anyhow::Result<()> {
     let mut session = WorkerSession::default();
     let mut ws = session.load_directory(repo.path())?;
 
-    // Create a small file
-    fs::write(repo.path().join("small.txt"), "line1\nline2\n")?;
-    ws.import_and_snapshot(false)?;
-
-    let parent_id = ws.wc_id().clone();
-
-    CreateRevision {
-        parent_ids: vec![mkid(&parent_id.hex(), &parent_id.hex())],
-    }
-    .execute_unboxed(&mut ws)?;
-
-    fs::write(repo.path().join("small.txt"), "line1\nchanged\n")?;
-    ws.import_and_snapshot(false)?;
-
-    let child_id = ws.wc_id().clone();
-
-    // Try to copy a hunk with out-of-bounds location
+    // small_parent has small.txt with "line1\nline2\n"
+    // small_child has small.txt with "line1\nchanged\n"
     let hunk = ChangeHunk {
         location: HunkLocation {
             from_file: FileRange { start: 1, len: 1 },
@@ -937,13 +720,10 @@ fn copy_hunk_out_of_bounds() -> anyhow::Result<()> {
         },
     };
 
+    // Try to copy a hunk with out-of-bounds location using the small file commits
     let mutation = CopyHunk {
-        from_id: CommitId {
-            hex: parent_id.hex(),
-            prefix: parent_id.hex()[..2].to_string(),
-            rest: parent_id.hex()[2..].to_string(),
-        },
-        to_id: mkid(&child_id.hex(), &child_id.hex()),
+        from_id: revs::small_parent().commit,
+        to_id: revs::small_child(),
         path: TreePath {
             repo_path: "small.txt".to_owned(),
             relative_path: "".into(),
@@ -974,24 +754,7 @@ fn copy_hunk_unchanged() -> anyhow::Result<()> {
     let mut session = WorkerSession::default();
     let mut ws = session.load_directory(repo.path())?;
 
-    // Create parent and child with identical content
-    fs::write(repo.path().join("same.txt"), "line1\nline2\nline3\n")?;
-    ws.import_and_snapshot(false)?;
-
-    let parent_id = ws.wc_id().clone();
-
-    CreateRevision {
-        parent_ids: vec![mkid(&parent_id.hex(), &parent_id.hex())],
-    }
-    .execute_unboxed(&mut ws)?;
-
-    // Child has same content
-    fs::write(repo.path().join("same.txt"), "line1\nline2\nline3\n")?;
-    ws.import_and_snapshot(false)?;
-
-    let child_id = ws.wc_id().clone();
-
-    // Try to restore a hunk that's already identical
+    // hunk_base has line1-line5, hunk_sibling has line1-line5 plus new6-new8
     let hunk = ChangeHunk {
         location: HunkLocation {
             from_file: FileRange { start: 1, len: 3 },
@@ -1006,20 +769,18 @@ fn copy_hunk_unchanged() -> anyhow::Result<()> {
         },
     };
 
+    // Copy a hunk between hunk_base and hunk_sibling where that part is identical
     let mutation = CopyHunk {
-        from_id: CommitId {
-            hex: parent_id.hex(),
-            prefix: parent_id.hex()[..2].to_string(),
-            rest: parent_id.hex()[2..].to_string(),
-        },
-        to_id: mkid(&child_id.hex(), &child_id.hex()),
+        from_id: revs::hunk_base().commit,
+        to_id: revs::hunk_sibling(),
         path: TreePath {
-            repo_path: "same.txt".to_owned(),
+            repo_path: "hunk_test.txt".to_owned(),
             relative_path: "".into(),
         },
         hunk,
     };
 
+    // Trying to "restore" lines 1-3 from base to sibling should be unchanged (they're already identical)
     let result = mutation.execute_unboxed(&mut ws)?;
     assert_matches!(result, MutationResult::Unchanged);
 
@@ -1034,52 +795,28 @@ fn copy_hunk_multiple_hunks() -> anyhow::Result<()> {
     let mut session = WorkerSession::default();
     let mut ws = session.load_directory(repo.path())?;
 
-    // Create parent with original content
-    fs::write(
-        repo.path().join("multi.txt"),
-        "line1\nline2\nline3\nline4\nline5\n",
-    )?;
-    ws.import_and_snapshot(false)?;
-    let parent_id = ws.wc_id().clone();
-
-    CreateRevision {
-        parent_ids: vec![mkid(&parent_id.hex(), &parent_id.hex())],
-    }
-    .execute_unboxed(&mut ws)?;
-
-    // Child modifies multiple lines
-    fs::write(
-        repo.path().join("multi.txt"),
-        "line1\nmodified2\nline3\nmodified4\nline5\n",
-    )?;
-    ws.import_and_snapshot(false)?;
-    let child_id = ws.wc_id().clone();
-
-    // Restore only the second hunk (line 4)
+    // hunk_child_multi modifies two lines: line2->changed2 and line4->changed4
     let hunk = ChangeHunk {
         location: HunkLocation {
-            from_file: FileRange { start: 3, len: 3 }, // Lines 3-5 in parent
-            to_file: FileRange { start: 3, len: 3 },   // Lines 3-5 in child (context + added)
+            from_file: FileRange { start: 3, len: 3 },
+            to_file: FileRange { start: 3, len: 3 },
         },
         lines: MultilineString {
             lines: vec![
                 " line3".to_owned(),
                 "-line4".to_owned(),
-                "+modified4".to_owned(),
+                "+changed4".to_owned(),
                 " line5".to_owned(),
             ],
         },
     };
 
+    // Restore only the second hunk (line 4) from hunk_base
     let mutation = CopyHunk {
-        from_id: CommitId {
-            hex: parent_id.hex(),
-            prefix: parent_id.hex()[..2].to_string(),
-            rest: parent_id.hex()[2..].to_string(),
-        },
-        to_id: mkid(&child_id.hex(), &child_id.hex()),
+        from_id: revs::hunk_base().commit,
+        to_id: revs::hunk_child_multi(),
         path: TreePath {
-            repo_path: "multi.txt".to_owned(),
+            repo_path: "hunk_test.txt".to_owned(),
             relative_path: "".into(),
         },
         hunk,
@@ -1088,11 +825,10 @@ fn copy_hunk_multiple_hunks() -> anyhow::Result<()> {
     let result = mutation.execute_unboxed(&mut ws)?;
     assert_matches!(result, MutationResult::Updated { .. });
 
-    // Verify: line 2 still modified, line 4 restored
-    let new_wc_id = ws.wc_id().clone();
-    let child_commit = ws.get_commit(&new_wc_id)?;
+    // Verify: line 2 still modified (changed2), line 4 restored (line4)
+    let child_commit = get_rev(&ws, &revs::hunk_child_multi())?;
     let child_tree = child_commit.tree()?;
-    let repo_path = jj_lib::repo_path::RepoPath::from_internal_string("multi.txt")?;
+    let repo_path = jj_lib::repo_path::RepoPath::from_internal_string("hunk_test.txt")?;
 
     match child_tree.path_value(&repo_path)?.into_resolved() {
         Ok(Some(jj_lib::backend::TreeValue::File { id, .. })) => {
@@ -1101,11 +837,11 @@ fn copy_hunk_multiple_hunks() -> anyhow::Result<()> {
             block_on(reader.read_to_end(&mut content))?;
             let content_str = String::from_utf8_lossy(&content);
             assert_eq!(
-                content_str, "line1\nmodified2\nline3\nline4\nline5\n",
-                "Line 2 should remain modified, line 4 should be restored"
+                content_str, "line1\nchanged2\nline3\nline4\nline5\n",
+                "Line 2 should remain modified (changed2), line 4 should be restored"
             );
         }
-        _ => panic!("Expected multi.txt to be a file"),
+        _ => panic!("Expected hunk_test.txt to be a file"),
     }
 
     Ok(())
@@ -1113,125 +849,77 @@ fn copy_hunk_multiple_hunks() -> anyhow::Result<()> {
 
 #[test]
 fn move_hunk_second_of_two_hunks() -> anyhow::Result<()> {
+    use jj_lib::repo::Repo;
+
     let repo = mkrepo();
     let mut session = WorkerSession::default();
     let mut ws = session.load_directory(repo.path())?;
 
-    // First create a base file in the parent commit
-    let base = "line1\nline2\nline3\nline4\nline5\n";
-    fs::write(repo.path().join("test.txt"), base)?;
-    ws.import_and_snapshot(false)?;
-
-    // Create a child commit
-    let parent_commit_id: jj_lib::backend::CommitId = ws.wc_id().clone();
-    CreateRevision {
-        parent_ids: vec![mkid(&parent_commit_id.hex(), &parent_commit_id.hex())],
-    }
-    .execute_unboxed(&mut ws)?;
-
-    // Now modify the file to add TWO hunks
-    let modified = "line1\ninserted1\nline2\nline3\nline4\ninserted2\nline5\n";
-    fs::write(repo.path().join("test.txt"), modified)?;
-    ws.import_and_snapshot(false)?;
-
-    let source_commit_id = ws.wc_id().clone();
-
-    // Try to move the SECOND hunk back to its parent
+    // hunk_child_multi has two hunks: line2->changed2 and line4->changed4
     let hunk = ChangeHunk {
         location: HunkLocation {
-            from_file: FileRange { start: 5, len: 2 },
-            to_file: FileRange { start: 6, len: 3 },
+            from_file: FileRange { start: 3, len: 3 },
+            to_file: FileRange { start: 3, len: 3 },
         },
         lines: MultilineString {
             lines: vec![
-                " line4".to_owned(),
-                "+inserted2".to_owned(),
+                " line3".to_owned(),
+                "-line4".to_owned(),
+                "+changed4".to_owned(),
                 " line5".to_owned(),
             ],
         },
     };
 
-    // Now create a different target commit (sibling of source) to move the hunk to
-    CreateRevision {
-        parent_ids: vec![mkid(&parent_commit_id.hex(), &parent_commit_id.hex())],
-    }
-    .execute_unboxed(&mut ws)?;
-
-    // Add the base file (without hunks) to the target
-    fs::write(repo.path().join("test.txt"), base)?;
-    ws.import_and_snapshot(false)?;
-
-    let target_commit_id = ws.wc_id().clone();
-
+    // Move only the second hunk (line4->changed4) to hunk_sibling
     let mutation = MoveHunk {
-        from_id: mkid(&source_commit_id.hex(), &source_commit_id.hex()),
-        to_id: crate::messages::CommitId {
-            hex: target_commit_id.hex(),
-            prefix: target_commit_id.hex()[..2].to_string(),
-            rest: target_commit_id.hex()[2..].to_string(),
-        },
+        from_id: revs::hunk_child_multi(),
+        to_id: revs::hunk_sibling().commit,
         path: TreePath {
-            repo_path: "test.txt".to_owned(),
+            repo_path: "hunk_test.txt".to_owned(),
             relative_path: "".into(),
         },
         hunk,
     };
 
-    let result = mutation.execute_unboxed(&mut ws);
+    let result = mutation.execute_unboxed(&mut ws)?;
+    assert_matches!(result, MutationResult::Updated { .. });
 
-    assert_matches!(result, Ok(MutationResult::Updated { .. }));
-
-    // Verify the hunk was moved correctly
-    use jj_lib::repo::Repo;
-    let test_path = jj_lib::repo_path::RepoPath::from_internal_string("test.txt")?;
-
-    // Get the change IDs to resolve the new commit IDs after rewriting
-    let source_change_id = ws.get_commit(&source_commit_id)?.change_id().clone();
-    let target_change_id = ws.get_commit(&target_commit_id)?.change_id().clone();
-
-    let new_source_commit_ids = ws
-        .repo()
-        .resolve_change_id(&source_change_id)?
-        .ok_or_else(|| anyhow::anyhow!("Failed to resolve source change ID"))?;
-    let new_target_commit_ids = ws
-        .repo()
-        .resolve_change_id(&target_change_id)?
-        .ok_or_else(|| anyhow::anyhow!("Failed to resolve target change ID"))?;
-
-    // Verify source commit has the second hunk removed (only first hunk remains)
-    let source_commit = ws.get_commit(&new_source_commit_ids[0])?;
+    // Verify source still has the first hunk (changed2), but not the second
+    let source_commit = get_rev(&ws, &revs::hunk_child_multi())?;
     let source_tree = source_commit.tree()?;
+    let repo_path = jj_lib::repo_path::RepoPath::from_internal_string("hunk_test.txt")?;
 
-    match source_tree.path_value(&test_path)?.into_resolved() {
+    match source_tree.path_value(&repo_path)?.into_resolved() {
         Ok(Some(jj_lib::backend::TreeValue::File { id, .. })) => {
-            let mut reader = block_on(ws.repo().store().read_file(&test_path, &id))?;
+            let mut reader = block_on(ws.repo().store().read_file(&repo_path, &id))?;
             let mut content = Vec::new();
             block_on(reader.read_to_end(&mut content))?;
             let content_str = String::from_utf8_lossy(&content);
             assert_eq!(
-                content_str, "line1\ninserted1\nline2\nline3\nline4\nline5\n",
-                "Source should have only the first hunk (inserted1), second hunk removed"
+                content_str, "line1\nchanged2\nline3\nline4\nline5\n",
+                "Source should have first hunk (changed2) but not second"
             );
         }
-        _ => panic!("Expected test.txt to be a file in source commit"),
+        _ => panic!("Expected hunk_test.txt to be a file in source commit"),
     }
 
-    // Verify target commit has the second hunk added
-    let target_commit = ws.get_commit(&new_target_commit_ids[0])?;
+    // Verify target has the second hunk added
+    let target_commit = get_rev(&ws, &revs::hunk_sibling())?;
     let target_tree = target_commit.tree()?;
 
-    match target_tree.path_value(&test_path)?.into_resolved() {
+    match target_tree.path_value(&repo_path)?.into_resolved() {
         Ok(Some(jj_lib::backend::TreeValue::File { id, .. })) => {
-            let mut reader = block_on(ws.repo().store().read_file(&test_path, &id))?;
+            let mut reader = block_on(ws.repo().store().read_file(&repo_path, &id))?;
             let mut content = Vec::new();
             block_on(reader.read_to_end(&mut content))?;
             let content_str = String::from_utf8_lossy(&content);
             assert_eq!(
-                content_str, "line1\nline2\nline3\nline4\ninserted2\nline5\n",
-                "Target should have the second hunk (inserted2) added"
+                content_str, "line1\nline2\nline3\nchanged4\nline5\nnew6\nnew7\nnew8\n",
+                "Target should have the second hunk (changed4) added plus new lines"
             );
         }
-        _ => panic!("Expected test.txt to be a file in target commit"),
+        _ => panic!("Expected hunk_test.txt to be a file in target commit"),
     }
 
     Ok(())

@@ -1,9 +1,9 @@
 use crate::{
     messages::{ChangeId, CommitId, RevId},
-    worker::WorkerSession,
+    worker::{WorkerSession, WorkspaceSession},
 };
 use anyhow::Result;
-use jj_lib::{backend::TreeValue, repo_path::RepoPath};
+use jj_lib::{backend::TreeValue, commit::Commit, repo_path::RepoPath};
 use std::{
     fs::{self, File},
     path::PathBuf,
@@ -14,6 +14,19 @@ use zip::ZipArchive;
 mod mutations;
 mod queries;
 mod session;
+
+// Test Repository Maintenance
+// ==========================
+// The test repository is stored as `resources/test-repo.zip` and extracted by `mkrepo()`.
+//
+// To modify the test repository:
+// 1. Extract test-repo.zip to a temporary directory
+// 2. Use `jj` CLI commands to create/modify commits
+// 3. Verify new commits are mutable: `jj log -r 'mutable()'`
+// 4. Re-zip the directory (excluding any OS-specific files)
+// 5. Update the `revs` module with new commit IDs
+//
+// The `revs` module provides helpers for known commits. Use `jj log` to find change/commit IDs.
 
 fn mkrepo() -> TempDir {
     let repo_dir = tempdir().unwrap();
@@ -42,25 +55,78 @@ fn mkid(xid: &str, cid: &str) -> RevId {
     }
 }
 
+/// Resolve a commit by change ID, even if it was rewritten and has a new commit ID.
+/// Use this to verify commit state after mutations that rewrite commits.
+fn get_rev(ws: &WorkspaceSession, rev_id: &RevId) -> Result<Commit> {
+    use jj_lib::repo::Repo;
+    use jj_lib::revset::RevsetIteratorExt;
+
+    let revset = ws.evaluate_revset_str(&rev_id.change.hex)?;
+    let mut iter = revset.as_ref().iter().commits(ws.repo().store()).fuse();
+    match iter.next() {
+        Some(commit) => Ok(commit?),
+        None => anyhow::bail!("Change {} not found", rev_id.change.hex),
+    }
+}
+
 mod revs {
     use crate::messages::RevId;
 
     use super::mkid;
 
+    /// The working copy commit (empty, child of main)
     pub fn working_copy() -> RevId {
         mkid("nnloouly", "56018b94eb61a9acddc58ad7974aa51c3368eadd")
     }
 
+    /// The main bookmark commit (renamed c.txt)
     pub fn main_bookmark() -> RevId {
         mkid("mnkoropy", "87e9c6c03e1b727ff712d962c03b32fffb704bc0")
     }
 
+    /// A commit with a conflict in b.txt
     pub fn conflict_bookmark() -> RevId {
         mkid("nwrnuwyp", "880abeefdd3ac344e2a0901c5f486d02d34053da")
     }
 
+    /// Child of conflict_bookmark that resolves the conflict
     pub fn resolve_conflict() -> RevId {
         mkid("rrxroxys", "db297552443bcafc0f0715b7ace7fb4488d7954d")
+    }
+
+    /// Mutable commit that changed b.txt from "1" to "11"
+    pub fn hunk_source() -> RevId {
+        mkid("kmtstztw", "7ef013217e74fce9ff04743ee9f1543fe9419675")
+    }
+
+    /// Contains hunk_test.txt with 5 lines: line1-line5
+    pub fn hunk_base() -> RevId {
+        mkid("vkwrnurr", "6efa7f9eade075121b33679efe232dac1a612a2d")
+    }
+
+    /// Child of hunk_base, modifies line 2: line2 -> modified2
+    pub fn hunk_child_single() -> RevId {
+        mkid("nkrxruxq", "45835b6809b4def71e04b7823c6b3ac08a2f217d")
+    }
+
+    /// Child of hunk_base, modifies lines 2 and 4: line2 -> changed2, line4 -> changed4
+    pub fn hunk_child_multi() -> RevId {
+        mkid("nqwrstxx", "e2f7f467dce1ed7ff6087c01ca986e24cc039d8c")
+    }
+
+    /// Child of hunk_base, adds lines 6-8: new6, new7, new8
+    pub fn hunk_sibling() -> RevId {
+        mkid("xwsxmqwz", "5dd18b61b3e94d60019265a0b6e5e74dff93d482")
+    }
+
+    /// Contains small.txt with 2 lines: line1, line2
+    pub fn small_parent() -> RevId {
+        mkid("nwzznmzm", "aebc9a99fb78a1717a008ed30619f55075bc65b1")
+    }
+
+    /// Child of small_parent, modifies line 2: line2 -> changed
+    pub fn small_child() -> RevId {
+        mkid("mvttnyym", "d18a83638ec0c7f1918f4e3ac14d07812880cab1")
     }
 }
 

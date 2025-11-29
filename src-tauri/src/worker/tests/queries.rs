@@ -13,7 +13,7 @@ fn log_all() -> Result<()> {
 
     let all_rows = queries::query_log(&ws, "all()", 100)?;
 
-    assert_eq!(12, all_rows.rows.len());
+    assert_eq!(18, all_rows.rows.len());
     assert!(!all_rows.has_more);
 
     Ok(())
