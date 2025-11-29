@@ -939,71 +939,21 @@ impl Mutation for MoveHunk {
         )?;
         let hunk_tree = store.get_root_tree(&hunk_tree_id)?;
 
-        // check if commits are related, which disallows conflict-free copies
+        // check if commits are related (needed for post-merge logic)
         let from_is_ancestor = tx.repo().index().is_ancestor(from.id(), to.id())?;
         let to_is_ancestor = tx.repo().index().is_ancestor(to.id(), from.id())?;
-        let is_related = from_is_ancestor || to_is_ancestor;
 
-        let (remainder_tree, new_to_tree) = if is_related {
-            // for related commits, we need 3-way merge (may create conflicts)
-            let remainder = from_tree
-                .clone()
-                .merge(hunk_tree.clone(), parent_tree.clone())
-                .await?;
-            let to_tree = to.tree()?;
-            let new_to = to_tree
-                .merge(parent_tree.clone(), hunk_tree.clone())
-                .await?;
-            (remainder, new_to)
-        } else {
-            // for unrelated commits, apply hunk directly to avoid conflicts
-            let to_tree = to.tree()?;
-            let to_content = read_file_content(store, &to_tree, &repo_path).await?;
-            let new_to_content = apply_hunk(&to_content, &self.hunk)?;
-            let new_to_blob_id = store
-                .write_file(&repo_path, &mut new_to_content.as_slice())
-                .await?;
-            let new_to_tree_id =
-                update_tree_entry(store, &to_tree, &repo_path, new_to_blob_id, hunk_executable)?;
-            let new_to = store.get_root_tree(&new_to_tree_id)?;
-
-            // remove hunk from source with reverse hunk
-            let reverse_hunk = crate::messages::ChangeHunk {
-                location: self.hunk.location.clone(),
-                lines: crate::messages::MultilineString {
-                    lines: self
-                        .hunk
-                        .lines
-                        .lines
-                        .iter()
-                        .filter_map(|line| {
-                            if line.starts_with('+') {
-                                Some(format!("-{}", &line[1..]))
-                            } else if line.starts_with('-') {
-                                Some(format!("+{}", &line[1..]))
-                            } else {
-                                Some(line.clone())
-                            }
-                        })
-                        .collect(),
-                },
-            };
-            let from_content = read_file_content(store, &from_tree, &repo_path).await?;
-            let remainder_content = apply_hunk(&from_content, &reverse_hunk)?;
-            let remainder_blob_id = store
-                .write_file(&repo_path, &mut remainder_content.as_slice())
-                .await?;
-            let remainder_tree_id = update_tree_entry(
-                store,
-                &from_tree,
-                &repo_path,
-                remainder_blob_id,
-                hunk_executable,
-            )?;
-            let remainder = store.get_root_tree(&remainder_tree_id)?;
-
-            (remainder, new_to)
-        };
+        // use 3-way merge for all cases (equivalent to split-then-squash)
+        // - remove hunk from source: from_tree.merge(hunk_tree, parent_tree) backs out the hunk
+        // - apply hunk to destination: to_tree.merge(parent_tree, hunk_tree) applies the hunk
+        let to_tree = to.tree()?;
+        let remainder_tree = from_tree
+            .clone()
+            .merge(hunk_tree.clone(), parent_tree.clone())
+            .await?;
+        let new_to_tree = to_tree
+            .merge(parent_tree.clone(), hunk_tree.clone())
+            .await?;
 
         // abandon or rewrite source and destination based on ancestry
         let abandon_source = remainder_tree.id() == parent_tree.id();
