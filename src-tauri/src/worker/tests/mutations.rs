@@ -334,23 +334,28 @@ fn move_hunk_content() -> anyhow::Result<()> {
     let mut session = WorkerSession::default();
     let mut ws = session.load_directory(repo.path())?;
 
-    // Hunk that changes "1" to "11" in b.txt
+    // hunk_child_multi modifies lines 2 and 4: line2 -> changed2, line4 -> changed4
+    // Move only the line 2 change to hunk_base (ancestor), keeping line 4 change in source
     let hunk = ChangeHunk {
         location: HunkLocation {
-            from_file: FileRange { start: 1, len: 1 },
-            to_file: FileRange { start: 1, len: 1 },
+            from_file: FileRange { start: 1, len: 3 },
+            to_file: FileRange { start: 1, len: 3 },
         },
         lines: MultilineString {
-            lines: vec!["-1".to_owned(), "+11".to_owned()],
+            lines: vec![
+                " line1".to_owned(),
+                "-line2".to_owned(),
+                "+changed2".to_owned(),
+                " line3".to_owned(),
+            ],
         },
     };
 
-    // Move the hunk from hunk_source to working_copy
     let mutation = MoveHunk {
-        from_id: revs::hunk_source(),
-        to_id: revs::working_copy().commit,
+        from_id: revs::hunk_child_multi(),
+        to_id: revs::hunk_base().commit,
         path: TreePath {
-            repo_path: "b.txt".to_owned(),
+            repo_path: "hunk_test.txt".to_owned(),
             relative_path: "".into(),
         },
         hunk,
@@ -359,39 +364,42 @@ fn move_hunk_content() -> anyhow::Result<()> {
     let result = mutation.execute_unboxed(&mut ws)?;
     assert_matches!(result, MutationResult::Updated { .. });
 
-    // Verify source commit was abandoned or has minimal changes
-    let from_rev = queries::query_revision(&ws, revs::hunk_source())?;
-    match from_rev {
-        RevResult::NotFound { .. } => (),
-        RevResult::Detail {
-            header, changes, ..
-        } if !header.has_conflict && changes.len() <= 1 => {}
-        _ => panic!(
-            "Expected source commit to be abandoned or have minimal changes after hunk removal"
-        ),
-    }
+    // Verify source still has the line 4 change but not line 2
+    let source_commit = get_rev(&ws, &revs::hunk_child_multi())?;
+    let source_tree = source_commit.tree()?;
+    let repo_path = jj_lib::repo_path::RepoPath::from_internal_string("hunk_test.txt")?;
 
-    // Verify target has the change applied cleanly
-    let new_wc_commit_id = ws.wc_id().clone();
-    let to_commit_obj = ws.get_commit(&new_wc_commit_id)?;
-    let to_tree = to_commit_obj.tree()?;
-    let repo_path = jj_lib::repo_path::RepoPath::from_internal_string("b.txt")?;
-    let path_value = to_tree.path_value(&repo_path)?;
-
-    assert!(
-        path_value.is_resolved(),
-        "Expected b.txt to be cleanly updated"
-    );
-
-    match path_value.into_resolved() {
+    match source_tree.path_value(&repo_path)?.into_resolved() {
         Ok(Some(jj_lib::backend::TreeValue::File { id, .. })) => {
             let mut reader = block_on(ws.repo().store().read_file(&repo_path, &id))?;
             let mut content = Vec::new();
             block_on(reader.read_to_end(&mut content))?;
             let content_str = String::from_utf8_lossy(&content);
-            assert_eq!(content_str, "11\n2\n", "Target should have hunk applied");
+            // Source should have changed2 (inherited from rebased parent) and changed4 (its own change)
+            assert_eq!(
+                content_str, "line1\nchanged2\nline3\nchanged4\nline5\n",
+                "Source should have both changes after rebase (parent now has changed2)"
+            );
         }
-        _ => panic!("Expected b.txt to be a file in target commit"),
+        _ => panic!("Expected hunk_test.txt to be a file in source commit"),
+    }
+
+    // Verify target (hunk_base) has the line 2 change applied
+    let target_commit = get_rev(&ws, &revs::hunk_base())?;
+    let target_tree = target_commit.tree()?;
+
+    match target_tree.path_value(&repo_path)?.into_resolved() {
+        Ok(Some(jj_lib::backend::TreeValue::File { id, .. })) => {
+            let mut reader = block_on(ws.repo().store().read_file(&repo_path, &id))?;
+            let mut content = Vec::new();
+            block_on(reader.read_to_end(&mut content))?;
+            let content_str = String::from_utf8_lossy(&content);
+            assert_eq!(
+                content_str, "line1\nchanged2\nline3\nline4\nline5\n",
+                "Target should have line 2 changed but not line 4"
+            );
+        }
+        _ => panic!("Expected hunk_test.txt to be a file in target commit"),
     }
 
     Ok(())
@@ -588,6 +596,61 @@ fn move_hunk_unrelated() -> anyhow::Result<()> {
             );
         }
         _ => panic!("Expected hunk_test.txt to be a file in sibling commit"),
+    }
+
+    Ok(())
+}
+
+#[test]
+fn move_hunk_unrelated_different_structure_creates_conflict() -> anyhow::Result<()> {
+    // This test documents that moving a hunk between unrelated commits with different
+    // file structures will create a conflict. This is the correct semantic behavior
+    // of 3-way merge: the hunk was computed against a different file than the target.
+    //
+    // Example: hunk_source's parent has b.txt="1\n", but working_copy has b.txt="1\n2\n"
+    // Moving the "1->11" hunk creates a conflict because the target file has content
+    // (line 2) that wasn't present when the hunk was computed.
+
+    let repo = mkrepo();
+    let mut session = WorkerSession::default();
+    let mut ws = session.load_directory(repo.path())?;
+
+    // Hunk from hunk_source that changes line 1: "1" -> "11"
+    // hunk_source's parent has b.txt = "1\n" (single line)
+    let hunk = ChangeHunk {
+        location: HunkLocation {
+            from_file: FileRange { start: 1, len: 1 },
+            to_file: FileRange { start: 1, len: 1 },
+        },
+        lines: MultilineString {
+            lines: vec!["-1".to_owned(), "+11".to_owned()],
+        },
+    };
+
+    // Move to working_copy which has b.txt = "1\n2\n" (different structure)
+    let mutation = MoveHunk {
+        from_id: revs::hunk_source(),
+        to_id: revs::working_copy().commit,
+        path: TreePath {
+            repo_path: "b.txt".to_owned(),
+            relative_path: "".into(),
+        },
+        hunk,
+    };
+
+    let result = mutation.execute_unboxed(&mut ws)?;
+    assert_matches!(result, MutationResult::Updated { .. });
+
+    // The target should have a conflict because the file structures differ
+    let to_rev = queries::query_revision(&ws, revs::working_copy())?;
+    match to_rev {
+        RevResult::Detail { header, .. } => {
+            assert!(
+                header.has_conflict,
+                "Expected conflict when moving hunk to file with different structure"
+            );
+        }
+        _ => panic!("Expected working copy to exist"),
     }
 
     Ok(())
