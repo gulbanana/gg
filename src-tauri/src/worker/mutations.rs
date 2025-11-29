@@ -955,29 +955,22 @@ impl Mutation for MoveHunk {
             .merge(parent_tree.clone(), hunk_tree.clone())
             .await?;
 
-        // abandon or rewrite source and destination based on ancestry
         let abandon_source = remainder_tree.id() == parent_tree.id();
 
-        if abandon_source {
-            // simple case: no source left
-            if to_is_ancestor {
-                precondition!(
-                    "Moving a hunk from a commit that becomes empty to an ancestor is not supported"
-                );
-            }
-            tx.repo_mut().record_abandoned_commit(&from);
+        // block moving a hunk from a commit that becomes empty to an ancestor
+        // (this would require abandoning a commit while also rebasing it)
+        if abandon_source && to_is_ancestor {
+            precondition!(
+                "Moving a hunk from a commit that becomes empty to an ancestor is not supported"
+            );
+        }
 
-            // apply hunk to destination
-            let description = combine_messages(&from, &to, abandon_source);
-            tx.repo_mut()
-                .rewrite_commit(&to)
-                .set_tree_id(new_to_tree.id().clone())
-                .set_description(description)
-                .write()?;
-        } else if to_is_ancestor {
+        let description = combine_messages(&from, &to, abandon_source);
+
+        if to_is_ancestor {
             // special case: descendant-to-ancestor
+            // Must modify ancestor first, then rebase descendant to pick up inherited changes
 
-            let description = combine_messages(&from, &to, abandon_source);
             let new_to = tx
                 .repo_mut()
                 .rewrite_commit(&to)
@@ -988,7 +981,7 @@ impl Mutation for MoveHunk {
             // recompute the source's tree after the destination has the hunk applied
             let child_new_tree = new_to_tree.clone().merge(parent_tree, from_tree).await?;
 
-            // rebase source
+            // rebase source onto modified ancestor
             tx.repo_mut()
                 .rewrite_commit(&from)
                 .set_parents(vec![new_to.id().clone()])
@@ -996,15 +989,19 @@ impl Mutation for MoveHunk {
                 .write()?;
         } else {
             // general case: unrelated or ancestor-to-descendant
-            tx.repo_mut()
-                .rewrite_commit(&from)
-                .set_tree_id(remainder_tree.id().clone())
-                .write()?;
 
-            let description = combine_messages(&from, &to, abandon_source);
+            // abandon or rewrite source
+            if abandon_source {
+                tx.repo_mut().record_abandoned_commit(&from);
+            } else {
+                tx.repo_mut()
+                    .rewrite_commit(&from)
+                    .set_tree_id(remainder_tree.id().clone())
+                    .write()?;
+            }
+
+            // rebase descendants of source, which may include destination
             let mut to = to;
-
-            // if destination is a descendant, rebase it after modifying source
             if from_is_ancestor {
                 let mut rebase_map = std::collections::HashMap::new();
                 tx.repo_mut().rebase_descendants_with_options(
@@ -1026,6 +1023,7 @@ impl Mutation for MoveHunk {
                 to = tx.repo().store().get_commit(&rebased_to_id)?;
             }
 
+            // apply hunk to destination
             tx.repo_mut()
                 .rewrite_commit(&to)
                 .set_tree_id(new_to_tree.id().clone())
