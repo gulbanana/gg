@@ -1603,61 +1603,25 @@ async fn read_file_content(
     }
 }
 
-// imperfect, but will work for many real-world moves
-fn find_hunk_position(
-    base_lines: &[&str],
-    hunk: &crate::messages::ChangeHunk,
-    suggested_start: usize,
-) -> Result<usize> {
-    let context_lines: Vec<&str> = hunk
-        .lines
-        .lines
-        .iter()
-        .filter(|line| line.starts_with(' ') || line.starts_with('-'))
-        .map(|line| line[1..].trim_end())
-        .collect();
-
-    if context_lines.is_empty() {
-        return Ok(suggested_start.min(base_lines.len()));
-    }
-
-    if base_lines.len() < context_lines.len() {
-        return Err(anyhow!(
-            "File has {} lines but hunk requires at least {} lines of context",
-            base_lines.len(),
-            context_lines.len()
-        ));
-    }
-
-    for start_idx in 0..=(base_lines.len() - context_lines.len()) {
-        let matches = context_lines
-            .iter()
-            .enumerate()
-            .all(|(i, &context_line)| base_lines[start_idx + i].trim_end() == context_line);
-
-        if matches {
-            return Ok(start_idx);
-        }
-    }
-
-    Err(anyhow!("Couldn't find a good  location to apply the hunk."))
-}
-
-// XXX does not use 3-way merge, which reduces conflicts but is imprecise
+/// Apply a hunk to its original base content using exact line numbers.
+///
+/// This function is only called when applying a hunk to the tree it was computed against
+/// (the parent tree of the commit containing the hunk). Since line numbers are exact,
+/// any mismatch indicates the hunk is invalid for this content.
 fn apply_hunk(content: &[u8], hunk: &crate::messages::ChangeHunk) -> Result<Vec<u8>> {
     let base_text = String::from_utf8_lossy(content);
     let base_lines: Vec<&str> = base_text.lines().collect();
     let ends_with_newline = content.ends_with(b"\n");
 
     let mut result_lines: Vec<String> = Vec::new();
-    let mut base_line_idx: usize;
     let mut hunk_lines = hunk.lines.lines.iter().peekable();
 
-    let hunk_start_line_0_based = hunk.location.from_file.start.saturating_sub(1);
-    let actual_start = find_hunk_position(&base_lines, hunk, hunk_start_line_0_based)?;
+    // Use exact line number from hunk location (1-indexed to 0-indexed)
+    let hunk_start = hunk.location.from_file.start.saturating_sub(1);
 
-    result_lines.extend(base_lines[..actual_start].iter().map(|s| s.to_string()));
-    base_line_idx = actual_start;
+    // Copy lines before the hunk
+    result_lines.extend(base_lines[..hunk_start].iter().map(|s| s.to_string()));
+    let mut base_line_idx = hunk_start;
 
     while let Some(hunk_line) = hunk_lines.next() {
         if hunk_line.starts_with(' ') || hunk_line.starts_with('-') {
@@ -1670,22 +1634,26 @@ fn apply_hunk(content: &[u8], hunk: &crate::messages::ChangeHunk) -> Result<Vec<
                 }
                 base_line_idx += 1;
             } else {
-                return Err(anyhow!(
+                // Hunk doesn't match at expected position - this is a precondition error
+                // since the hunk should be a valid subset of the source revision
+                anyhow::bail!(
                     "Hunk mismatch at line {}: expected '{}', found '{}'",
-                    base_line_idx,
+                    base_line_idx + 1,
                     hunk_content_part.trim_end(),
                     base_lines
                         .get(base_line_idx)
                         .map_or("<EOF>", |l| l.trim_end())
-                ));
+                );
             }
         } else if hunk_line.starts_with('+') {
             let added_content = hunk_line[1..].trim_end_matches('\n');
             result_lines.push(added_content.to_string());
         } else {
-            return Err(anyhow!("Malformed hunk line: {}", hunk_line));
+            anyhow::bail!("Malformed hunk line: {}", hunk_line);
         }
     }
+
+    // Copy remaining lines after the hunk
     result_lines.extend(base_lines[base_line_idx..].iter().map(|s| s.to_string()));
 
     let mut result_bytes = Vec::new();
