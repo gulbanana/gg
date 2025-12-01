@@ -943,9 +943,11 @@ impl Mutation for MoveHunk {
         let from_is_ancestor = tx.repo().index().is_ancestor(from.id(), to.id())?;
         let to_is_ancestor = tx.repo().index().is_ancestor(to.id(), from.id())?;
 
-        // use 3-way merge for all cases (equivalent to split-then-squash)
-        // - remove hunk from source: from_tree.merge(hunk_tree, parent_tree) backs out the hunk
-        // - apply hunk to destination: to_tree.merge(parent_tree, hunk_tree) applies the hunk
+        // Split-rebase-squash algorithm (matches jj squash behavior):
+        // 1. hunk_tree is a "sibling" of from: it's parent_tree with just the hunk applied
+        // 2. remainder_tree removes the hunk from source via 3-way backout (deterministic)
+        // 3. new_to_tree applies the hunk to destination via 3-way merge
+        // 4. rebase_descendants() handles tree reconciliation for related commits
         let to_tree = to.tree()?;
         let remainder_tree = from_tree
             .clone()
@@ -957,36 +959,30 @@ impl Mutation for MoveHunk {
 
         let abandon_source = remainder_tree.id() == parent_tree.id();
 
-        // block moving a hunk from a commit that becomes empty to an ancestor
-        // (this would require abandoning a commit while also rebasing it)
-        if abandon_source && to_is_ancestor {
-            precondition!(
-                "Moving a hunk from a commit that becomes empty to an ancestor is not supported"
-            );
-        }
-
         let description = combine_messages(&from, &to, abandon_source);
 
         if to_is_ancestor {
-            // special case: descendant-to-ancestor
-            // Must modify ancestor first, then rebase descendant to pick up inherited changes
+            // Descendant-to-ancestor: modify ancestor first, then rewrite/abandon source
+            // rebase_descendants() will handle tree reconciliation automatically
 
-            let new_to = tx
-                .repo_mut()
+            tx.repo_mut()
                 .rewrite_commit(&to)
                 .set_tree_id(new_to_tree.id().clone())
                 .set_description(description)
                 .write()?;
 
-            // recompute the source's tree after the destination has the hunk applied
-            let child_new_tree = new_to_tree.clone().merge(parent_tree, from_tree).await?;
+            // Abandon or rewrite source
+            if abandon_source {
+                tx.repo_mut().record_abandoned_commit(&from);
+            } else {
+                tx.repo_mut()
+                    .rewrite_commit(&from)
+                    .set_tree_id(remainder_tree.id().clone())
+                    .write()?;
+            }
 
-            // rebase source onto modified ancestor
-            tx.repo_mut()
-                .rewrite_commit(&from)
-                .set_parents(vec![new_to.id().clone()])
-                .set_tree_id(child_new_tree.id().clone())
-                .write()?;
+            // Let jj handle rebasing descendants onto the modified ancestor
+            tx.repo_mut().rebase_descendants()?;
         } else {
             // general case: unrelated or ancestor-to-descendant
 

@@ -494,7 +494,9 @@ fn move_hunk_invalid() -> anyhow::Result<()> {
 }
 
 #[test]
-fn move_hunk_descendant() -> anyhow::Result<()> {
+fn move_hunk_descendant_abandons_source() -> anyhow::Result<()> {
+    use jj_lib::repo::Repo;
+
     let repo = mkrepo();
     let mut session = WorkerSession::default();
     let mut ws = session.load_directory(repo.path())?;
@@ -515,7 +517,7 @@ fn move_hunk_descendant() -> anyhow::Result<()> {
         },
     };
 
-    // This should fail because it would leave the child empty
+    // Move the only hunk from child to parent - child should be abandoned
     let mutation = MoveHunk {
         from_id: revs::hunk_child_single(),
         to_id: revs::hunk_base().commit,
@@ -527,7 +529,34 @@ fn move_hunk_descendant() -> anyhow::Result<()> {
     };
 
     let result = mutation.execute_unboxed(&mut ws)?;
-    assert_matches!(result, MutationResult::PreconditionError { .. });
+    assert_matches!(result, MutationResult::Updated { .. });
+
+    // Source should be abandoned (not found in repo)
+    let source_rev = queries::query_revision(&ws, revs::hunk_child_single())?;
+    assert_matches!(
+        source_rev,
+        RevResult::NotFound { .. },
+        "Source should be abandoned"
+    );
+
+    // Target (hunk_base) should have the change
+    let target_commit = get_rev(&ws, &revs::hunk_base())?;
+    let target_tree = target_commit.tree()?;
+    let repo_path = jj_lib::repo_path::RepoPath::from_internal_string("hunk_test.txt")?;
+
+    match target_tree.path_value(&repo_path)?.into_resolved() {
+        Ok(Some(jj_lib::backend::TreeValue::File { id, .. })) => {
+            let mut reader = block_on(ws.repo().store().read_file(&repo_path, &id))?;
+            let mut content = Vec::new();
+            block_on(reader.read_to_end(&mut content))?;
+            let content_str = String::from_utf8_lossy(&content);
+            assert_eq!(
+                content_str, "line1\nmodified2\nline3\nline4\nline5\n",
+                "Target should have the hunk applied"
+            );
+        }
+        _ => panic!("Expected hunk_test.txt to be a file in target commit"),
+    }
 
     Ok(())
 }
