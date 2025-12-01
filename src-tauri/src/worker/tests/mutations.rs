@@ -327,15 +327,16 @@ fn move_source() -> Result<()> {
 }
 
 #[test]
-fn move_hunk_content() -> anyhow::Result<()> {
+fn move_hunk_descendant_partial() -> anyhow::Result<()> {
     use jj_lib::repo::Repo;
 
     let repo = mkrepo();
     let mut session = WorkerSession::default();
     let mut ws = session.load_directory(repo.path())?;
 
+    // Move one of two hunks from descendant (hunk_child_multi) to ancestor (hunk_base)
     // hunk_child_multi modifies lines 2 and 4: line2 -> changed2, line4 -> changed4
-    // Move only the line 2 change to hunk_base (ancestor), keeping line 4 change in source
+    // Move only the line 2 change to hunk_base, keeping line 4 change in source
     let hunk = ChangeHunk {
         location: HunkLocation {
             from_file: FileRange { start: 1, len: 3 },
