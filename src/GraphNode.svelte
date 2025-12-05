@@ -2,10 +2,9 @@
     import type { RevHeader } from "./messages/RevHeader";
     import { currentContext } from "./stores.js";
 
-    export let header: RevHeader;
+    let { header }: { header: RevHeader } = $props();
 
-    let context = false;
-    $: context = $currentContext?.type == "Revision" && header == $currentContext.header;
+    let context = $derived($currentContext?.type == "Revision" && header == $currentContext.header);
 </script>
 
 {#if header.is_immutable}
