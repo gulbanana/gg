@@ -30,11 +30,11 @@
     import type { InputResponse } from "./messages/InputResponse";
     import type Settings from "./shell/Settings";
 
-    let selection: Query<RevResult> = {
+    let selection = $state<Query<RevResult>>({
         type: "wait",
-    };
+    });
     // for open recent workspaces when error dialogs happen
-    let recentWorkspaces: string[] = [];
+    let recentWorkspaces = $state<string[]>([]);
 
     document.addEventListener("keydown", (event) => {
         if (event.key === "o" && event.ctrlKey) {
@@ -67,15 +67,23 @@
     onEvent("gg://context/branch", mutateRef);
     onEvent("gg://input", requestInput);
 
-    $: if ($repoConfigEvent) loadRepo($repoConfigEvent);
-    $: if ($repoStatusEvent && $revisionSelectEvent) loadChange($revisionSelectEvent.id);
-    $: if (
-        $repoConfigEvent.type === "LoadError" ||
-        $repoConfigEvent.type === "TimeoutError" ||
-        $repoConfigEvent.type === "WorkerError"
-    ) {
-        queryRecentWorkspaces();
-    }
+    $effect(() => {
+        if ($repoConfigEvent) loadRepo($repoConfigEvent);
+    });
+    
+    $effect(() => {
+        if ($repoStatusEvent && $revisionSelectEvent) loadChange($revisionSelectEvent.id);
+    });
+    
+    $effect(() => {
+        if (
+            $repoConfigEvent.type === "LoadError" ||
+            $repoConfigEvent.type === "TimeoutError" ||
+            $repoConfigEvent.type === "WorkerError"
+        ) {
+            queryRecentWorkspaces();
+        }
+    });
 
     async function loadRepo(config: RepoConfig) {
         if (loadTimeout) {
@@ -139,42 +147,61 @@
     }
 </script>
 
-<Zone operand={{ type: "Repository" }} alwaysTarget let:target>
-    <div id="shell" class={$repoConfigEvent?.type == "Workspace" ? $repoConfigEvent.theme_override : ""}>
-        {#if $repoConfigEvent.type == "Initial"}
-            <Pane>
-                <h2 slot="header">Loading...</h2>
-            </Pane>
-
-            <div class="separator"></div>
-
-            <Pane />
-        {:else if $repoConfigEvent.type == "Workspace"}
-            {#key $repoConfigEvent.absolute_path}
-                <LogPane default_query={$repoConfigEvent.default_query} latest_query={$repoConfigEvent.latest_query} />
-            {/key}
-
-            <div class="separator"></div>
-
-            <BoundQuery query={selection} let:data>
-                {#if data.type == "Detail"}
-                    <RevisionPane rev={data} />
-                {:else}
-                    <Pane>
-                        <h2 slot="header">Not Found</h2>
-                        <p slot="body">
-                            Revision <IdSpan id={data.id.change} />|<IdSpan id={data.id.commit} /> does not exist.
-                        </p>
-                    </Pane>
-                {/if}
-                <Pane slot="error" let:message>
-                    <h2 slot="header">Error</h2>
-                    <p slot="body">{message}</p>
+<Zone operand={{ type: "Repository" }} alwaysTarget>
+    {#snippet children({ target })}
+        <div id="shell" class={$repoConfigEvent?.type == "Workspace" ? $repoConfigEvent.theme_override : ""}>
+            {#if $repoConfigEvent.type == "Initial"}
+                <Pane>
+                    {#snippet header()}
+                        <h2>Loading...</h2>
+                    {/snippet}
                 </Pane>
-                <Pane slot="wait">
-                    <h2 slot="header">Loading...</h2>
-                </Pane>
-            </BoundQuery>
+
+                <div class="separator"></div>
+
+                <Pane />
+            {:else if $repoConfigEvent.type == "Workspace"}
+                {#key $repoConfigEvent.absolute_path}
+                    <LogPane default_query={$repoConfigEvent.default_query} latest_query={$repoConfigEvent.latest_query} />
+                {/key}
+
+                <div class="separator"></div>
+
+                <BoundQuery query={selection}>
+                    {#snippet children(data)}
+                        {#if data.type == "Detail"}
+                            <RevisionPane rev={data} />
+                        {:else}
+                            <Pane>
+                                {#snippet header()}
+                                    <h2>Not Found</h2>
+                                {/snippet}
+                                {#snippet body()}
+                                    <p>
+                                        Revision <IdSpan id={data.id.change} />|<IdSpan id={data.id.commit} /> does not exist.
+                                    </p>
+                                {/snippet}
+                            </Pane>
+                        {/if}
+                    {/snippet}
+                    {#snippet error(message)}
+                        <Pane>
+                            {#snippet header()}
+                                <h2>Error</h2>
+                            {/snippet}
+                            {#snippet body()}
+                                <p>{message}</p>
+                            {/snippet}
+                        </Pane>
+                    {/snippet}
+                    {#snippet wait()}
+                        <Pane>
+                            {#snippet header()}
+                                <h2>Loading...</h2>
+                            {/snippet}
+                        </Pane>
+                    {/snippet}
+                </BoundQuery>
         {:else if $repoConfigEvent.type == "LoadError"}
             <ModalOverlay>
                 <ErrorDialog title="No Workspace Loaded">
@@ -204,38 +231,39 @@
 
         <div class="separator" style="grid-area: 2/1/3/4"></div>
 
-        <StatusBar {target} />
+            <StatusBar {target} />
 
-        {#if $currentInput}
-            <ModalOverlay>
-                <InputDialog
-                    title={$currentInput.title}
-                    detail={$currentInput.detail}
-                    fields={$currentInput.fields}
-                    on:response={(event) => $currentInput?.callback(event.detail)} />
-            </ModalOverlay>
-        {:else if $currentMutation}
-            <ModalOverlay>
-                {#if $currentMutation.type == "data" && ($currentMutation.value.type == "InternalError" || $currentMutation.value.type == "PreconditionError")}
-                    <ErrorDialog title="Command Error" onClose={() => ($currentMutation = null)} severe>
-                        {#if $currentMutation.value.type == "InternalError"}
-                            <p>
-                                {#each $currentMutation.value.message.lines as line}
-                                    {line}<br />
-                                {/each}
-                            </p>
-                        {:else}
-                            <p>{$currentMutation.value.message}</p>
-                        {/if}
-                    </ErrorDialog>
-                {:else if $currentMutation.type == "error"}
-                    <ErrorDialog title="IPC Error" onClose={() => ($currentMutation = null)} severe>
-                        <p>{$currentMutation.message}</p>
-                    </ErrorDialog>
-                {/if}
-            </ModalOverlay>
-        {/if}
-    </div>
+            {#if $currentInput}
+                <ModalOverlay>
+                    <InputDialog
+                        title={$currentInput.title}
+                        detail={$currentInput.detail}
+                        fields={$currentInput.fields}
+                        onresponse={(response) => $currentInput?.callback(response)} />
+                </ModalOverlay>
+            {:else if $currentMutation}
+                <ModalOverlay>
+                    {#if $currentMutation.type == "data" && ($currentMutation.value.type == "InternalError" || $currentMutation.value.type == "PreconditionError")}
+                        <ErrorDialog title="Command Error" onClose={() => ($currentMutation = null)} severe>
+                            {#if $currentMutation.value.type == "InternalError"}
+                                <p>
+                                    {#each $currentMutation.value.message.lines as line}
+                                        {line}<br />
+                                    {/each}
+                                </p>
+                            {:else}
+                                <p>{$currentMutation.value.message}</p>
+                            {/if}
+                        </ErrorDialog>
+                    {:else if $currentMutation.type == "error"}
+                        <ErrorDialog title="IPC Error" onClose={() => ($currentMutation = null)} severe>
+                            <p>{$currentMutation.message}</p>
+                        </ErrorDialog>
+                    {/if}
+                </ModalOverlay>
+            {/if}
+        </div>
+    {/snippet}
 </Zone>
 
 <style>

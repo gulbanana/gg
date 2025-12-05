@@ -11,10 +11,12 @@
     import { type EnhancedRow, default as GraphLog, type EnhancedLine } from "./GraphLog.svelte";
     import ListWidget, { type List } from "./controls/ListWidget.svelte";
 
-    export let default_query: string;
-    export let latest_query: string;
+    let { default_query, latest_query }: {
+        default_query: string;
+        latest_query: string;
+    } = $props();
 
-    const presets = [
+    let presets = $derived([
         { label: "Default", value: default_query },
         { label: "Tracked Bookmarks", value: "@ | ancestors(bookmarks(), 5)" },
         {
@@ -22,15 +24,19 @@
             value: "@ | ancestors(remote_bookmarks(), 5)",
         },
         { label: "All Revisions", value: "all()" },
-    ];
+    ]);
 
-    let choices: ReturnType<typeof getChoices>;
-    let entered_query = latest_query;
-    let graphRows: EnhancedRow[] | undefined;
+    let choices = $state<ReturnType<typeof getChoices>>([]);
+    let entered_query = $state("");
+    $effect(() => {
+        entered_query = latest_query;
+        choices = getChoices();
+    });
+    let graphRows = $state<EnhancedRow[] | undefined>(undefined);
 
-    let logHeight = 0;
-    let logWidth = 0;
-    let logScrollTop = 0;
+    let logHeight = $state(0);
+    let logWidth = $state(0);
+    let logScrollTop = $state(0);
 
     // all these calculations are not efficient. probably doesn't matter
     let list: List = {
@@ -56,8 +62,13 @@
         loadLog();
     });
 
-    $: if (entered_query) choices = getChoices();
-    $: if ($repoStatusEvent) reloadLog();
+    $effect(() => {
+        if (entered_query) choices = getChoices();
+    });
+    
+    $effect(() => {
+        if ($repoStatusEvent) reloadLog();
+    });
 
     function getChoices() {
         let choices = presets;
@@ -166,38 +177,44 @@
 </script>
 
 <Pane>
-    <div slot="header" class="log-selector">
-        <SelectWidget options={choices} bind:value={entered_query} on:change={reloadLog}>
-            <svelte:fragment let:option>{option.label}</svelte:fragment>
-        </SelectWidget>
-        <input type="text" bind:value={entered_query} on:change={reloadLog} />
-    </div>
+    {#snippet header()}
+        <div class="log-selector">
+            <SelectWidget options={choices} bind:value={entered_query} onchange={reloadLog}>
+                {#snippet children(option)}
+                    {option.label}
+                {/snippet}
+            </SelectWidget>
+            <input type="text" bind:value={entered_query} onchange={reloadLog} />
+        </div>
+    {/snippet}
 
-    <ListWidget
-        slot="body"
-        type="Revision"
-        descendant={$revisionSelectEvent?.id.commit.prefix}
-        {list}
-        bind:clientHeight={logHeight}
-        bind:clientWidth={logWidth}
-        bind:scrollTop={logScrollTop}>
-        {#if graphRows}
-            <GraphLog
-                containerHeight={logHeight}
-                containerWidth={logWidth}
-                scrollTop={logScrollTop}
-                rows={graphRows}
-                let:row>
-                {#if row}
-                    <RevisionObject
-                        header={row.revision}
-                        selected={$revisionSelectEvent?.id.commit.hex == row.revision.id.commit.hex} />
-                {/if}
-            </GraphLog>
-        {:else}
-            <div>Loading changes...</div>
-        {/if}
-    </ListWidget>
+    {#snippet body()}
+        <ListWidget
+            type="Revision"
+            descendant={$revisionSelectEvent?.id.commit.prefix}
+            {list}
+            bind:clientHeight={logHeight}
+            bind:clientWidth={logWidth}
+            bind:scrollTop={logScrollTop}>
+            {#if graphRows}
+                <GraphLog
+                    containerHeight={logHeight}
+                    containerWidth={logWidth}
+                    scrollTop={logScrollTop}
+                    rows={graphRows}>
+                    {#snippet children({ row })}
+                        {#if row}
+                            <RevisionObject
+                                header={row.revision}
+                                selected={$revisionSelectEvent?.id.commit.hex == row.revision.id.commit.hex} />
+                        {/if}
+                    {/snippet}
+                </GraphLog>
+            {:else}
+                <div>Loading changes...</div>
+            {/if}
+        </ListWidget>
+    {/snippet}
 </Pane>
 
 <style>
