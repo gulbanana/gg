@@ -4,75 +4,78 @@
     import Zone from "./objects/Zone.svelte";
     import { currentTarget } from "./stores";
 
-    export let line: EnhancedLine;
+    let { line }: { line: EnhancedLine } = $props();
 
-    let isMerge = line.type == "ToIntersection";
-    let allowEarlyBreak = line.type == "FromNode";
-    let c1 = line.source[0];
-    let c2 = line.target[0];
-    let r1 = line.source[1];
-    let r2 = line.target[1];
+    let isMerge = $derived(line.type == "ToIntersection");
+    let allowEarlyBreak = $derived(line.type == "FromNode");
+    let c1 = $derived(line.source[0]);
+    let c2 = $derived(line.target[0]);
+    let r1 = $derived(line.source[1]);
+    let r2 = $derived(line.target[1]);
 
-    let operand: Operand = { type: "Parent", header: line.parent, child: line.child };
+    let operand = $derived<Operand>({ type: "Parent", header: line.parent, child: line.child });
 
     // draw path downward, from child to parent
-    let path: string;
+    let childY = $derived(r1 * 30 + 21);
+    let parentY = $derived(r2 * 30 + 9);
 
-    let childY = r1 * 30 + 21;
-    let parentY = r2 * 30 + 9;
+    let path = $derived.by(() => {
+        if (isMerge) {
+            // instead of a parent, we have a mergepoint
+            let childX = c1 * 18 + 9;
+            let mergeX = c2 * 18 + 9;
+            let midY = c2 > c1 ? childY + 9 : parentY - 9;
+            let radius = c2 > c1 ? 6 : -6;
+            let sweep = c2 > c1 ? 0 : 1;
+            return `M${childX},${childY} 
+                L${childX},${midY - 6} 
+                A6,6,0,0,${sweep},${childX + radius},${midY}
+                L${mergeX - radius},${midY}
+                A6,6,0,0,${1 - sweep},${mergeX},${midY + 6} 
+                L${mergeX},${parentY}`;
+        } else if (c1 == c2) {
+            // same-column, straight line
+            let x = c1 * 18 + 9;
+            return `M${x},${childY} L${x},${parentY}`;
+        } else {
+            // different-column, curved line
+            let childX = c1 * 18 + 9;
+            let parentX = c2 * 18 + 9;
+            let midY = allowEarlyBreak && c1 > c2 ? parentY - 9 : childY + 9;
+            let radius = c2 > c1 ? 6 : -6;
+            let sweep = c2 > c1 ? 0 : 1;
+            return `M${childX},${childY} 
+                L${childX},${midY - 6} 
+                A6,6,0,0,${sweep},${childX + radius},${midY}
+                L${parentX - radius},${midY}
+                A6,6,0,0,${1 - sweep},${parentX},${midY + 6} 
+                L${parentX},${parentY}`;
+        }
+    });
 
-    let blockX: number;
-    let blockY: number;
-    let blockW: number;
-    let blockH: number;
+    let blockX = $derived.by(() => {
+        if (isMerge) {
+            return c1 < c2 ? c1 * 18 + 2 : c2 * 18 + 2;
+        } else if (c1 == c2) {
+            return c1 * 18 + 2;
+        } else {
+            return c1 < c2 ? c1 * 18 + 16 : c2 * 18 + 16;
+        }
+    });
 
-    if (isMerge) {
-        // instead of a parent, we have a mergepoint
-        let childX = c1 * 18 + 9;
-        let mergeX = c2 * 18 + 9;
-        let midY = c2 > c1 ? childY + 9 : parentY - 9;
-        let radius = c2 > c1 ? 6 : -6;
-        let sweep = c2 > c1 ? 0 : 1;
-        path = `M${childX},${childY} 
-            L${childX},${midY - 6} 
-            A6,6,0,0,${sweep},${childX + radius},${midY}
-            L${mergeX - radius},${midY}
-            A6,6,0,0,${1 - sweep},${mergeX},${midY + 6} 
-            L${mergeX},${parentY}`;
+    let blockY = $derived(isMerge || c1 != c2 ? r1 * 30 + 22 : r1 * 30 + 21);
 
-        blockX = c1 < c2 ? c1 * 18 + 2 : c2 * 18 + 2;
-        blockY = r1 * 30 + 22;
-        blockW = c1 < c2 ? (c2 - c1 + 1) * 18 - 5 : (c1 - c2 + 1) * 18 - 5;
-        blockH = 14;
-    } else if (c1 == c2) {
-        // same-column, straight line
-        let x = c1 * 18 + 9;
+    let blockW = $derived.by(() => {
+        if (isMerge) {
+            return c1 < c2 ? (c2 - c1 + 1) * 18 - 5 : (c1 - c2 + 1) * 18 - 5;
+        } else if (c1 == c2) {
+            return 14;
+        } else {
+            return c1 < c2 ? (c2 - c1) * 18 - 14 : (c1 - c2) * 18 - 14;
+        }
+    });
 
-        path = `M${x},${childY} L${x},${parentY}`;
-
-        blockX = c1 * 18 + 2;
-        blockY = r1 * 30 + 21;
-        blockW = 14;
-        blockH = (r2 - r1) * 30 - 12;
-    } else {
-        // different-column, curved line
-        let childX = c1 * 18 + 9;
-        let parentX = c2 * 18 + 9;
-        let midY = allowEarlyBreak && c1 > c2 ? parentY - 9 : childY + 9;
-        let radius = c2 > c1 ? 6 : -6;
-        let sweep = c2 > c1 ? 0 : 1;
-        path = `M${childX},${childY} 
-            L${childX},${midY - 6} 
-            A6,6,0,0,${sweep},${childX + radius},${midY}
-            L${parentX - radius},${midY}
-            A6,6,0,0,${1 - sweep},${parentX},${midY + 6} 
-            L${parentX},${parentY}`;
-
-        blockX = c1 < c2 ? c1 * 18 + 16 : c2 * 18 + 16;
-        blockY = r1 * 30 + 22;
-        blockW = c1 < c2 ? (c2 - c1) * 18 - 14 : (c1 - c2) * 18 - 14;
-        blockH = 14;
-    }
+    let blockH = $derived(c1 == c2 && !isMerge ? (r2 - r1) * 30 - 12 : 14);
 </script>
 
 {#if !line.indirect}

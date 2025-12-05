@@ -2,11 +2,10 @@
     import type { ChangeId } from "../messages/ChangeId";
     import type { CommitId } from "../messages/CommitId";
     import { currentTarget } from "../stores";
-    export let id: ChangeId | CommitId;
-    export let pronoun: boolean = false;
-    export let selectable: boolean = false;
+    
+    let { id, pronoun = false, selectable = false }: { id: ChangeId | CommitId; pronoun?: boolean; selectable?: boolean } = $props();
 
-    let suffix = id.rest.substring(0, 8 - id.prefix.length);
+    let suffix = $derived(id.rest.substring(0, 8 - id.prefix.length));
 </script>
 
 <span class="id" class:pronoun={pronoun || $currentTarget?.type == "Repository"} class:selectable>

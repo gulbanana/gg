@@ -1,9 +1,9 @@
 <script lang="ts">
     import type { RevAuthor } from "../messages/RevAuthor";
-    export let author: RevAuthor;
-    export let includeTimestamp: boolean = false;
+    
+    let { author, includeTimestamp = false }: { author: RevAuthor; includeTimestamp?: boolean } = $props();
 
-    let datetime = new Date(author.timestamp);
+    let datetime = $derived(new Date(author.timestamp));
 
     function relativeDate() {
         const cutoffs = [60, 3600, 86400, 86400 * 7, 86400 * 30, 86400 * 365, Infinity];

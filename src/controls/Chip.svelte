@@ -1,13 +1,18 @@
 <script lang="ts">
-    export let context: boolean;
-    export let target: boolean;
-    export let disconnected: boolean = false;
-    export let immobile: boolean = false;
-    export let tip: string = "";
+    import type { Snippet } from "svelte";
+    
+    let { context, target, disconnected = false, immobile = false, tip = "", children }: { 
+        context: boolean; 
+        target: boolean; 
+        disconnected?: boolean; 
+        immobile?: boolean; 
+        tip?: string;
+        children?: Snippet;
+    } = $props();
 </script>
 
 <div class="chip" class:context class:target class:disconnected class:immobile title={tip}>
-    <slot />
+    {@render children?.()}
 </div>
 
 <style>
