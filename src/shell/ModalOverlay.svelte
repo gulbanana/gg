@@ -1,6 +1,9 @@
 <script lang="ts">
     import { onMount } from "svelte";
     import { hasModal } from "../stores";
+    import type { Snippet } from "svelte";
+
+    let { children }: { children?: Snippet } = $props();
 
     onMount(() => {
         $hasModal = true;
@@ -11,7 +14,7 @@
 </script>
 
 <div id="overlay">
-    <slot />
+    {@render children?.()}
 </div>
 
 <style>

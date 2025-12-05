@@ -1,13 +1,16 @@
 <script lang="ts">
     import { hasModal } from "../stores";
+    import type { Snippet } from "svelte";
+
+    let { header, body }: { header?: Snippet; body?: Snippet } = $props();
 </script>
 
 <section inert={$hasModal}>
     <div class="header">
-        <slot name="header" />
+        {@render header?.()}
     </div>
     <div class="body">
-        <slot name="body" />
+        {@render body?.()}
     </div>
 </section>
 

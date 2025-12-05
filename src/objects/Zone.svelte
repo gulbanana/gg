@@ -7,17 +7,16 @@ A drop target for direct-manipulation objects.
     import type { Operand } from "../messages/Operand";
     import BinaryMutator from "../mutators/BinaryMutator";
     import { currentSource, currentTarget } from "../stores";
+    import type { Snippet } from "svelte";
 
-    interface $$Slots {
-        default: { target: boolean; hint: string | null };
-    }
+    let { operand, alwaysTarget = false, children }: {
+        operand: Operand;
+        alwaysTarget?: boolean;
+        children: Snippet<[{ target: boolean; hint: string | null }]>;
+    } = $props();
 
-    export let operand: Operand;
-    export let alwaysTarget: boolean = false;
-
-    let dropHint: string | null = null;
-    let target = false;
-    $: target = match($currentTarget);
+    let dropHint: string | null = $state(null);
+    let target = $derived(match($currentTarget));
 
     function match(target: Operand | null): boolean {
         return (
@@ -67,11 +66,11 @@ A drop target for direct-manipulation objects.
     role="presentation"
     class="zone"
     class:hint={dropHint}
-    on:dragenter={onDragOver}
-    on:dragover={onDragOver}
-    on:dragleave={onDragLeave}
-    on:drop={onDrop}>
-    <slot {target} hint={dropHint} />
+    ondragenter={onDragOver}
+    ondragover={onDragOver}
+    ondragleave={onDragLeave}
+    ondrop={onDrop}>
+    {@render children({ target, hint: dropHint })}
 </div>
 
 <style>

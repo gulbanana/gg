@@ -7,36 +7,30 @@ Core component for direct-manipulation objects. A drag&drop source.
     import type { Operand } from "../messages/Operand";
     import { trigger } from "../ipc";
     import { currentContext, currentSource } from "../stores";
-    import { createEventDispatcher } from "svelte";
     import BinaryMutator from "../mutators/BinaryMutator";
+    import type { Snippet } from "svelte";
 
-    interface $$Slots {
-        default: { context: boolean; hint: string | null };
-    }
+    let { suffix = null, label, selected = false, conflicted, operand, onclick, ondblclick, children }: {
+        suffix?: string | null;
+        label: string;
+        selected?: boolean;
+        conflicted: boolean;
+        operand: Operand;
+        onclick?: (e: MouseEvent) => void;
+        ondblclick?: (e: MouseEvent) => void;
+        children: Snippet<[{ context: boolean; hint: string | null }]>;
+    } = $props();
 
-    interface $$Events {
-        click: CustomEvent<MouseEvent>;
-        dblclick: CustomEvent<MouseEvent>;
-    }
-
-    export let suffix: string | null = null;
-    export let label: string;
-    export let selected: boolean = false;
-    export let conflicted: boolean;
-    export let operand: Operand;
-
-    let dispatch = createEventDispatcher();
-
-    let id = suffix == null ? null : `${operand.type}-${suffix}`;
-    let dragging: boolean;
-    let dragHint: string | null = null;
+    let id = $derived(suffix == null ? null : `${operand.type}-${suffix}`);
+    let dragging: boolean = $state(false);
+    let dragHint: string | null = $state(null);
 
     function onClick(event: MouseEvent) {
-        dispatch("click", event);
+        onclick?.(event);
     }
 
     function onDoubleClick(event: MouseEvent) {
-        dispatch("dblclick", event);
+        ondblclick?.(event);
     }
 
     function onMenu(event: Event) {
@@ -88,12 +82,12 @@ Core component for direct-manipulation objects. A drag&drop source.
     role="option"
     aria-label={label}
     aria-selected={selected}
-    on:click={onClick}
-    on:dblclick={onDoubleClick}
-    on:contextmenu={onMenu}
-    on:dragstart={onDragStart}
-    on:dragend={onDragEnd}>
-    <slot context={dragging || $currentContext == operand} hint={dragHint} />
+    onclick={onClick}
+    ondblclick={onDoubleClick}
+    oncontextmenu={onMenu}
+    ondragstart={onDragStart}
+    ondragend={onDragEnd}>
+    {@render children({ context: dragging || $currentContext == operand, hint: dragHint })}
 </button>
 
 <style>
