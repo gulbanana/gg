@@ -80,8 +80,10 @@
 
 {#if !line.indirect}
     <foreignObject x={blockX} y={blockY} width={blockW} height={blockH}>
-        <Zone {operand} let:target>
-            <div class="backdrop" class:target></div>
+        <Zone {operand}>
+            {#snippet children({ target })}
+                <div class="backdrop" class:target></div>
+            {/snippet}
         </Zone>
     </foreignObject>
 {/if}

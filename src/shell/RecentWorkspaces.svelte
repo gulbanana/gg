@@ -1,7 +1,7 @@
 <script lang="ts">
     import { trigger } from "../ipc.js";
 
-    export let workspaces: string[] = [];
+    let { workspaces = [] }: { workspaces?: string[] } = $props();
 </script>
 
 {#if workspaces.length > 0}
@@ -10,7 +10,7 @@
         {#each workspaces as workspace}
             <li>
                 <button
-                    on:click={() =>
+                    onclick={() =>
                         trigger("open_workspace_at_path", {
                             path: workspace,
                         })}

@@ -11,7 +11,7 @@
     } = $props();
 </script>
 
-<ModalDialog {title} error={severe} oncancel={onClose}>
+<ModalDialog {title} error={severe} oncancel={onClose ?? undefined}>
     {@render children?.()}
 
     {#snippet commands()}

@@ -16,29 +16,32 @@
     import ListWidget, { type List } from "./controls/ListWidget.svelte";
     import type { RevChange } from "./messages/RevChange";
 
-    export let rev: Extract<RevResult, { type: "Detail" }>;
+    let { rev }: { rev: Extract<RevResult, { type: "Detail" }> } = $props();
 
     const CONTEXT = 3;
 
-    let mutator = new RevisionMutator(rev.header);
+    let mutator = $derived(new RevisionMutator(rev.header));
 
-    const currentDescription = rev.header.description.lines.join("\n");
-    let fullDescription = currentDescription;
-    $: descriptionChanged = fullDescription !== currentDescription;
+    let currentDescription = $derived(rev.header.description.lines.join("\n"));
+    let fullDescription = $state("");
+    $effect(() => {
+        fullDescription = currentDescription;
+    });
+    let descriptionChanged = $derived(fullDescription !== currentDescription);
     function updateDescription() {
         mutator.onDescribe(fullDescription, resetAuthor);
     }
 
-    let resetAuthor = false;
+    let resetAuthor = $state(false);
 
-    let unresolvedConflicts = rev.conflicts.filter(
+    let unresolvedConflicts = $derived(rev.conflicts.filter(
         (conflict) =>
             rev.changes.findIndex(
                 (change) => !change.has_conflict && change.path.repo_path == conflict.path.repo_path,
             ) == -1,
-    );
+    ));
 
-    let syntheticChanges = rev.changes
+    let syntheticChanges = $derived(rev.changes
         .concat(
             unresolvedConflicts.map((conflict) => ({
                 kind: "None",
@@ -47,18 +50,20 @@
                 hunks: [conflict.hunk],
             })),
         )
-        .sort((a, b) => a.path.relative_path.localeCompare(b.path.relative_path));
+        .sort((a, b) => a.path.relative_path.localeCompare(b.path.relative_path)));
 
-    let unset = true;
-    let selectedChange = $changeSelectEvent;
-    for (let change of syntheticChanges) {
-        if (selectedChange?.path?.repo_path === change.path.repo_path) {
-            unset = false;
+    $effect(() => {
+        let unset = true;
+        let selectedChange = $changeSelectEvent;
+        for (let change of syntheticChanges) {
+            if (selectedChange?.path?.repo_path === change.path.repo_path) {
+                unset = false;
+            }
         }
-    }
-    if (unset) {
-        changeSelectEvent.set(syntheticChanges[0]);
-    }
+        if (unset) {
+            changeSelectEvent.set(syntheticChanges[0]);
+        }
+    });
 
     let list: List = {
         getSize() {
@@ -100,43 +105,46 @@
 </script>
 
 <Pane>
-    <h2 slot="header" class="header">
-        <span class="title">
-            <IdSpan selectable id={rev.header.id.change} /> | <IdSpan selectable id={rev.header.id.commit} />
-            {#if rev.header.is_working_copy}
-                | Working copy
-            {/if}
-            {#if rev.header.is_immutable}
-                | Immutable
-            {/if}
-        </span>
+    {#snippet header()}
+        <h2 class="header">
+            <span class="title">
+                <IdSpan selectable id={rev.header.id.change} /> | <IdSpan selectable id={rev.header.id.commit} />
+                {#if rev.header.is_working_copy}
+                    | Working copy
+                {/if}
+                {#if rev.header.is_immutable}
+                    | Immutable
+                {/if}
+            </span>
 
-        <div class="checkout-commands">
-            <ActionWidget
-                tip="make working copy"
-                onClick={mutator.onEdit}
-                disabled={rev.header.is_immutable || rev.header.is_working_copy}>
-                <Icon name="edit-2" /> Edit
-            </ActionWidget>
-            <ActionWidget tip="create a child" onClick={mutator.onNewChild}>
-                <Icon name="edit" /> New
-            </ActionWidget>
-        </div>
-    </h2>
+            <div class="checkout-commands">
+                <ActionWidget
+                    tip="make working copy"
+                    onClick={mutator.onEdit}
+                    disabled={rev.header.is_immutable || rev.header.is_working_copy}>
+                    <Icon name="edit-2" /> Edit
+                </ActionWidget>
+                <ActionWidget tip="create a child" onClick={mutator.onNewChild}>
+                    <Icon name="edit" /> New
+                </ActionWidget>
+            </div>
+        </h2>
+    {/snippet}
 
-    <div slot="body" class="body">
-        <textarea
-            class="description"
-            spellcheck="false"
-            disabled={rev.header.is_immutable}
-            bind:value={fullDescription}
-            on:dragenter={dragOverWidget}
-            on:dragover={dragOverWidget}
-            on:keydown={(ev) => {
-                if (descriptionChanged && ev.key === "Enter" && (ev.metaKey || ev.ctrlKey)) {
-                    updateDescription();
-                }
-            }}></textarea>
+    {#snippet body()}
+        <div class="body">
+            <textarea
+                class="description"
+                spellcheck="false"
+                disabled={rev.header.is_immutable}
+                bind:value={fullDescription}
+                ondragenter={dragOverWidget}
+                ondragover={dragOverWidget}
+                onkeydown={(ev) => {
+                    if (descriptionChanged && ev.key === "Enter" && (ev.metaKey || ev.ctrlKey)) {
+                        updateDescription();
+                    }
+                }}></textarea>
 
         <div class="signature-commands">
             <span>Author:</span>
@@ -151,18 +159,20 @@
             </ActionWidget>
         </div>
 
-        {#if rev.parents.length > 0}
-            <Zone operand={{ type: "Merge", header: rev.header }} let:target>
-                <div class="parents" class:target>
-                    {#each rev.parents as parent}
-                        <div class="parent">
-                            <span>Parent:</span>
-                            <RevisionObject header={parent} child={rev.header} selected={false} noBranches />
+            {#if rev.parents.length > 0}
+                <Zone operand={{ type: "Merge", header: rev.header }}>
+                    {#snippet children({ target })}
+                        <div class="parents" class:target>
+                            {#each rev.parents as parent}
+                                <div class="parent">
+                                    <span>Parent:</span>
+                                    <RevisionObject header={parent} child={rev.header} selected={false} noBranches />
+                                </div>
+                            {/each}
                         </div>
-                    {/each}
-                </div>
-            </Zone>
-        {/if}
+                    {/snippet}
+                </Zone>
+            {/if}
 
         {#if syntheticChanges.length > 0}
             <div class="move-commands">
@@ -181,7 +191,7 @@
                 </ActionWidget>
             </div>
 
-            <ListWidget {list} type="Change" descendant={$changeSelectEvent?.path.repo_path}>
+            <ListWidget {list} type="Change" descendant={$changeSelectEvent?.path.repo_path} clientHeight={0} clientWidth={0} scrollTop={0}>
                 <div class="changes">
                     {#each syntheticChanges as change}
                         <ChangeObject
@@ -202,13 +212,14 @@
                         {/if}
                     {/each}
                 </div>
-            </ListWidget>
-        {:else}
-            <div class="move-commands">
-                <span>Changes: <span class="no-changes">(empty)</span></span>
-            </div>
-        {/if}
-    </div>
+                </ListWidget>
+            {:else}
+                <div class="move-commands">
+                    <span>Changes: <span class="no-changes">(empty)</span></span>
+                </div>
+            {/if}
+        </div>
+    {/snippet}
 </Pane>
 
 <style>
