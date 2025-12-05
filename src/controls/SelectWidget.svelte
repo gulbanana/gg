@@ -1,27 +1,25 @@
 <script lang="ts" generics="T extends {value: string}">
-    import { createEventDispatcher } from "svelte";
     import Icon from "./Icon.svelte";
+    import type { Snippet } from "svelte";
 
-    interface $$Slots {
-        default: { option: T };
-    }
-
-    interface $$Events {
-        change: CustomEvent<Event>;
-    }
-
-    export let id: string | null = null;
-    export let options: T[];
-    export let value: string;
-
-    let dispatch = createEventDispatcher();
+    let { id = null, options, value = $bindable(), onchange, children }: {
+        id?: string | null;
+        options: T[];
+        value: string;
+        onchange?: (event: Event) => void;
+        children?: Snippet<[T]>;
+    } = $props();
 </script>
 
 <div class="wrapper">
-    <select {id} bind:value on:change={(event) => dispatch("change", event)}>
+    <select {id} bind:value onchange={(event) => onchange?.(event)}>
         {#each options as option}
             <option selected={value == option.value} value={option.value}>
-                <slot {option}>{option.value}</slot>
+                {#if children}
+                    {@render children(option)}
+                {:else}
+                    {option.value}
+                {/if}
             </option>
         {/each}
     </select>
