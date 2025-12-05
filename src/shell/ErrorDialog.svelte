@@ -1,18 +1,22 @@
 <script lang="ts">
     import ActionWidget from "../controls/ActionWidget.svelte";
     import ModalDialog from "./ModalDialog.svelte";
+    import type { Snippet } from "svelte";
 
-    export let title: string;
-    export let severe: boolean = false;
-    export let onClose: (() => void) | null = null;
+    let { title, severe = false, onClose = null, children }: {
+        title: string;
+        severe?: boolean;
+        onClose: (() => void) | null;
+        children?: Snippet;
+    } = $props();
 </script>
 
-<ModalDialog {title} error={severe} on:cancel={onClose}>
-    <slot />
+<ModalDialog {title} error={severe} oncancel={onClose}>
+    {@render children?.()}
 
-    <svelte:fragment slot="commands">
+    {#snippet commands()}
         {#if onClose}
             <ActionWidget tip="close dialog" safe onClick={onClose}>OK</ActionWidget>
         {/if}
-    </svelte:fragment>
+    {/snippet}
 </ModalDialog>

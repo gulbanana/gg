@@ -1,7 +1,9 @@
 <!-- Renders commit rows with an SVG graph drawn over them, virtualising the ui to allow for long graphs -->
 
-<script context="module" lang="ts">
+<script module lang="ts">
     import type { LogLine } from "./messages/LogLine.js";
+    import type { LogRow } from "./messages/LogRow.js";
+    import type { RevHeader } from "./messages/RevHeader.js";
 
     export type EnhancedLine = LogLine & { key: number; parent: RevHeader; child: RevHeader };
 
@@ -11,21 +13,20 @@
 </script>
 
 <script lang="ts">
-    import type { LogRow } from "./messages/LogRow.js";
     import GraphLine from "./GraphLine.svelte";
     import GraphNode from "./GraphNode.svelte";
-    import type { RevHeader } from "./messages/RevHeader.js";
+    import type { Snippet } from "svelte";
 
-    interface $$Slots {
-        default: { row: EnhancedRow | null };
-    }
+    let { containerHeight, containerWidth, scrollTop, rows, children }: {
+        containerHeight: number;
+        containerWidth: number;
+        scrollTop: number;
+        rows: (EnhancedRow | null)[];
+        children: Snippet<[{ row: EnhancedRow | null }]>;
+    } = $props();
 
     const columnWidth = 18;
     const rowHeight = 30;
-    export let containerHeight: number;
-    export let containerWidth: number;
-    export let scrollTop: number;
-    export let rows: (EnhancedRow | null)[];
 
     function sliceArray(arr: (EnhancedRow | null)[], start: number, end: number) {
         arr = arr.slice(start, end);
@@ -77,13 +78,13 @@
         return sortLines(result);
     }
 
-    $: graphHeight = Math.max(containerHeight, rows.length * rowHeight);
-    $: visibleRows = Math.ceil(containerHeight / rowHeight) + 1;
-    $: startIndex = Math.floor(Math.max(scrollTop, 0) / rowHeight);
-    $: endIndex = startIndex + visibleRows;
-    $: overlap = startIndex % visibleRows;
-    $: visibleSlice = shiftArray(sliceArray(rows, startIndex, endIndex), overlap);
-    $: distinctLines = computeDistinctLines(visibleSlice);
+    let graphHeight = $derived(Math.max(containerHeight, rows.length * rowHeight));
+    let visibleRows = $derived(Math.ceil(containerHeight / rowHeight) + 1);
+    let startIndex = $derived(Math.floor(Math.max(scrollTop, 0) / rowHeight));
+    let endIndex = $derived(startIndex + visibleRows);
+    let overlap = $derived(startIndex % visibleRows);
+    let visibleSlice = $derived(shiftArray(sliceArray(rows, startIndex, endIndex), overlap));
+    let distinctLines = $derived(computeDistinctLines(visibleSlice));
 </script>
 
 <svg class="graph" style="width: 100%; height: {graphHeight}px;">
@@ -94,7 +95,7 @@
                 height={rowHeight}
                 width={containerWidth - (row?.location[0] ?? 0) * columnWidth}
                 style="--leftpad: {(row?.padding ?? 0) * columnWidth + columnWidth + 6}px;">
-                <slot {row} />
+                {@render children({ row })}
             </foreignObject>
 
             {#if row}
