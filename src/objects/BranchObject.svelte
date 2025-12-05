@@ -9,26 +9,29 @@
     import Object from "./Object.svelte";
     import Zone from "./Zone.svelte";
 
-    export let header: RevHeader;
-    export let ref: Extract<StoreRef, { type: "LocalBookmark" | "RemoteBookmark" }>;
+    let { header, ref }: {
+        header: RevHeader;
+        ref: Extract<StoreRef, { type: "LocalBookmark" | "RemoteBookmark" }>;
+    } = $props();
 
     let settings = getContext<Settings>("settings");
 
-    $: operand = { type: "Ref", header, ref } as Operand;
+    let operand = $derived<Operand>({ type: "Ref", header, ref });
 
-    $: label = ref.type === "LocalBookmark" ? ref.branch_name : `${ref.branch_name}@${ref.remote_name}`;
+    let label = $derived(ref.type === "LocalBookmark" ? ref.branch_name : `${ref.branch_name}@${ref.remote_name}`);
 
-    $: state = (
+    let state = $derived<"add" | "change" | "remove">(
         ref.type === "LocalBookmark" ? (ref.is_synced ? "change" : "add") : ref.is_tracked ? "remove" : "change"
-    ) as "add" | "change" | "remove";
+    );
 
-    $: disconnected =
+    let disconnected = $derived(
         settings.markUnpushedBranches &&
         (ref.type === "LocalBookmark"
             ? ref.available_remotes == 0 && ref.potential_remotes > 0
-            : ref.is_tracked && ref.is_absent);
+            : ref.is_tracked && ref.is_absent)
+    );
 
-    $: tip = computeTip(ref);
+    let tip = $derived(computeTip(ref));
 
     function computeTip(ref: Extract<StoreRef, { type: "LocalBookmark" | "RemoteBookmark" }>): string {
         if (ref.type === "LocalBookmark") {
@@ -63,11 +66,15 @@
     }
 </script>
 
-<Object {operand} {label} conflicted={ref.has_conflict} let:context let:hint={dragHint}>
-    <Zone {operand} let:target let:hint={dropHint}>
-        <Chip {context} {target} {disconnected} {tip}>
-            <Icon name="bookmark" state={context ? null : state} />
-            <span>{dragHint ?? dropHint ?? label}</span>
-        </Chip>
-    </Zone>
+<Object {operand} {label} conflicted={ref.has_conflict}>
+    {#snippet children({ context, hint: dragHint })}
+        <Zone {operand}>
+            {#snippet children({ target, hint: dropHint })}
+                <Chip {context} {target} {disconnected} {tip}>
+                    <Icon name="bookmark" state={context ? null : state} />
+                    <span>{dragHint ?? dropHint ?? label}</span>
+                </Chip>
+            {/snippet}
+        </Zone>
+    {/snippet}
 </Object>
