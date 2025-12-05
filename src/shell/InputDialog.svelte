@@ -1,27 +1,24 @@
 <script lang="ts">
-    import { createEventDispatcher, onMount } from "svelte";
+    import { onMount } from "svelte";
     import type { InputResponse } from "../messages/InputResponse";
     import type { InputField } from "../messages/InputField";
     import ActionWidget from "../controls/ActionWidget.svelte";
     import ModalDialog from "./ModalDialog.svelte";
     import SelectWidget from "../controls/SelectWidget.svelte";
 
-    interface $$Events {
-        response: CustomEvent<InputResponse>;
-    }
-
-    export let title: string;
-    export let detail: String;
-    export let fields: InputField[];
-
-    let dispatch = createEventDispatcher();
+    let { title, detail, fields, onresponse }: {
+        title: string;
+        detail: String;
+        fields: InputField[];
+        onresponse?: (response: InputResponse) => void;
+    } = $props();
 
     onMount(() => {
         document.getElementById(`field-${fields[0].label}`)?.focus();
     });
 
     function onCancel() {
-        dispatch("response", {
+        onresponse?.({
             cancel: true,
             fields: {},
         });
@@ -40,14 +37,14 @@
             }
         }
 
-        dispatch("response", {
+        onresponse?.({
             cancel: false,
             fields: responseFields,
         });
     }
 </script>
 
-<ModalDialog {title} on:cancel={onCancel} on:default={onEnter}>
+<ModalDialog {title} oncancel={onCancel} ondefault={onEnter}>
     {#if detail != ""}
         <p>{detail}</p>
     {/if}
@@ -66,10 +63,10 @@
             <input id="field-{field.label}" type="text" autoCapitalize="off" autoCorrect="off" />
         {/if}
     {/each}
-    <svelte:fragment slot="commands">
+    {#snippet commands()}
         <ActionWidget safe onClick={onEnter}>Enter</ActionWidget>
         <ActionWidget safe onClick={onCancel}>Cancel</ActionWidget>
-    </svelte:fragment>
+    {/snippet}
 </ModalDialog>
 
 <style>
