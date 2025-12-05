@@ -6,28 +6,34 @@
     import Object from "./Object.svelte";
     import Zone from "./Zone.svelte";
 
-    export let header: RevHeader;
-    export let path: TreePath;
-    export let hunk: ChangeHunk;
+    let { header, path, hunk }: {
+        header: RevHeader;
+        path: TreePath;
+        hunk: ChangeHunk;
+    } = $props();
 
-    let operand: Operand = {
+    let operand = $derived<Operand>({
         type: "Change",
         header,
         path,
         hunk,
-    };
+    });
 
     function getHunkDescription(hunk: ChangeHunk): string {
         return `@@ -${hunk.location.from_file.start},${hunk.location.from_file.len} +${hunk.location.to_file.start},${hunk.location.to_file.len} @@`;
     }
 </script>
 
-<Object {operand} conflicted={false} label={getHunkDescription(hunk)} let:context let:hint={dragHint}>
-    <Zone {operand} let:target let:hint={dropHint}>
-        <div class="hunk" class:target>
-            {dragHint ?? dropHint ?? getHunkDescription(hunk)}
-        </div>
-    </Zone>
+<Object {operand} conflicted={false} label={getHunkDescription(hunk)}>
+    {#snippet children({ hint: dragHint })}
+        <Zone {operand}>
+            {#snippet children({ target, hint: dropHint })}
+                <div class="hunk" class:target>
+                    {dragHint ?? dropHint ?? getHunkDescription(hunk)}
+                </div>
+            {/snippet}
+        </Zone>
+    {/snippet}
 </Object>
 
 <style>

@@ -4,10 +4,12 @@
     import type { Operand } from "../messages/Operand";
     import Chip from "../controls/Chip.svelte";
 
-    export let header: RevHeader;
-    export let ref: Extract<StoreRef, { type: "Tag" }>;
+    let { header, ref }: {
+        header: RevHeader;
+        ref: Extract<StoreRef, { type: "Tag" }>;
+    } = $props();
 
-    let operand: Operand = { type: "Ref", header, ref };
+    let operand = $derived<Operand>({ type: "Ref", header, ref });
 </script>
 
 <Chip context={false} target={false} immobile tip="tag">

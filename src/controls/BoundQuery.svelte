@@ -13,8 +13,6 @@ Abstraction of dubious utility - it's only used in one place, because most IPC d
         error?: Snippet<[string]>;
         children: Snippet<[T]>;
     } = $props();
-
-    let type = query.type;
 </script>
 
 {#key query}

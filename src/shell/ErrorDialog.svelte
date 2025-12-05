@@ -6,7 +6,7 @@
     let { title, severe = false, onClose = null, children }: {
         title: string;
         severe?: boolean;
-        onClose: (() => void) | null;
+        onClose?: (() => void) | null;
         children?: Snippet;
     } = $props();
 </script>
