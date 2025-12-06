@@ -1293,7 +1293,10 @@ impl Mutation for GitPush {
                     .view()
                     .all_remote_bookmarks()
                     .filter_map(|(remote_ref_symbol, remote_ref)| {
-                        if remote_ref.is_tracked() && remote_ref_symbol.name == branch_name_ref {
+                        if remote_ref.is_tracked()
+                            && remote_ref_symbol.name == branch_name_ref
+                            && remote_ref_symbol.remote != REMOTE_NAME_FOR_LOCAL_GIT_REPO
+                        {
                             Some((remote_ref_symbol.remote, remote_ref))
                         } else {
                             None

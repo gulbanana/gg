@@ -4,6 +4,7 @@
 
 ### Fixed
 - Git remote handling: gg now displays only fetchable remotes, and fetching actually works again.
+- Pushing a single bookmark with right-click was also broken for some repos, depending on config, and could fail with an error about trying to push to the "git" pseudo-remote.
 
 ## [0.35.1](releases/tag/v0.35.0)
 
