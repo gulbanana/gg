@@ -23,7 +23,8 @@ use jj_lib::{
     backend::{BackendError, ChangeId, CommitId},
     commit::Commit,
     default_index::DefaultReadonlyIndex,
-    file_util, git,
+    file_util,
+    git::{self, REMOTE_NAME_FOR_LOCAL_GIT_REPO},
     git_backend::GitBackend,
     gitignore::GitIgnoreFile,
     id_prefix::{IdPrefixContext, IdPrefixIndex},
@@ -1050,20 +1051,31 @@ fn build_ref_index(repo: &ReadonlyRepo) -> RefIndex {
                 messages::StoreRef::LocalBookmark {
                     branch_name: branch_name.as_str().to_owned(),
                     has_conflict: local_target.has_conflict(),
-                    is_synced: remote_refs.iter().all(|&(_, remote_ref)| {
-                        !remote_ref.is_tracked() || remote_ref.target == *local_target
+                    is_synced: remote_refs.iter().all(|&(remote_name, remote_ref)| {
+                        remote_name == REMOTE_NAME_FOR_LOCAL_GIT_REPO
+                            || !remote_ref.is_tracked()
+                            || remote_ref.target == *local_target
                     }),
                     tracking_remotes: remote_refs
                         .iter()
-                        .filter(|&(_, remote_ref)| remote_ref.is_tracked())
+                        .filter(|&(remote_name, remote_ref)| {
+                            *remote_name != REMOTE_NAME_FOR_LOCAL_GIT_REPO
+                                && remote_ref.is_tracked()
+                        })
                         .map(|&(remote_name, _)| remote_name.as_str().to_owned())
                         .collect(),
-                    available_remotes: remote_refs.len(),
+                    available_remotes: remote_refs
+                        .iter()
+                        .filter(|&(remote_name, _)| *remote_name != REMOTE_NAME_FOR_LOCAL_GIT_REPO)
+                        .count(),
                     potential_remotes,
                 },
             );
         }
         for &(remote_name, remote_ref) in &remote_refs {
+            if remote_name == REMOTE_NAME_FOR_LOCAL_GIT_REPO {
+                continue;
+            }
             index.insert(
                 remote_ref.target.added_ids(),
                 messages::StoreRef::RemoteBookmark {
