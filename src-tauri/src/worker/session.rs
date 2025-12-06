@@ -93,7 +93,9 @@ impl Session for WorkerSession {
             log::debug!("WorkerSession handling {evt:?}");
             match evt {
                 Ok(SessionEvent::EndSession) => return Ok(()),
-                Ok(SessionEvent::ExecuteSnapshot { .. }) => (),
+                Ok(SessionEvent::ExecuteSnapshot { tx }) => {
+                    tx.send(None)?;
+                }
                 Ok(SessionEvent::ReadConfigArray { key, tx }) => {
                     let name: ConfigNamePathBuf = key.iter().collect();
                     if let Some(global_settings) = self.user_settings.as_ref() {

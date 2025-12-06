@@ -8,6 +8,7 @@
 - Spurious @git bookmarks were showing up in colocated repos. This has probably been an issue for a while, but colocation became more common recently due to a change in jj defaults. Now they're hidden.
 - Graph line rendering was breaking in various ways due to our attempt to fix memory leaks with structural comparison. Switched to a different implementation (index comparison, deeper reactivity) which should be more efficient as well as unbreaking scrolling, decorations, etc.
 - Drag-drop of bookmarks was also affected, and is also fixed.
+- Spurious "receiving on a closed channel" errors at startup - they were harmless, but now they're gone.
 
 ## [0.35.1](releases/tag/v0.35.0)
 
