@@ -6,6 +6,7 @@
 - Git remote handling: gg now displays only fetchable remotes, and fetching actually works again.
 - Pushing a single bookmark with right-click was also broken for some repos, depending on config, and could fail with an error about trying to push to the "git" pseudo-remote.
 - Spurious @git bookmarks were showing up in colocated repos. This has probably been an issue for a while, but colocation became more common recently due to a change in jj defaults. Now they're hidden.
+- Graph line rendering was breaking in various ways due to our attempt to fix memory leaks with structural comparison. Switched to a different implementation (index comparison, deeper reactivity) which should be more efficient as well as unbreaking scrolling, decorations, etc.
 
 ## [0.35.1](releases/tag/v0.35.0)
 

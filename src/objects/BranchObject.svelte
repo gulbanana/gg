@@ -12,59 +12,54 @@
     export let header: RevHeader;
     export let ref: Extract<StoreRef, { type: "LocalBookmark" | "RemoteBookmark" }>;
 
-    let operand: Operand = { type: "Ref", header, ref };
+    let settings = getContext<Settings>("settings");
 
-    let label: string;
-    let state: "add" | "change" | "remove";
-    let disconnected: boolean;
-    let tip: string;
+    $: operand = { type: "Ref", header, ref } as Operand;
 
-    switch (ref.type) {
-        case "LocalBookmark":
-            label = ref.branch_name;
-            state = ref.is_synced ? "change" : "add";
-            disconnected = ref.available_remotes == 0 && ref.potential_remotes > 0;
+    $: label = ref.type === "LocalBookmark" ? ref.branch_name : `${ref.branch_name}@${ref.remote_name}`;
 
-            if (disconnected) {
-                tip = "local-only bookmark";
-            } else {
-                tip = "local bookmark";
-                if (ref.tracking_remotes.length >= 0) {
-                    tip = tip + " (tracking ";
-                    let first = true;
-                    for (let r of ref.tracking_remotes) {
-                        if (first) {
-                            first = false;
-                        } else {
-                            tip = tip + ", ";
-                        }
-                        tip = tip + r;
+    $: state = (
+        ref.type === "LocalBookmark" ? (ref.is_synced ? "change" : "add") : ref.is_tracked ? "remove" : "change"
+    ) as "add" | "change" | "remove";
+
+    $: disconnected =
+        settings.markUnpushedBranches &&
+        (ref.type === "LocalBookmark"
+            ? ref.available_remotes == 0 && ref.potential_remotes > 0
+            : ref.is_tracked && ref.is_absent);
+
+    $: tip = computeTip(ref);
+
+    function computeTip(ref: Extract<StoreRef, { type: "LocalBookmark" | "RemoteBookmark" }>): string {
+        if (ref.type === "LocalBookmark") {
+            if (ref.available_remotes == 0 && ref.potential_remotes > 0) {
+                return "local-only bookmark";
+            }
+            let result = "local bookmark";
+            if (ref.tracking_remotes.length >= 0) {
+                result = result + " (tracking ";
+                let first = true;
+                for (let r of ref.tracking_remotes) {
+                    if (first) {
+                        first = false;
+                    } else {
+                        result = result + ", ";
                     }
-                    tip = tip + ")";
+                    result = result + r;
                 }
+                result = result + ")";
             }
-
-            break;
-
-        case "RemoteBookmark":
-            label = `${ref.branch_name}@${ref.remote_name}`;
-            state = ref.is_tracked ? "remove" : "change"; // we haven't combined this remote, and it has a local = red
-            disconnected = ref.is_tracked && ref.is_absent;
-
-            tip = "remote bookmark";
-            if (disconnected) {
-                tip = tip + " (deleting)";
+            return result;
+        } else {
+            let result = "remote bookmark";
+            if (ref.is_tracked && ref.is_absent) {
+                return result + " (deleting)";
             } else if (ref.is_tracked) {
-                tip = tip + " (tracked)";
+                return result + " (tracked)";
             } else {
-                tip = tip + " (untracked)";
+                return result + " (untracked)";
             }
-
-            break;
-    }
-
-    if (!getContext<Settings>("settings").markUnpushedBranches) {
-        disconnected = false;
+        }
     }
 </script>
 

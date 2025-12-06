@@ -207,3 +207,45 @@ jj-lib and jj-cli dependencies are pinned to specific versions (currently 0.29).
 - `src-tauri/src/worker/mutations.rs` - All mutation implementations (21+ examples)
 - `src-tauri/src/config/gg.toml` - Default configuration with inline docs
 - `src/stores.ts` - Global Svelte stores for cross-component state
+
+## Svelte Patterns
+
+### Virtualized Lists (GraphLog.svelte)
+
+The log pane uses virtualization - a fixed pool of DOM slots that get reused as you scroll. Key by **slot index**, not by content:
+
+```svelte
+<!-- CORRECT: Key by slot position for virtualization -->
+{#each visibleSlice.rows as row, i (i)}
+    <RevisionObject header={row.revision} />
+{/each}
+
+<!-- WRONG: Content-based keys fight virtualization -->
+{#each visibleSlice.rows as row, i}
+    {#key row?.revision.id.commit.hex ?? i}
+        <RevisionObject header={row.revision} />
+    {/key}
+{/each}
+```
+
+Content-based keys cause components to be destroyed/recreated when slots scroll to show different data, defeating the purpose of virtualization. Slot-index keys let Svelte efficiently update props on the same component instances.
+
+### Reactive Derived Values
+
+When component props are used to compute derived values, use `$:` reactive statements - not one-time initialization in the script body:
+
+```svelte
+<!-- WRONG: Computed once at mount, won't update when ref changes -->
+<script>
+    export let ref;
+    let label = ref.branch_name;  // stale after prop update!
+</script>
+
+<!-- CORRECT: Recomputes when ref changes -->
+<script>
+    export let ref;
+    $: label = ref.branch_name;
+</script>
+```
+
+This is especially important for components rendered in virtualized lists, where the same component instance receives different props as slots are reused.

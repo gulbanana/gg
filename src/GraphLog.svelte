@@ -73,12 +73,6 @@
             });
     }
 
-    function getKey(row: EnhancedRow | null) {
-        if (!row) return null;
-        const lineKeys = row.passingLines.map((l) => l.key).join(":");
-        return `${row.revision.id.commit.hex}:${lineKeys}`;
-    }
-
     $: graphHeight = Math.max(containerHeight, rows.length * rowHeight);
     $: visibleRows = Math.ceil(containerHeight / rowHeight) + 1;
     $: startIndex = Math.floor(Math.max(scrollTop, 0) / rowHeight);
@@ -91,30 +85,26 @@
 </script>
 
 <svg class="graph" style="width: 100%; height: {graphHeight}px;">
-    {#each visibleSlice.rows as row, i}
-        {#key getKey(row) ?? i}
-            <g transform="translate({(row?.location[0] ?? 0) * columnWidth} {(row?.location[1] ?? 0) * rowHeight})">
-                <foreignObject
-                    class:placeholder={row === null}
-                    height={rowHeight}
-                    width={containerWidth - (row?.location[0] ?? 0) * columnWidth}
-                    style="--leftpad: {(row?.padding ?? 0) * columnWidth + columnWidth + 6}px;">
-                    <slot {row} />
-                </foreignObject>
+    {#each visibleSlice.rows as row, i (i)}
+        <g transform="translate({(row?.location[0] ?? 0) * columnWidth} {(row?.location[1] ?? 0) * rowHeight})">
+            <foreignObject
+                class:placeholder={row === null}
+                height={rowHeight}
+                width={containerWidth - (row?.location[0] ?? 0) * columnWidth}
+                style="--leftpad: {(row?.padding ?? 0) * columnWidth + columnWidth + 6}px;">
+                <slot {row} />
+            </foreignObject>
 
-                {#if row}
-                    <GraphNode header={row.revision} />
-                {/if}
-            </g>
-        {/key}
+            {#if row}
+                <GraphNode header={row.revision} />
+            {/if}
+        </g>
     {/each}
 
-    {#each visibleSlice.rows as row, i}
-        {#key getKey(row) ?? i}
-            {#each distinctLines(visibleSlice.keys, row) as line}
-                <GraphLine {line} />
-            {/each}
-        {/key}
+    {#each visibleSlice.rows as row, i (i)}
+        {#each distinctLines(visibleSlice.keys, row) as line (line.key)}
+            <GraphLine {line} />
+        {/each}
     {/each}
 </svg>
 
