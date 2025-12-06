@@ -1,6 +1,6 @@
 # GG Changelog
 
-## Unreleased
+## [0.35.2](releases/tag/v0.35.2)
 
 ### Fixed
 - Git remote handling: gg now displays only fetchable remotes, and fetching actually works again.
@@ -10,7 +10,7 @@
 - Drag-drop of bookmarks was also affected, and is also fixed.
 - Spurious "receiving on a closed channel" errors at startup - they were harmless, but now they're gone.
 
-## [0.35.1](releases/tag/v0.35.0)
+## [0.35.1](releases/tag/v0.35.1)
 
 ### Added
 - New config option `gg.ui.track-recent-workspaces`, which can be set to false to disable saving recent workspaces to the config file.
