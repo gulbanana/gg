@@ -260,4 +260,9 @@
     .separator {
         background: var(--ctp-overlay0);
     }
+
+    p {
+        pointer-events: auto;
+        user-select: text;
+    }
 </style>

@@ -1,5 +1,10 @@
 # GG Changelog
 
+## Unreleased
+
+### Added
+- The text of error dialogs is now selectable for copying.
+
 ## [0.35.2](releases/tag/v0.35.2)
 
 ### Fixed
