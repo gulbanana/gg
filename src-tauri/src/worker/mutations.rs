@@ -1505,6 +1505,7 @@ impl Mutation for GitFetch {
                 fetcher
                     .fetch(RemoteName::new(&remote_name), refspecs, cb, None, None)
                     .context("failed to fetch")?;
+                fetcher.import_refs().context("failed to import refs")?;
                 Ok(())
             })?;
         }

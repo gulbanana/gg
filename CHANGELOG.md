@@ -3,7 +3,7 @@
 ## Unreleased
 
 ### Fixed
-- Git remote handling: gg now displays only fetchable remotes.
+- Git remote handling: gg now displays only fetchable remotes, and fetching actually works again.
 
 ## [0.35.1](releases/tag/v0.35.0)
 
