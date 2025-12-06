@@ -28,7 +28,7 @@ use jj_lib::{
     git_backend::GitBackend,
     gitignore::GitIgnoreFile,
     id_prefix::{IdPrefixContext, IdPrefixIndex},
-    matchers::EverythingMatcher,
+    matchers::{EverythingMatcher, NothingMatcher},
     object_id::ObjectId,
     op_heads_store,
     operation::Operation,
@@ -692,16 +692,17 @@ impl WorkspaceSession<'_> {
             progress: None,
             max_new_file_size,
             start_tracking_matcher: &EverythingMatcher,
+            force_tracking_matcher: &NothingMatcher,
         }))?;
 
-        let did_anything = new_tree_id != *wc_commit.tree_id();
+        let did_anything = new_tree_id.tree_ids() != wc_commit.tree_ids();
 
         if did_anything {
             let mut tx = repo.start_transaction();
             let mut_repo = tx.repo_mut();
             let commit = mut_repo
                 .rewrite_commit(&wc_commit)
-                .set_tree_id(new_tree_id)
+                .set_tree(new_tree_id)
                 .write()?;
             mut_repo.set_wc_commit(workspace_name.clone(), commit.id().clone())?;
 
@@ -728,19 +729,21 @@ impl WorkspaceSession<'_> {
         maybe_old_commit: Option<&Commit>,
         new_commit: &Commit,
     ) -> Result<Option<CheckoutStats>> {
-        let old_tree_id = maybe_old_commit.map(|commit| commit.tree_id().clone());
+        let old_tree = maybe_old_commit.map(|commit| commit.tree());
 
-        Ok(if Some(new_commit.tree_id()) != old_tree_id.as_ref() {
-            Some(self.workspace.check_out(
-                self.operation.repo.op_id().clone(),
-                old_tree_id.as_ref(),
-                new_commit,
-            )?)
-        } else {
-            let locked_ws = self.workspace.start_working_copy_mutation()?;
-            locked_ws.finish(self.operation.repo.op_id().clone())?;
-            None
-        })
+        Ok(
+            if Some(new_commit.tree_ids()) != old_tree.as_ref().map(|t| t.tree_ids()) {
+                Some(self.workspace.check_out(
+                    self.operation.repo.op_id().clone(),
+                    old_tree.as_ref(),
+                    new_commit,
+                )?)
+            } else {
+                let locked_ws = self.workspace.start_working_copy_mutation()?;
+                locked_ws.finish(self.operation.repo.op_id().clone())?;
+                None
+            },
+        )
     }
 
     fn import_git_head(&mut self) -> Result<()> {
@@ -781,7 +784,7 @@ impl WorkspaceSession<'_> {
     }
 
     fn import_git_refs(&mut self) -> Result<()> {
-        let git_settings = self.data.workspace_settings.git_settings()?;
+        let git_settings = git::GitSettings::from_settings(&self.data.workspace_settings)?;
         let mut tx = self.operation.repo.start_transaction();
         // Automated import shouldn't fail because of reserved remote name.
         let stats = jj_lib::git::import_refs(tx.repo_mut(), &git_settings)?;
@@ -899,6 +902,7 @@ impl WorkspaceData {
             default_ignored_remote: default_ignored_remote_name(store),
             extensions: &self.extensions,
             workspace: Some(workspace_context),
+            use_glob_by_default: false,
         }
     }
 }

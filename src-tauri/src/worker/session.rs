@@ -5,7 +5,7 @@ use std::{
 };
 
 use anyhow::{Context, Result, anyhow};
-use jj_cli::{config::ConfigEnv, ui::Ui};
+use jj_cli::config::ConfigEnv;
 use jj_lib::config::{ConfigNamePathBuf, ConfigSource};
 
 use super::{
@@ -288,7 +288,7 @@ impl Session for WorkspaceSession<'_> {
                 }
                 SessionEvent::WriteConfigArray { scope, key, values } => {
                     let name: ConfigNamePathBuf = key.iter().collect();
-                    let config_env = ConfigEnv::from_environment(&Ui::null());
+                    let config_env = ConfigEnv::from_environment();
                     let path = match scope {
                         ConfigSource::User => config_env
                             .user_config_paths()

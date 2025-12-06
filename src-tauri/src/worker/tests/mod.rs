@@ -139,7 +139,7 @@ fn wc_path_is_visible() -> Result<()> {
 
     let commit = ws.get_commit(ws.wc_id())?;
     let value = commit
-        .tree()?
+        .tree()
         .path_value(RepoPath::from_internal_string("a.txt")?)?;
 
     assert!(value.is_resolved());
@@ -204,7 +204,7 @@ fn transaction_snapshot_path_is_visible() -> Result<()> {
 
     let commit = ws.get_commit(ws.wc_id())?;
     let value = commit
-        .tree()?
+        .tree()
         .path_value(RepoPath::from_internal_string("new.txt")?)?;
 
     assert!(value.is_resolved());

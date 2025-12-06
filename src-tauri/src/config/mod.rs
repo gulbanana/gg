@@ -4,10 +4,7 @@ mod tests;
 use std::path::Path;
 
 use anyhow::{Result, anyhow};
-use jj_cli::{
-    config::{ConfigEnv, config_from_environment, default_config_layers},
-    ui::Ui,
-};
+use jj_cli::config::{ConfigEnv, config_from_environment, default_config_layers};
 use jj_lib::{
     config::{ConfigGetError, ConfigLayer, ConfigNamePathBuf, ConfigSource, StackedConfig},
     revset::RevsetAliasesMap,
@@ -71,7 +68,7 @@ impl GGSettings for UserSettings {
 
 pub fn read_config(repo_path: Option<&Path>) -> Result<(UserSettings, RevsetAliasesMap)> {
     let mut layers = vec![];
-    let mut config_env = ConfigEnv::from_environment(&Ui::null());
+    let mut config_env = ConfigEnv::from_environment();
 
     let default_layers = default_config_layers();
     let gg_layer = ConfigLayer::parse(ConfigSource::Default, include_str!("../config/gg.toml"))?;

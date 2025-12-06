@@ -308,7 +308,7 @@ pub fn query_revision(ws: &WorkspaceSession, id: RevId) -> Result<RevResult> {
 
     let commit_parents: Result<Vec<_>, _> = commit.parents().collect();
     let parent_tree = block_on(rewrite::merge_commit_trees(ws.repo(), &commit_parents?))?;
-    let tree = commit.tree()?;
+    let tree = commit.tree();
 
     let mut conflicts = Vec::new();
     for (path, entry) in parent_tree.entries() {

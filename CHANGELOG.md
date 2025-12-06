@@ -1,6 +1,7 @@
 # GG Changelog
 
 ## Unreleased
+This release is based on Jujutsu 0.36.
 
 ### Added
 - The text of error dialogs is now selectable for copying.

@@ -374,7 +374,7 @@ fn move_hunk_content() -> anyhow::Result<()> {
     // Verify target has the change applied cleanly
     let new_wc_commit_id = ws.wc_id().clone();
     let to_commit_obj = ws.get_commit(&new_wc_commit_id)?;
-    let to_tree = to_commit_obj.tree()?;
+    let to_tree = to_commit_obj.tree();
     let repo_path = jj_lib::repo_path::RepoPath::from_internal_string("b.txt")?;
     let path_value = to_tree.path_value(&repo_path)?;
 
@@ -573,7 +573,7 @@ fn move_hunk_unrelated() -> anyhow::Result<()> {
 
     // Verify target has the hunk applied (with the new lines still there)
     let sibling_commit = get_rev(&ws, &revs::hunk_sibling())?;
-    let sibling_tree = sibling_commit.tree()?;
+    let sibling_tree = sibling_commit.tree();
     let repo_path = jj_lib::repo_path::RepoPath::from_internal_string("hunk_test.txt")?;
 
     match sibling_tree.path_value(&repo_path)?.into_resolved() {
@@ -633,7 +633,7 @@ fn copy_hunk_from_parent() -> anyhow::Result<()> {
 
     // Verify: child should now have parent's content (restoration)
     let child_commit = get_rev(&ws, &revs::hunk_child_single())?;
-    let child_tree = child_commit.tree()?;
+    let child_tree = child_commit.tree();
     let repo_path = jj_lib::repo_path::RepoPath::from_internal_string("hunk_test.txt")?;
 
     match child_tree.path_value(&repo_path)?.into_resolved() {
@@ -827,7 +827,7 @@ fn copy_hunk_multiple_hunks() -> anyhow::Result<()> {
 
     // Verify: line 2 still modified (changed2), line 4 restored (line4)
     let child_commit = get_rev(&ws, &revs::hunk_child_multi())?;
-    let child_tree = child_commit.tree()?;
+    let child_tree = child_commit.tree();
     let repo_path = jj_lib::repo_path::RepoPath::from_internal_string("hunk_test.txt")?;
 
     match child_tree.path_value(&repo_path)?.into_resolved() {
@@ -887,7 +887,7 @@ fn move_hunk_second_of_two_hunks() -> anyhow::Result<()> {
 
     // Verify source still has the first hunk (changed2), but not the second
     let source_commit = get_rev(&ws, &revs::hunk_child_multi())?;
-    let source_tree = source_commit.tree()?;
+    let source_tree = source_commit.tree();
     let repo_path = jj_lib::repo_path::RepoPath::from_internal_string("hunk_test.txt")?;
 
     match source_tree.path_value(&repo_path)?.into_resolved() {
@@ -906,7 +906,7 @@ fn move_hunk_second_of_two_hunks() -> anyhow::Result<()> {
 
     // Verify target has the second hunk added
     let target_commit = get_rev(&ws, &revs::hunk_sibling())?;
-    let target_tree = target_commit.tree()?;
+    let target_tree = target_commit.tree();
 
     match target_tree.path_value(&repo_path)?.into_resolved() {
         Ok(Some(jj_lib::backend::TreeValue::File { id, .. })) => {

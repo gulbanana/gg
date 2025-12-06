@@ -26,8 +26,8 @@ tauri-plugin-shell = "~2.2.0"
 tauri-plugin-window-state = "2.0.0"
 tauri-plugin-log = "2.0.0"
 
-jj-lib = { version = "0.35", features = ["watchman"] }
-jj-cli = { version = "0.35" }
+jj-lib = { version = "0.36", features = ["watchman"] }
+jj-cli = { version = "0.36" }
 
 # deps shared with JJ, which we try to keep on the same version
 anyhow = "1.0.100"
@@ -42,7 +42,7 @@ dirs = "6"
 dunce = "1.0.5"
 itertools = "0.14"
 indexmap = "2.12"
-gix = { version = "0.74.1", default-features = false, features = [
+gix = { version = "0.75.0", default-features = false, features = [
     "index",
     "max-performance-safe",
     "blob-diff",
@@ -52,7 +52,7 @@ async-trait = "0.1.89"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0.145"
 tokio = { version = "1.48.0", features = ["io-util"] }
-toml_edit = { version = "0.23.7", features = ["serde"] }
+toml_edit = { version = "0.23.8", features = ["serde"] }
 thiserror = "2.0.17"
 
 # deps used by JJ but with different features

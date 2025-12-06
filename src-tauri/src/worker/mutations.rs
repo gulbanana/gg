@@ -4,7 +4,7 @@ use std::sync::Arc;
 use anyhow::{Context, Result, anyhow};
 use indexmap::IndexMap;
 use itertools::Itertools;
-use jj_lib::backend::{CopyId, FileId, MergedTreeId, TreeValue};
+use jj_lib::backend::{CopyId, FileId, TreeValue};
 use jj_lib::conflicts::{
     self, ConflictMarkerStyle, ConflictMaterializeOptions, MaterializedTreeValue,
 };
@@ -28,7 +28,7 @@ use jj_lib::{
     rewrite::{self, RebaseOptions, RebasedCommit},
     settings::UserSettings,
     store::Store,
-    str_util::StringPattern,
+    str_util::{StringExpression, StringPattern},
 };
 use tokio::io::AsyncReadExt;
 
@@ -104,13 +104,13 @@ impl Mutation for BackoutRevisions {
         let reverted_parents: Result<Vec<_>, BackendError> = reverted[0].parents().collect();
 
         let old_base_tree = rewrite::merge_commit_trees(tx.repo(), &reverted_parents?).await?;
-        let new_base_tree = working_copy.tree()?;
-        let old_tree = reverted[0].tree()?;
+        let new_base_tree = working_copy.tree();
+        let old_tree = reverted[0].tree();
         let new_tree = new_base_tree.merge(old_tree, old_base_tree).await?;
 
         tx.repo_mut()
             .rewrite_commit(&working_copy)
-            .set_tree_id(new_tree.id())
+            .set_tree(new_tree)
             .write()?;
 
         match ws.finish_transaction(tx, format!("back out commit {}", reverted[0].id().hex()))? {
@@ -167,10 +167,7 @@ impl Mutation for CreateRevision {
         let parent_commits = ws.resolve_multiple(parents_revset)?;
         let merged_tree = rewrite::merge_commit_trees(tx.repo(), &parent_commits).await?;
 
-        let new_commit = tx
-            .repo_mut()
-            .new_commit(parent_ids?, merged_tree.id())
-            .write()?;
+        let new_commit = tx.repo_mut().new_commit(parent_ids?, merged_tree).write()?;
 
         tx.repo_mut().edit(ws.name().to_owned(), &new_commit)?;
 
@@ -200,10 +197,7 @@ impl Mutation for CreateRevisionBetween {
         let parent_commits = vec![parent_id];
         let merged_tree = rewrite::merge_commit_trees(tx.repo(), &parent_commits).await?;
 
-        let new_commit = tx
-            .repo_mut()
-            .new_commit(parent_ids, merged_tree.id())
-            .write()?;
+        let new_commit = tx.repo_mut().new_commit(parent_ids, merged_tree).write()?;
 
         let before_commit = ws
             .resolve_single_change(&self.before_id)
@@ -435,24 +429,21 @@ impl Mutation for MoveChanges {
         }
 
         // construct a split tree and a remainder tree by copying changes from child to parent and from parent to child
-        let from_tree = from.tree()?;
+        let from_tree = from.tree();
         let from_parents: Result<Vec<_>, _> = from.parents().collect();
         let parent_tree = rewrite::merge_commit_trees(tx.repo(), &from_parents?).await?;
-        let split_tree_id =
-            rewrite::restore_tree(&from_tree, &parent_tree, matcher.as_ref()).await?;
-        let split_tree = tx.repo().store().get_root_tree(&split_tree_id)?;
-        let remainder_tree_id =
+        let split_tree = rewrite::restore_tree(&from_tree, &parent_tree, matcher.as_ref()).await?;
+        let remainder_tree =
             rewrite::restore_tree(&parent_tree, &from_tree, matcher.as_ref()).await?;
-        let remainder_tree = tx.repo().store().get_root_tree(&remainder_tree_id)?;
 
         // abandon or rewrite source
-        let abandon_source = remainder_tree.id() == parent_tree.id();
+        let abandon_source = remainder_tree.tree_ids() == parent_tree.tree_ids();
         if abandon_source {
             tx.repo_mut().record_abandoned_commit(&from);
         } else {
             tx.repo_mut()
                 .rewrite_commit(&from)
-                .set_tree_id(remainder_tree.id().clone())
+                .set_tree(remainder_tree.clone())
                 .write()?;
         }
 
@@ -479,14 +470,14 @@ impl Mutation for MoveChanges {
         }
 
         // apply changes to destination
-        let to_tree = to.tree()?;
+        let to_tree = to.tree();
         let new_to_tree = to_tree
             .merge(parent_tree.clone(), split_tree.clone())
             .await?;
         let description = combine_messages(&from, &to, abandon_source);
         tx.repo_mut()
             .rewrite_commit(&to)
-            .set_tree_id(new_to_tree.id().clone())
+            .set_tree(new_to_tree)
             .set_description(description)
             .write()?;
 
@@ -505,7 +496,7 @@ impl Mutation for CopyChanges {
     async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction()?;
 
-        let from_tree = ws.resolve_single_commit(&self.from_id)?.tree()?;
+        let from_tree = ws.resolve_single_commit(&self.from_id)?.tree();
         let to = ws.resolve_single_change(&self.to_id)?;
         let matcher = build_matcher(&self.paths)?;
 
@@ -514,14 +505,14 @@ impl Mutation for CopyChanges {
         }
 
         // construct a restore tree - the destination with some portions overwritten by the source
-        let to_tree = to.tree()?;
-        let new_to_tree_id = rewrite::restore_tree(&from_tree, &to_tree, matcher.as_ref()).await?;
-        if &new_to_tree_id == to.tree_id() {
+        let to_tree = to.tree();
+        let new_to_tree = rewrite::restore_tree(&from_tree, &to_tree, matcher.as_ref()).await?;
+        if new_to_tree.tree_ids() == to_tree.tree_ids() {
             Ok(MutationResult::Unchanged)
         } else {
             tx.repo_mut()
                 .rewrite_commit(&to)
-                .set_tree_id(new_to_tree_id)
+                .set_tree(new_to_tree)
                 .write()?;
 
             tx.repo_mut().rebase_descendants()?;
@@ -910,13 +901,13 @@ impl Mutation for MoveHunk {
         }
 
         // get parent tree from which to calculate split and remainder trees
-        let from_tree = from.tree()?;
+        let from_tree = from.tree();
         let from_parents: Result<Vec<_>, _> = from.parents().collect();
         let from_parents = from_parents?;
         if from_parents.len() != 1 {
             precondition!("Cannot move hunk from a merge commit");
         }
-        let parent_tree = from_parents[0].tree()?;
+        let parent_tree = from_parents[0].tree();
 
         // construct hunk_tree: parent_tree with the hunk applied
         let store = tx.repo().store();
@@ -930,14 +921,13 @@ impl Mutation for MoveHunk {
             Ok(_) => false,
             Err(_) => false,
         };
-        let hunk_tree_id = update_tree_entry(
+        let hunk_tree = update_tree_entry(
             store,
             &parent_tree,
             &repo_path,
             hunk_blob_id,
             hunk_executable,
         )?;
-        let hunk_tree = store.get_root_tree(&hunk_tree_id)?;
 
         // check if commits are related, which disallows conflict-free copies
         let from_is_ancestor = tx.repo().index().is_ancestor(from.id(), to.id())?;
@@ -950,22 +940,21 @@ impl Mutation for MoveHunk {
                 .clone()
                 .merge(hunk_tree.clone(), parent_tree.clone())
                 .await?;
-            let to_tree = to.tree()?;
+            let to_tree = to.tree();
             let new_to = to_tree
                 .merge(parent_tree.clone(), hunk_tree.clone())
                 .await?;
             (remainder, new_to)
         } else {
             // for unrelated commits, apply hunk directly to avoid conflicts
-            let to_tree = to.tree()?;
+            let to_tree = to.tree();
             let to_content = read_file_content(store, &to_tree, &repo_path).await?;
             let new_to_content = apply_hunk(&to_content, &self.hunk)?;
             let new_to_blob_id = store
                 .write_file(&repo_path, &mut new_to_content.as_slice())
                 .await?;
-            let new_to_tree_id =
+            let new_to =
                 update_tree_entry(store, &to_tree, &repo_path, new_to_blob_id, hunk_executable)?;
-            let new_to = store.get_root_tree(&new_to_tree_id)?;
 
             // remove hunk from source with reverse hunk
             let reverse_hunk = crate::messages::ChangeHunk {
@@ -993,20 +982,19 @@ impl Mutation for MoveHunk {
             let remainder_blob_id = store
                 .write_file(&repo_path, &mut remainder_content.as_slice())
                 .await?;
-            let remainder_tree_id = update_tree_entry(
+            let remainder = update_tree_entry(
                 store,
                 &from_tree,
                 &repo_path,
                 remainder_blob_id,
                 hunk_executable,
             )?;
-            let remainder = store.get_root_tree(&remainder_tree_id)?;
 
             (remainder, new_to)
         };
 
         // abandon or rewrite source and destination based on ancestry
-        let abandon_source = remainder_tree.id() == parent_tree.id();
+        let abandon_source = remainder_tree.tree_ids() == parent_tree.tree_ids();
 
         if abandon_source {
             // simple case: no source left
@@ -1021,7 +1009,7 @@ impl Mutation for MoveHunk {
             let description = combine_messages(&from, &to, abandon_source);
             tx.repo_mut()
                 .rewrite_commit(&to)
-                .set_tree_id(new_to_tree.id().clone())
+                .set_tree(new_to_tree.clone())
                 .set_description(description)
                 .write()?;
         } else if to_is_ancestor {
@@ -1031,7 +1019,7 @@ impl Mutation for MoveHunk {
             let new_to = tx
                 .repo_mut()
                 .rewrite_commit(&to)
-                .set_tree_id(new_to_tree.id().clone())
+                .set_tree(new_to_tree.clone())
                 .set_description(description)
                 .write()?;
 
@@ -1042,13 +1030,13 @@ impl Mutation for MoveHunk {
             tx.repo_mut()
                 .rewrite_commit(&from)
                 .set_parents(vec![new_to.id().clone()])
-                .set_tree_id(child_new_tree.id().clone())
+                .set_tree(child_new_tree)
                 .write()?;
         } else {
             // general case: unrelated or ancestor-to-descendant
             tx.repo_mut()
                 .rewrite_commit(&from)
-                .set_tree_id(remainder_tree.id().clone())
+                .set_tree(remainder_tree.clone())
                 .write()?;
 
             let description = combine_messages(&from, &to, abandon_source);
@@ -1078,7 +1066,7 @@ impl Mutation for MoveHunk {
 
             tx.repo_mut()
                 .rewrite_commit(&to)
-                .set_tree_id(new_to_tree.id().clone())
+                .set_tree(new_to_tree)
                 .set_description(description)
                 .write()?;
 
@@ -1114,7 +1102,7 @@ impl Mutation for CopyHunk {
         }
 
         let store = tx.repo().store();
-        let to_tree = to.tree()?;
+        let to_tree = to.tree();
 
         // vheck for conflicts in destination
         let to_path_value = to_tree.path_value(&repo_path)?;
@@ -1177,7 +1165,7 @@ impl Mutation for CopyHunk {
         }
 
         // read source content
-        let from_tree = from.tree()?;
+        let from_tree = from.tree();
         let from_content = read_file_content(store, &from_tree, &repo_path).await?;
         let from_text = String::from_utf8_lossy(&from_content);
         let from_lines: Vec<&str> = from_text.lines().collect();
@@ -1230,13 +1218,13 @@ impl Mutation for CopyHunk {
             _ => false,
         };
 
-        let new_to_tree_id =
+        let new_to_tree =
             update_tree_entry(store, &to_tree, &repo_path, new_to_blob_id, to_executable)?;
 
         // rewrite destination
         tx.repo_mut()
             .rewrite_commit(&to)
-            .set_tree_id(new_to_tree_id)
+            .set_tree(new_to_tree)
             .write()?;
 
         tx.repo_mut().rebase_descendants()?;
@@ -1418,7 +1406,7 @@ impl Mutation for GitPush {
         // push to each remote
         for (remote_name, branch_updates) in remote_branch_updates.into_iter() {
             let targets = GitBranchPushTargets { branch_updates };
-            let git_settings = ws.data.workspace_settings.git_settings()?;
+            let git_settings = git::GitSettings::from_settings(&ws.data.workspace_settings)?;
 
             ws.session.callbacks.with_git(tx.repo_mut(), &|repo, cb| {
                 git::push_branches(
@@ -1491,20 +1479,17 @@ impl Mutation for GitFetch {
                 remote_patterns.push((remote_name, Some(branch_name.to_owned())));
             }
         }
-        let git_settings = ws.data.workspace_settings.git_settings()?;
+        let git_settings = git::GitSettings::from_settings(&ws.data.workspace_settings)?;
 
         for (remote_name, pattern) in remote_patterns {
             ws.session.callbacks.with_git(tx.repo_mut(), &|repo, cb| {
                 let mut fetcher = git::GitFetch::new(repo, &git_settings)?;
-                let refspecs = git::expand_fetch_refspecs(
-                    &RemoteName::new(&remote_name),
-                    vec![
-                        pattern
-                            .clone()
-                            .map(StringPattern::exact)
-                            .unwrap_or_else(StringPattern::all),
-                    ],
-                )?;
+                let bookmark_expr = pattern
+                    .clone()
+                    .map(StringExpression::exact)
+                    .unwrap_or_else(StringExpression::all);
+                let refspecs =
+                    git::expand_fetch_refspecs(&RemoteName::new(&remote_name), bookmark_expr)?;
                 fetcher
                     .fetch(RemoteName::new(&remote_name), refspecs, cb, None, None)
                     .context("failed to fetch")?;
@@ -1755,13 +1740,13 @@ fn apply_hunk(content: &[u8], hunk: &crate::messages::ChangeHunk) -> Result<Vec<
 }
 
 fn update_tree_entry(
-    store: &Arc<jj_lib::store::Store>,
+    _store: &Arc<jj_lib::store::Store>,
     original_tree: &MergedTree,
     path: &RepoPath,
     new_blob: FileId,
     executable: bool,
-) -> Result<MergedTreeId, anyhow::Error> {
-    let mut builder = MergedTreeBuilder::new(original_tree.id().clone());
+) -> Result<MergedTree, anyhow::Error> {
+    let mut builder = MergedTreeBuilder::new(original_tree.clone());
     builder.set_or_remove(
         path.to_owned(),
         Merge::normal(TreeValue::File {
@@ -1770,6 +1755,6 @@ fn update_tree_entry(
             copy_id: CopyId::placeholder(),
         }),
     );
-    let new_tree_id = builder.write_tree(store)?;
-    Ok(new_tree_id)
+    let new_tree = builder.write_tree()?;
+    Ok(new_tree)
 }
