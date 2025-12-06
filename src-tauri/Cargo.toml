@@ -74,6 +74,9 @@ windows = { version = "0.60", features = [
     "Win32_UI_Shell_PropertiesSystem",
 ] }
 
+[profile.dev]
+debug = 0
+
 [profile.release]
 lto = true
 codegen-units = 1
