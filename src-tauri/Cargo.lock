@@ -1934,7 +1934,6 @@ dependencies = [
  "jj-cli",
  "jj-lib",
  "log",
- "pollster",
  "serde",
  "serde_json",
  "tauri",

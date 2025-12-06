@@ -35,11 +35,11 @@ pub trait Mutation: Debug {
     ) -> Result<messages::MutationResult>;
 
     #[cfg(test)]
-    fn execute_unboxed(self, ws: &mut WorkspaceSession) -> Result<messages::MutationResult>
+    async fn execute_unboxed(self, ws: &mut WorkspaceSession) -> Result<messages::MutationResult>
     where
         Self: Sized,
     {
-        pollster::block_on(Box::new(self).execute(ws))
+        Box::new(self).execute(ws).await
     }
 }
 

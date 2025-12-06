@@ -47,7 +47,6 @@ use jj_lib::{
     working_copy::{CheckoutStats, SnapshotOptions, WorkingCopyFreshness},
     workspace::{self, DefaultWorkspaceLoaderFactory, Workspace, WorkspaceLoaderFactory},
 };
-use pollster::block_on;
 use thiserror::Error;
 
 use super::WorkerSession;
@@ -561,8 +560,8 @@ impl WorkspaceSession<'_> {
      * Ideally in future the code can be extracted to not depend on TUI. *
      *********************************************************************/
 
-    pub fn start_transaction(&mut self) -> Result<Transaction> {
-        self.import_and_snapshot(true)?;
+    pub async fn start_transaction(&mut self) -> Result<Transaction> {
+        self.import_and_snapshot(true).await?;
         Ok(self.operation.repo.start_transaction())
     }
 
@@ -608,7 +607,7 @@ impl WorkspaceSession<'_> {
     }
 
     // XXX does this need to do any operation merging in case of other writers?
-    pub fn import_and_snapshot(&mut self, force: bool) -> Result<bool> {
+    pub async fn import_and_snapshot(&mut self, force: bool) -> Result<bool> {
         if !(force
             || self
                 .data
@@ -620,10 +619,10 @@ impl WorkspaceSession<'_> {
         }
 
         if self.is_colocated {
-            self.import_git_head()?;
+            self.import_git_head().await?;
         }
 
-        let updated_working_copy = self.snapshot_working_copy()?;
+        let updated_working_copy = self.snapshot_working_copy().await?;
 
         if self.is_colocated {
             self.import_git_refs()?;
@@ -632,7 +631,7 @@ impl WorkspaceSession<'_> {
         Ok(updated_working_copy)
     }
 
-    fn snapshot_working_copy(&mut self) -> Result<bool> {
+    async fn snapshot_working_copy(&mut self) -> Result<bool> {
         let workspace_name = self.workspace.workspace_name().to_owned();
         let get_wc_commit = |repo: &ReadonlyRepo| -> Result<Option<_>, _> {
             repo.view()
@@ -687,13 +686,16 @@ impl WorkspaceSession<'_> {
         if max_new_file_size == 0 {
             max_new_file_size = u64::MAX;
         }
-        let (new_tree_id, _) = block_on(locked_ws.locked_wc().snapshot(&SnapshotOptions {
-            base_ignores,
-            progress: None,
-            max_new_file_size,
-            start_tracking_matcher: &EverythingMatcher,
-            force_tracking_matcher: &NothingMatcher,
-        }))?;
+        let (new_tree_id, _) = locked_ws
+            .locked_wc()
+            .snapshot(&SnapshotOptions {
+                base_ignores,
+                progress: None,
+                max_new_file_size,
+                start_tracking_matcher: &EverythingMatcher,
+                force_tracking_matcher: &NothingMatcher,
+            })
+            .await?;
 
         let did_anything = new_tree_id.tree_ids() != wc_commit.tree_ids();
 
@@ -746,7 +748,7 @@ impl WorkspaceSession<'_> {
         )
     }
 
-    fn import_git_head(&mut self) -> Result<()> {
+    async fn import_git_head(&mut self) -> Result<()> {
         let mut tx = self.operation.repo.start_transaction();
         git::import_head(tx.repo_mut())?;
         if !tx.repo().has_changes() {
@@ -770,7 +772,7 @@ impl WorkspaceSession<'_> {
 
             let mut locked_ws = self.workspace.start_working_copy_mutation()?;
 
-            block_on(locked_ws.locked_wc().reset(&new_git_head_commit))?;
+            locked_ws.locked_wc().reset(&new_git_head_commit).await?;
             tx.repo_mut().rebase_descendants()?;
 
             self.operation =
@@ -804,7 +806,7 @@ impl WorkspaceSession<'_> {
     /* complicate the interface of trait Mutation                                                    */
     /*************************************************************************************************/
 
-    pub fn disinherit_children(
+    pub async fn disinherit_children(
         &self,
         tx: &mut Transaction,
         target: &Commit,
@@ -846,13 +848,10 @@ impl WorkspaceSession<'_> {
 
             rebased_commit_ids.insert(
                 child_commit.id().clone(),
-                block_on(rewrite::rebase_commit(
-                    tx.repo_mut(),
-                    child_commit,
-                    new_child_parents?,
-                ))?
-                .id()
-                .clone(),
+                rewrite::rebase_commit(tx.repo_mut(), child_commit, new_child_parents?)
+                    .await?
+                    .id()
+                    .clone(),
             );
         }
         {

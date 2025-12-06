@@ -167,7 +167,7 @@ match tree.path_value(path)?.into_resolved() {
     Ok(Some(TreeValue::File { id, .. })) => /* normal file */,
     Err(_) => {
         // Handle conflict by materializing to text with markers
-        match block_on(conflicts::materialize_tree_value(store, path, tree.path_value(path)?))? {
+        match conflicts::materialize_tree_value(store, path, tree.path_value(path)?).await? {
             MaterializedTreeValue::FileConflict(file) => {
                 conflicts::materialize_merge_result(&file.contents, ConflictMarkerStyle::default(), &mut output)?;
             }

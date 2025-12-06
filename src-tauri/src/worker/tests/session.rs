@@ -7,16 +7,16 @@ use anyhow::Result;
 use jj_lib::config::ConfigSource;
 use std::{path::PathBuf, sync::mpsc::channel};
 
-#[test]
-fn start_and_stop() -> Result<()> {
+#[tokio::test]
+async fn start_and_stop() -> Result<()> {
     let (tx, rx) = channel::<SessionEvent>();
     tx.send(SessionEvent::EndSession)?;
-    WorkerSession::default().handle_events(&rx)?;
+    WorkerSession::default().handle_events(&rx).await?;
     Ok(())
 }
 
-#[test]
-fn load_repo() -> Result<()> {
+#[tokio::test]
+async fn load_repo() -> Result<()> {
     let repo = mkrepo();
 
     let (tx, rx) = channel::<SessionEvent>();
@@ -33,7 +33,7 @@ fn load_repo() -> Result<()> {
     })?;
     tx.send(SessionEvent::EndSession)?;
 
-    WorkerSession::default().handle_events(&rx)?;
+    WorkerSession::default().handle_events(&rx).await?;
 
     let config = rx_good_repo.recv()??;
     assert!(matches!(config, RepoConfig::Workspace { .. }));
@@ -44,8 +44,8 @@ fn load_repo() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn reload_repo() -> Result<()> {
+#[tokio::test]
+async fn reload_repo() -> Result<()> {
     let repo1 = mkrepo();
     let repo2 = mkrepo();
 
@@ -63,7 +63,7 @@ fn reload_repo() -> Result<()> {
     })?;
     tx.send(SessionEvent::EndSession)?;
 
-    WorkerSession::default().handle_events(&rx)?;
+    WorkerSession::default().handle_events(&rx).await?;
 
     let config = rx_first_repo.recv()??;
     assert!(matches!(config, RepoConfig::Workspace { .. }));
@@ -74,8 +74,8 @@ fn reload_repo() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn reload_with_default_query() -> Result<()> {
+#[tokio::test]
+async fn reload_with_default_query() -> Result<()> {
     let repo = mkrepo();
 
     let (tx, rx) = channel::<SessionEvent>();
@@ -97,7 +97,7 @@ fn reload_with_default_query() -> Result<()> {
     })?;
     tx.send(SessionEvent::EndSession)?;
 
-    WorkerSession::default().handle_events(&rx)?;
+    WorkerSession::default().handle_events(&rx).await?;
 
     _ = rx_load.recv()??;
     _ = rx_query.recv()??;
@@ -109,8 +109,8 @@ fn reload_with_default_query() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn query_log_single() -> Result<()> {
+#[tokio::test]
+async fn query_log_single() -> Result<()> {
     let repo = mkrepo();
 
     let (tx, rx) = channel::<SessionEvent>();
@@ -127,7 +127,7 @@ fn query_log_single() -> Result<()> {
     })?;
     tx.send(SessionEvent::EndSession)?;
 
-    WorkerSession::default().handle_events(&rx)?;
+    WorkerSession::default().handle_events(&rx).await?;
 
     _ = rx_load.recv()??;
     let page = rx_query.recv()??;
@@ -137,8 +137,8 @@ fn query_log_single() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn query_log_multi() -> Result<()> {
+#[tokio::test]
+async fn query_log_multi() -> Result<()> {
     let repo = mkrepo();
     let (tx, rx) = channel::<SessionEvent>();
     let (tx_load, rx_load) = channel::<Result<RepoConfig>>();
@@ -160,7 +160,8 @@ fn query_log_multi() -> Result<()> {
         force_log_page_size: Some(7),
         ..Default::default()
     }
-    .handle_events(&rx)?;
+    .handle_events(&rx)
+    .await?;
 
     rx_load.recv()??;
 
@@ -175,8 +176,8 @@ fn query_log_multi() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn query_log_multi_restart() -> Result<()> {
+#[tokio::test]
+async fn query_log_multi_restart() -> Result<()> {
     let repo = mkrepo();
     let (tx, rx) = channel::<SessionEvent>();
     let (tx_load, rx_load) = channel::<Result<RepoConfig>>();
@@ -203,7 +204,8 @@ fn query_log_multi_restart() -> Result<()> {
         force_log_page_size: Some(7),
         ..Default::default()
     }
-    .handle_events(&rx)?;
+    .handle_events(&rx)
+    .await?;
 
     rx_load.recv()??;
 
@@ -222,8 +224,8 @@ fn query_log_multi_restart() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn query_log_multi_interrupt() -> Result<()> {
+#[tokio::test]
+async fn query_log_multi_interrupt() -> Result<()> {
     let repo = mkrepo();
     let (tx, rx) = channel::<SessionEvent>();
     let (tx_load, rx_load) = channel::<Result<RepoConfig>>();
@@ -250,7 +252,8 @@ fn query_log_multi_interrupt() -> Result<()> {
         force_log_page_size: Some(7),
         ..Default::default()
     }
-    .handle_events(&rx)?;
+    .handle_events(&rx)
+    .await?;
 
     rx_load.recv()??;
 
@@ -268,8 +271,8 @@ fn query_log_multi_interrupt() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn query_check_immutable() -> Result<()> {
+#[tokio::test]
+async fn query_check_immutable() -> Result<()> {
     let repo = mkrepo();
     let (tx, rx) = channel::<SessionEvent>();
     let (tx_load, rx_load) = channel::<Result<RepoConfig>>();
@@ -289,7 +292,8 @@ fn query_check_immutable() -> Result<()> {
         force_log_page_size: Some(2),
         ..Default::default()
     }
-    .handle_events(&rx)?;
+    .handle_events(&rx)
+    .await?;
 
     rx_load.recv()??;
 
@@ -301,8 +305,8 @@ fn query_check_immutable() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn query_rev_not_found() -> Result<()> {
+#[tokio::test]
+async fn query_rev_not_found() -> Result<()> {
     let repo = mkrepo();
 
     let (tx, rx) = channel::<SessionEvent>();
@@ -319,7 +323,7 @@ fn query_rev_not_found() -> Result<()> {
     })?;
     tx.send(SessionEvent::EndSession)?;
 
-    WorkerSession::default().handle_events(&rx)?;
+    WorkerSession::default().handle_events(&rx).await?;
 
     _ = rx_load.recv()??;
     let result = rx_query.recv()??;
@@ -331,8 +335,8 @@ fn query_rev_not_found() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn config_read() -> Result<()> {
+#[tokio::test]
+async fn config_read() -> Result<()> {
     let repo = mkrepo();
 
     let (tx, rx) = channel::<SessionEvent>();
@@ -349,7 +353,7 @@ fn config_read() -> Result<()> {
     })?;
     tx.send(SessionEvent::EndSession)?;
 
-    WorkerSession::default().handle_events(&rx)?;
+    WorkerSession::default().handle_events(&rx).await?;
 
     _ = rx_load.recv()??;
     let result = rx_read.recv()?;
@@ -359,8 +363,8 @@ fn config_read() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn config_write() -> Result<()> {
+#[tokio::test]
+async fn config_write() -> Result<()> {
     let repo = mkrepo();
 
     let (tx, rx) = channel::<SessionEvent>();
@@ -382,7 +386,7 @@ fn config_write() -> Result<()> {
     })?;
     tx.send(SessionEvent::EndSession)?;
 
-    WorkerSession::default().handle_events(&rx)?;
+    WorkerSession::default().handle_events(&rx).await?;
 
     _ = rx_load.recv()??;
     let result = rx_read.recv()??;

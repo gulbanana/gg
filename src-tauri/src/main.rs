@@ -19,6 +19,7 @@ use anyhow::{Context, Result, anyhow};
 use clap::Parser;
 use jj_lib::config::ConfigSource;
 use log::LevelFilter;
+use tauri::async_runtime;
 use tauri::menu::Menu;
 use tauri::{Emitter, Listener, State, Window, WindowEvent, Wry};
 use tauri::{Manager, ipc::InvokeError};
@@ -177,23 +178,7 @@ fn main() -> Result<()> {
 
             let mut handle = window.as_ref().window();
             let window_worker = thread::spawn(move || {
-                log::info!("start worker");
-
-                while let Err(err) =
-                    WorkerSession::new(FrontendCallbacks(handle.clone()), args.workspace.clone())
-                        .handle_events(&receiver)
-                        .context("worker")
-                {
-                    log::info!("restart worker: {err:#}");
-
-                    // it's ok if the worker has to restart, as long as we can notify the frontend of it
-                    handler::fatal!(handle.emit(
-                        "gg://repo/config",
-                        messages::RepoConfig::WorkerError {
-                            message: format!("{err:#}"),
-                        },
-                    ));
-                }
+                async_runtime::block_on(work(handle.clone(), receiver, args.workspace))
             });
 
             window.on_menu_event(|w, e| handler::fatal!(menu::handle_event(w, e)));
@@ -233,6 +218,30 @@ fn main() -> Result<()> {
         .run(tauri::generate_context!())?;
 
     Ok(())
+}
+
+async fn work(
+    window: Window,
+    rx: std::sync::mpsc::Receiver<SessionEvent>,
+    workspace: Option<PathBuf>,
+) {
+    log::info!("start worker");
+
+    while let Err(err) = WorkerSession::new(FrontendCallbacks(window.clone()), workspace.clone())
+        .handle_events(&rx)
+        .await
+        .context("worker")
+    {
+        log::info!("restart worker: {err:#}");
+
+        // it's ok if the worker has to restart, as long as we can notify the frontend of it
+        handler::fatal!(window.emit(
+            "gg://repo/config",
+            messages::RepoConfig::WorkerError {
+                message: format!("{err:#}"),
+            },
+        ));
+    }
 }
 
 #[tauri::command(async)]

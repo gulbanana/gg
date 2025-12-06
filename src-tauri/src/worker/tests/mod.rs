@@ -153,27 +153,27 @@ fn wc_path_is_visible() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn snapshot_updates_wc_if_changed() -> Result<()> {
+#[tokio::test]
+async fn snapshot_updates_wc_if_changed() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
     let mut ws = session.load_directory(repo.path())?;
     let old_wc = ws.wc_id().clone();
 
-    assert!(!ws.import_and_snapshot(true)?);
+    assert!(!ws.import_and_snapshot(true).await?);
     assert_eq!(&old_wc, ws.wc_id());
 
     fs::write(repo.path().join("new.txt"), []).unwrap();
 
-    assert!(ws.import_and_snapshot(true)?);
+    assert!(ws.import_and_snapshot(true).await?);
     assert_ne!(&old_wc, ws.wc_id());
 
     Ok(())
 }
 
-#[test]
-fn transaction_updates_wc_if_snapshot() -> Result<()> {
+#[tokio::test]
+async fn transaction_updates_wc_if_snapshot() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
@@ -182,7 +182,7 @@ fn transaction_updates_wc_if_snapshot() -> Result<()> {
 
     fs::write(repo.path().join("new.txt"), []).unwrap();
 
-    let tx = ws.start_transaction()?;
+    let tx = ws.start_transaction().await?;
     ws.finish_transaction(tx, "do nothing")?;
 
     assert_ne!(&old_wc, ws.wc_id());
@@ -190,8 +190,8 @@ fn transaction_updates_wc_if_snapshot() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn transaction_snapshot_path_is_visible() -> Result<()> {
+#[tokio::test]
+async fn transaction_snapshot_path_is_visible() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
@@ -199,7 +199,7 @@ fn transaction_snapshot_path_is_visible() -> Result<()> {
 
     fs::write(repo.path().join("new.txt"), []).unwrap();
 
-    let tx = ws.start_transaction()?;
+    let tx = ws.start_transaction().await?;
     ws.finish_transaction(tx, "do nothing")?;
 
     let commit = ws.get_commit(ws.wc_id())?;

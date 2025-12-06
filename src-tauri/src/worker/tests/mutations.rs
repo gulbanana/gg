@@ -9,12 +9,11 @@ use crate::{
 };
 use anyhow::Result;
 use assert_matches::assert_matches;
-use pollster::block_on;
 use std::fs;
 use tokio::io::AsyncReadExt;
 
-#[test]
-fn abandon_revisions() -> Result<()> {
+#[tokio::test]
+async fn abandon_revisions() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
@@ -26,7 +25,8 @@ fn abandon_revisions() -> Result<()> {
     AbandonRevisions {
         ids: vec![revs::resolve_conflict().commit],
     }
-    .execute_unboxed(&mut ws)?;
+    .execute_unboxed(&mut ws)
+    .await?;
 
     let page = queries::query_log(&ws, "all()", 100)?;
     assert_eq!(17, page.rows.len());
@@ -34,41 +34,42 @@ fn abandon_revisions() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn checkout_revision() -> Result<()> {
+#[tokio::test]
+async fn checkout_revision() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
     let mut ws = session.load_directory(repo.path())?;
 
-    let head_rev = queries::query_revision(&ws, revs::working_copy())?;
-    let conflict_rev = queries::query_revision(&ws, revs::conflict_bookmark())?;
+    let head_rev = queries::query_revision(&ws, revs::working_copy()).await?;
+    let conflict_rev = queries::query_revision(&ws, revs::conflict_bookmark()).await?;
     assert_matches!(head_rev, RevResult::Detail { header, .. } if header.is_working_copy);
     assert_matches!(conflict_rev, RevResult::Detail { header, .. } if !header.is_working_copy);
 
     let result = CheckoutRevision {
         id: revs::conflict_bookmark(),
     }
-    .execute_unboxed(&mut ws)?;
+    .execute_unboxed(&mut ws)
+    .await?;
     assert_matches!(result, MutationResult::UpdatedSelection { .. });
 
-    let head_rev = queries::query_revision(&ws, revs::working_copy())?;
-    let conflict_rev = queries::query_revision(&ws, revs::conflict_bookmark())?;
+    let head_rev = queries::query_revision(&ws, revs::working_copy()).await?;
+    let conflict_rev = queries::query_revision(&ws, revs::conflict_bookmark()).await?;
     assert_matches!(head_rev, RevResult::NotFound { .. });
     assert_matches!(conflict_rev, RevResult::Detail { header, .. } if header.is_working_copy);
 
     Ok(())
 }
 
-#[test]
-fn copy_changes() -> Result<()> {
+#[tokio::test]
+async fn copy_changes() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
     let mut ws = session.load_directory(repo.path())?;
 
-    let from_rev = queries::query_revision(&ws, revs::resolve_conflict())?;
-    let to_rev = queries::query_revision(&ws, revs::working_copy())?;
+    let from_rev = queries::query_revision(&ws, revs::resolve_conflict()).await?;
+    let to_rev = queries::query_revision(&ws, revs::working_copy()).await?;
     assert_matches!(from_rev, RevResult::Detail { changes, .. } if changes.len() == 1);
     assert_matches!(to_rev, RevResult::Detail { changes, .. } if changes.is_empty());
 
@@ -80,36 +81,38 @@ fn copy_changes() -> Result<()> {
             relative_path: "".into(),
         }],
     }
-    .execute_unboxed(&mut ws)?;
+    .execute_unboxed(&mut ws)
+    .await?;
     assert_matches!(result, MutationResult::Updated { .. });
 
-    let from_rev = queries::query_revision(&ws, revs::resolve_conflict())?;
-    let to_rev = queries::query_revision(&ws, revs::working_copy())?;
+    let from_rev = queries::query_revision(&ws, revs::resolve_conflict()).await?;
+    let to_rev = queries::query_revision(&ws, revs::working_copy()).await?;
     assert_matches!(from_rev, RevResult::Detail { changes, .. } if changes.len() == 1);
     assert_matches!(to_rev, RevResult::Detail { changes, .. } if changes.len() == 1);
 
     Ok(())
 }
 
-#[test]
-fn create_revision_single_parent() -> Result<()> {
+#[tokio::test]
+async fn create_revision_single_parent() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
     let mut ws = session.load_directory(repo.path())?;
 
-    let parent_rev = queries::query_revision(&ws, revs::working_copy())?;
+    let parent_rev = queries::query_revision(&ws, revs::working_copy()).await?;
     assert_matches!(parent_rev, RevResult::Detail { header, .. } if header.is_working_copy);
 
     let result = CreateRevision {
         parent_ids: vec![revs::working_copy()],
     }
-    .execute_unboxed(&mut ws)?;
+    .execute_unboxed(&mut ws)
+    .await?;
 
     match result {
         MutationResult::UpdatedSelection { new_selection, .. } => {
-            let parent_rev = queries::query_revision(&ws, revs::working_copy())?;
-            let child_rev = queries::query_revision(&ws, new_selection.id)?;
+            let parent_rev = queries::query_revision(&ws, revs::working_copy()).await?;
+            let child_rev = queries::query_revision(&ws, new_selection.id).await?;
             assert!(
                 matches!(parent_rev, RevResult::Detail { header, .. } if !header.is_working_copy)
             );
@@ -123,24 +126,25 @@ fn create_revision_single_parent() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn create_revision_multi_parent() -> Result<()> {
+#[tokio::test]
+async fn create_revision_multi_parent() -> Result<()> {
     let repo: tempfile::TempDir = mkrepo();
 
     let mut session = WorkerSession::default();
     let mut ws = session.load_directory(repo.path())?;
 
-    let parent_rev = queries::query_revision(&ws, revs::working_copy())?;
+    let parent_rev = queries::query_revision(&ws, revs::working_copy()).await?;
     assert_matches!(parent_rev, RevResult::Detail { header, .. } if header.is_working_copy);
 
     let result = CreateRevision {
         parent_ids: vec![revs::working_copy(), revs::conflict_bookmark()],
     }
-    .execute_unboxed(&mut ws)?;
+    .execute_unboxed(&mut ws)
+    .await?;
 
     match result {
         MutationResult::UpdatedSelection { new_selection, .. } => {
-            let child_rev = queries::query_revision(&ws, new_selection.id)?;
+            let child_rev = queries::query_revision(&ws, new_selection.id).await?;
             assert_matches!(child_rev, RevResult::Detail { parents, .. } if parents.len() == 2);
         }
         _ => panic!("CreateRevision failed"),
@@ -149,14 +153,14 @@ fn create_revision_multi_parent() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn describe_revision() -> Result<()> {
+#[tokio::test]
+async fn describe_revision() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
     let mut ws = session.load_directory(repo.path())?;
 
-    let rev = queries::query_revision(&ws, revs::working_copy())?;
+    let rev = queries::query_revision(&ws, revs::working_copy()).await?;
     assert_matches!(rev, RevResult::Detail { header, .. } if header.description.lines[0].is_empty());
 
     let result = DescribeRevision {
@@ -164,10 +168,11 @@ fn describe_revision() -> Result<()> {
         new_description: "wip".to_owned(),
         reset_author: false,
     }
-    .execute_unboxed(&mut ws)?;
+    .execute_unboxed(&mut ws)
+    .await?;
     assert_matches!(result, MutationResult::Updated { .. });
 
-    let rev = queries::query_revision(&ws, revs::working_copy())?;
+    let rev = queries::query_revision(&ws, revs::working_copy()).await?;
     assert!(
         matches!(rev, RevResult::Detail { header, .. } if header.description.lines[0] == "wip")
     );
@@ -175,14 +180,14 @@ fn describe_revision() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn describe_revision_with_snapshot() -> Result<()> {
+#[tokio::test]
+async fn describe_revision_with_snapshot() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
     let mut ws = session.load_directory(repo.path())?;
 
-    let rev = queries::query_revision(&ws, revs::working_copy())?;
+    let rev = queries::query_revision(&ws, revs::working_copy()).await?;
     assert!(
         matches!(rev, RevResult::Detail { header, changes, .. } if header.description.lines[0].is_empty() && changes.is_empty())
     );
@@ -194,9 +199,10 @@ fn describe_revision_with_snapshot() -> Result<()> {
         new_description: "wip".to_owned(),
         reset_author: false,
     }
-    .execute_unboxed(&mut ws)?;
+    .execute_unboxed(&mut ws)
+    .await?;
 
-    let rev = queries::query_revision(&ws, revs::working_copy())?;
+    let rev = queries::query_revision(&ws, revs::working_copy()).await?;
     assert!(
         matches!(rev, RevResult::Detail { header, changes, .. } if header.description.lines[0] == "wip" && !changes.is_empty())
     );
@@ -204,20 +210,21 @@ fn describe_revision_with_snapshot() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn duplicate_revisions() -> Result<()> {
+#[tokio::test]
+async fn duplicate_revisions() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
     let mut ws = session.load_directory(repo.path())?;
 
-    let rev = queries::query_revision(&ws, revs::working_copy())?;
+    let rev = queries::query_revision(&ws, revs::working_copy()).await?;
     assert_matches!(rev, RevResult::Detail { header, .. } if header.description.lines[0].is_empty());
 
     let result = DuplicateRevisions {
         ids: vec![revs::main_bookmark()],
     }
-    .execute_unboxed(&mut ws)?;
+    .execute_unboxed(&mut ws)
+    .await?;
     assert_matches!(result, MutationResult::UpdatedSelection { .. });
 
     let page = queries::query_log(&ws, "description(unsynced)", 3)?;
@@ -226,8 +233,8 @@ fn duplicate_revisions() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn insert_revision() -> Result<()> {
+#[tokio::test]
+async fn insert_revision() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
@@ -241,7 +248,8 @@ fn insert_revision() -> Result<()> {
         before_id: revs::working_copy(),
         id: revs::resolve_conflict(),
     }
-    .execute_unboxed(&mut ws)?;
+    .execute_unboxed(&mut ws)
+    .await?;
 
     let page = queries::query_log(&ws, "main::@", 4)?;
     assert_eq!(3, page.rows.len());
@@ -249,14 +257,14 @@ fn insert_revision() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn move_changes_all_paths() -> Result<()> {
+#[tokio::test]
+async fn move_changes_all_paths() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
     let mut ws = session.load_directory(repo.path())?;
 
-    let parent_rev = queries::query_revision(&ws, revs::conflict_bookmark())?;
+    let parent_rev = queries::query_revision(&ws, revs::conflict_bookmark()).await?;
     assert_matches!(parent_rev, RevResult::Detail { header, .. } if header.has_conflict);
 
     let result = MoveChanges {
@@ -264,24 +272,25 @@ fn move_changes_all_paths() -> Result<()> {
         to_id: revs::conflict_bookmark().commit,
         paths: vec![],
     }
-    .execute_unboxed(&mut ws)?;
+    .execute_unboxed(&mut ws)
+    .await?;
     assert_matches!(result, MutationResult::Updated { .. });
 
-    let parent_rev = queries::query_revision(&ws, revs::conflict_bookmark())?;
+    let parent_rev = queries::query_revision(&ws, revs::conflict_bookmark()).await?;
     assert_matches!(parent_rev, RevResult::Detail { header, .. } if !header.has_conflict);
 
     Ok(())
 }
 
-#[test]
-fn move_changes_single_path() -> Result<()> {
+#[tokio::test]
+async fn move_changes_single_path() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
     let mut ws = session.load_directory(repo.path())?;
 
-    let from_rev = queries::query_revision(&ws, revs::main_bookmark())?;
-    let to_rev = queries::query_revision(&ws, revs::working_copy())?;
+    let from_rev = queries::query_revision(&ws, revs::main_bookmark()).await?;
+    let to_rev = queries::query_revision(&ws, revs::working_copy()).await?;
     assert_matches!(from_rev, RevResult::Detail { changes, .. } if changes.len() == 2);
     assert_matches!(to_rev, RevResult::Detail { changes, .. } if changes.is_empty());
 
@@ -293,19 +302,20 @@ fn move_changes_single_path() -> Result<()> {
             relative_path: "".into(),
         }],
     }
-    .execute_unboxed(&mut ws)?;
+    .execute_unboxed(&mut ws)
+    .await?;
     assert_matches!(result, MutationResult::Updated { .. });
 
-    let from_rev = queries::query_revision(&ws, revs::main_bookmark())?;
-    let to_rev = queries::query_revision(&ws, revs::working_copy())?;
+    let from_rev = queries::query_revision(&ws, revs::main_bookmark()).await?;
+    let to_rev = queries::query_revision(&ws, revs::working_copy()).await?;
     assert_matches!(from_rev, RevResult::Detail { changes, .. } if changes.len() == 1);
     assert_matches!(to_rev, RevResult::Detail { changes, .. } if changes.len() == 1);
 
     Ok(())
 }
 
-#[test]
-fn move_source() -> Result<()> {
+#[tokio::test]
+async fn move_source() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
@@ -318,7 +328,8 @@ fn move_source() -> Result<()> {
         id: revs::resolve_conflict(),
         parent_ids: vec![revs::working_copy().commit],
     }
-    .execute_unboxed(&mut ws)?;
+    .execute_unboxed(&mut ws)
+    .await?;
 
     let page = queries::query_log(&ws, "@+", 2)?;
     assert_eq!(1, page.rows.len());
@@ -326,8 +337,8 @@ fn move_source() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn move_hunk_content() -> anyhow::Result<()> {
+#[tokio::test]
+async fn move_hunk_content() -> anyhow::Result<()> {
     use jj_lib::repo::Repo;
 
     let repo = mkrepo();
@@ -356,11 +367,11 @@ fn move_hunk_content() -> anyhow::Result<()> {
         hunk,
     };
 
-    let result = mutation.execute_unboxed(&mut ws)?;
+    let result = mutation.execute_unboxed(&mut ws).await?;
     assert_matches!(result, MutationResult::Updated { .. });
 
     // Verify source commit was abandoned or has minimal changes
-    let from_rev = queries::query_revision(&ws, revs::hunk_source())?;
+    let from_rev = queries::query_revision(&ws, revs::hunk_source()).await?;
     match from_rev {
         RevResult::NotFound { .. } => (),
         RevResult::Detail {
@@ -385,9 +396,9 @@ fn move_hunk_content() -> anyhow::Result<()> {
 
     match path_value.into_resolved() {
         Ok(Some(jj_lib::backend::TreeValue::File { id, .. })) => {
-            let mut reader = block_on(ws.repo().store().read_file(&repo_path, &id))?;
+            let mut reader = ws.repo().store().read_file(&repo_path, &id).await?;
             let mut content = Vec::new();
-            block_on(reader.read_to_end(&mut content))?;
+            reader.read_to_end(&mut content).await?;
             let content_str = String::from_utf8_lossy(&content);
             assert_eq!(content_str, "11\n2\n", "Target should have hunk applied");
         }
@@ -397,8 +408,8 @@ fn move_hunk_content() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[test]
-fn move_hunk_message() -> anyhow::Result<()> {
+#[tokio::test]
+async fn move_hunk_message() -> anyhow::Result<()> {
     let repo = mkrepo();
     let mut session = WorkerSession::default();
     let mut ws = session.load_directory(repo.path())?;
@@ -424,11 +435,11 @@ fn move_hunk_message() -> anyhow::Result<()> {
         hunk,
     };
 
-    let result = mutation.execute_unboxed(&mut ws)?;
+    let result = mutation.execute_unboxed(&mut ws).await?;
     assert_matches!(result, MutationResult::Updated { .. });
 
     // Source should be abandoned (not found in repo)
-    let source_rev = queries::query_revision(&ws, revs::hunk_child_single())?;
+    let source_rev = queries::query_revision(&ws, revs::hunk_child_single()).await?;
     assert_matches!(
         source_rev,
         RevResult::NotFound { .. },
@@ -436,7 +447,7 @@ fn move_hunk_message() -> anyhow::Result<()> {
     );
 
     // Target should have combined description
-    let target_rev = queries::query_revision(&ws, revs::hunk_sibling())?;
+    let target_rev = queries::query_revision(&ws, revs::hunk_sibling()).await?;
     match target_rev {
         RevResult::Detail { header, .. } => {
             let desc = header.description.lines.join("\n");
@@ -452,8 +463,8 @@ fn move_hunk_message() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[test]
-fn move_hunk_invalid() -> anyhow::Result<()> {
+#[tokio::test]
+async fn move_hunk_invalid() -> anyhow::Result<()> {
     let repo = mkrepo();
     let mut session = WorkerSession::default();
     let mut ws = session.load_directory(repo.path())?;
@@ -479,14 +490,14 @@ fn move_hunk_invalid() -> anyhow::Result<()> {
         hunk,
     };
 
-    let result = mutation.execute_unboxed(&mut ws);
+    let result = mutation.execute_unboxed(&mut ws).await;
     assert!(result.is_err(), "Should fail with invalid hunk");
 
     Ok(())
 }
 
-#[test]
-fn move_hunk_descendant() -> anyhow::Result<()> {
+#[tokio::test]
+async fn move_hunk_descendant() -> anyhow::Result<()> {
     let repo = mkrepo();
     let mut session = WorkerSession::default();
     let mut ws = session.load_directory(repo.path())?;
@@ -518,14 +529,14 @@ fn move_hunk_descendant() -> anyhow::Result<()> {
         hunk,
     };
 
-    let result = mutation.execute_unboxed(&mut ws)?;
+    let result = mutation.execute_unboxed(&mut ws).await?;
     assert_matches!(result, MutationResult::PreconditionError { .. });
 
     Ok(())
 }
 
-#[test]
-fn move_hunk_unrelated() -> anyhow::Result<()> {
+#[tokio::test]
+async fn move_hunk_unrelated() -> anyhow::Result<()> {
     use jj_lib::repo::Repo;
 
     let repo = mkrepo();
@@ -560,11 +571,11 @@ fn move_hunk_unrelated() -> anyhow::Result<()> {
         hunk,
     };
 
-    let result = mutation.execute_unboxed(&mut ws)?;
+    let result = mutation.execute_unboxed(&mut ws).await?;
     assert_matches!(result, MutationResult::Updated { .. });
 
     // Verify source has the hunk removed (becomes empty and should be abandoned or have no changes)
-    let from_rev = queries::query_revision(&ws, revs::hunk_child_single())?;
+    let from_rev = queries::query_revision(&ws, revs::hunk_child_single()).await?;
     match from_rev {
         RevResult::NotFound { .. } => (),
         RevResult::Detail { changes, .. } if changes.is_empty() => (),
@@ -578,9 +589,9 @@ fn move_hunk_unrelated() -> anyhow::Result<()> {
 
     match sibling_tree.path_value(&repo_path)?.into_resolved() {
         Ok(Some(jj_lib::backend::TreeValue::File { id, .. })) => {
-            let mut reader = block_on(ws.repo().store().read_file(&repo_path, &id))?;
+            let mut reader = ws.repo().store().read_file(&repo_path, &id).await?;
             let mut content = Vec::new();
-            block_on(reader.read_to_end(&mut content))?;
+            reader.read_to_end(&mut content).await?;
             let content_str = String::from_utf8_lossy(&content);
             assert_eq!(
                 content_str, "line1\nmodified2\nline3\nline4\nline5\nnew6\nnew7\nnew8\n",
@@ -593,8 +604,8 @@ fn move_hunk_unrelated() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[test]
-fn copy_hunk_from_parent() -> anyhow::Result<()> {
+#[tokio::test]
+async fn copy_hunk_from_parent() -> anyhow::Result<()> {
     use jj_lib::repo::Repo;
 
     let repo = mkrepo();
@@ -628,7 +639,7 @@ fn copy_hunk_from_parent() -> anyhow::Result<()> {
         hunk,
     };
 
-    let result = mutation.execute_unboxed(&mut ws)?;
+    let result = mutation.execute_unboxed(&mut ws).await?;
     assert_matches!(result, MutationResult::Updated { .. });
 
     // Verify: child should now have parent's content (restoration)
@@ -638,9 +649,9 @@ fn copy_hunk_from_parent() -> anyhow::Result<()> {
 
     match child_tree.path_value(&repo_path)?.into_resolved() {
         Ok(Some(jj_lib::backend::TreeValue::File { id, .. })) => {
-            let mut reader = block_on(ws.repo().store().read_file(&repo_path, &id))?;
+            let mut reader = ws.repo().store().read_file(&repo_path, &id).await?;
             let mut content = Vec::new();
-            block_on(reader.read_to_end(&mut content))?;
+            reader.read_to_end(&mut content).await?;
             let content_str = String::from_utf8_lossy(&content);
             assert_eq!(
                 content_str, "line1\nline2\nline3\nline4\nline5\n",
@@ -653,8 +664,8 @@ fn copy_hunk_from_parent() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[test]
-fn copy_hunk_to_conflict() -> anyhow::Result<()> {
+#[tokio::test]
+async fn copy_hunk_to_conflict() -> anyhow::Result<()> {
     let repo = mkrepo();
     let mut session = WorkerSession::default();
     let mut ws = session.load_directory(repo.path())?;
@@ -684,7 +695,7 @@ fn copy_hunk_to_conflict() -> anyhow::Result<()> {
         hunk,
     };
 
-    let result = mutation.execute_unboxed(&mut ws);
+    let result = mutation.execute_unboxed(&mut ws).await;
 
     // Should fail with precondition error about conflicts
     match result {
@@ -702,8 +713,8 @@ fn copy_hunk_to_conflict() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[test]
-fn copy_hunk_out_of_bounds() -> anyhow::Result<()> {
+#[tokio::test]
+async fn copy_hunk_out_of_bounds() -> anyhow::Result<()> {
     let repo = mkrepo();
     let mut session = WorkerSession::default();
     let mut ws = session.load_directory(repo.path())?;
@@ -731,7 +742,7 @@ fn copy_hunk_out_of_bounds() -> anyhow::Result<()> {
         hunk,
     };
 
-    let result = mutation.execute_unboxed(&mut ws);
+    let result = mutation.execute_unboxed(&mut ws).await;
 
     match result {
         Ok(MutationResult::PreconditionError { message }) => {
@@ -748,8 +759,8 @@ fn copy_hunk_out_of_bounds() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[test]
-fn copy_hunk_unchanged() -> anyhow::Result<()> {
+#[tokio::test]
+async fn copy_hunk_unchanged() -> anyhow::Result<()> {
     let repo = mkrepo();
     let mut session = WorkerSession::default();
     let mut ws = session.load_directory(repo.path())?;
@@ -781,14 +792,14 @@ fn copy_hunk_unchanged() -> anyhow::Result<()> {
     };
 
     // Trying to "restore" lines 1-3 from base to sibling should be unchanged (they're already identical)
-    let result = mutation.execute_unboxed(&mut ws)?;
+    let result = mutation.execute_unboxed(&mut ws).await?;
     assert_matches!(result, MutationResult::Unchanged);
 
     Ok(())
 }
 
-#[test]
-fn copy_hunk_multiple_hunks() -> anyhow::Result<()> {
+#[tokio::test]
+async fn copy_hunk_multiple_hunks() -> anyhow::Result<()> {
     use jj_lib::repo::Repo;
 
     let repo = mkrepo();
@@ -822,7 +833,7 @@ fn copy_hunk_multiple_hunks() -> anyhow::Result<()> {
         hunk,
     };
 
-    let result = mutation.execute_unboxed(&mut ws)?;
+    let result = mutation.execute_unboxed(&mut ws).await?;
     assert_matches!(result, MutationResult::Updated { .. });
 
     // Verify: line 2 still modified (changed2), line 4 restored (line4)
@@ -832,9 +843,9 @@ fn copy_hunk_multiple_hunks() -> anyhow::Result<()> {
 
     match child_tree.path_value(&repo_path)?.into_resolved() {
         Ok(Some(jj_lib::backend::TreeValue::File { id, .. })) => {
-            let mut reader = block_on(ws.repo().store().read_file(&repo_path, &id))?;
+            let mut reader = ws.repo().store().read_file(&repo_path, &id).await?;
             let mut content = Vec::new();
-            block_on(reader.read_to_end(&mut content))?;
+            reader.read_to_end(&mut content).await?;
             let content_str = String::from_utf8_lossy(&content);
             assert_eq!(
                 content_str, "line1\nchanged2\nline3\nline4\nline5\n",
@@ -847,8 +858,8 @@ fn copy_hunk_multiple_hunks() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[test]
-fn move_hunk_second_of_two_hunks() -> anyhow::Result<()> {
+#[tokio::test]
+async fn move_hunk_second_of_two_hunks() -> anyhow::Result<()> {
     use jj_lib::repo::Repo;
 
     let repo = mkrepo();
@@ -882,7 +893,7 @@ fn move_hunk_second_of_two_hunks() -> anyhow::Result<()> {
         hunk,
     };
 
-    let result = mutation.execute_unboxed(&mut ws)?;
+    let result = mutation.execute_unboxed(&mut ws).await?;
     assert_matches!(result, MutationResult::Updated { .. });
 
     // Verify source still has the first hunk (changed2), but not the second
@@ -892,9 +903,9 @@ fn move_hunk_second_of_two_hunks() -> anyhow::Result<()> {
 
     match source_tree.path_value(&repo_path)?.into_resolved() {
         Ok(Some(jj_lib::backend::TreeValue::File { id, .. })) => {
-            let mut reader = block_on(ws.repo().store().read_file(&repo_path, &id))?;
+            let mut reader = ws.repo().store().read_file(&repo_path, &id).await?;
             let mut content = Vec::new();
-            block_on(reader.read_to_end(&mut content))?;
+            reader.read_to_end(&mut content).await?;
             let content_str = String::from_utf8_lossy(&content);
             assert_eq!(
                 content_str, "line1\nchanged2\nline3\nline4\nline5\n",
@@ -910,9 +921,9 @@ fn move_hunk_second_of_two_hunks() -> anyhow::Result<()> {
 
     match target_tree.path_value(&repo_path)?.into_resolved() {
         Ok(Some(jj_lib::backend::TreeValue::File { id, .. })) => {
-            let mut reader = block_on(ws.repo().store().read_file(&repo_path, &id))?;
+            let mut reader = ws.repo().store().read_file(&repo_path, &id).await?;
             let mut content = Vec::new();
-            block_on(reader.read_to_end(&mut content))?;
+            reader.read_to_end(&mut content).await?;
             let content_str = String::from_utf8_lossy(&content);
             assert_eq!(
                 content_str, "line1\nline2\nline3\nchanged4\nline5\nnew6\nnew7\nnew8\n",

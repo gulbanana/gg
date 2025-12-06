@@ -51,7 +51,7 @@ macro_rules! precondition {
 #[async_trait::async_trait(?Send)]
 impl Mutation for AbandonRevisions {
     async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
-        let mut tx = ws.start_transaction()?;
+        let mut tx = ws.start_transaction().await?;
 
         let abandoned_ids = self
             .ids
@@ -97,7 +97,7 @@ impl Mutation for BackoutRevisions {
             precondition!("Not implemented for >1 rev");
         }
 
-        let mut tx = ws.start_transaction()?;
+        let mut tx = ws.start_transaction().await?;
 
         let working_copy = ws.get_commit(ws.wc_id())?;
         let reverted = ws.resolve_multiple_changes(self.ids)?;
@@ -123,7 +123,7 @@ impl Mutation for BackoutRevisions {
 #[async_trait::async_trait(?Send)]
 impl Mutation for CheckoutRevision {
     async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
-        let mut tx = ws.start_transaction()?;
+        let mut tx = ws.start_transaction().await?;
 
         let edited = ws.resolve_single_change(&self.id)?;
 
@@ -153,7 +153,7 @@ impl Mutation for CheckoutRevision {
 #[async_trait::async_trait(?Send)]
 impl Mutation for CreateRevision {
     async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
-        let mut tx = ws.start_transaction()?;
+        let mut tx = ws.start_transaction().await?;
 
         let parents_revset = ws.evaluate_revset_changes(
             &self
@@ -188,7 +188,7 @@ impl Mutation for CreateRevision {
 impl Mutation for CreateRevisionBetween {
     async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         eprintln!("CreateREvisionBetween execute()");
-        let mut tx = ws.start_transaction()?;
+        let mut tx = ws.start_transaction().await?;
 
         let parent_id = ws
             .resolve_single_commit(&self.after_id)
@@ -226,7 +226,7 @@ impl Mutation for CreateRevisionBetween {
 #[async_trait::async_trait(?Send)]
 impl Mutation for DescribeRevision {
     async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
-        let mut tx = ws.start_transaction()?;
+        let mut tx = ws.start_transaction().await?;
 
         let described = ws.resolve_single_change(&self.id)?;
 
@@ -260,7 +260,7 @@ impl Mutation for DescribeRevision {
 #[async_trait::async_trait(?Send)]
 impl Mutation for DuplicateRevisions {
     async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
-        let mut tx = ws.start_transaction()?;
+        let mut tx = ws.start_transaction().await?;
 
         let clonees = ws.resolve_multiple_changes(self.ids)?; // in reverse topological order
         let num_clonees = clonees.len();
@@ -314,7 +314,7 @@ impl Mutation for DuplicateRevisions {
 #[async_trait::async_trait(?Send)]
 impl Mutation for InsertRevision {
     async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
-        let mut tx = ws.start_transaction()?;
+        let mut tx = ws.start_transaction().await?;
 
         let target = ws
             .resolve_single_change(&self.id)
@@ -331,7 +331,7 @@ impl Mutation for InsertRevision {
         }
 
         // rebase the target's children
-        let rebased_children = ws.disinherit_children(&mut tx, &target)?;
+        let rebased_children = ws.disinherit_children(&mut tx, &target).await?;
 
         // update after, which may have been a descendant of target
         let after_id = rebased_children
@@ -354,7 +354,7 @@ impl Mutation for InsertRevision {
 #[async_trait::async_trait(?Send)]
 impl Mutation for MoveRevision {
     async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
-        let mut tx = ws.start_transaction()?;
+        let mut tx = ws.start_transaction().await?;
 
         let target = ws.resolve_single_change(&self.id)?;
         let parents = ws.resolve_multiple_changes(self.parent_ids)?;
@@ -364,7 +364,7 @@ impl Mutation for MoveRevision {
         }
 
         // rebase the target's children
-        let rebased_children = ws.disinherit_children(&mut tx, &target)?;
+        let rebased_children = ws.disinherit_children(&mut tx, &target).await?;
 
         // update parents, which may have been descendants of the target
         let parent_ids: Vec<_> = parents
@@ -391,7 +391,7 @@ impl Mutation for MoveRevision {
 #[async_trait::async_trait(?Send)]
 impl Mutation for MoveSource {
     async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
-        let mut tx = ws.start_transaction()?;
+        let mut tx = ws.start_transaction().await?;
 
         let target = ws.resolve_single_change(&self.id)?;
         let parent_ids = ws
@@ -418,7 +418,7 @@ impl Mutation for MoveSource {
 #[async_trait::async_trait(?Send)]
 impl Mutation for MoveChanges {
     async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
-        let mut tx = ws.start_transaction()?;
+        let mut tx = ws.start_transaction().await?;
 
         let from = ws.resolve_single_change(&self.from_id)?;
         let mut to = ws.resolve_single_commit(&self.to_id)?;
@@ -492,7 +492,7 @@ impl Mutation for MoveChanges {
 #[async_trait::async_trait(?Send)]
 impl Mutation for CopyChanges {
     async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
-        let mut tx = ws.start_transaction()?;
+        let mut tx = ws.start_transaction().await?;
 
         let from_tree = ws.resolve_single_commit(&self.from_id)?.tree();
         let to = ws.resolve_single_change(&self.to_id)?;
@@ -538,7 +538,7 @@ impl Mutation for TrackBranch {
                 remote_name,
                 ..
             } => {
-                let mut tx = ws.start_transaction()?;
+                let mut tx = ws.start_transaction().await?;
                 let branch_name_ref = RefNameBuf::from(branch_name);
                 let remote_name_ref = RemoteNameBuf::from(remote_name);
                 let remote_ref_symbol = RemoteRefSymbol {
@@ -578,7 +578,7 @@ impl Mutation for TrackBranch {
 #[async_trait::async_trait(?Send)]
 impl Mutation for UntrackBranch {
     async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
-        let mut tx = ws.start_transaction()?;
+        let mut tx = ws.start_transaction().await?;
 
         let mut untracked = Vec::new();
         match self.r#ref {
@@ -660,7 +660,7 @@ impl Mutation for RenameBranch {
             precondition!("Bookmark already exists: {}", new_name_ref.as_str());
         }
 
-        let mut tx = ws.start_transaction()?;
+        let mut tx = ws.start_transaction().await?;
 
         tx.repo_mut()
             .set_local_bookmark_target(&new_name_ref, ref_target);
@@ -684,7 +684,7 @@ impl Mutation for RenameBranch {
 #[async_trait::async_trait(?Send)]
 impl Mutation for CreateRef {
     async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
-        let mut tx = ws.start_transaction()?;
+        let mut tx = ws.start_transaction().await?;
 
         let commit = ws.resolve_single_change(&self.id)?;
 
@@ -759,7 +759,7 @@ impl Mutation for DeleteRef {
                 remote_name,
                 ..
             } => {
-                let mut tx = ws.start_transaction()?;
+                let mut tx = ws.start_transaction().await?;
 
                 // forget the bookmark entirely - when target is absent, it's removed from the view
                 let remote_ref = RemoteRef {
@@ -790,7 +790,7 @@ impl Mutation for DeleteRef {
             }
             StoreRef::LocalBookmark { branch_name, .. } => {
                 let branch_name_ref = RefNameBuf::from(branch_name);
-                let mut tx = ws.start_transaction()?;
+                let mut tx = ws.start_transaction().await?;
 
                 tx.repo_mut()
                     .set_local_bookmark_target(&branch_name_ref, RefTarget::absent());
@@ -802,7 +802,7 @@ impl Mutation for DeleteRef {
             }
             StoreRef::Tag { tag_name } => {
                 let tag_name_ref = RefNameBuf::from(tag_name);
-                let mut tx = ws.start_transaction()?;
+                let mut tx = ws.start_transaction().await?;
 
                 tx.repo_mut()
                     .set_local_tag_target(&tag_name_ref, RefTarget::absent());
@@ -820,7 +820,7 @@ impl Mutation for DeleteRef {
 #[async_trait::async_trait(?Send)]
 impl Mutation for MoveRef {
     async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
-        let mut tx = ws.start_transaction()?;
+        let mut tx = ws.start_transaction().await?;
 
         let commit = ws.resolve_single_change(&self.to_id)?;
 
@@ -885,7 +885,7 @@ impl Mutation for MoveRef {
 #[async_trait::async_trait(?Send)]
 impl Mutation for MoveHunk {
     async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
-        let mut tx = ws.start_transaction()?;
+        let mut tx = ws.start_transaction().await?;
 
         let from = ws.resolve_single_change(&self.from_id)?;
         let to = ws.resolve_single_commit(&self.to_id)?;
@@ -1087,7 +1087,7 @@ impl Mutation for MoveHunk {
 #[async_trait::async_trait(?Send)]
 impl Mutation for CopyHunk {
     async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
-        let mut tx = ws.start_transaction()?;
+        let mut tx = ws.start_transaction().await?;
 
         let from = ws.resolve_single_commit(&self.from_id)?;
         let to = ws.resolve_single_change(&self.to_id)?;
@@ -1241,7 +1241,7 @@ impl Mutation for CopyHunk {
 #[async_trait::async_trait(?Send)]
 impl Mutation for GitPush {
     async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
-        let mut tx = ws.start_transaction()?;
+        let mut tx = ws.start_transaction().await?;
 
         // determine bookmarks to push, recording the old and new commits
         let mut remote_branch_updates: Vec<(&str, Vec<(RefNameBuf, refs::BookmarkPushUpdate)>)> =
@@ -1449,7 +1449,7 @@ impl Mutation for GitPush {
 #[async_trait::async_trait(?Send)]
 impl Mutation for GitFetch {
     async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
-        let mut tx = ws.start_transaction()?;
+        let mut tx = ws.start_transaction().await?;
 
         let git_repo = match ws.git_repo() {
             Some(git_repo) => git_repo,
@@ -1516,7 +1516,7 @@ impl Mutation for UndoOperation {
             precondition!("Cannot undo a merge operation");
         };
 
-        let mut tx = ws.start_transaction()?;
+        let mut tx = ws.start_transaction().await?;
         let repo_loader = tx.base_repo().loader();
         let head_repo = repo_loader.load_at(&head_op)?;
         let parent_repo = repo_loader.load_at(&parent_op)?;

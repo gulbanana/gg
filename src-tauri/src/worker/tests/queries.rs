@@ -82,14 +82,14 @@ fn log_immutable() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn revision() -> Result<()> {
+#[tokio::test]
+async fn revision() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
     let ws = session.load_directory(repo.path())?;
 
-    let rev = queries::query_revision(&ws, revs::main_bookmark())?;
+    let rev = queries::query_revision(&ws, revs::main_bookmark()).await?;
 
     assert_matches!(
         rev,

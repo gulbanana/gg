@@ -35,7 +35,6 @@ use jj_lib::{
     rewrite,
     tree_merge::MergeOptions,
 };
-use pollster::{FutureExt, block_on};
 
 use crate::messages::{
     ChangeHunk, ChangeKind, FileRange, HunkLocation, LogCoordinates, LogLine, LogPage, LogRow,
@@ -300,14 +299,14 @@ pub fn query_log(ws: &WorkspaceSession, revset_str: &str, max_results: usize) ->
 }
 
 // XXX this is reloading the header, which the client already has
-pub fn query_revision(ws: &WorkspaceSession, id: RevId) -> Result<RevResult> {
+pub async fn query_revision(ws: &WorkspaceSession<'_>, id: RevId) -> Result<RevResult> {
     let commit = match ws.resolve_optional_id(&id)? {
         Some(commit) => commit,
         None => return Ok(RevResult::NotFound { id }),
     };
 
     let commit_parents: Result<Vec<_>, _> = commit.parents().collect();
-    let parent_tree = block_on(rewrite::merge_commit_trees(ws.repo(), &commit_parents?))?;
+    let parent_tree = rewrite::merge_commit_trees(ws.repo(), &commit_parents?).await?;
     let tree = commit.tree();
 
     let mut conflicts = Vec::new();
@@ -315,7 +314,7 @@ pub fn query_revision(ws: &WorkspaceSession, id: RevId) -> Result<RevResult> {
         if let Ok(entry) = entry
             && !entry.is_resolved()
         {
-            match conflicts::materialize_tree_value(ws.repo().store(), &path, entry).block_on()? {
+            match conflicts::materialize_tree_value(ws.repo().store(), &path, entry).await? {
                 MaterializedTreeValue::FileConflict(file) => {
                     let mut hunk_content = vec![];
                     conflicts::materialize_merge_result(
@@ -347,7 +346,7 @@ pub fn query_revision(ws: &WorkspaceSession, id: RevId) -> Result<RevResult> {
 
     let mut changes = Vec::new();
     let tree_diff = parent_tree.diff_stream(&tree, &EverythingMatcher);
-    format_tree_changes(ws, &mut changes, tree_diff).block_on()?;
+    format_tree_changes(ws, &mut changes, tree_diff).await?;
 
     let header = ws.format_header(&commit, None)?;
 
@@ -432,7 +431,7 @@ async fn format_tree_changes(
         let after_future = conflicts::materialize_tree_value(store, &path, after.clone());
         let (before_value, after_value) = try_join!(before_future, after_future)?;
 
-        let hunks = get_value_hunks(3, &path, before_value, after_value)?;
+        let hunks = get_value_hunks(3, &path, before_value, after_value).await?;
 
         changes.push(RevChange {
             path: ws.format_path(path)?,
@@ -444,26 +443,26 @@ async fn format_tree_changes(
     Ok(())
 }
 
-fn get_value_hunks(
+async fn get_value_hunks(
     num_context_lines: usize,
     path: &RepoPath,
     left_value: MaterializedTreeValue,
     right_value: MaterializedTreeValue,
 ) -> Result<Vec<ChangeHunk>> {
     if left_value.is_absent() {
-        let right_part = get_value_contents(path, right_value)?;
+        let right_part = get_value_contents(path, right_value).await?;
         get_unified_hunks(num_context_lines, &[], &right_part)
     } else if right_value.is_present() {
-        let left_part = get_value_contents(path, left_value)?;
-        let right_part = get_value_contents(path, right_value)?;
+        let left_part = get_value_contents(path, left_value).await?;
+        let right_part = get_value_contents(path, right_value).await?;
         get_unified_hunks(num_context_lines, &left_part, &right_part)
     } else {
-        let left_part = get_value_contents(path, left_value)?;
+        let left_part = get_value_contents(path, left_value).await?;
         get_unified_hunks(num_context_lines, &left_part, &[])
     }
 }
 
-fn get_value_contents(path: &RepoPath, value: MaterializedTreeValue) -> Result<Vec<u8>> {
+async fn get_value_contents(path: &RepoPath, value: MaterializedTreeValue) -> Result<Vec<u8>> {
     use tokio::io::AsyncReadExt;
 
     match value {
@@ -472,7 +471,7 @@ fn get_value_contents(path: &RepoPath, value: MaterializedTreeValue) -> Result<V
         )),
         MaterializedTreeValue::File(MaterializedFileValue { mut reader, .. }) => {
             let mut contents = vec![];
-            reader.read_to_end(&mut contents).block_on()?;
+            reader.read_to_end(&mut contents).await?;
 
             let start = &contents[..8000.min(contents.len())]; // same heuristic git uses
             let is_binary = start.contains(&b'\0');
