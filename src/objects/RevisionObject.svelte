@@ -15,7 +15,7 @@
     export let selected: boolean; // same as the imported event, but parent may want to force a value
     export let noBranches: boolean = false;
 
-    let operand: Operand = child ? { type: "Parent", header, child } : { type: "Revision", header };
+    $: operand = (child ? { type: "Parent", header, child } : { type: "Revision", header }) as Operand;
 
     function onSelect() {
         revisionSelectEvent.set(header);
