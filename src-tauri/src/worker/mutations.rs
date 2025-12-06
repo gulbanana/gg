@@ -443,7 +443,7 @@ impl Mutation for MoveChanges {
         } else {
             tx.repo_mut()
                 .rewrite_commit(&from)
-                .set_tree(remainder_tree.clone())
+                .set_tree(remainder_tree)
                 .write()?;
         }
 
@@ -471,9 +471,7 @@ impl Mutation for MoveChanges {
 
         // apply changes to destination
         let to_tree = to.tree();
-        let new_to_tree = to_tree
-            .merge(parent_tree.clone(), split_tree.clone())
-            .await?;
+        let new_to_tree = to_tree.merge(parent_tree, split_tree).await?;
         let description = combine_messages(&from, &to, abandon_source);
         tx.repo_mut()
             .rewrite_commit(&to)
@@ -941,9 +939,7 @@ impl Mutation for MoveHunk {
                 .merge(hunk_tree.clone(), parent_tree.clone())
                 .await?;
             let to_tree = to.tree();
-            let new_to = to_tree
-                .merge(parent_tree.clone(), hunk_tree.clone())
-                .await?;
+            let new_to = to_tree.merge(parent_tree.clone(), hunk_tree).await?;
             (remainder, new_to)
         } else {
             // for unrelated commits, apply hunk directly to avoid conflicts
@@ -1009,7 +1005,7 @@ impl Mutation for MoveHunk {
             let description = combine_messages(&from, &to, abandon_source);
             tx.repo_mut()
                 .rewrite_commit(&to)
-                .set_tree(new_to_tree.clone())
+                .set_tree(new_to_tree)
                 .set_description(description)
                 .write()?;
         } else if to_is_ancestor {
@@ -1024,7 +1020,7 @@ impl Mutation for MoveHunk {
                 .write()?;
 
             // recompute the source's tree after the destination has the hunk applied
-            let child_new_tree = new_to_tree.clone().merge(parent_tree, from_tree).await?;
+            let child_new_tree = new_to_tree.merge(parent_tree, from_tree).await?;
 
             // rebase source
             tx.repo_mut()
@@ -1036,7 +1032,7 @@ impl Mutation for MoveHunk {
             // general case: unrelated or ancestor-to-descendant
             tx.repo_mut()
                 .rewrite_commit(&from)
-                .set_tree(remainder_tree.clone())
+                .set_tree(remainder_tree)
                 .write()?;
 
             let description = combine_messages(&from, &to, abandon_source);
