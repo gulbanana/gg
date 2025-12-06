@@ -50,6 +50,7 @@ use pollster::block_on;
 use thiserror::Error;
 
 use super::WorkerSession;
+
 use crate::{
     config::{GGSettings, read_config},
     messages::{self, RevId},
@@ -422,11 +423,7 @@ impl WorkspaceSession<'_> {
         let absolute_path = self.workspace.workspace_root().into();
 
         let git_remotes = match self.git_repo() {
-            Some(repo) => repo
-                .remote_names()
-                .into_iter()
-                .map(|s| s.to_string())
-                .collect(),
+            Some(repo) => get_git_remote_names(&repo),
             None => vec![],
         };
 
@@ -1126,4 +1123,19 @@ fn load_at_head(workspace: &Workspace, data: &WorkspaceData) -> Result<SessionOp
         data,
         repo,
     ))
+}
+
+/// Lists only fetchable remotes
+pub fn get_git_remote_names(git_repo: &gix::Repository) -> Vec<String> {
+    git_repo
+        .remote_names()
+        .into_iter()
+        .filter(|name| {
+            matches!(
+                git_repo.try_find_remote(&**name),
+                Some(Ok(remote)) if remote.url(gix::remote::Direction::Fetch).is_some()
+            )
+        })
+        .map(|remote| remote.to_string())
+        .collect()
 }

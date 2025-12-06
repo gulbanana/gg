@@ -1,5 +1,10 @@
 # GG Changelog
 
+## Unreleased
+
+### Fixed
+- Git remote handling: gg now displays only fetchable remotes.
+
 ## [0.35.1](releases/tag/v0.35.0)
 
 ### Added

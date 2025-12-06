@@ -42,7 +42,7 @@ use crate::messages::{
     MultilineString, RevChange, RevConflict, RevId, RevResult,
 };
 
-use super::WorkspaceSession;
+use super::{WorkspaceSession, gui_util::get_git_remote_names};
 
 struct LogStem {
     source: LogCoordinates,
@@ -384,11 +384,7 @@ pub fn query_remotes(
         None => return Err(anyhow!("No git backend")),
     };
 
-    let all_remotes: Vec<String> = git_repo
-        .remote_names()
-        .into_iter()
-        .map(|remote| remote.to_string())
-        .collect();
+    let all_remotes = get_git_remote_names(&git_repo);
 
     let matching_remotes = match tracking_branch {
         Some(branch_name) => all_remotes

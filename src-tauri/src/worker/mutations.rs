@@ -40,7 +40,7 @@ use crate::messages::{
 };
 
 use super::Mutation;
-use super::gui_util::WorkspaceSession;
+use super::gui_util::{WorkspaceSession, get_git_remote_names};
 
 macro_rules! precondition {
     ($($args:tt)*) => {
@@ -1476,11 +1476,7 @@ impl Mutation for GitFetch {
             }
             GitFetch::AllRemotes { branch_ref } => {
                 let branch_name = branch_ref.as_branch()?;
-                for remote_name in git_repo
-                    .remote_names()
-                    .into_iter()
-                    .map(|remote| remote.to_string())
-                {
+                for remote_name in get_git_remote_names(&git_repo) {
                     remote_patterns.push((remote_name, Some(branch_name.to_owned())));
                 }
             }
