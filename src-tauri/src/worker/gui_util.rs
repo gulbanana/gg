@@ -1105,6 +1105,10 @@ fn build_ref_index(repo: &ReadonlyRepo) -> RefIndex {
     index
 }
 
+/************************************************/
+/* misc helpers that should be better organised */
+/************************************************/
+
 fn load_at_head(workspace: &Workspace, data: &WorkspaceData) -> Result<SessionOperation> {
     let loader = workspace.repo_loader();
 
