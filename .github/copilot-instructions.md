@@ -63,9 +63,10 @@ npm run tauri dev -- -- -- --debug  # Pass --debug to app (yes, 3x --)
 1. Define struct in `src-tauri/src/messages/mutations.rs` with `#[cfg_attr(feature = "ts-rs", derive(TS))]`
 2. Implement `Mutation` trait in `src-tauri/src/worker/mutations.rs`:
    ```rust
+   #[async_trait::async_trait(?Send)]
    impl Mutation for YourMutation {
-       fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
-           let mut tx = ws.start_transaction()?;
+       async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
+           let mut tx = ws.start_transaction().await?;
            
            // Resolve commits early
            let from = ws.resolve_single_change(&self.from_id)?;
@@ -127,14 +128,15 @@ Access via `GGSettings` trait methods in `src-tauri/src/config/mod.rs`.
 1. Add default value with comment in `src-tauri/src/config/gg.toml`
 2. Add trait method to `GGSettings` and implement for `UserSettings` in `src-tauri/src/config/mod.rs`
 3. If frontend needs the value: add field to message struct (e.g., `RepoConfig::Workspace`), populate in worker, run `npm run gen`
-4. Add tests using `settings_with_gg_defaults()` / `settings_with_overrides()` helpers in `config/mod.rs`
+4. Add tests using `settings_with_gg_defaults()` / `settings_with_overrides()` helpers in `config/tests.rs`
 
 ### Error Handling in Workers
 
 Use macros from `handler.rs`:
-- `precondition!("msg")` - return `MutationResult::PreconditionError` 
 - `fatal!(result)` - panic with logging (unrecoverable)
 - `nonfatal!(result)` - log and return early
+
+In mutations, use the `precondition!` macro (defined in `mutations.rs`) to return `MutationResult::PreconditionError` for user-facing validation errors.
 
 ### Tree Merge Semantics
 
@@ -185,26 +187,26 @@ jj log -r 'mutable()'  # Shows commits that can be modified in tests
 ```
 
 **Key test commits** (from `src-tauri/src/worker/tests/mod.rs`):
-- `working_copy()` - nnloouly (empty, child of main)
+- `working_copy()` - mntpnnrk (empty, child of main)
 - `main_bookmark()` - mnkoropy (renamed c.txt)
 - `conflict_bookmark()` - nwrnuwyp (has conflict in b.txt)
 - `resolve_conflict()` - rrxroxys (resolved the conflict)
 
 Test structure:
 - Use `mkid("change_id", "commit_id")` to reference specific commits
-- Use `mutation.execute_unboxed(&mut ws)?` to run mutations
+- Use `mutation.execute_unboxed(&mut ws).await?` to run mutations (async)
 - Use `assert_matches!(result, MutationResult::Updated { .. })` to verify success
 - Immutable commits will fail with `PreconditionError`
 
 ### JJ Version Coupling
 
-jj-lib and jj-cli dependencies are pinned to specific versions (currently 0.29). Changes must be compatible with the declared version. The app embeds jj functionality - users don't need jj CLI installed.
+jj-lib and jj-cli dependencies are pinned to specific versions (see `Cargo.toml`). Changes must be compatible with the declared version. The app embeds jj functionality - users don't need jj CLI installed.
 
 ## Key Files to Reference
 
 - `DESIGN.md` - Core metaphors, architectural decisions, branch state machine
 - `src/mutators/BinaryMutator.ts` - All drag-drop operation policies
-- `src-tauri/src/worker/mutations.rs` - All mutation implementations (21+ examples)
+- `src-tauri/src/worker/mutations.rs` - All mutation implementations
 - `src-tauri/src/config/gg.toml` - Default configuration with inline docs
 - `src/stores.ts` - Global Svelte stores for cross-component state
 
