@@ -136,7 +136,7 @@
                 if (descriptionChanged && ev.key === "Enter" && (ev.metaKey || ev.ctrlKey)) {
                     updateDescription();
                 }
-            }} />
+            }}></textarea>
 
         <div class="signature-commands">
             <span>Author:</span>

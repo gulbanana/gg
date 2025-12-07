@@ -46,31 +46,35 @@
         return arr;
     }
 
-    function distinctLines(keys: Set<number>, row: EnhancedRow | null): EnhancedLine[] {
-        if (row === null) {
-            return [];
+    function sortLines(lines: EnhancedLine[]): EnhancedLine[] {
+        return lines.sort((a, b) => {
+            let aSameColumn = a.source[0] == a.target[0];
+            let bSameColumn = b.source[0] == b.target[0];
+            if (aSameColumn && !bSameColumn) {
+                return -1;
+            } else if (bSameColumn && !aSameColumn) {
+                return 1;
+            } else {
+                return 0;
+            }
+        });
+    }
+
+    function computeDistinctLines(rows: (EnhancedRow | null)[]): EnhancedLine[] {
+        const keys = new Set<number>();
+        const result: EnhancedLine[] = [];
+
+        for (const row of rows) {
+            if (row === null) continue;
+            for (const line of row.passingLines) {
+                if (!keys.has(line.key)) {
+                    keys.add(line.key);
+                    result.push(line);
+                }
+            }
         }
 
-        return row.passingLines
-            .filter((l) => {
-                if (keys.has(l.key)) {
-                    return false;
-                } else {
-                    keys.add(l.key);
-                    return true;
-                }
-            })
-            .sort((a, b) => {
-                let aSameColumn = a.source[0] == a.target[0];
-                let bSameColumn = b.source[0] == b.target[0];
-                if (aSameColumn && !bSameColumn) {
-                    return -1;
-                } else if (bSameColumn && !aSameColumn) {
-                    return 1;
-                } else {
-                    return 0;
-                }
-            });
+        return sortLines(result);
     }
 
     $: graphHeight = Math.max(containerHeight, rows.length * rowHeight);
@@ -78,14 +82,12 @@
     $: startIndex = Math.floor(Math.max(scrollTop, 0) / rowHeight);
     $: endIndex = startIndex + visibleRows;
     $: overlap = startIndex % visibleRows;
-    $: visibleSlice = {
-        rows: shiftArray(sliceArray(rows, startIndex, endIndex), overlap),
-        keys: new Set<number>(),
-    };
+    $: visibleSlice = shiftArray(sliceArray(rows, startIndex, endIndex), overlap);
+    $: distinctLines = computeDistinctLines(visibleSlice);
 </script>
 
 <svg class="graph" style="width: 100%; height: {graphHeight}px;">
-    {#each visibleSlice.rows as row, i (i)}
+    {#each visibleSlice as row, i (i)}
         <g transform="translate({(row?.location[0] ?? 0) * columnWidth} {(row?.location[1] ?? 0) * rowHeight})">
             <foreignObject
                 class:placeholder={row === null}
@@ -101,10 +103,8 @@
         </g>
     {/each}
 
-    {#each visibleSlice.rows as row, i (i)}
-        {#each distinctLines(visibleSlice.keys, row) as line (line.key)}
-            <GraphLine {line} />
-        {/each}
+    {#each distinctLines as line (line.key)}
+        <GraphLine {line} />
     {/each}
 </svg>
 

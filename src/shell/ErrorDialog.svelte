@@ -7,7 +7,7 @@
     export let onClose: (() => void) | null = null;
 </script>
 
-<ModalDialog {title} error={severe} on:cancel={onClose}>
+<ModalDialog {title} error={severe} on:cancel={() => onClose?.()}>
     <slot />
 
     <svelte:fragment slot="commands">
