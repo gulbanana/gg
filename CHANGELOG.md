@@ -1,10 +1,16 @@
 # GG Changelog
 
-## Unreleased
+## [0.36.0](releases/tag/v0.36.0)
 This release is based on Jujutsu 0.36.
 
 ### Added
 - The text of error dialogs is now selectable for copying.
+
+### Changed
+- Moving sub-file changes ("hunks") has been reworked with a new algorithm that will hopefully have more intuitive results and reduced conflicts. Conceptually, it now works as if you'd split the original commit into two, rebased everything, then squashed the split-out part. 
+
+### Fixes
+- Performance improvements due updated dependencies and some internal use of async.
 
 ## [0.35.2](releases/tag/v0.35.2)
 
