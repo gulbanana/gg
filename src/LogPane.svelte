@@ -72,7 +72,7 @@
         return choices;
     }
 
-    async function loadLog() {
+    async function loadLog(selectFirst: boolean = true) {
         let page = await query<LogPage>(
             "query_log",
             {
@@ -85,7 +85,7 @@
             graphRows = [];
             graphRows = addPageToGraph(graphRows, page.value.rows);
 
-            if (page.value.rows.length > 0) {
+            if (selectFirst && page.value.rows.length > 0) {
                 $revisionSelectEvent = page.value.rows[0].revision;
             }
 
@@ -101,29 +101,8 @@
         }
     }
 
-    async function reloadLog() {
-        let page = await query<LogPage>(
-            "query_log",
-            {
-                revset: entered_query == "" ? "all()" : entered_query,
-            },
-            () => (graphRows = undefined),
-        );
-
-        if (page.type == "data") {
-            graphRows = [];
-            graphRows = addPageToGraph(graphRows, page.value.rows);
-
-            while (page.value.has_more) {
-                let next_page = await query<LogPage>("query_log_next_page", null);
-                if (next_page.type == "data") {
-                    graphRows = addPageToGraph(graphRows, next_page.value.rows);
-                    page = next_page;
-                } else {
-                    break;
-                }
-            }
-        }
+    function reloadLog() {
+        loadLog(false);
     }
 
     // augment rows with all lines that pass through them
