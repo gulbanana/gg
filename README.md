@@ -10,7 +10,8 @@ GG is a desktop application with a keyboard & mouse interface, written in [Tauri
 To compile from source:
 1. Install the system dependencies (on Debian-likes, `apt install libpango1.0-dev libatk1.0-dev libgdk-pixbuf2.0-dev libgtk-3-dev libjavascriptcoregtk-4.1-dev libwebkit2gtk-4.1-dev`).
 2. Install the frontend dependencies: `npm install`.
-3. Build the application: `npm run tauri build`.
+3. (Optional) Install the Tauri CLI: `cargo install tauri-cli --version "^2.0.0" --locked`.
+3. Build the application: `cargo tauri build`, or `npm run tauri build` if you don't want tauri-cli installed globally.
 
 ### Setup 
 Put `gg` on your path and run it from a Jujutsu workspace, pass the workspace directory as an argument or launch it separately and use the Repository->Open menu item. Tips:
@@ -46,10 +47,10 @@ If your repo is "too large" some features will be disabled for performance. See 
 Recommended IDE setup: [VS Code](https://code.visualstudio.com/) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer) + [Svelte](https://marketplace.visualstudio.com/items?itemName=svelte.svelte-vscode) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode).
 
 Some useful commands:
-* `npm run test` - execute unit tests.
-* `npm run gen` - update the IPC message types in app/messages from src/messages.rs.
-* `npm run tauri dev` - launch a debug build with automatic reloading.
-* `npm run tauri build -- --target universal-apple-darwin` - create a fat binary for MacOS.
-* `npm run tauri dev -- -- -- --debug` - run locally with --debug. Yes, all three `--` are necessary.
+* `cargo test` - execute unit tests.
+* `cargo gen` - update the IPC message types in app/messages from src/messages.rs.
+* `cargo tauri dev` - launch a debug build with automatic reloading.
+* `cargo tauri build --target universal-apple-darwin` - create a fat binary for MacOS.
+* `cargo tauri dev -- -- --debug` - run locally with --debug. Yes, both `--` are necessary.
 
 [DESIGN.md](DESIGN.md) has some basic information about how GG works.

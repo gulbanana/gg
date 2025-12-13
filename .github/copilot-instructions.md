@@ -36,7 +36,7 @@ The UI metaphor is **drag-and-drop to edit the repository**. Core components:
 After modifying Rust structs with `#[cfg_attr(feature = "ts-rs", ...)]` in `src/messages/`:
 
 ```bash
-npm run gen  # Runs: cargo test -F ts-rs
+cargo gen  # Runs: cargo test -F ts-rs
 ```
 
 This exports TypeScript types to `app/messages/`. **Frontend will break without this step.**
@@ -53,9 +53,9 @@ This project uses **Jujutsu (jj)** for version control instead of Git. See [juju
 ### Development Commands
 
 ```bash
-npm run tauri dev              # Debug build with auto-reload
-npm run test                   # Cargo tests
-npm run tauri dev -- -- -- --debug  # Pass --debug to app (yes, 3x --)
+cargo tauri dev              # Debug build with auto-reload
+cargo test                   # Cargo tests
+cargo tauri dev -- -- --debug  # Pass --debug to app (yes, 2x --)
 ```
 
 ### Adding New Mutations
@@ -86,7 +86,7 @@ npm run tauri dev -- -- -- --debug  # Pass --debug to app (yes, 3x --)
        }
    }
    ```
-3. Run `npm run gen` to export types
+3. Run `cargo gen` to export types
 4. Call from frontend via `mutate()` in `app/ipc.ts`
 
 **Mutation Style Guide:**
@@ -127,7 +127,7 @@ Access via `GGSettings` trait methods in `src/config/mod.rs`.
 
 1. Add default value with comment in `src/config/gg.toml`
 2. Add trait method to `GGSettings` and implement for `UserSettings` in `src/config/mod.rs`
-3. If frontend needs the value: add field to message struct (e.g., `RepoConfig::Workspace`), populate in worker, run `npm run gen`
+3. If frontend needs the value: add field to message struct (e.g., `RepoConfig::Workspace`), populate in worker, run `cargo gen`
 4. Add tests using `settings_with_gg_defaults()` / `settings_with_overrides()` helpers in `config/tests.rs`
 
 ### Error Handling in Workers
