@@ -27,3 +27,6 @@ anyhow = "1.0.100"
 # Tauri needs to be a direct dependency for tauri-build to work correctly
 tauri = { version = "2.0.0", features = ["config-toml"] }
 
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+

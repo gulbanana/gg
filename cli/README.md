@@ -10,7 +10,23 @@ To install GG via cargo:
 cargo install --locked gg-cli
 ```
 
-Then run `gg` from any directory to launch the GUI application.
+Then run `gg` from any directory to launch the GUI application. The GUI will automatically spawn in the background, freeing your shell immediately.
+
+### Usage
+
+```bash
+# Launch GUI (non-blocking)
+gg
+
+# Launch GUI in a specific directory
+gg /path/to/workspace
+
+# Enable debug logging
+gg --debug
+
+# See all options
+gg --help
+```
 
 ## For Maintainers
 
