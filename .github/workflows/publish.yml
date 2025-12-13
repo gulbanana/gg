@@ -64,9 +64,36 @@ jobs:
           AZURE_CLIENT_ID: ${{ matrix.platform == 'windows-latest' && secrets.AZURE_CLIENT_ID }}
           AZURE_CLIENT_SECRET: ${{ matrix.platform == 'windows-latest' && secrets.AZURE_CLIENT_SECRET }}
         with:
-          args: ${{ matrix.platform == 'macos-latest' && '--target universal-apple-darwin --verbose' || '--verbose'}}
+          # Build without fork feature so installers run in foreground like normal apps
+          args: ${{ matrix.platform == 'macos-latest' && '--target universal-apple-darwin --verbose -- --no-default-features' || '--verbose -- --no-default-features'}}
           tagName: v__VERSION__
           releaseName: 'GG __VERSION__'
           releaseBody: 'See the assets to download this version and install.'
           releaseDraft: true
           prerelease: true
+
+  publish-crate:
+    needs: publish-tauri
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: install frontend dependencies
+        run: npm ci
+
+      - name: build frontend assets
+        run: npm run build
+
+      - name: publish to crates.io
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish --no-verify

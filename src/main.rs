@@ -46,6 +46,12 @@ struct Args {
     workspace: Option<PathBuf>,
     #[arg(short, long, help = "Enable debug logging.")]
     debug: bool,
+    #[arg(
+        long,
+        help = "Run in foreground (don't spawn a background process).",
+        hide = true
+    )]
+    foreground: bool,
 }
 
 #[derive(Default)]
@@ -100,6 +106,108 @@ fn main() -> Result<()> {
 
     let args = Args::parse();
 
+    // When built with the fork feature (default for cargo install), spawn a background
+    // process and exit immediately, unless --foreground is specified
+    #[cfg(feature = "fork")]
+    if !args.foreground {
+        return spawn_in_background(&args);
+    }
+
+    run_app(args)
+}
+
+/// Spawn the GUI in a background process and exit immediately.
+/// This allows `gg` to return control to the shell without blocking.
+#[cfg(all(feature = "fork", unix))]
+fn spawn_in_background(args: &Args) -> Result<()> {
+    use std::ffi::CString;
+    use std::process::Command;
+
+    let exe = std::env::current_exe()?;
+    let mut cmd = Command::new(&exe);
+    cmd.arg("--foreground");
+
+    if let Some(workspace) = &args.workspace {
+        cmd.arg(workspace);
+    }
+    if args.debug {
+        cmd.arg("--debug");
+    }
+
+    // SAFETY: fork() is safe here because:
+    // 1. We're in a single-threaded context (early in main before any threads spawn)
+    // 2. We only use async-signal-safe functions in the child before exec
+    // 3. The child immediately execs, replacing itself entirely
+    // 4. The parent exits without doing anything else
+    unsafe {
+        match libc::fork() {
+            -1 => {
+                return Err(anyhow!("Failed to fork"));
+            }
+            0 => {
+                // Child process: create new session to detach from terminal
+                if libc::setsid() == -1 {
+                    eprintln!("Warning: setsid() failed");
+                }
+
+                // Redirect stdin/stdout/stderr to /dev/null
+                let devnull = CString::new("/dev/null").unwrap();
+                let null_fd = libc::open(devnull.as_ptr(), libc::O_RDWR);
+                if null_fd != -1 {
+                    if libc::dup2(null_fd, 0) == -1
+                        || libc::dup2(null_fd, 1) == -1
+                        || libc::dup2(null_fd, 2) == -1
+                    {
+                        eprintln!("Warning: failed to redirect stdio");
+                    }
+                    libc::close(null_fd);
+                }
+
+                // Execute the command (replaces current process)
+                use std::os::unix::process::CommandExt;
+                let err = cmd.exec();
+                eprintln!("Failed to exec: {}", err);
+                std::process::exit(1);
+            }
+            _ => {
+                // Parent process: exit successfully
+                std::process::exit(0);
+            }
+        }
+    }
+}
+
+/// Spawn the GUI in a background process and exit immediately.
+/// This allows `gg` to return control to the shell without blocking.
+#[cfg(all(feature = "fork", windows))]
+fn spawn_in_background(args: &Args) -> Result<()> {
+    use std::os::windows::process::CommandExt;
+    use std::process::Command;
+
+    let exe = std::env::current_exe()?;
+    let mut cmd = Command::new(&exe);
+    cmd.arg("--foreground");
+
+    if let Some(workspace) = &args.workspace {
+        cmd.arg(workspace);
+    }
+    if args.debug {
+        cmd.arg("--debug");
+    }
+
+    // Spawn with DETACHED_PROCESS flag so the child runs independently
+    const DETACHED_PROCESS: u32 = 0x00000008;
+    const CREATE_NEW_PROCESS_GROUP: u32 = 0x00000200;
+
+    cmd.creation_flags(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP);
+
+    match cmd.spawn() {
+        Ok(_) => std::process::exit(0),
+        Err(err) => Err(anyhow!("Failed to spawn GG: {}", err)),
+    }
+}
+
+fn run_app(args: Args) -> Result<()> {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())

@@ -1,9 +1,36 @@
 [package]
 name = "gg"
-version = "0.36.1"
+version = "0.36.0"
 description = "GG - Gui for JJ"
 authors = ["Thomas Castiglione"]
 edition = "2024"
+license = "Apache"
+repository = "https://github.com/gulbanana/gg"
+homepage = "https://github.com/gulbanana/gg"
+keywords = ["jujutsu", "jj", "version-control", "gui"]
+categories = ["development-tools"]
+include = [
+    "src/**/*",
+    "res/**/*",
+    "app/**/*",
+    "gen/**/*",
+    "build.rs",
+    "Cargo.toml",
+    "Tauri.toml",
+    "index.html",
+    "LICENSE",
+]
+
+[features]
+default = ["fork", "custom-protocol"]
+fork = ["libc"]
+ts-rs = ["dep:ts-rs"]
+# custom-protocol tells Tauri to use embedded frontendDist assets instead of devUrl
+# This must be disabled for `cargo tauri dev` (which the CLI does automatically)
+custom-protocol = ["tauri/custom-protocol"]
+
+[package.metadata.release]
+pre-release-hook = ["npm", "run", "build"]
 
 [build-dependencies]
 tauri-build = { version = "2.0.0", features = ["config-toml"] }
@@ -61,6 +88,9 @@ chrono = { version = "0.4.42", features = ["serde"] }
 log = "0.4"
 futures-util = "0.3.31"
 ts-rs = { version = "7.1.1", features = ["chrono-impl"], optional = true }
+
+[target.'cfg(unix)'.dependencies]
+libc = { version = "0.2", optional = true }
 
 [target."cfg(windows)".dependencies]
 windows = { version = "0.60", features = [
