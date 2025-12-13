@@ -1,3 +1,14 @@
+[workspace]
+members = [".", "cli"]
+resolver = "2"
+
+[workspace.profile.dev]
+debug = 0
+
+[workspace.profile.release]
+lto = true
+codegen-units = 1
+
 [package]
 name = "gg"
 version = "0.36.0"
@@ -74,9 +85,3 @@ windows = { version = "0.60", features = [
     "Win32_UI_Shell_PropertiesSystem",
 ] }
 
-[profile.dev]
-debug = 0
-
-[profile.release]
-lto = true
-codegen-units = 1

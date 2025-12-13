@@ -1,0 +1,53 @@
+productName = "gg"
+version = "0.36.0"
+identifier = "au.gulbanala.gg"
+
+[build]
+beforeDevCommand = "npm run dev"
+devUrl = "http://localhost:6973"
+beforeBuildCommand = "npm run build"
+frontendDist = "../dist"
+
+[app]
+
+[[app.windows]]
+label = "main"
+title = "GG - Gui for JJ"
+decorations = true
+resizable = true
+focus = true
+width = 1280
+height = 720
+visible = false
+dragDropEnabled = false
+
+[[app.security.capabilities]]
+identifier = "main-capability"
+description = "Capability for the main window"
+windows = ["main"]
+permissions = [
+    "core:path:default",
+    "core:event:default",
+    "core:window:default",
+    "core:app:default",
+    "core:resources:default",
+    "core:menu:default",
+    "core:tray:default",
+    "shell:allow-open",
+]
+
+[bundle]
+active = false
+targets = "all"
+icon = [
+    "../res/icons/32x32.png",
+    "../res/icons/128x128.png",
+    "../res/icons/128x128@2x.png",
+    "../res/icons/icon.icns",
+    "../res/icons/icon.ico",
+]
+
+[bundle.windows]
+signCommand = ""
+
+[plugins]

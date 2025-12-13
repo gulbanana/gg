@@ -1,0 +1,29 @@
+[package]
+name = "gg-cli"
+version = "0.36.0"
+description = "GG - Gui for JJ (installable via cargo install)"
+authors = ["Thomas Castiglione"]
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/gulbanana/gg"
+homepage = "https://github.com/gulbanala/gg"
+keywords = ["jujutsu", "version-control", "gui"]
+categories = ["command-line-utilities", "development-tools"]
+readme = "README.md"
+
+[[bin]]
+name = "gg"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2.0.0", features = ["config-toml"] }
+
+[dependencies]
+# Depend on the parent gg crate as a library
+gg = { path = ".." }
+clap = { version = "4.5.53", features = ["derive"] }
+anyhow = "1.0.100"
+
+# Tauri needs to be a direct dependency for tauri-build to work correctly
+tauri = { version = "2.0.0", features = ["config-toml"] }
+
