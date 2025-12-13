@@ -1,5 +1,10 @@
 # GG Changelog
 
+## Unreleased
+
+### Fixed
+- Change IDs in the log pane would sometimes display the wrong suffix. This was happening when a line's id changed but its prefix remained the same.
+
 ## [0.36.0](releases/tag/v0.36.0)
 This release is based on Jujutsu 0.36.
 

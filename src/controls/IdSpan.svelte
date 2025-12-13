@@ -6,7 +6,7 @@
     export let pronoun: boolean = false;
     export let selectable: boolean = false;
 
-    let suffix = id.rest.substring(0, 8 - id.prefix.length);
+    $: suffix = id.rest.substring(0, 8 - id.prefix.length);
 </script>
 
 <span class="id" class:pronoun={pronoun || $currentTarget?.type == "Repository"} class:selectable>
