@@ -10,8 +10,9 @@ fn main() {
     // Verify that dist directory exists
     if !dist_dir.exists() {
         panic!(
-            "Frontend assets not found at {:?}. Please run 'npm install && npm run build' \
-             in the root directory before building the CLI.",
+            "Frontend assets not found at {:?}.\n\
+             For local development: run 'npm install && npm run build' in the root directory.\n\
+             For published crate: the dist/ directory must be committed to the repository.",
             dist_dir
         );
     }

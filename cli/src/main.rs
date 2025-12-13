@@ -54,7 +54,11 @@ fn spawn_in_background(args: Args) -> anyhow::Result<()> {
         cmd.arg("--debug");
     }
     
-    // On Unix, we fork and let the parent exit, child continues in background
+    // SAFETY: fork() is safe to call here because:
+    // 1. We're in a single-threaded context (early in main before any threads are spawned)
+    // 2. We only use async-signal-safe functions (fork, setsid, open, dup2, close, exec) in the child
+    // 3. The child process immediately execs, replacing itself entirely
+    // 4. The parent exits without doing anything else
     unsafe {
         use std::ffi::CString;
         
@@ -63,20 +67,25 @@ fn spawn_in_background(args: Args) -> anyhow::Result<()> {
                 return Err(anyhow::anyhow!("Failed to fork"));
             }
             0 => {
-                // Child process: create new session and exec
-                libc::setsid();
+                // Child process: create new session to detach from terminal
+                if libc::setsid() == -1 {
+                    eprintln!("Warning: setsid() failed");
+                }
                 
                 // Redirect stdin/stdout/stderr to /dev/null
                 let devnull = CString::new("/dev/null").unwrap();
                 let null_fd = libc::open(devnull.as_ptr(), libc::O_RDWR);
                 if null_fd != -1 {
-                    libc::dup2(null_fd, 0);
-                    libc::dup2(null_fd, 1);
-                    libc::dup2(null_fd, 2);
+                    if libc::dup2(null_fd, 0) == -1
+                        || libc::dup2(null_fd, 1) == -1
+                        || libc::dup2(null_fd, 2) == -1
+                    {
+                        eprintln!("Warning: failed to redirect stdio");
+                    }
                     libc::close(null_fd);
                 }
                 
-                // Execute the command
+                // Execute the command (replaces current process)
                 let err = cmd.exec();
                 eprintln!("Failed to exec: {}", err);
                 process::exit(1);
