@@ -1,6 +1,6 @@
 # GG Changelog
 
-## Unreleased
+## [0.36.1](releases/tag/v0.36.1)
 
 ### Fixed
 - Change IDs in the log pane would sometimes display the wrong suffix. This was happening when a line's id changed but its prefix remained the same.
