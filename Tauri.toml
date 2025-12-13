@@ -6,7 +6,7 @@ identifier = "au.gulbanana.gg"
 beforeDevCommand = "npm run dev"
 devUrl = "http://localhost:6973"
 beforeBuildCommand = "npm run build"
-frontendDist = "../dist"
+frontendDist = "dist"
 
 [app]
 
@@ -21,17 +21,30 @@ height = 720
 visible = false
 dragDropEnabled = false
 
-[app.security]
+[[app.security.capabilities]]
+identifier = "main-capability"
+description = "Capability for the main window"
+windows = ["main"]
+permissions = [
+    "core:path:default",
+    "core:event:default",
+    "core:window:default",
+    "core:app:default",
+    "core:resources:default",
+    "core:menu:default",
+    "core:tray:default",
+    "shell:allow-open",
+]
 
 [bundle]
 active = true # Comment this out or set to false to disable bundle compilation
 targets = "all"
 icon = [
-    "icons/32x32.png",
-    "icons/128x128.png",
-    "icons/128x128@2x.png",
-    "icons/icon.icns",
-    "icons/icon.ico",
+    "resources/icons/32x32.png",
+    "resources/icons/128x128.png",
+    "resources/icons/128x128@2x.png",
+    "resources/icons/icon.icns",
+    "resources/icons/icon.ico",
 ]
 
 [bundle.windows]

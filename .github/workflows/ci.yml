@@ -37,9 +37,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
 
       - uses: Swatinem/rust-cache@v2
-        with:
-            workspaces: "src-tauri"
 
       - name: run tests
-        run: cd src-tauri && cargo test
+        run: cargo test
 

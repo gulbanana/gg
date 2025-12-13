@@ -28,8 +28,6 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
 
       - uses: Swatinem/rust-cache@v2
-        with:
-            workspaces: "src-tauri"
 
       - name: install dependencies (ubuntu)
         if: matrix.platform == 'ubuntu-22.04'

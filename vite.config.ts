@@ -14,8 +14,8 @@ export default defineConfig(async () => ({
     port: 6973,
     strictPort: true,
     watch: {
-      // 3. tell vite to ignore watching `src-tauri`
-      ignored: ["**/src-tauri/**"],
+      // 3. tell vite to ignore watching rust directories
+      ignored: ["**/src/**", "**/target/**"],
     },
   },
 

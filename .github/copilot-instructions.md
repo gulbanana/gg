@@ -2,7 +2,7 @@
 
 ## Architecture Overview
 
-**GG is a Tauri desktop app**: Svelte/TypeScript frontend (`app/`) + Rust backend (`src-tauri/src/`). Each window has a dedicated worker thread owning a `Session` that manages jj-lib state (jj-lib is not thread-safe).
+**GG is a Tauri desktop app**: Svelte/TypeScript frontend (`app/`) + Rust backend (`src/`). Each window has a dedicated worker thread owning a `Session` that manages jj-lib state (jj-lib is not thread-safe).
 
 ### Core Architectural Boundaries
 
@@ -12,12 +12,12 @@
   - `mutate()` - structured repository mutations (goes through worker)
   - Events - server→client and client→client broadcasts via Svelte stores
   
-- **`src-tauri/src/worker/mod.rs`**: Worker thread state machine. Session progresses through states:
+- **`src/worker/mod.rs`**: Worker thread state machine. Session progresses through states:
   - `WorkerSession` - Opening/reopening workspace
   - `WorkspaceSession` - Workspace open, executes mutations
   - `QuerySession` - Paged log query in progress
 
-- **`src-tauri/src/handler.rs`**: Error handling macros (`fatal!`, `nonfatal!`, `optional!`) for worker error propagation
+- **`src/handler.rs`**: Error handling macros (`fatal!`, `nonfatal!`, `optional!`) for worker error propagation
 
 ### Direct Manipulation System
 
@@ -33,10 +33,10 @@ The UI metaphor is **drag-and-drop to edit the repository**. Core components:
 
 ### Type Generation (CRITICAL)
 
-After modifying Rust structs with `#[cfg_attr(feature = "ts-rs", ...)]` in `src-tauri/src/messages/`:
+After modifying Rust structs with `#[cfg_attr(feature = "ts-rs", ...)]` in `src/messages/`:
 
 ```bash
-npm run gen  # Runs: cd src-tauri && cargo test -F ts-rs
+npm run gen  # Runs: cargo test -F ts-rs
 ```
 
 This exports TypeScript types to `app/messages/`. **Frontend will break without this step.**
@@ -54,14 +54,14 @@ This project uses **Jujutsu (jj)** for version control instead of Git. See [juju
 
 ```bash
 npm run tauri dev              # Debug build with auto-reload
-npm run test                   # Cargo tests (in src-tauri/)
+npm run test                   # Cargo tests
 npm run tauri dev -- -- -- --debug  # Pass --debug to app (yes, 3x --)
 ```
 
 ### Adding New Mutations
 
-1. Define struct in `src-tauri/src/messages/mutations.rs` with `#[cfg_attr(feature = "ts-rs", derive(TS))]`
-2. Implement `Mutation` trait in `src-tauri/src/worker/mutations.rs`:
+1. Define struct in `src/messages/mutations.rs` with `#[cfg_attr(feature = "ts-rs", derive(TS))]`
+2. Implement `Mutation` trait in `src/worker/mutations.rs`:
    ```rust
    #[async_trait::async_trait(?Send)]
    impl Mutation for YourMutation {
@@ -113,7 +113,7 @@ See `DESIGN.md` "Branch Objects" section for the full state machine.
 
 ### Configuration System
 
-`src-tauri/src/config/gg.toml` contains defaults. Settings loaded via `jj config` (user + repo layers).
+`src/config/gg.toml` contains defaults. Settings loaded via `jj config` (user + repo layers).
 
 Key settings:
 - `gg.queries.log-page-size` - controls paging (default 1000)
@@ -121,12 +121,12 @@ Key settings:
 - `gg.ui.track-recent-workspaces` - disable to prevent config file updates (default true)
 - `revset-aliases.immutable_heads()` - determines editable history boundary
 
-Access via `GGSettings` trait methods in `src-tauri/src/config/mod.rs`.
+Access via `GGSettings` trait methods in `src/config/mod.rs`.
 
 ### Adding New GG Settings
 
-1. Add default value with comment in `src-tauri/src/config/gg.toml`
-2. Add trait method to `GGSettings` and implement for `UserSettings` in `src-tauri/src/config/mod.rs`
+1. Add default value with comment in `src/config/gg.toml`
+2. Add trait method to `GGSettings` and implement for `UserSettings` in `src/config/mod.rs`
 3. If frontend needs the value: add field to message struct (e.g., `RepoConfig::Workspace`), populate in worker, run `npm run gen`
 4. Add tests using `settings_with_gg_defaults()` / `settings_with_overrides()` helpers in `config/tests.rs`
 
@@ -181,12 +181,12 @@ match tree.path_value(path)?.into_resolved() {
 
 ### Testing Mutations
 
-Test repository (`src-tauri/resources/test-repo.zip`) contains pre-defined commits. Check which are mutable:
+Test repository (`resources/test-repo.zip`) contains pre-defined commits. Check which are mutable:
 ```bash
 jj log -r 'mutable()'  # Shows commits that can be modified in tests
 ```
 
-**Key test commits** (from `src-tauri/src/worker/tests/mod.rs`):
+**Key test commits** (from `src/worker/tests/mod.rs`):
 - `working_copy()` - mntpnnrk (empty, child of main)
 - `main_bookmark()` - mnkoropy (renamed c.txt)
 - `conflict_bookmark()` - nwrnuwyp (has conflict in b.txt)
@@ -206,8 +206,8 @@ jj-lib and jj-cli dependencies are pinned to specific versions (see `Cargo.toml`
 
 - `DESIGN.md` - Core metaphors, architectural decisions, branch state machine
 - `app/mutators/BinaryMutator.ts` - All drag-drop operation policies
-- `src-tauri/src/worker/mutations.rs` - All mutation implementations
-- `src-tauri/src/config/gg.toml` - Default configuration with inline docs
+- `src/worker/mutations.rs` - All mutation implementations
+- `src/config/gg.toml` - Default configuration with inline docs
 - `app/stores.ts` - Global Svelte stores for cross-component state
 
 ## Svelte Patterns

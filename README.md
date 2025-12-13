@@ -1,6 +1,6 @@
-# ![icon](src-tauri/icons/24x24.png) GG - Gui for JJ
+# ![icon](resources/icons/24x24.png) GG - Gui for JJ
 
-![screenshot](src-tauri/resources/screenshot.png)
+![screenshot](resources/screenshot.png)
 
 GG is a GUI for the version control system [Jujutsu](https://github.com/martinvonz/jj). It takes advantage of Jujutsu's composable primitives to present an interactive view of your repository. Just imagine: what if you were always in the middle of an interactive rebase, but this was actually good?
 
@@ -19,7 +19,7 @@ Put `gg` on your path and run it from a Jujutsu workspace, pass the workspace di
 - `gg --help` will display some possible command-line arguments.
 
 ### Configuration
-GG uses `jj config`; `revset-aliases.immutable_heads()` is particularly important, as it determines how much history you can edit. GG has some additional settings of its own, with defaults and documentation [here](src-tauri/src/config/gg.toml).
+GG uses `jj config`; `revset-aliases.immutable_heads()` is particularly important, as it determines how much history you can edit. GG has some additional settings of its own, with defaults and documentation [here](src/config/gg.toml).
 
 ## Features
 GG doesn't require [JJ](https://martinvonz.github.io/jj/latest/install-and-setup/) to run, but you'll need it for tasks GG doesn't cover. What it *can* do:
@@ -40,14 +40,14 @@ There's no roadmap as such, but items on [the to-do list](TODO.md) may or may no
 ### Known Issues
 GG is in early development and will have bugs. In theory it can't corrupt a repository thanks to the operation log, but it never hurts to make backups. 
 
-If your repo is "too large" some features will be disabled for performance. See [the default config](src-tauri/src/config/gg.toml) for details.
+If your repo is "too large" some features will be disabled for performance. See [the default config](src/config/gg.toml) for details.
 
 ## Development  
 Recommended IDE setup: [VS Code](https://code.visualstudio.com/) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer) + [Svelte](https://marketplace.visualstudio.com/items?itemName=svelte.svelte-vscode) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode).
 
 Some useful commands:
 * `npm run test` - execute unit tests.
-* `npm run gen` - update the IPC message types in app/messages from src-tauri/messages.rs.
+* `npm run gen` - update the IPC message types in app/messages from src/messages.rs.
 * `npm run tauri dev` - launch a debug build with automatic reloading.
 * `npm run tauri build -- --target universal-apple-darwin` - create a fat binary for MacOS.
 * `npm run tauri dev -- -- -- --debug` - run locally with --debug. Yes, all three `--` are necessary.

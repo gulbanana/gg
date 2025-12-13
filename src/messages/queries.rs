@@ -16,7 +16,7 @@ pub trait Id {
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
-    ts(export, export_to = "../app/messages/")
+    ts(export, export_to = "app/messages/")
 )]
 pub struct CommitId {
     pub hex: String,
@@ -41,7 +41,7 @@ impl Id for CommitId {
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
-    ts(export, export_to = "../app/messages/")
+    ts(export, export_to = "app/messages/")
 )]
 pub struct ChangeId {
     pub hex: String,
@@ -67,7 +67,7 @@ impl Id for ChangeId {
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
-    ts(export, export_to = "../app/messages/")
+    ts(export, export_to = "app/messages/")
 )]
 pub struct RevId {
     pub change: ChangeId,
@@ -78,7 +78,7 @@ pub struct RevId {
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
-    ts(export, export_to = "../app/messages/")
+    ts(export, export_to = "app/messages/")
 )]
 pub struct RevHeader {
     pub id: RevId,
@@ -95,7 +95,7 @@ pub struct RevHeader {
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
-    ts(export, export_to = "../app/messages/")
+    ts(export, export_to = "app/messages/")
 )]
 pub struct RevAuthor {
     pub email: String,
@@ -119,7 +119,7 @@ impl TryFrom<&Signature> for RevAuthor {
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
-    ts(export, export_to = "../app/messages/")
+    ts(export, export_to = "app/messages/")
 )]
 pub struct RevChange {
     pub kind: ChangeKind,
@@ -132,7 +132,7 @@ pub struct RevChange {
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
-    ts(export, export_to = "../app/messages/")
+    ts(export, export_to = "app/messages/")
 )]
 pub struct RevConflict {
     pub path: TreePath,
@@ -143,7 +143,7 @@ pub struct RevConflict {
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
-    ts(export, export_to = "../app/messages/")
+    ts(export, export_to = "app/messages/")
 )]
 pub enum ChangeKind {
     None,
@@ -156,7 +156,7 @@ pub enum ChangeKind {
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
-    ts(export, export_to = "../app/messages/")
+    ts(export, export_to = "app/messages/")
 )]
 pub struct ChangeHunk {
     pub location: HunkLocation,
@@ -167,7 +167,7 @@ pub struct ChangeHunk {
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
-    ts(export, export_to = "../app/messages/")
+    ts(export, export_to = "app/messages/")
 )]
 pub struct HunkLocation {
     pub from_file: FileRange,
@@ -178,7 +178,7 @@ pub struct HunkLocation {
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
-    ts(export, export_to = "../app/messages/")
+    ts(export, export_to = "app/messages/")
 )]
 pub struct FileRange {
     pub start: usize,
@@ -190,7 +190,7 @@ pub struct FileRange {
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
-    ts(export, export_to = "../app/messages/")
+    ts(export, export_to = "app/messages/")
 )]
 #[allow(clippy::large_enum_variant)]
 pub enum RevResult {
@@ -209,7 +209,7 @@ pub enum RevResult {
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
-    ts(export, export_to = "../app/messages/")
+    ts(export, export_to = "app/messages/")
 )]
 pub struct LogCoordinates(pub usize, pub usize);
 
@@ -218,7 +218,7 @@ pub struct LogCoordinates(pub usize, pub usize);
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
-    ts(export, export_to = "../app/messages/")
+    ts(export, export_to = "app/messages/")
 )]
 pub enum LogLine {
     FromNode {
@@ -247,7 +247,7 @@ pub enum LogLine {
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
-    ts(export, export_to = "../app/messages/")
+    ts(export, export_to = "app/messages/")
 )]
 pub struct LogRow {
     pub revision: RevHeader,
@@ -260,7 +260,7 @@ pub struct LogRow {
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
-    ts(export, export_to = "../app/messages/")
+    ts(export, export_to = "app/messages/")
 )]
 pub struct LogPage {
     pub rows: Vec<LogRow>,
