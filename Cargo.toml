@@ -5,6 +5,11 @@ description = "GG - Gui for JJ"
 authors = ["Thomas Castiglione"]
 edition = "2024"
 
+[features]
+default = ["custom-protocol"]
+ts-rs = ["dep:ts-rs"]
+custom-protocol = ["tauri/custom-protocol"] # tauri build adds this, tauri dev removes it - default to adding so that cargo run works
+
 [build-dependencies]
 tauri-build = { version = "2.0.0", features = ["config-toml"] }
 

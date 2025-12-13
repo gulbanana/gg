@@ -39,5 +39,5 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: run tests
-        run: cargo test
+        run: cargo test --no-default-features
 

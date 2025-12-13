@@ -9,7 +9,7 @@ GG is a desktop application with a keyboard & mouse interface, written in [Tauri
 
 To compile from source:
 1. Install the system dependencies (on Debian-likes, `apt install libpango1.0-dev libatk1.0-dev libgdk-pixbuf2.0-dev libgtk-3-dev libjavascriptcoregtk-4.1-dev libwebkit2gtk-4.1-dev`).
-2. Install the frontend dependencies: `npm install`.
+2. Install the frontend dependencies: `npm install && npm run build`.
 3. (Optional) Install the Tauri CLI: `cargo install tauri-cli --version "^2.0.0" --locked`.
 3. Build the application: `cargo tauri build`, or `npm run tauri build` if you don't want tauri-cli installed globally.
 
