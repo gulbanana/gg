@@ -18,7 +18,7 @@ use ts_rs::TS;
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
-    ts(export, export_to = "../src/messages/")
+    ts(export, export_to = "../app/messages/")
 )]
 pub struct MultilineString {
     pub lines: Vec<String>,
@@ -40,7 +40,7 @@ where
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
-    ts(export, export_to = "../src/messages/")
+    ts(export, export_to = "../app/messages/")
 )]
 pub struct DisplayPath(pub String);
 
@@ -59,7 +59,7 @@ impl<T: AsRef<Path>> From<T> for DisplayPath {
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
-    ts(export, export_to = "../src/messages/")
+    ts(export, export_to = "../app/messages/")
 )]
 pub struct TreePath {
     pub repo_path: String,
@@ -71,7 +71,7 @@ pub struct TreePath {
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
-    ts(export, export_to = "../src/messages/")
+    ts(export, export_to = "../app/messages/")
 )]
 pub enum RepoConfig {
     #[allow(dead_code)] // used by frontend
@@ -101,7 +101,7 @@ pub enum RepoConfig {
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
-    ts(export, export_to = "../src/messages/")
+    ts(export, export_to = "../app/messages/")
 )]
 pub struct RepoStatus {
     pub operation_description: String,
@@ -114,7 +114,7 @@ pub struct RepoStatus {
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
-    ts(export, export_to = "../src/messages/")
+    ts(export, export_to = "../app/messages/")
 )]
 pub enum StoreRef {
     LocalBookmark {
@@ -159,7 +159,7 @@ impl StoreRef {
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
-    ts(export, export_to = "../src/messages/")
+    ts(export, export_to = "../app/messages/")
 )]
 #[allow(clippy::large_enum_variant)]
 pub enum Operand {
@@ -189,7 +189,7 @@ pub enum Operand {
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
-    ts(export, export_to = "../src/messages/")
+    ts(export, export_to = "../app/messages/")
 )]
 pub struct InputRequest {
     pub title: String,
@@ -201,7 +201,7 @@ pub struct InputRequest {
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
-    ts(export, export_to = "../src/messages/")
+    ts(export, export_to = "../app/messages/")
 )]
 pub struct InputResponse {
     pub cancel: bool,
@@ -212,7 +212,7 @@ pub struct InputResponse {
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
-    ts(export, export_to = "../src/messages/")
+    ts(export, export_to = "../app/messages/")
 )]
 pub struct InputField {
     pub label: String,

@@ -47,7 +47,7 @@ Recommended IDE setup: [VS Code](https://code.visualstudio.com/) + [rust-analyze
 
 Some useful commands:
 * `npm run test` - execute unit tests.
-* `npm run gen` - update the IPC message types in src/messages from src-tauri/messages.rs.
+* `npm run gen` - update the IPC message types in app/messages from src-tauri/messages.rs.
 * `npm run tauri dev` - launch a debug build with automatic reloading.
 * `npm run tauri build -- --target universal-apple-darwin` - create a fat binary for MacOS.
 * `npm run tauri dev -- -- -- --debug` - run locally with --debug. Yes, all three `--` are necessary.

@@ -6,7 +6,7 @@ use super::*;
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
-    ts(export, export_to = "../src/messages/")
+    ts(export, export_to = "../app/messages/")
 )]
 #[allow(clippy::large_enum_variant)]
 pub enum MutationResult {
@@ -31,7 +31,7 @@ pub enum MutationResult {
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
-    ts(export, export_to = "../src/messages/")
+    ts(export, export_to = "../app/messages/")
 )]
 pub struct CheckoutRevision {
     pub id: RevId,
@@ -42,7 +42,7 @@ pub struct CheckoutRevision {
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
-    ts(export, export_to = "../src/messages/")
+    ts(export, export_to = "../app/messages/")
 )]
 pub struct CreateRevision {
     pub parent_ids: Vec<RevId>,
@@ -53,7 +53,7 @@ pub struct CreateRevision {
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
-    ts(export, export_to = "../src/messages/")
+    ts(export, export_to = "../app/messages/")
 )]
 pub struct CreateRevisionBetween {
     pub after_id: CommitId,
@@ -64,7 +64,7 @@ pub struct CreateRevisionBetween {
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
-    ts(export, export_to = "../src/messages/")
+    ts(export, export_to = "../app/messages/")
 )]
 pub struct InsertRevision {
     pub id: RevId,
@@ -76,7 +76,7 @@ pub struct InsertRevision {
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
-    ts(export, export_to = "../src/messages/")
+    ts(export, export_to = "../app/messages/")
 )]
 pub struct MoveRevision {
     pub id: RevId,
@@ -87,7 +87,7 @@ pub struct MoveRevision {
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
-    ts(export, export_to = "../src/messages/")
+    ts(export, export_to = "../app/messages/")
 )]
 pub struct MoveSource {
     pub id: RevId,
@@ -98,7 +98,7 @@ pub struct MoveSource {
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
-    ts(export, export_to = "../src/messages/")
+    ts(export, export_to = "../app/messages/")
 )]
 pub struct MoveHunk {
     pub from_id: RevId,
@@ -111,7 +111,7 @@ pub struct MoveHunk {
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
-    ts(export, export_to = "../src/messages/")
+    ts(export, export_to = "../app/messages/")
 )]
 pub struct CopyHunk {
     pub from_id: CommitId, // limitation: we don't know parent chids because they are more expensive to look up
@@ -125,7 +125,7 @@ pub struct CopyHunk {
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
-    ts(export, export_to = "../src/messages/")
+    ts(export, export_to = "../app/messages/")
 )]
 pub struct DescribeRevision {
     pub id: RevId,
@@ -138,7 +138,7 @@ pub struct DescribeRevision {
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
-    ts(export, export_to = "../src/messages/")
+    ts(export, export_to = "../app/messages/")
 )]
 pub struct DuplicateRevisions {
     pub ids: Vec<RevId>,
@@ -148,7 +148,7 @@ pub struct DuplicateRevisions {
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
-    ts(export, export_to = "../src/messages/")
+    ts(export, export_to = "../app/messages/")
 )]
 pub struct AbandonRevisions {
     pub ids: Vec<CommitId>,
@@ -159,7 +159,7 @@ pub struct AbandonRevisions {
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
-    ts(export, export_to = "../src/messages/")
+    ts(export, export_to = "../app/messages/")
 )]
 pub struct BackoutRevisions {
     pub ids: Vec<RevId>,
@@ -169,7 +169,7 @@ pub struct BackoutRevisions {
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
-    ts(export, export_to = "../src/messages/")
+    ts(export, export_to = "../app/messages/")
 )]
 pub struct MoveChanges {
     pub from_id: RevId,
@@ -181,7 +181,7 @@ pub struct MoveChanges {
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
-    ts(export, export_to = "../src/messages/")
+    ts(export, export_to = "../app/messages/")
 )]
 pub struct CopyChanges {
     pub from_id: CommitId, // limitation: we don't know parent chids because they are more expensive to look up
@@ -193,7 +193,7 @@ pub struct CopyChanges {
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
-    ts(export, export_to = "../src/messages/")
+    ts(export, export_to = "../app/messages/")
 )]
 pub struct TrackBranch {
     pub r#ref: StoreRef,
@@ -203,7 +203,7 @@ pub struct TrackBranch {
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
-    ts(export, export_to = "../src/messages/")
+    ts(export, export_to = "../app/messages/")
 )]
 pub struct UntrackBranch {
     pub r#ref: StoreRef,
@@ -213,7 +213,7 @@ pub struct UntrackBranch {
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
-    ts(export, export_to = "../src/messages/")
+    ts(export, export_to = "../app/messages/")
 )]
 pub struct RenameBranch {
     pub r#ref: StoreRef,
@@ -224,7 +224,7 @@ pub struct RenameBranch {
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
-    ts(export, export_to = "../src/messages/")
+    ts(export, export_to = "../app/messages/")
 )]
 pub struct CreateRef {
     pub id: RevId,
@@ -235,7 +235,7 @@ pub struct CreateRef {
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
-    ts(export, export_to = "../src/messages/")
+    ts(export, export_to = "../app/messages/")
 )]
 pub struct DeleteRef {
     pub r#ref: StoreRef,
@@ -245,7 +245,7 @@ pub struct DeleteRef {
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
-    ts(export, export_to = "../src/messages/")
+    ts(export, export_to = "../app/messages/")
 )]
 pub struct MoveRef {
     pub r#ref: StoreRef,
@@ -257,7 +257,7 @@ pub struct MoveRef {
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
-    ts(export, export_to = "../src/messages/")
+    ts(export, export_to = "../app/messages/")
 )]
 pub enum GitPush {
     AllBookmarks {
@@ -277,7 +277,7 @@ pub enum GitPush {
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
-    ts(export, export_to = "../src/messages/")
+    ts(export, export_to = "../app/messages/")
 )]
 pub enum GitFetch {
     AllBookmarks {
@@ -296,6 +296,6 @@ pub enum GitFetch {
 #[cfg_attr(
     feature = "ts-rs",
     derive(TS),
-    ts(export, export_to = "../src/messages/")
+    ts(export, export_to = "../app/messages/")
 )]
 pub struct UndoOperation;

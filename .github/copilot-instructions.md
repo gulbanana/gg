@@ -2,11 +2,11 @@
 
 ## Architecture Overview
 
-**GG is a Tauri desktop app**: Svelte/TypeScript frontend (`src/`) + Rust backend (`src-tauri/src/`). Each window has a dedicated worker thread owning a `Session` that manages jj-lib state (jj-lib is not thread-safe).
+**GG is a Tauri desktop app**: Svelte/TypeScript frontend (`app/`) + Rust backend (`src-tauri/src/`). Each window has a dedicated worker thread owning a `Session` that manages jj-lib state (jj-lib is not thread-safe).
 
 ### Core Architectural Boundaries
 
-- **`src/ipc.ts`**: Frontend IPC abstraction. Four message types:
+- **`app/ipc.ts`**: Frontend IPC abstraction. Four message types:
   - `trigger()` - fire-and-forget backend actions (native UI)
   - `query()` - request data without side effects  
   - `mutate()` - structured repository mutations (goes through worker)
@@ -23,9 +23,9 @@
 
 The UI metaphor is **drag-and-drop to edit the repository**. Core components:
 
-- **`src/objects/Object.svelte`**: Draggable items (revisions, changes, branches)
-- **`src/objects/Zone.svelte`**: Drop targets
-- **`src/mutators/BinaryMutator.ts`**: Centralizes drag-drop policy. Check `canDrag()` and `canDrop()` methods to understand valid operations.
+- **`app/objects/Object.svelte`**: Draggable items (revisions, changes, branches)
+- **`app/objects/Zone.svelte`**: Drop targets
+- **`app/mutators/BinaryMutator.ts`**: Centralizes drag-drop policy. Check `canDrag()` and `canDrop()` methods to understand valid operations.
 
 **Convention**: Actionable objects = icon + text. Greyscale = chrome/labels, colors = interactive widgets/state indicators.
 
@@ -39,7 +39,7 @@ After modifying Rust structs with `#[cfg_attr(feature = "ts-rs", ...)]` in `src-
 npm run gen  # Runs: cd src-tauri && cargo test -F ts-rs
 ```
 
-This exports TypeScript types to `src/messages/`. **Frontend will break without this step.**
+This exports TypeScript types to `app/messages/`. **Frontend will break without this step.**
 
 ### Source Control
 This project uses **Jujutsu (jj)** for version control instead of Git. See [jujutsu-guide.md](jujutsu-guide.md) for detailed usage instructions.
@@ -87,7 +87,7 @@ npm run tauri dev -- -- -- --debug  # Pass --debug to app (yes, 3x --)
    }
    ```
 3. Run `npm run gen` to export types
-4. Call from frontend via `mutate()` in `src/ipc.ts`
+4. Call from frontend via `mutate()` in `app/ipc.ts`
 
 **Mutation Style Guide:**
 - Start transaction early (first line after signature)
@@ -205,10 +205,10 @@ jj-lib and jj-cli dependencies are pinned to specific versions (see `Cargo.toml`
 ## Key Files to Reference
 
 - `DESIGN.md` - Core metaphors, architectural decisions, branch state machine
-- `src/mutators/BinaryMutator.ts` - All drag-drop operation policies
+- `app/mutators/BinaryMutator.ts` - All drag-drop operation policies
 - `src-tauri/src/worker/mutations.rs` - All mutation implementations
 - `src-tauri/src/config/gg.toml` - Default configuration with inline docs
-- `src/stores.ts` - Global Svelte stores for cross-component state
+- `app/stores.ts` - Global Svelte stores for cross-component state
 
 ## Svelte Patterns
 

@@ -17,10 +17,10 @@
     "strictPropertyInitialization": false
   },
   "include": [
-    "src/**/*.d.ts",
-    "src/**/*.ts",
-    "src/**/*.js",
-    "src/**/*.svelte"
+    "app/**/*.d.ts",
+    "app/**/*.ts",
+    "app/**/*.js",
+    "app/**/*.svelte"
   ],
   "references": [
     {
