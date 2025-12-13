@@ -181,7 +181,7 @@ match tree.path_value(path)?.into_resolved() {
 
 ### Testing Mutations
 
-Test repository (`resources/test-repo.zip`) contains pre-defined commits. Check which are mutable:
+Test repository (`res/test-repo.zip`) contains pre-defined commits. Check which are mutable:
 ```bash
 jj log -r 'mutable()'  # Shows commits that can be modified in tests
 ```

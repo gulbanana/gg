@@ -1,6 +1,6 @@
-# ![icon](resources/icons/24x24.png) GG - Gui for JJ
+# ![icon](res/icons/24x24.png) GG - Gui for JJ
 
-![screenshot](resources/screenshot.png)
+![screenshot](res/screenshot.png)
 
 GG is a GUI for the version control system [Jujutsu](https://github.com/martinvonz/jj). It takes advantage of Jujutsu's composable primitives to present an interactive view of your repository. Just imagine: what if you were always in the middle of an interactive rebase, but this was actually good?
 

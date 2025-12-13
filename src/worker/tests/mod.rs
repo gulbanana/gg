@@ -17,7 +17,7 @@ mod session;
 
 // Test Repository Maintenance
 // ==========================
-// The test repository is stored as `resources/test-repo.zip` and extracted by `mkrepo()`.
+// The test repository is stored as `res/test-repo.zip` and extracted by `mkrepo()`.
 //
 // To modify the test repository:
 // 1. Extract test-repo.zip to a temporary directory
@@ -31,7 +31,7 @@ mod session;
 fn mkrepo() -> TempDir {
     let repo_dir = tempdir().unwrap();
     let mut archive_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    archive_path.push("resources/test-repo.zip");
+    archive_path.push("res/test-repo.zip");
     let archive_file = File::open(&archive_path).unwrap();
     let mut archive = ZipArchive::new(archive_file).unwrap();
 

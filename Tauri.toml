@@ -40,11 +40,11 @@ permissions = [
 active = true # Comment this out or set to false to disable bundle compilation
 targets = "all"
 icon = [
-    "resources/icons/32x32.png",
-    "resources/icons/128x128.png",
-    "resources/icons/128x128@2x.png",
-    "resources/icons/icon.icns",
-    "resources/icons/icon.ico",
+    "res/icons/32x32.png",
+    "res/icons/128x128.png",
+    "res/icons/128x128@2x.png",
+    "res/icons/icon.icns",
+    "res/icons/icon.ico",
 ]
 
 [bundle.windows]
