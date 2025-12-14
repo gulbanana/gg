@@ -28,12 +28,12 @@ pre-release-hook = ["npm", "run", "build"]
 name = "gg"
 path = "src/main.rs"
 
+# custom-protocol is magic - tauri build adds it, tauri dev removes. it's on by default so that cargo run works
 [features]
 default = ["custom-protocol"]
+gui = []
+custom-protocol = ["tauri/custom-protocol"]
 ts-rs = ["dep:ts-rs"]
-custom-protocol = [
-    "tauri/custom-protocol",
-] # tauri build adds this, tauri dev removes it - default to adding so that cargo run works
 
 [build-dependencies]
 tauri-build = { version = "2.0.0", features = ["config-toml"] }
@@ -98,11 +98,15 @@ windows = { version = "0.60", features = [
     "Win32_System_Com",
     "Win32_System_Com_StructuredStorage",
     "Win32_System_Console",
+    "Win32_System_Threading",
     "Win32_System_Variant",
     "Win32_UI_Shell",
     "Win32_UI_Shell_Common",
     "Win32_UI_Shell_PropertiesSystem",
 ] }
+
+[target.'cfg(unix)'.dependencies]
+libc = { version = "0.2" }
 
 [target."cfg(target_os = \"macos\")".dependencies]
 objc2 = "0.6"

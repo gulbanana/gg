@@ -3,7 +3,8 @@
 ## Unreleased
 
 ### Fixed
-- MacOS: added dock icon when run from the CLI build.
+- CLI build: added dock icon on MacOS.
+- CLI build: the advertised `--foreground` now actually exists and works.
 
 ## [0.36.2](releases/tag/v0.36.2)
 

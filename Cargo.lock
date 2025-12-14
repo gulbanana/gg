@@ -1924,6 +1924,7 @@ dependencies = [
  "itertools 0.14.0",
  "jj-cli",
  "jj-lib",
+ "libc",
  "log",
  "objc2",
  "objc2-app-kit",

@@ -1,4 +1,4 @@
-#![cfg_attr(not(test), windows_subsystem = "windows")]
+#![cfg_attr(feature = "gui", windows_subsystem = "windows")]
 
 mod callbacks;
 mod config;
@@ -48,6 +48,13 @@ struct Args {
     workspace: Option<PathBuf>,
     #[arg(short, long, help = "Enable debug logging.")]
     debug: bool,
+    #[cfg(not(feature = "gui"))]
+    #[arg(
+        long,
+        help = "Run in foreground (don't spawn a background process).",
+        hide = true
+    )]
+    foreground: bool,
 }
 
 #[derive(Default)]
@@ -102,6 +109,87 @@ fn main() -> Result<()> {
 
     let args = Args::parse();
 
+    // cargo run/install: act like a CLI that spawns a GUI in the background
+    #[cfg(not(feature = "gui"))]
+    if !args.foreground {
+        spawn_app()
+    } else {
+        run_app(args)
+    }
+
+    #[cfg(feature = "gui")]
+    {
+        run_app(args)
+    }
+}
+
+#[cfg(not(feature = "gui"))]
+fn spawn_app() -> Result<()> {
+    use std::process::{Command, exit};
+
+    let exe = std::env::current_exe()?;
+    let mut cmd = Command::new(&exe);
+    cmd.arg("--foreground");
+    cmd.args(std::env::args().skip(1)); // forward all original arguments
+
+    #[cfg(windows)]
+    {
+        use ::windows::Win32::System::Threading::{CREATE_NEW_PROCESS_GROUP, DETACHED_PROCESS};
+        use std::os::windows::process::CommandExt;
+
+        // Spawn with DETACHED_PROCESS flag so the child runs independently
+        cmd.creation_flags(DETACHED_PROCESS.0 | CREATE_NEW_PROCESS_GROUP.0);
+
+        match cmd.spawn() {
+            Err(err) => Err(anyhow!("Failed to spawn GG: {}", err)),
+            Ok(_) => exit(0),
+        }
+    }
+
+    #[cfg(unix)]
+    {
+        use std::ffi::CString;
+        use std::os::unix::process::CommandExt;
+
+        // safety: fork() is ok here because:
+        // 1. We're in a single-threaded context (early in main before any threads spawn)
+        // 2. We only use async-signal-safe functions in the child before exec
+        // 3. The child immediately execs, replacing itself entirely
+        // 4. The parent exits without doing anything else
+        unsafe {
+            match libc::fork() {
+                -1 => Err(anyhow!("fork() failed")),
+
+                // child: detach from terminal, redirect stdio and exec
+                0 => {
+                    if libc::setsid() == -1 {
+                        eprintln!("Warning: setsid() failed");
+                    }
+
+                    let devnull = CString::new("/dev/null")?;
+                    let null_fd = libc::open(devnull.as_ptr(), libc::O_RDWR);
+                    if null_fd != -1 {
+                        if libc::dup2(null_fd, 0) == -1
+                            || libc::dup2(null_fd, 1) == -1
+                            || libc::dup2(null_fd, 2) == -1
+                        {
+                            eprintln!("Warning: failed to redirect stdio");
+                        }
+                        libc::close(null_fd);
+                    }
+
+                    let err = cmd.exec();
+                    Err(anyhow!("exec() failed: {}", err))
+                }
+
+                // parent: we're done
+                _ => exit(0),
+            }
+        }
+    }
+}
+
+fn run_app(args: Args) -> Result<()> {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
