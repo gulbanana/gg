@@ -38,19 +38,19 @@ GG is lightly maintained and will have bugs. In theory it can't corrupt a reposi
 If your repo is "too large" some features will be disabled for performance. See [the default config](src/config/gg.toml) for details.
 
 ## Development  
-Recommended IDE setup: [VS Code](https://code.visualstudio.com/) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer) + [Svelte](https://marketplace.visualstudio.com/items?itemName=svelte.svelte-vscode) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode).
+Recommended IDE: [VS Code](https://code.visualstudio.com/) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer) + [Svelte](https://marketplace.visualstudio.com/items?itemName=svelte.svelte-vscode) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode).
 
-To create a build:
-1. (Linux) Install the system dependencies (on Debian-likes, `apt install libpango1.0-dev libatk1.0-dev libgdk-pixbuf2.0-dev libgtk-3-dev libjavascriptcoregtk-4.1-dev libwebkit2gtk-4.1-dev`).
-2. (Optional) Install the Tauri CLI: `cargo install tauri-cli --version "^2.0.0" --locked`.
-3. Build the frontend: `npm install && npm run build`.
-4. Build the application: `cargo tauri build` or `npm run tauri build`.
+Initial setup:
+1. Run the first frontend build: `npm install && npm run build`. Future builds will be done automatically by `cargo tauri` or `cargo publish`.
+2. (Optional) Install the Tauri CLI: `cargo install tauri-cli --version "^2.0.0" --locked`. This allows you to use `cargo tauri` instead of `npm run tauri`.
+3. (Linux) Install system dependencies (on Debian-likes, `apt install libpango1.0-dev libatk1.0-dev libgdk-pixbuf2.0-dev libgtk-3-dev libjavascriptcoregtk-4.1-dev libwebkit2gtk-4.1-dev`).
 
 Some useful commands:
 * `cargo test` - execute unit tests.
 * `cargo gen` - update the IPC message types in app/messages from src/messages.rs.
 * `cargo tauri dev` - launch a debug build with automatic reloading.
-* `cargo tauri build --target universal-apple-darwin` - create a fat binary for MacOS.
 * `cargo tauri dev -- -- --debug` - run locally with --debug. Yes, both `--` are necessary.
+* `cargo tauri build` - create a standard release build. Require codesigning setup.
+* `cargo tauri build --target universal-apple-darwin` - create a fat binary for MacOS.
 
-[DESIGN.md](DESIGN.md) has some basic information about how GG works.
+[DESIGN.md](DESIGN.md) has some basic information about how GG works and why.
