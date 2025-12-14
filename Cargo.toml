@@ -105,6 +105,3 @@ windows = { version = "0.60", features = [
 [profile.dev]
 debug = 0
 
-[profile.release]
-lto = true
-codegen-units = 1

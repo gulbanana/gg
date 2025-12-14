@@ -63,6 +63,8 @@ jobs:
           AZURE_TENANT_ID: ${{ matrix.platform == 'windows-latest' && secrets.AZURE_TENANT_ID }}
           AZURE_CLIENT_ID: ${{ matrix.platform == 'windows-latest' && secrets.AZURE_CLIENT_ID }}
           AZURE_CLIENT_SECRET: ${{ matrix.platform == 'windows-latest' && secrets.AZURE_CLIENT_SECRET }}
+          CARGO_PROFILE_RELEASE_LTO: 'true'
+          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: '1'
         with:
           args: ${{ matrix.platform == 'macos-latest' && '--target universal-apple-darwin --verbose' || '--verbose'}}
           tagName: v__VERSION__
