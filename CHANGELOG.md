@@ -1,5 +1,10 @@
 # GG Changelog
 
+## [0.36.2](releases/tag/v0.36.2)
+
+### Added
+- GG is now available from crates.io: `cargo install --locked`. This will give you a `gg` CLI binary on your PATH which launches the GUI in the background or, with `--foreground`, in the foreground.
+
 ## [0.36.1](releases/tag/v0.36.1)
 
 ### Fixed

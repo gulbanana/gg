@@ -1,9 +1,32 @@
 [package]
-name = "gg"
-version = "0.36.1"
+name = "gg-cli"
+version = "0.36.2"
 description = "GG - Gui for JJ"
 authors = ["Thomas Castiglione"]
 edition = "2024"
+license = "Apache-2.0"
+repository = "https://github.com/gulbanana/gg"
+homepage = "https://github.com/gulbanana/gg"
+keywords = ["jujutsu", "jj", "vcs", "scm", "gui"]
+categories = ["development-tools"]
+include = [
+    "res/**/*",
+    "src/**/*",
+    "gen/**/*",    
+    "dist/**/*",
+    "build.rs",
+    "Tauri.toml",
+    "index.html",
+    "LICENSE",
+    "README.md"
+]
+
+[package.metadata.release]
+pre-release-hook = ["npm", "run", "build"]
+
+[[bin]]
+name = "gg"
+path = "src/main.rs" 
 
 [features]
 default = ["custom-protocol"]

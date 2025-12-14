@@ -5,13 +5,7 @@
 GG is a GUI for the version control system [Jujutsu](https://github.com/martinvonz/jj). It takes advantage of Jujutsu's composable primitives to present an interactive view of your repository. Just imagine: what if you were always in the middle of an interactive rebase, but this was actually good?
 
 ## Installation
-GG is a desktop application with a keyboard & mouse interface, written in [Tauri](https://tauri.app/). Binaries are available for several platforms on the [releases page](https://github.com/gulbanana/gg/releases). Use the `.dmg` or `.app.tar.gz` on MacOS, and the `.msi` or `.exe` on Windows.
-
-To compile from source:
-1. Install the system dependencies (on Debian-likes, `apt install libpango1.0-dev libatk1.0-dev libgdk-pixbuf2.0-dev libgtk-3-dev libjavascriptcoregtk-4.1-dev libwebkit2gtk-4.1-dev`).
-2. Install the frontend dependencies: `npm install && npm run build`.
-3. (Optional) Install the Tauri CLI: `cargo install tauri-cli --version "^2.0.0" --locked`.
-3. Build the application: `cargo tauri build`, or `npm run tauri build` if you don't want tauri-cli installed globally.
+GG is a desktop application with a keyboard & mouse interface, written in [Tauri](https://tauri.app/). Binaries are available for several platforms on the [releases page](https://github.com/gulbanana/gg/releases). Use the `.dmg` or `.app.tar.gz` on MacOS, and the `.msi` or `.exe` on Windows. You can also build from source using `cargo install --locked gg-cli`.
 
 ### Setup 
 Put `gg` on your path and run it from a Jujutsu workspace, pass the workspace directory as an argument or launch it separately and use the Repository->Open menu item. Tips:
@@ -39,12 +33,18 @@ More detail is available in [the changelog](CHANGELOG.md).
 There's no roadmap as such, but items on [the to-do list](TODO.md) may or may not be implemented in future. Just about everything is subject to change for now, including the name.
 
 ### Known Issues
-GG is in early development and will have bugs. In theory it can't corrupt a repository thanks to the operation log, but it never hurts to make backups. 
+GG is lightly maintained and will have bugs. In theory it can't corrupt a repository thanks to the operation log, but it never hurts to make backups. 
 
 If your repo is "too large" some features will be disabled for performance. See [the default config](src/config/gg.toml) for details.
 
 ## Development  
 Recommended IDE setup: [VS Code](https://code.visualstudio.com/) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer) + [Svelte](https://marketplace.visualstudio.com/items?itemName=svelte.svelte-vscode) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode).
+
+To create a build:
+1. (Linux) Install the system dependencies (on Debian-likes, `apt install libpango1.0-dev libatk1.0-dev libgdk-pixbuf2.0-dev libgtk-3-dev libjavascriptcoregtk-4.1-dev libwebkit2gtk-4.1-dev`).
+2. (Optional) Install the Tauri CLI: `cargo install tauri-cli --version "^2.0.0" --locked`.
+3. Build the frontend: `npm install && npm run build`.
+4. Build the application: `cargo tauri build` or `npm run tauri build`.
 
 Some useful commands:
 * `cargo test` - execute unit tests.

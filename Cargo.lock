@@ -1916,8 +1916,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "gg"
-version = "0.36.1"
+name = "gg-cli"
+version = "0.36.2"
 dependencies = [
  "anyhow",
  "assert_matches",
