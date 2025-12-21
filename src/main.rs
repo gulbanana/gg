@@ -119,7 +119,7 @@ fn spawn_detached_child() -> Result<()> {
     cmd.arg("--foreground");
     
     // Pass through original arguments except for any existing --foreground flag
-    for (i, arg) in args.iter().enumerate().skip(1) {
+    for arg in args.iter().skip(1) {
         if arg != "--foreground" {
             cmd.arg(arg);
         }
