@@ -5,7 +5,7 @@ use windows::Win32::Foundation::MAX_PATH;
 use windows::Win32::Foundation::PROPERTYKEY;
 use windows::Win32::System::Com::StructuredStorage::PROPVARIANT;
 use windows::Win32::System::Com::{CLSCTX_INPROC_SERVER, CoCreateInstance};
-use windows::Win32::System::Console::{ATTACH_PARENT_PROCESS, AttachConsole};
+use windows::Win32::System::Console::{ATTACH_PARENT_PROCESS, AttachConsole, FreeConsole};
 use windows::Win32::UI::Shell::Common::{IObjectArray, IObjectCollection};
 use windows::Win32::UI::Shell::PropertiesSystem::{IPropertyStore, PSGetPropertyKeyFromName};
 use windows::Win32::UI::Shell::{
@@ -13,9 +13,22 @@ use windows::Win32::UI::Shell::{
 };
 use windows::core::{BSTR, HSTRING, Interface, PWSTR, w};
 
-pub fn reattach_console() {
+pub fn setup_foreground_console() {
+    // Try to attach to parent console (if launched from shell)
     // safety: FFI
-    let _ = unsafe { AttachConsole(ATTACH_PARENT_PROCESS) };
+    let attached = unsafe { AttachConsole(ATTACH_PARENT_PROCESS) };
+    
+    // After attaching, we'll free it once the GUI starts
+    // This allows the shell to wait for the process while avoiding orphaned console windows
+    // The FreeConsole will happen after Tauri is initialized in run_gui
+}
+
+pub fn free_console() {
+    // Free the console to prevent orphaned console window
+    // safety: FFI
+    unsafe { 
+        let _ = FreeConsole();
+    }
 }
 
 #[cfg_attr(not(windows), allow(dead_code))]

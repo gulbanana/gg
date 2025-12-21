@@ -1,5 +1,3 @@
-#![cfg_attr(not(test), windows_subsystem = "windows")]
-
 mod callbacks;
 mod config;
 mod handler;
@@ -46,6 +44,8 @@ struct Args {
     workspace: Option<PathBuf>,
     #[arg(short, long, help = "Enable debug logging.")]
     debug: bool,
+    #[arg(long, help = "Run in foreground mode (blocks the shell until closed).")]
+    foreground: bool,
 }
 
 #[derive(Default)]
@@ -91,14 +91,105 @@ impl AppState {
     }
 }
 
+#[cfg(unix)]
+fn spawn_detached_child() -> Result<()> {
+    use std::os::unix::process::CommandExt;
+    
+    let exe = std::env::current_exe()?;
+    let args: Vec<String> = std::env::args().collect();
+    
+    // Fork the process
+    unsafe {
+        let pid = libc::fork();
+        if pid < 0 {
+            return Err(anyhow!("Failed to fork process"));
+        } else if pid > 0 {
+            // Parent process: exit immediately
+            return Ok(());
+        }
+        
+        // Child process: detach from terminal
+        if libc::setsid() < 0 {
+            return Err(anyhow!("Failed to create new session"));
+        }
+    }
+    
+    // Re-exec with --foreground flag to run the GUI
+    let mut cmd = std::process::Command::new(exe);
+    cmd.arg("--foreground");
+    
+    // Pass through original arguments except for any existing --foreground flag
+    for (i, arg) in args.iter().enumerate().skip(1) {
+        if arg != "--foreground" {
+            cmd.arg(arg);
+        }
+    }
+    
+    // Redirect stdio to /dev/null
+    cmd.stdin(std::process::Stdio::null())
+       .stdout(std::process::Stdio::null())
+       .stderr(std::process::Stdio::null());
+    
+    cmd.exec();
+    
+    // If exec returns, it failed
+    Err(anyhow!("Failed to exec child process"))
+}
+
+#[cfg(windows)]
+fn spawn_detached_child() -> Result<()> {
+    use std::os::windows::process::CommandExt;
+    use windows::Win32::System::Threading::{
+        CREATE_NEW_PROCESS_GROUP, DETACHED_PROCESS, CREATE_NO_WINDOW,
+    };
+    
+    let exe = std::env::current_exe()?;
+    let args: Vec<String> = std::env::args().collect();
+    
+    let mut cmd = std::process::Command::new(exe);
+    cmd.arg("--foreground");
+    
+    // Pass through original arguments except for any existing --foreground flag
+    for arg in args.iter().skip(1) {
+        if arg != "--foreground" {
+            cmd.arg(arg);
+        }
+    }
+    
+    // Redirect stdio to null to prevent PowerShell from waiting
+    cmd.stdin(std::process::Stdio::null())
+       .stdout(std::process::Stdio::null())
+       .stderr(std::process::Stdio::null());
+    
+    // Use flags to detach from console and prevent console window
+    const DETACHED_FLAGS: u32 = DETACHED_PROCESS.0 | CREATE_NEW_PROCESS_GROUP.0 | CREATE_NO_WINDOW.0;
+    cmd.creation_flags(DETACHED_FLAGS);
+    
+    cmd.spawn()?;
+    
+    Ok(())
+}
+
 fn main() -> Result<()> {
-    // before parsing args, attach a console on windows - will fail if not started from a shell, but that's fine
-    #[cfg(windows)]
-    {
-        windows::reattach_console();
+    // Parse args early to check for foreground flag
+    let args = Args::parse();
+
+    // If not in foreground mode, spawn a detached child and exit
+    if !args.foreground {
+        spawn_detached_child()?;
+        return Ok(());
     }
 
-    let args = Args::parse();
+    // Foreground mode: continue with GUI startup
+    #[cfg(windows)]
+    {
+        windows::setup_foreground_console();
+    }
+
+    run_gui(args)
+}
+
+fn run_gui(args: Args) -> Result<()> {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
@@ -211,6 +302,13 @@ fn main() -> Result<()> {
                     ref_menu,
                 },
             );
+
+            // On Windows in foreground mode, free the console after GUI is initialized
+            // This prevents orphaned console windows when launched from Explorer
+            #[cfg(windows)]
+            {
+                windows::free_console();
+            }
 
             Ok(())
         })

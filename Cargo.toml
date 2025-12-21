@@ -96,11 +96,15 @@ windows = { version = "0.60", features = [
     "Win32_System_Com",
     "Win32_System_Com_StructuredStorage",
     "Win32_System_Console",
+    "Win32_System_Threading",
     "Win32_System_Variant",
     "Win32_UI_Shell",
     "Win32_UI_Shell_Common",
     "Win32_UI_Shell_PropertiesSystem",
 ] }
+
+[target."cfg(unix)".dependencies]
+libc = "0.2"
 
 [profile.dev]
 debug = 0
