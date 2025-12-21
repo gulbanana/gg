@@ -1,5 +1,10 @@
 # GG Changelog
 
+## Unreleased
+
+### Fixed
+- MacOS: added dock icon when run from the CLI build.
+
 ## [0.36.2](releases/tag/v0.36.2)
 
 ### Added

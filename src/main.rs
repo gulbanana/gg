@@ -3,6 +3,8 @@
 mod callbacks;
 mod config;
 mod handler;
+#[cfg(target_os = "macos")]
+mod macos;
 mod menu;
 mod messages;
 #[cfg(windows)]
@@ -171,6 +173,12 @@ fn main() -> Result<()> {
         ])
         .menu(menu::build_main)
         .setup(|app| {
+            // after tauri initialises NSApplication, set the dock icon in case we're running as CLI
+            #[cfg(target_os = "macos")]
+            {
+                macos::set_dock_icon();
+            }
+
             let window = app
                 .get_webview_window("main")
                 .ok_or(anyhow!("preconfigured window not found"))?;

@@ -104,5 +104,15 @@ windows = { version = "0.60", features = [
     "Win32_UI_Shell_PropertiesSystem",
 ] }
 
+[target."cfg(target_os = \"macos\")".dependencies]
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", default-features = false, features = [
+    "NSData",
+] }
+objc2-app-kit = { version = "0.3", default-features = false, features = [
+    "NSApplication",
+    "NSImage",
+] }
+
 [profile.dev]
 debug = 0
