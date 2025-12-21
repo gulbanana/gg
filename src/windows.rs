@@ -13,6 +13,15 @@ use windows::Win32::UI::Shell::{
 };
 use windows::core::{BSTR, HSTRING, Interface, PWSTR, w};
 
+/// Sets up console attachment for foreground mode on Windows.
+///
+/// Attempts to attach to the parent process's console (if launched from a shell).
+/// This allows the shell to wait for the process to exit. The console will be
+/// freed after GUI initialization via free_console() to prevent orphaned console
+/// windows when launched from Explorer.
+///
+/// # Usage
+/// Call this in foreground mode before GUI initialization (in main()).
 pub fn setup_foreground_console() {
     // Try to attach to parent console (if launched from shell)
     // safety: FFI
@@ -23,6 +32,17 @@ pub fn setup_foreground_console() {
     // The FreeConsole will happen after Tauri is initialized in run_gui
 }
 
+/// Frees the console attachment on Windows.
+///
+/// Releases the console that was attached via setup_foreground_console(). This
+/// prevents orphaned console windows when the application is launched from
+/// Explorer (where there's no parent console to attach to).
+///
+/// # Usage
+/// Call this after GUI initialization completes (in run_gui() setup).
+///
+/// # Safety
+/// Safe to call even if console wasn't attached - FreeConsole handles this gracefully.
 pub fn free_console() {
     // Free the console to prevent orphaned console window
     // safety: FFI

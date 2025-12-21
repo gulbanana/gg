@@ -99,6 +99,21 @@ impl AppState {
     }
 }
 
+/// Spawns a detached child process on Unix systems.
+///
+/// Uses fork() to create a child process, setsid() to detach from the controlling
+/// terminal, and exec() to replace the child with a new instance running in
+/// foreground mode.
+///
+/// # Process
+/// 1. Fork the current process
+/// 2. Parent exits immediately (returns Ok)
+/// 3. Child calls setsid() to become session leader without controlling terminal
+/// 4. Child re-execs itself with --foreground flag
+/// 5. Child's stdio is redirected to /dev/null
+///
+/// # Errors
+/// Returns error if fork(), setsid(), or exec() fail, with OS-level error details.
 #[cfg(unix)]
 fn spawn_detached_child() -> Result<()> {
     use std::os::unix::process::CommandExt;
@@ -145,6 +160,24 @@ fn spawn_detached_child() -> Result<()> {
     Err(anyhow!("Failed to exec child process: {}", err))
 }
 
+/// Spawns a detached child process on Windows.
+///
+/// Uses CreateProcess with special flags to detach from the parent console and
+/// prevent console window creation. The child process is spawned with --foreground
+/// flag to run the GUI.
+///
+/// # Flags Used
+/// - DETACHED_PROCESS: Detaches from parent console
+/// - CREATE_NEW_PROCESS_GROUP: Creates new process group (prevents Ctrl+C propagation)
+/// - CREATE_NO_WINDOW: Prevents console window flash
+///
+/// # Process
+/// 1. Spawn child process with --foreground flag
+/// 2. Child's stdio is redirected to null to prevent PowerShell waiting
+/// 3. Parent returns immediately
+///
+/// # Errors
+/// Returns error if process spawn fails.
 #[cfg(windows)]
 fn spawn_detached_child() -> Result<()> {
     use std::os::windows::process::CommandExt;
