@@ -5,13 +5,33 @@ use windows::Win32::Foundation::MAX_PATH;
 use windows::Win32::Foundation::PROPERTYKEY;
 use windows::Win32::System::Com::StructuredStorage::PROPVARIANT;
 use windows::Win32::System::Com::{CLSCTX_INPROC_SERVER, CoCreateInstance};
-use windows::Win32::System::Console::{ATTACH_PARENT_PROCESS, AttachConsole, FreeConsole};
+use windows::Win32::System::Console::{ATTACH_PARENT_PROCESS, AttachConsole, FreeConsole, GetConsoleWindow};
 use windows::Win32::UI::Shell::Common::{IObjectArray, IObjectCollection};
 use windows::Win32::UI::Shell::PropertiesSystem::{IPropertyStore, PSGetPropertyKeyFromName};
 use windows::Win32::UI::Shell::{
     DestinationList, EnumerableObjectCollection, ICustomDestinationList, IShellLinkW, ShellLink,
 };
+use windows::Win32::UI::WindowsAndMessaging::{ShowWindow, SW_HIDE};
 use windows::core::{BSTR, HSTRING, Interface, PWSTR, w};
+
+/// Hides the console window on Windows.
+///
+/// This is used to prevent console window flash when the application is launched
+/// from Explorer or other GUI contexts. The console subsystem is required for
+/// --foreground mode to work in shells, but the console window should be hidden
+/// when spawning the detached child process.
+///
+/// # Usage
+/// Call this immediately at startup before spawning the detached child.
+pub fn hide_console() {
+    // safety: FFI
+    unsafe {
+        let console_window = GetConsoleWindow();
+        if !console_window.is_invalid() {
+            let _ = ShowWindow(console_window, SW_HIDE);
+        }
+    }
+}
 
 /// Sets up console attachment for foreground mode on Windows.
 ///

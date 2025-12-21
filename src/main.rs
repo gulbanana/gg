@@ -214,6 +214,12 @@ fn main() -> Result<()> {
 
     // If not in foreground mode, spawn a detached child and exit
     if !args.foreground {
+        // Hide console window to prevent flash when launched from Explorer
+        #[cfg(windows)]
+        {
+            windows::hide_console();
+        }
+        
         spawn_detached_child()?;
         return Ok(());
     }
