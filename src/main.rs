@@ -34,6 +34,14 @@ use worker::{Mutation, Session, SessionEvent, WorkerSession};
 use crate::callbacks::FrontendCallbacks;
 use crate::messages::CopyHunk;
 
+#[cfg(windows)]
+use windows::Win32::System::Threading::{
+    CREATE_NEW_PROCESS_GROUP, DETACHED_PROCESS, CREATE_NO_WINDOW,
+};
+
+#[cfg(windows)]
+const DETACHED_FLAGS: u32 = DETACHED_PROCESS.0 | CREATE_NEW_PROCESS_GROUP.0 | CREATE_NO_WINDOW.0;
+
 #[derive(Parser, Debug)]
 #[command(version, author)]
 struct Args {
@@ -139,9 +147,6 @@ fn spawn_detached_child() -> Result<()> {
 #[cfg(windows)]
 fn spawn_detached_child() -> Result<()> {
     use std::os::windows::process::CommandExt;
-    use windows::Win32::System::Threading::{
-        CREATE_NEW_PROCESS_GROUP, DETACHED_PROCESS, CREATE_NO_WINDOW,
-    };
     
     let exe = std::env::current_exe()?;
     let args: Vec<String> = std::env::args().collect();
@@ -162,7 +167,6 @@ fn spawn_detached_child() -> Result<()> {
        .stderr(std::process::Stdio::null());
     
     // Use flags to detach from console and prevent console window
-    const DETACHED_FLAGS: u32 = DETACHED_PROCESS.0 | CREATE_NEW_PROCESS_GROUP.0 | CREATE_NO_WINDOW.0;
     cmd.creation_flags(DETACHED_FLAGS);
     
     cmd.spawn()?;
@@ -199,7 +203,6 @@ fn run_gui(args: Args) -> Result<()> {
                 .with_state_flags(
                     StateFlags::SIZE
                         | StateFlags::POSITION
-                        | StateFlags::SIZE
                         | StateFlags::FULLSCREEN,
                 )
                 .build(),

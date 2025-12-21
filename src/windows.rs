@@ -16,7 +16,7 @@ use windows::core::{BSTR, HSTRING, Interface, PWSTR, w};
 pub fn setup_foreground_console() {
     // Try to attach to parent console (if launched from shell)
     // safety: FFI
-    let attached = unsafe { AttachConsole(ATTACH_PARENT_PROCESS) };
+    let _ = unsafe { AttachConsole(ATTACH_PARENT_PROCESS) };
     
     // After attaching, we'll free it once the GUI starts
     // This allows the shell to wait for the process while avoiding orphaned console windows
