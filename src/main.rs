@@ -35,7 +35,7 @@ use crate::callbacks::FrontendCallbacks;
 use crate::messages::CopyHunk;
 
 #[cfg(windows)]
-use windows::Win32::System::Threading::{
+use ::windows::Win32::System::Threading::{
     CREATE_NEW_PROCESS_GROUP, DETACHED_PROCESS, CREATE_NO_WINDOW,
 };
 
