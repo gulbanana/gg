@@ -209,22 +209,26 @@ fn spawn_detached_child() -> Result<()> {
 }
 
 fn main() -> Result<()> {
-    // Parse args early to check for foreground flag
+    // On Windows with console subsystem, check if we're in foreground mode
+    // before parsing args to avoid console window flash
+    #[cfg(windows)]
+    {
+        let is_foreground = std::env::args().any(|arg| arg == "--foreground");
+        if !is_foreground {
+            // Free the console immediately to prevent it from showing
+            windows::free_console();
+        }
+    }
+
     let args = Args::parse();
 
     // If not in foreground mode, spawn a detached child and exit
     if !args.foreground {
-        // Hide console window to prevent flash when launched from Explorer
-        #[cfg(windows)]
-        {
-            windows::hide_console();
-        }
-        
         spawn_detached_child()?;
         return Ok(());
     }
 
-    // Foreground mode: continue with GUI startup
+    // Foreground mode: keep console attached for shell blocking
     #[cfg(windows)]
     {
         windows::setup_foreground_console();
@@ -345,13 +349,6 @@ fn run_gui(args: Args) -> Result<()> {
                     ref_menu,
                 },
             );
-
-            // On Windows in foreground mode, free the console after GUI is initialized
-            // This prevents orphaned console windows when launched from Explorer
-            #[cfg(windows)]
-            {
-                windows::free_console();
-            }
 
             Ok(())
         })
