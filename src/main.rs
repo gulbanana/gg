@@ -110,7 +110,8 @@ fn spawn_detached_child() -> Result<()> {
     unsafe {
         let pid = libc::fork();
         if pid < 0 {
-            return Err(anyhow!("Failed to fork process"));
+            let err = std::io::Error::last_os_error();
+            return Err(anyhow!("Failed to fork process: {}", err));
         } else if pid > 0 {
             // Parent process: exit immediately
             return Ok(());
@@ -118,7 +119,8 @@ fn spawn_detached_child() -> Result<()> {
         
         // Child process: detach from terminal
         if libc::setsid() < 0 {
-            return Err(anyhow!("Failed to create new session"));
+            let err = std::io::Error::last_os_error();
+            return Err(anyhow!("Failed to create new session: {}", err));
         }
     }
     
@@ -138,10 +140,9 @@ fn spawn_detached_child() -> Result<()> {
        .stdout(std::process::Stdio::null())
        .stderr(std::process::Stdio::null());
     
-    cmd.exec();
-    
-    // If exec returns, it failed
-    Err(anyhow!("Failed to exec child process"))
+    // exec() never returns on success - if we reach here, it failed
+    let err = cmd.exec();
+    Err(anyhow!("Failed to exec child process: {}", err))
 }
 
 #[cfg(windows)]
