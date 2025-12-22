@@ -12,13 +12,14 @@ mod windows;
 mod worker;
 
 use std::collections::HashMap;
+use std::fmt::Display;
 use std::path::PathBuf;
 use std::sync::Mutex;
 use std::sync::mpsc::{Sender, channel};
 use std::thread::{self, JoinHandle};
 
 use anyhow::{Context, Result, anyhow};
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use jj_lib::config::ConfigSource;
 use log::LevelFilter;
 use tauri::async_runtime;
@@ -27,34 +28,87 @@ use tauri::{Emitter, Listener, State, Window, WindowEvent, Wry};
 use tauri::{Manager, ipc::InvokeError};
 use tauri_plugin_window_state::StateFlags;
 
+use callbacks::FrontendCallbacks;
+use config::{GGSettings, read_config};
 use messages::{
-    AbandonRevisions, BackoutRevisions, CheckoutRevision, CopyChanges, CreateRef, CreateRevision,
-    CreateRevisionBetween, DeleteRef, DescribeRevision, DuplicateRevisions, GitFetch, GitPush,
-    InputResponse, InsertRevision, MoveChanges, MoveHunk, MoveRef, MoveRevision, MoveSource,
-    MutationResult, RenameBranch, RevId, TrackBranch, UndoOperation, UntrackBranch,
+    AbandonRevisions, BackoutRevisions, CheckoutRevision, CopyChanges, CopyHunk, CreateRef,
+    CreateRevision, CreateRevisionBetween, DeleteRef, DescribeRevision, DuplicateRevisions,
+    GitFetch, GitPush, InputResponse, InsertRevision, MoveChanges, MoveHunk, MoveRef, MoveRevision,
+    MoveSource, MutationResult, RenameBranch, RevId, TrackBranch, UndoOperation, UntrackBranch,
 };
 use worker::{Mutation, Session, SessionEvent, WorkerSession};
 
-use crate::callbacks::FrontendCallbacks;
-use crate::messages::CopyHunk;
+#[derive(Clone, Debug, Default, PartialEq, Eq, ValueEnum)]
+enum LaunchMode {
+    #[default]
+    Gui,
+    Web,
+}
+
+impl Display for LaunchMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LaunchMode::Gui => write!(f, "gui"),
+            LaunchMode::Web => write!(f, "web"),
+        }
+    }
+}
 
 #[derive(Parser, Debug)]
-#[command(version, author)]
+#[command(version, author, args_conflicts_with_subcommands = true)]
 struct Args {
-    #[arg(
-        index(1),
-        help = "Open this directory (instead of the current working directory)."
-    )]
+    #[command(subcommand)]
+    command: Option<Subcommand>,
+
+    /// Open this directory (instead of the current working directory).
+    #[arg(index(1))]
     workspace: Option<PathBuf>,
-    #[arg(short, long, help = "Enable debug logging.")]
+
+    /// Enable debug logging.
+    #[arg(short, long, global = true)]
     debug: bool,
+
     #[cfg(not(feature = "gui"))]
     #[arg(
         long,
+        global = true,
         help = "Run in foreground (don't spawn a background process).",
         hide = true
     )]
     foreground: bool,
+}
+
+#[derive(clap::Subcommand, Debug)]
+enum Subcommand {
+    /// Launch GG in GUI mode (default).
+    Gui {
+        /// Open this directory (instead of the current working directory).
+        workspace: Option<PathBuf>,
+    },
+    /// Launch GG in web mode.
+    Web {
+        /// Open this directory (instead of the current working directory).
+        workspace: Option<PathBuf>,
+    },
+}
+
+impl Args {
+    fn mode(&self) -> Result<LaunchMode> {
+        match &self.command {
+            Some(Subcommand::Gui { .. }) => Ok(LaunchMode::Gui),
+            Some(Subcommand::Web { .. }) => Ok(LaunchMode::Web),
+            _ => Ok(read_config(self.workspace().as_deref())?.0.default_mode()),
+        }
+    }
+
+    fn workspace(&self) -> Option<PathBuf> {
+        match &self.command {
+            Some(Subcommand::Gui { workspace }) | Some(Subcommand::Web { workspace }) => {
+                workspace.clone()
+            }
+            None => self.workspace.clone(),
+        }
+    }
 }
 
 #[derive(Default)]
@@ -129,8 +183,9 @@ fn spawn_app() -> Result<()> {
 
     let exe = std::env::current_exe()?;
     let mut cmd = Command::new(&exe);
-    cmd.arg("--foreground");
+
     cmd.args(std::env::args().skip(1)); // forward all original arguments
+    cmd.arg("--foreground");
 
     #[cfg(windows)]
     {
@@ -190,128 +245,134 @@ fn spawn_app() -> Result<()> {
 }
 
 fn run_app(args: Args) -> Result<()> {
-    tauri::Builder::default()
-        .plugin(tauri_plugin_shell::init())
-        .plugin(tauri_plugin_dialog::init())
-        .plugin(
-            tauri_plugin_window_state::Builder::default()
-                .with_state_flags(
-                    StateFlags::SIZE
-                        | StateFlags::POSITION
-                        | StateFlags::SIZE
-                        | StateFlags::FULLSCREEN,
-                )
-                .build(),
-        )
-        .plugin(
-            tauri_plugin_log::Builder::default()
-                .level(LevelFilter::Warn)
-                .level_for(
-                    "gg",
-                    if args.debug {
-                        LevelFilter::Debug
-                    } else {
-                        LevelFilter::Warn
-                    },
-                )
-                .level_for(
-                    "tao",
-                    if args.debug {
-                        LevelFilter::Info
-                    } else {
-                        LevelFilter::Error
-                    },
-                )
-                .build(),
-        )
-        .invoke_handler(tauri::generate_handler![
-            notify_window_ready,
-            notify_input,
-            forward_accelerator,
-            forward_context_menu,
-            query_log,
-            query_log_next_page,
-            query_revision,
-            query_remotes,
-            abandon_revisions,
-            backout_revisions,
-            checkout_revision,
-            create_revision,
-            create_revision_between,
-            describe_revision,
-            duplicate_revisions,
-            insert_revision,
-            move_revision,
-            move_source,
-            move_changes,
-            copy_changes,
-            move_hunk,
-            copy_hunk,
-            track_branch,
-            untrack_branch,
-            rename_branch,
-            create_ref,
-            delete_ref,
-            move_ref,
-            git_push,
-            git_fetch,
-            undo_operation,
-            query_recent_workspaces,
-            open_workspace_at_path,
-        ])
-        .menu(menu::build_main)
-        .setup(|app| {
-            // after tauri initialises NSApplication, set the dock icon in case we're running as CLI
-            #[cfg(all(target_os = "macos", not(feature = "gui")))]
-            {
-                macos::set_dock_icon();
-            }
+    let workspace = args.workspace();
 
-            let window = app
-                .get_webview_window("main")
-                .ok_or(anyhow!("preconfigured window not found"))?;
-            let (sender, receiver) = channel();
+    match args.mode()? {
+        LaunchMode::Web => eprintln!("not yet implemented"),
 
-            let mut handle = window.as_ref().window();
-            let window_worker = thread::spawn(move || {
-                async_runtime::block_on(work(handle.clone(), receiver, args.workspace))
-            });
-
-            window.on_menu_event(|w, e| handler::fatal!(menu::handle_event(w, e)));
-
-            handle = window.as_ref().window();
-            window.on_window_event(move |event| handle_window_event(&handle, event));
-
-            handle = window.as_ref().window();
-            window.listen("gg://revision/select", move |event| {
-                let payload: Result<Option<messages::RevHeader>, serde_json::Error> =
-                    serde_json::from_str(event.payload());
-                if let Some(menu) = handle.menu()
-                    && let Ok(selection) = payload
+        LaunchMode::Gui => tauri::Builder::default()
+            .plugin(tauri_plugin_shell::init())
+            .plugin(tauri_plugin_dialog::init())
+            .plugin(
+                tauri_plugin_window_state::Builder::default()
+                    .with_state_flags(
+                        StateFlags::SIZE
+                            | StateFlags::POSITION
+                            | StateFlags::SIZE
+                            | StateFlags::FULLSCREEN,
+                    )
+                    .build(),
+            )
+            .plugin(
+                tauri_plugin_log::Builder::default()
+                    .level(LevelFilter::Warn)
+                    .level_for(
+                        "gg",
+                        if args.debug {
+                            LevelFilter::Debug
+                        } else {
+                            LevelFilter::Warn
+                        },
+                    )
+                    .level_for(
+                        "tao",
+                        if args.debug {
+                            LevelFilter::Info
+                        } else {
+                            LevelFilter::Error
+                        },
+                    )
+                    .build(),
+            )
+            .invoke_handler(tauri::generate_handler![
+                notify_window_ready,
+                notify_input,
+                forward_accelerator,
+                forward_context_menu,
+                query_log,
+                query_log_next_page,
+                query_revision,
+                query_remotes,
+                abandon_revisions,
+                backout_revisions,
+                checkout_revision,
+                create_revision,
+                create_revision_between,
+                describe_revision,
+                duplicate_revisions,
+                insert_revision,
+                move_revision,
+                move_source,
+                move_changes,
+                copy_changes,
+                move_hunk,
+                copy_hunk,
+                track_branch,
+                untrack_branch,
+                rename_branch,
+                create_ref,
+                delete_ref,
+                move_ref,
+                git_push,
+                git_fetch,
+                undo_operation,
+                query_recent_workspaces,
+                open_workspace_at_path,
+            ])
+            .menu(menu::build_main)
+            .setup(move |app| {
+                // after tauri initialises NSApplication, set the dock icon in case we're running as CLI
+                #[cfg(all(target_os = "macos", not(feature = "gui")))]
                 {
-                    handler::fatal!(menu::handle_selection(menu, selection));
+                    macos::set_dock_icon();
                 }
-            });
 
-            let (revision_menu, tree_menu, ref_menu) = menu::build_context(app.handle())?;
+                let window = app
+                    .get_webview_window("main")
+                    .ok_or(anyhow!("preconfigured window not found"))?;
+                let (sender, receiver) = channel();
 
-            let app_state = app.state::<AppState>();
-            app_state.0.lock().unwrap().insert(
-                window.label().to_owned(),
-                WindowState {
-                    _worker: window_worker,
-                    worker_channel: sender,
-                    input_channel: None,
-                    revision_menu,
-                    tree_menu,
-                    ref_menu,
-                },
-            );
+                let mut handle = window.as_ref().window();
+                let window_worker = thread::spawn(move || {
+                    async_runtime::block_on(work(handle.clone(), receiver, workspace))
+                });
 
-            Ok(())
-        })
-        .manage(AppState::default())
-        .run(tauri::generate_context!())?;
+                window.on_menu_event(|w, e| handler::fatal!(menu::handle_event(w, e)));
+
+                handle = window.as_ref().window();
+                window.on_window_event(move |event| handle_window_event(&handle, event));
+
+                handle = window.as_ref().window();
+                window.listen("gg://revision/select", move |event| {
+                    let payload: Result<Option<messages::RevHeader>, serde_json::Error> =
+                        serde_json::from_str(event.payload());
+                    if let Some(menu) = handle.menu()
+                        && let Ok(selection) = payload
+                    {
+                        handler::fatal!(menu::handle_selection(menu, selection));
+                    }
+                });
+
+                let (revision_menu, tree_menu, ref_menu) = menu::build_context(app.handle())?;
+
+                let app_state = app.state::<AppState>();
+                app_state.0.lock().unwrap().insert(
+                    window.label().to_owned(),
+                    WindowState {
+                        _worker: window_worker,
+                        worker_channel: sender,
+                        input_channel: None,
+                        revision_menu,
+                        tree_menu,
+                        ref_menu,
+                    },
+                );
+
+                Ok(())
+            })
+            .manage(AppState::default())
+            .run(tauri::generate_context!())?,
+    }
 
     Ok(())
 }

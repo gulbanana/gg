@@ -11,7 +11,10 @@ use jj_lib::{
     settings::UserSettings,
 };
 
+use crate::LaunchMode;
+
 pub trait GGSettings {
+    fn default_mode(&self) -> LaunchMode;
     fn query_log_page_size(&self) -> usize;
     fn query_large_repo_heuristic(&self) -> i64;
     fn query_auto_snapshot(&self) -> Option<bool>;
@@ -23,6 +26,14 @@ pub trait GGSettings {
 }
 
 impl GGSettings for UserSettings {
+    fn default_mode(&self) -> LaunchMode {
+        match self.get_string("gg.default-mode").ok().as_deref() {
+            Some("gui") => LaunchMode::Gui,
+            Some("web") => LaunchMode::Web,
+            _ => LaunchMode::Gui,
+        }
+    }
+
     fn query_log_page_size(&self) -> usize {
         self.get_int("gg.queries.log-page-size").unwrap_or(1000) as usize
     }

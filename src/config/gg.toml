@@ -1,3 +1,6 @@
+[gg]
+default-mode = "gui" # "gui" or "web"
+
 [gg.queries]
 # Number of commits to load per call
 log-page-size = 1000
