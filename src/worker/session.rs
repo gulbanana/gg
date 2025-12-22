@@ -100,26 +100,22 @@ impl Session for WorkerSession {
                 }
                 Ok(SessionEvent::ReadConfigArray { key, tx }) => {
                     let name: ConfigNamePathBuf = key.iter().collect();
-                    if let Some(global_settings) = self.user_settings.as_ref() {
-                        tx.send(
-                            global_settings
-                                .config()
-                                .get_value_with(&name, |value| {
-                                    value
-                                        .as_array()
-                                        .map(|values| {
-                                            values
-                                                .into_iter()
-                                                .flat_map(|v| v.as_str().map(|s| s.to_string()))
-                                                .collect::<Vec<String>>()
-                                        })
-                                        .ok_or(anyhow!("config value is not an array"))
-                                })
-                                .context("read config"),
-                        )?;
-                    } else {
-                        tx.send(Err(anyhow!("global settings not found")))?;
-                    }
+                    tx.send(
+                        self.user_settings
+                            .config()
+                            .get_value_with(&name, |value| {
+                                value
+                                    .as_array()
+                                    .map(|values| {
+                                        values
+                                            .into_iter()
+                                            .flat_map(|v| v.as_str().map(|s| s.to_string()))
+                                            .collect::<Vec<String>>()
+                                    })
+                                    .ok_or(anyhow!("config value is not an array"))
+                            })
+                            .context("read config"),
+                    )?;
                 }
                 Ok(SessionEvent::OpenWorkspace { mut tx, mut wd }) => loop {
                     let resolved_wd = match wd.clone().or(latest_wd) {
