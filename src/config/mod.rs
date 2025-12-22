@@ -1,5 +1,5 @@
 #[cfg(all(test, not(feature = "ts-rs")))]
-mod tests;
+pub mod tests;
 
 use std::path::Path;
 

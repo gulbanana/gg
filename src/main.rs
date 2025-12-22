@@ -72,11 +72,11 @@ enum Subcommand {
 }
 
 impl Args {
-    fn mode(&self) -> Result<LaunchMode> {
+    fn mode(&self) -> Option<LaunchMode> {
         match &self.command {
-            Some(Subcommand::Gui { .. }) => Ok(LaunchMode::Gui),
-            Some(Subcommand::Web { .. }) => Ok(LaunchMode::Web),
-            _ => Ok(read_config(self.workspace().as_deref())?.0.default_mode()),
+            Some(Subcommand::Gui { .. }) => Some(LaunchMode::Gui),
+            Some(Subcommand::Web { .. }) => Some(LaunchMode::Web),
+            _ => None,
         }
     }
 
@@ -181,8 +181,11 @@ fn spawn_app() -> Result<()> {
 }
 
 fn run_app(args: Args) -> Result<()> {
-    match args.mode()? {
-        LaunchMode::Gui => gui::run_gui(args.workspace(), args.debug),
+    let (settings, _) = read_config(args.workspace().as_deref())?;
+    let mode = args.mode().unwrap_or_else(|| settings.default_mode());
+
+    match mode {
+        LaunchMode::Gui => gui::run_gui(args.workspace(), args.debug, settings),
         LaunchMode::Web => {
             eprintln!("not yet implemented");
             Ok(())

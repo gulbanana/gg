@@ -18,7 +18,7 @@ use std::{
 use anyhow::{Error, Result, anyhow};
 use jj_lib::{git::RemoteCallbacks, repo::MutableRepo, settings::UserSettings};
 
-use crate::{config::read_config, messages};
+use crate::messages;
 use gui_util::WorkspaceSession;
 pub use session::{Session, SessionEvent};
 
@@ -52,38 +52,27 @@ pub trait WorkerCallbacks {
     ) -> Result<()>;
 }
 
-struct NoCallbacks;
-
-impl WorkerCallbacks for NoCallbacks {
-    fn with_git(
-        &self,
-        repo: &mut MutableRepo,
-        f: &dyn Fn(&mut MutableRepo, RemoteCallbacks<'_>) -> Result<()>,
-    ) -> Result<()> {
-        f(repo, RemoteCallbacks::default())
-    }
-}
-
 /// state that doesn't depend on jj-lib borrowings
 pub struct WorkerSession {
     pub force_log_page_size: Option<usize>,
     pub latest_query: Option<String>,
     pub callbacks: Box<dyn WorkerCallbacks>,
     pub working_directory: Option<PathBuf>,
-    pub user_settings: Option<UserSettings>,
+    pub user_settings: UserSettings,
 }
 
 impl WorkerSession {
-    pub fn new<T: WorkerCallbacks + 'static>(callbacks: T, workspace: Option<PathBuf>) -> Self {
-        let user_settings = match read_config(None) {
-            Ok((settings, _)) => Some(settings),
-            Err(_) => None,
-        };
+    pub fn new<T: WorkerCallbacks + 'static>(
+        callbacks: T,
+        workspace: Option<PathBuf>,
+        user_settings: UserSettings,
+    ) -> Self {
         WorkerSession {
+            force_log_page_size: None,
+            latest_query: None,
             callbacks: Box::new(callbacks),
             working_directory: workspace,
             user_settings,
-            ..Default::default()
         }
     }
 
@@ -98,17 +87,5 @@ impl WorkerSession {
                 Err(err) => Some(Err(anyhow!(err))),
             })
             .unwrap_or_else(|| env::current_dir().map_err(Error::new))
-    }
-}
-
-impl Default for WorkerSession {
-    fn default() -> Self {
-        WorkerSession {
-            force_log_page_size: None,
-            latest_query: None,
-            callbacks: Box::new(NoCallbacks),
-            working_directory: None,
-            user_settings: None,
-        }
     }
 }

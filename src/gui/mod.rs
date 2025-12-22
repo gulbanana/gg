@@ -24,6 +24,7 @@ use crate::messages::{
     MutationResult, RenameBranch, TrackBranch, UndoOperation, UntrackBranch,
 };
 use crate::worker::{Mutation, Session, SessionEvent, WorkerSession};
+use jj_lib::settings::UserSettings;
 
 #[derive(Default)]
 struct AppState(Mutex<HashMap<String, WindowState>>);
@@ -68,7 +69,7 @@ impl AppState {
     }
 }
 
-pub fn run_gui(workspace: Option<PathBuf>, debug: bool) -> Result<()> {
+pub fn run_gui(workspace: Option<PathBuf>, debug: bool, settings: UserSettings) -> Result<()> {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
@@ -153,7 +154,7 @@ pub fn run_gui(workspace: Option<PathBuf>, debug: bool) -> Result<()> {
 
             let mut handle = window.as_ref().window();
             let window_worker = thread::spawn(move || {
-                async_runtime::block_on(work(handle.clone(), receiver, workspace))
+                async_runtime::block_on(work(handle.clone(), receiver, workspace, settings))
             });
 
             window.on_menu_event(|w, e| handler::fatal!(menu::handle_event(w, e)));
@@ -199,12 +200,14 @@ async fn work(
     window: Window,
     rx: std::sync::mpsc::Receiver<SessionEvent>,
     workspace: Option<PathBuf>,
+    settings: UserSettings,
 ) {
     log::info!("start worker");
 
     while let Err(err) = WorkerSession::new(
         callbacks::FrontendCallbacks(window.clone()),
         workspace.clone(),
+        settings.clone(),
     )
     .handle_events(&rx)
     .await

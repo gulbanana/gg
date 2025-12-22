@@ -2,7 +2,7 @@ use super::*;
 use jj_lib::config::ConfigLayer;
 
 /// Create isolated test settings with only gg.toml defaults, no user config.
-fn settings_with_gg_defaults() -> UserSettings {
+pub fn settings_with_gg_defaults() -> UserSettings {
     let mut config = StackedConfig::empty();
 
     let jj_defaults = ConfigLayer::parse(
