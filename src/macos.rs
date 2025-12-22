@@ -62,7 +62,7 @@ fn create_info_plist(bundle_version: &str, executable_name: &str) -> String {
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>NSHumanReadableCopyright</key>
-    <string>Copyright © 2024 Thomas Castiglione</string>
+    <string>Copyright © 2025 Thomas Castiglione</string>
 </dict>
 </plist>
 "#, executable_name, bundle_version, bundle_version)
@@ -101,24 +101,32 @@ fn create_bundle() -> Result<PathBuf> {
         .context("Failed to create symlink to executable")?;
     
     // Try to copy icon if available
-    // Look for icon in resources relative to the binary location
-    if let Ok(exe_dir) = current_exe.parent()
-        .and_then(|p| p.parent()) // Go up from bin/ to installation root
-        .ok_or_else(|| anyhow::anyhow!("Could not determine executable directory"))
-    {
-        let possible_icon_paths = vec![
-            exe_dir.join("res").join("icons").join("icon.icns"),
-            exe_dir.join("share").join("gg").join("icons").join("icon.icns"),
-        ];
-        
-        for icon_path in possible_icon_paths {
+    // Look for icon in multiple possible locations
+    let possible_icon_paths = vec![
+        // Relative to binary location (development builds)
+        current_exe.parent()
+            .and_then(|p| p.parent())
+            .map(|p| p.join("res").join("icons").join("icon.icns")),
+        // System-wide installation
+        PathBuf::from("/usr/local/share/gg/icons/icon.icns").into(),
+        PathBuf::from("/usr/share/gg/icons/icon.icns").into(),
+        // Homebrew installation
+        PathBuf::from("/opt/homebrew/share/gg/icons/icon.icns").into(),
+    ];
+    
+    for icon_path_opt in possible_icon_paths {
+        if let Some(icon_path) = icon_path_opt {
             if icon_path.exists() {
                 let dest_icon = resources_dir.join("icon.icns");
                 let _ = fs::copy(&icon_path, &dest_icon);
+                log::debug!("Copied icon from {}", icon_path.display());
                 break;
             }
         }
     }
+    
+    // If no icon was found, log a debug message but continue
+    log::debug!("Icon not found, bundle will use default icon");
     
     log::info!("Created app bundle at {}", bundle_path.display());
     
