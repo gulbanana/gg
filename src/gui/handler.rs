@@ -1,3 +1,5 @@
+//! Macros for error handling in unit fns (generally Tauri callbacks).
+
 macro_rules! fatal {
     ($result:expr) => {
         match $result {

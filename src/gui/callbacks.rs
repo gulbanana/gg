@@ -12,7 +12,7 @@ use jj_lib::{git::RemoteCallbacks, repo::MutableRepo};
 use tauri::{Emitter, Manager, Window};
 
 use crate::{
-    AppState,
+    gui::AppState,
     messages::{InputField, InputRequest},
     worker::WorkerCallbacks,
 };
