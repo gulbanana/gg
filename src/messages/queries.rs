@@ -13,11 +13,7 @@ pub trait Id {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(tag = "type")]
-#[cfg_attr(
-    feature = "ts-rs",
-    derive(TS),
-    ts(export, export_to = "app/messages/")
-)]
+#[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
 pub struct CommitId {
     pub hex: String,
     pub prefix: String,
@@ -38,11 +34,7 @@ impl Id for CommitId {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(tag = "type")]
-#[cfg_attr(
-    feature = "ts-rs",
-    derive(TS),
-    ts(export, export_to = "app/messages/")
-)]
+#[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
 pub struct ChangeId {
     pub hex: String,
     pub prefix: String,
@@ -64,22 +56,14 @@ impl Id for ChangeId {
 /// A pair of ids representing the ui's view of a revision.
 /// The worker may use one or both depending on policy.
 #[derive(Serialize, Deserialize, Clone, Debug)]
-#[cfg_attr(
-    feature = "ts-rs",
-    derive(TS),
-    ts(export, export_to = "app/messages/")
-)]
+#[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
 pub struct RevId {
     pub change: ChangeId,
     pub commit: CommitId,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-#[cfg_attr(
-    feature = "ts-rs",
-    derive(TS),
-    ts(export, export_to = "app/messages/")
-)]
+#[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
 pub struct RevHeader {
     pub id: RevId,
     pub description: MultilineString,
@@ -92,11 +76,7 @@ pub struct RevHeader {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
-#[cfg_attr(
-    feature = "ts-rs",
-    derive(TS),
-    ts(export, export_to = "app/messages/")
-)]
+#[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
 pub struct RevAuthor {
     pub email: String,
     pub name: String,
@@ -116,11 +96,7 @@ impl TryFrom<&Signature> for RevAuthor {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-#[cfg_attr(
-    feature = "ts-rs",
-    derive(TS),
-    ts(export, export_to = "app/messages/")
-)]
+#[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
 pub struct RevChange {
     pub kind: ChangeKind,
     pub path: TreePath,
@@ -129,22 +105,14 @@ pub struct RevChange {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-#[cfg_attr(
-    feature = "ts-rs",
-    derive(TS),
-    ts(export, export_to = "app/messages/")
-)]
+#[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
 pub struct RevConflict {
     pub path: TreePath,
     pub hunk: ChangeHunk,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-#[cfg_attr(
-    feature = "ts-rs",
-    derive(TS),
-    ts(export, export_to = "app/messages/")
-)]
+#[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
 pub enum ChangeKind {
     None,
     Added,
@@ -153,33 +121,21 @@ pub enum ChangeKind {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-#[cfg_attr(
-    feature = "ts-rs",
-    derive(TS),
-    ts(export, export_to = "app/messages/")
-)]
+#[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
 pub struct ChangeHunk {
     pub location: HunkLocation,
     pub lines: MultilineString,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-#[cfg_attr(
-    feature = "ts-rs",
-    derive(TS),
-    ts(export, export_to = "app/messages/")
-)]
+#[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
 pub struct HunkLocation {
     pub from_file: FileRange,
     pub to_file: FileRange,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-#[cfg_attr(
-    feature = "ts-rs",
-    derive(TS),
-    ts(export, export_to = "app/messages/")
-)]
+#[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
 pub struct FileRange {
     pub start: usize,
     pub len: usize,
@@ -187,11 +143,7 @@ pub struct FileRange {
 
 #[derive(Serialize, Debug)]
 #[serde(tag = "type")]
-#[cfg_attr(
-    feature = "ts-rs",
-    derive(TS),
-    ts(export, export_to = "app/messages/")
-)]
+#[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
 #[allow(clippy::large_enum_variant)]
 pub enum RevResult {
     NotFound {
@@ -206,20 +158,12 @@ pub enum RevResult {
 }
 
 #[derive(Serialize, Clone, Copy, Debug)]
-#[cfg_attr(
-    feature = "ts-rs",
-    derive(TS),
-    ts(export, export_to = "app/messages/")
-)]
+#[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
 pub struct LogCoordinates(pub usize, pub usize);
 
 #[derive(Serialize, Debug)]
 #[serde(tag = "type")]
-#[cfg_attr(
-    feature = "ts-rs",
-    derive(TS),
-    ts(export, export_to = "app/messages/")
-)]
+#[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
 pub enum LogLine {
     FromNode {
         source: LogCoordinates,
@@ -244,11 +188,7 @@ pub enum LogLine {
 }
 
 #[derive(Serialize, Debug)]
-#[cfg_attr(
-    feature = "ts-rs",
-    derive(TS),
-    ts(export, export_to = "app/messages/")
-)]
+#[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
 pub struct LogRow {
     pub revision: RevHeader,
     pub location: LogCoordinates,
@@ -257,11 +197,7 @@ pub struct LogRow {
 }
 
 #[derive(Serialize)]
-#[cfg_attr(
-    feature = "ts-rs",
-    derive(TS),
-    ts(export, export_to = "app/messages/")
-)]
+#[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
 pub struct LogPage {
     pub rows: Vec<LogRow>,
     pub has_more: bool,
