@@ -5,6 +5,7 @@ mod gui;
 #[cfg(all(target_os = "macos", not(feature = "gui")))]
 mod macos;
 mod messages;
+mod web;
 #[cfg(windows)]
 mod windows;
 mod worker;
@@ -186,9 +187,6 @@ fn run_app(args: Args) -> Result<()> {
 
     match mode {
         LaunchMode::Gui => gui::run_gui(args.workspace(), args.debug, settings),
-        LaunchMode::Web => {
-            eprintln!("not yet implemented");
-            Ok(())
-        }
+        LaunchMode::Web => web::run_web(args.workspace(), settings),
     }
 }
