@@ -1,5 +1,13 @@
-// Only use windows_subsystem for gg-gui.exe (not for gg.exe launcher)
-#![cfg_attr(all(not(test), windows, feature = "gui-binary"), windows_subsystem = "windows")]
+// Only use windows_subsystem for gg-gui.exe on Windows
+// is_gui_binary is set by build.rs when compiling gg-gui
+#![cfg_attr(
+    all(
+        not(test),
+        windows,
+        is_gui_binary
+    ),
+    windows_subsystem = "windows"
+)]
 
 mod callbacks;
 mod config;

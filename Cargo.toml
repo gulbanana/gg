@@ -29,16 +29,15 @@ name = "gg"
 path = "src/main.rs"
 
 # Windows-only: GUI binary with windows subsystem
+# On non-Windows, this will still be built but is functionally identical to gg
 [[bin]]
 name = "gg-gui"
 path = "src/main.rs"
-required-features = ["gui-binary"]
 
 [features]
 default = ["custom-protocol"]
 ts-rs = ["dep:ts-rs"]
 custom-protocol = ["tauri/custom-protocol"] # tauri build adds this, tauri dev removes it - default to adding so that cargo run works
-gui-binary = [] # Used to enable windows_subsystem for gg-gui.exe
 
 [build-dependencies]
 tauri-build = { version = "2.0.0", features = ["config-toml"] }

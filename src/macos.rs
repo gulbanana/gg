@@ -121,9 +121,22 @@ fn create_bundle() -> Result<PathBuf> {
 fn launch_via_bundle(bundle_path: &Path) -> Result<()> {
     log::info!("Launching via bundle at {}", bundle_path.display());
     
-    Command::new("open")
-        .arg(bundle_path)
-        .spawn()
+    // Collect arguments to pass, but filter out --foreground if present
+    let args: Vec<String> = std::env::args()
+        .skip(1)
+        .filter(|arg| arg != "--foreground" && arg != "-f")
+        .collect();
+    
+    let mut cmd = Command::new("open");
+    cmd.arg(bundle_path);
+    
+    // Pass arguments to the bundle via --args
+    if !args.is_empty() {
+        cmd.arg("--args");
+        cmd.args(&args);
+    }
+    
+    cmd.spawn()
         .context("Failed to launch bundle with 'open' command")?;
     
     Ok(())

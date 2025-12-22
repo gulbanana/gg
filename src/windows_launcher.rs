@@ -21,10 +21,14 @@ pub fn launch_gui_background() -> Result<()> {
         ));
     }
     
-    // Collect arguments to pass to GUI
-    let args: Vec<String> = std::env::args().skip(1).collect();
+    // Collect arguments to pass to GUI, but filter out the --foreground flag if present
+    // since we're explicitly launching in non-foreground mode
+    let args: Vec<String> = std::env::args()
+        .skip(1)
+        .filter(|arg| arg != "--foreground" && arg != "-f")
+        .collect();
     
-    log::info!("Launching GUI in background: {}", gui_exe.display());
+    log::info!("Launching GUI in background: {} with args: {:?}", gui_exe.display(), args);
     
     // Launch with CREATE_NO_WINDOW flag via Windows API
     #[cfg(windows)]
@@ -68,9 +72,11 @@ pub fn handle_launch(foreground: bool) -> Result<bool> {
     
     // If we're the GUI binary, just continue normally
     if !is_launcher {
-        log::debug!("Running as GUI binary");
+        log::debug!("Running as GUI binary (gg-gui.exe)");
         return Ok(false);
     }
+    
+    // We're the launcher (gg.exe)
     
     // If foreground mode, continue as GUI in this process
     if foreground {
@@ -79,7 +85,7 @@ pub fn handle_launch(foreground: bool) -> Result<bool> {
     }
     
     // Launch GUI in background and exit
-    log::debug!("Launching GUI in background");
+    log::debug!("Launcher mode: launching gg-gui.exe in background");
     launch_gui_background()?;
     Ok(true)
 }
