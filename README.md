@@ -7,10 +7,16 @@ GG is a GUI for the version control system [Jujutsu](https://github.com/martinvo
 ## Installation
 GG is a desktop application with a keyboard & mouse interface, written in [Tauri](https://tauri.app/). Binaries are available for several platforms on the [releases page](https://github.com/gulbanana/gg/releases). Use the `.dmg` or `.app.tar.gz` on MacOS, and the `.msi` or `.exe` on Windows. You can also build from source using `cargo install --locked gg-cli`.
 
+**Note for `cargo install` users:**
+- On Windows, two binaries will be installed: `gg.exe` (launcher) and `gg-gui.exe` (GUI). Both must be kept together in the same directory.
+- On macOS, the installed binary will create an app bundle at `~/Applications/GG.app` on first run for proper dock integration.
+
 ### Setup 
 Put `gg` on your path and run it from a Jujutsu workspace, pass the workspace directory as an argument or launch it separately and use the Repository->Open menu item. Tips:
 - On MacOS, try adding `/Applications/gg.app/Contents/MacOS/` to your PATH environment variable. On Windows, add `C:\Program Files\gg\`.
 - Using `gg &` on MacOS/Linux or `start gg` on Windows will run in the background without blocking your shell.
+- On macOS, running `gg` will automatically create an app bundle at `~/Applications/GG.app` for proper dock integration. Use `gg --foreground` to skip this and run directly.
+- On Windows when installed via `cargo install`, running `gg` will launch the GUI in the background. Use `gg --foreground` to run in the foreground (useful when launching from PowerShell).
 - `gg --help` will display some possible command-line arguments.
 
 ### Configuration

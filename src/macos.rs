@@ -10,7 +10,15 @@ use std::os::unix::fs as unix_fs;
 fn get_bundle_path() -> Result<PathBuf> {
     let home = dirs::home_dir()
         .ok_or_else(|| anyhow::anyhow!("Could not find home directory"))?;
-    Ok(home.join("Applications").join("GG.app"))
+    let apps_dir = home.join("Applications");
+    
+    // Ensure ~/Applications exists
+    if !apps_dir.exists() {
+        fs::create_dir_all(&apps_dir)
+            .context("Failed to create ~/Applications directory")?;
+    }
+    
+    Ok(apps_dir.join("GG.app"))
 }
 
 /// Check if we're currently running from within the bundle
