@@ -7,10 +7,8 @@ use tauri::{
 };
 use tauri_plugin_dialog::{DialogExt, FilePath};
 
-use crate::{
-    AppState, handler,
-    messages::{Operand, RevHeader, StoreRef},
-};
+use super::{AppState, handler};
+use crate::messages::{Operand, RevHeader, StoreRef};
 
 pub fn build_main(app_handle: &AppHandle) -> tauri::Result<Menu<Wry>> {
     #[cfg(target_os = "macos")]
@@ -514,14 +512,14 @@ pub fn repo_open(window: &Window) {
     window.dialog().file().pick_folder(move |picked| {
         if let Some(FilePath::Path(cwd)) = picked {
             handler::fatal!(
-                crate::try_open_repository(&window, Some(cwd)).context("try_open_repository")
+                super::try_open_repository(&window, Some(cwd)).context("try_open_repository")
             );
         }
     });
 }
 
 fn repo_reopen(window: &Window) {
-    handler::fatal!(crate::try_open_repository(window, None).context("try_open_repository"));
+    handler::fatal!(super::try_open_repository(window, None).context("try_open_repository"));
 }
 
 trait Enabler {

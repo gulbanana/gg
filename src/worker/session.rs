@@ -17,7 +17,7 @@ use super::{
 
 use crate::{
     config::{GGSettings, read_config},
-    handler, messages,
+    messages,
 };
 
 /// implemented by states of the event loop
@@ -312,7 +312,9 @@ impl Session for WorkspaceSession<'_> {
                         Ok(())
                     });
 
-                    handler::optional!(path);
+                    if let Err(err) = path {
+                        log::warn!("Failed to write config array: {err:#}");
+                    }
 
                     (self.data.workspace_settings, self.data.aliases_map) =
                         read_config(Some(self.workspace.repo_path()))?;
