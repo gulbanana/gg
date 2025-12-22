@@ -1,12 +1,17 @@
-#![cfg_attr(not(test), windows_subsystem = "windows")]
+// Only use windows_subsystem for gg-gui.exe (not for gg.exe launcher)
+#![cfg_attr(all(not(test), windows, feature = "gui-binary"), windows_subsystem = "windows")]
 
 mod callbacks;
 mod config;
 mod handler;
 mod menu;
 mod messages;
+#[cfg(target_os = "macos")]
+mod macos;
 #[cfg(windows)]
 mod windows;
+#[cfg(windows)]
+mod windows_launcher;
 mod worker;
 
 use std::collections::HashMap;
@@ -46,6 +51,8 @@ struct Args {
     workspace: Option<PathBuf>,
     #[arg(short, long, help = "Enable debug logging.")]
     debug: bool,
+    #[arg(short, long, help = "Run in foreground mode (don't self-bundle on macOS, don't launch background GUI on Windows).")]
+    foreground: bool,
 }
 
 #[derive(Default)]
@@ -99,6 +106,43 @@ fn main() -> Result<()> {
     }
 
     let args = Args::parse();
+
+    // Platform-specific launch handling
+    #[cfg(target_os = "macos")]
+    {
+        match macos::handle_launch(args.foreground) {
+            Ok(true) => {
+                // App was re-launched via bundle, exit this process
+                log::info!("Re-launched via bundle, exiting launcher");
+                return Ok(());
+            }
+            Ok(false) => {
+                // Continue normally
+            }
+            Err(e) => {
+                // Log error but continue anyway
+                log::warn!("Failed to create/launch bundle: {:#}", e);
+            }
+        }
+    }
+
+    #[cfg(windows)]
+    {
+        match windows_launcher::handle_launch(args.foreground) {
+            Ok(true) => {
+                // GUI was launched in background, exit launcher
+                log::info!("Launched GUI in background, exiting launcher");
+                return Ok(());
+            }
+            Ok(false) => {
+                // Continue normally (either we're the GUI binary or in foreground mode)
+            }
+            Err(e) => {
+                // Log error but continue anyway (fallback to running GUI in this process)
+                log::warn!("Failed to launch GUI in background: {:#}. Running in this process.", e);
+            }
+        }
+    }
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
