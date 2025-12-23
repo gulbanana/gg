@@ -184,9 +184,10 @@ fn spawn_app() -> Result<()> {
 fn run_app(args: Args) -> Result<()> {
     let (settings, _) = read_config(args.workspace().as_deref())?;
     let mode = args.mode().unwrap_or_else(|| settings.default_mode());
+    let context = tauri::generate_context!();
 
     match mode {
-        LaunchMode::Gui => gui::run_gui(args.workspace(), args.debug, settings),
-        LaunchMode::Web => web::run_web(args.workspace(), settings),
+        LaunchMode::Gui => gui::run_gui(args.workspace(), args.debug, settings, context),
+        LaunchMode::Web => web::run_web(args.workspace(), settings, context),
     }
 }

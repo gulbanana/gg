@@ -69,7 +69,12 @@ impl AppState {
     }
 }
 
-pub fn run_gui(workspace: Option<PathBuf>, debug: bool, settings: UserSettings) -> Result<()> {
+pub fn run_gui(
+    workspace: Option<PathBuf>,
+    debug: bool,
+    settings: UserSettings,
+    context: tauri::Context<tauri::Wry>,
+) -> Result<()> {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
@@ -191,7 +196,7 @@ pub fn run_gui(workspace: Option<PathBuf>, debug: bool, settings: UserSettings) 
             Ok(())
         })
         .manage(AppState::default())
-        .run(tauri::generate_context!())?;
+        .run(context)?;
 
     Ok(())
 }
