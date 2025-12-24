@@ -2,7 +2,8 @@
     import type { RevId } from "./messages/RevId";
     import type { RevResult } from "./messages/RevResult";
     import type { RepoConfig } from "./messages/RepoConfig";
-    import { type Query, query, trigger, onEvent } from "./ipc.js";
+    import type { RepoStatus } from "./messages/RepoStatus";
+    import { type Query, query, trigger, onEvent, isTauri } from "./ipc.js";
     import {
         currentMutation,
         currentContext,
@@ -65,6 +66,40 @@
             loadTimeout = setTimeout(() => {
                 repoConfigEvent.set({ type: "TimeoutError" });
             }, 10_000);
+        }
+
+        if (!isTauri()) {
+            // signal shutdown on unload, cancel if it was a reload
+            const handleUnload = () => {
+                trigger("begin_shutdown");
+            };
+            trigger("end_shutdown");
+            window.addEventListener("beforeunload", handleUnload);
+
+            // snapshot when focusing the browser or returning to the tab
+            const handleSnapshot = async () => {
+                if (document.visibilityState === "visible" && $repoConfigEvent.type === "Workspace") {
+                    const result = await query<RepoStatus>("query_snapshot", null);
+                    if (result.type === "data") {
+                        repoStatusEvent.set(result.value);
+                    }
+                }
+            };
+            document.addEventListener("visibilitychange", handleSnapshot);
+            window.addEventListener("focus", handleSnapshot);
+
+            // ping the backend; if either component dies, the other can clean up
+            const heartbeatInterval = setInterval(async () => {
+                trigger("heartbeat", undefined, cleanup);
+            }, 30_000);
+
+            const cleanup = () => {
+                clearInterval(heartbeatInterval);
+                document.removeEventListener("visibilitychange", handleSnapshot);
+                window.removeEventListener("focus", handleSnapshot);
+                window.removeEventListener("beforeunload", handleUnload);
+            };
+            return cleanup;
         }
     });
 
