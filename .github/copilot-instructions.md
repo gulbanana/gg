@@ -2,7 +2,14 @@
 
 ## Architecture Overview
 
-**GG is a Tauri desktop app**: Svelte/TypeScript frontend (`app/`) + Rust backend (`src/`). Each window has a dedicated worker thread owning a `Session` that manages jj-lib state (jj-lib is not thread-safe).
+**GG is a desktop app** with two components: Svelte/TypeScript frontend (`app/`) + Rust backend (`src/`). Each window has a dedicated worker thread owning a `Session` that manages jj-lib state (jj-lib is not thread-safe).
+
+### Launch Modes
+
+- **GUI mode** (`src/gui/mod.rs`): Tauri desktop app with native windowing, menus, and IPC
+- **Web mode** (`src/web.rs`): Axum server that serves the frontend in a browser (in-progress, will have full feature parity)
+
+Mode selection: CLI subcommands (`gg gui`, `gg web`) or `gg.default-mode` config setting.
 
 ### Core Architectural Boundaries
 
@@ -56,6 +63,8 @@ This project uses **Jujutsu (jj)** for version control instead of Git. See [juju
 cargo tauri dev              # Debug build with auto-reload
 cargo test                   # Cargo tests
 cargo tauri dev -- -- --debug  # Pass --debug to app (yes, 2x --)
+cargo run                    # Spawns GUI in background (uses prebuilt assets)
+cargo run -- web             # Launch in web mode (opens browser)
 ```
 
 ### Adding New Mutations
@@ -116,6 +125,7 @@ See `DESIGN.md` "Branch Objects" section for the full state machine.
 `src/config/gg.toml` contains defaults. Settings loaded via `jj config` (user + repo layers).
 
 Key settings:
+- `gg.default-mode` - launch mode when no subcommand given: "gui" (default) or "web"
 - `gg.queries.log-page-size` - controls paging (default 1000)
 - `gg.queries.large-repo-heuristic` - disables features when repo is "too large" (default 100k)
 - `gg.ui.track-recent-workspaces` - disable to prevent config file updates (default true)
@@ -208,6 +218,8 @@ jj-lib and jj-cli dependencies are pinned to specific versions (see `Cargo.toml`
 - `app/mutators/BinaryMutator.ts` - All drag-drop operation policies
 - `src/worker/mutations.rs` - All mutation implementations
 - `src/config/gg.toml` - Default configuration with inline docs
+- `src/gui/mod.rs` - Tauri GUI mode: windowing, menus, IPC handlers
+- `src/web.rs` - Web mode: Axum server serving embedded assets
 - `app/stores.ts` - Global Svelte stores for cross-component state
 
 ## Svelte Patterns
