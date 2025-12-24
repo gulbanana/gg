@@ -24,11 +24,12 @@ use jj_lib::{
     commit::Commit,
     default_index::DefaultReadonlyIndex,
     file_util,
+    fileset::{self, FilesetDiagnostics},
     git::{self, REMOTE_NAME_FOR_LOCAL_GIT_REPO},
     git_backend::GitBackend,
     gitignore::GitIgnoreFile,
     id_prefix::{IdPrefixContext, IdPrefixIndex},
-    matchers::{EverythingMatcher, NothingMatcher},
+    matchers::{Matcher, NothingMatcher},
     object_id::ObjectId,
     op_heads_store,
     operation::Operation,
@@ -686,13 +687,14 @@ impl WorkspaceSession<'_> {
         if max_new_file_size == 0 {
             max_new_file_size = u64::MAX;
         }
+
         let (new_tree_id, _) = locked_ws
             .locked_wc()
             .snapshot(&SnapshotOptions {
                 base_ignores,
                 progress: None,
                 max_new_file_size,
-                start_tracking_matcher: &EverythingMatcher,
+                start_tracking_matcher: self.data.auto_tracking_matcher()?.as_ref(),
                 force_tracking_matcher: &NothingMatcher,
             })
             .await?;
@@ -903,6 +905,21 @@ impl WorkspaceData {
             workspace: Some(workspace_context),
             use_glob_by_default: false,
         }
+    }
+
+    pub fn auto_tracking_matcher(&self) -> Result<Box<dyn Matcher>> {
+        let pattern = self
+            .workspace_settings
+            .get_string("snapshot.auto-track")
+            .unwrap_or_else(|_| "all()".to_string()); // same default as jj-cli
+
+        let mut diagnostics = FilesetDiagnostics::new();
+        let expression = fileset::parse(&mut diagnostics, &pattern, &self.path_converter)?;
+        if let Some(diagnostic) = diagnostics.into_iter().next() {
+            return Err(anyhow!("snapshot.auto-track: {}", diagnostic));
+        }
+
+        Ok(expression.to_matcher())
     }
 }
 

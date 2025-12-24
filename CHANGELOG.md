@@ -5,6 +5,7 @@
 ### Fixed
 - CLI build: added dock icon on MacOS.
 - CLI build: the advertised `--foreground` now actually exists and works.
+- GG now respects the `snapshot.auto-track` setting.
 
 ## [0.36.2](releases/tag/v0.36.2)
 

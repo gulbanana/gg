@@ -1366,6 +1366,51 @@ async fn move_hunk_second_of_two_hunks() -> anyhow::Result<()> {
     Ok(())
 }
 
+// XXX possibly this should be a session test using the ExecuteSnapshot event
+#[tokio::test]
+async fn snapshot_respects_auto_track_config() -> Result<()> {
+    let repo = mkrepo();
+
+    // Configure snapshot.auto-track to only track .txt files
+    let config_path = repo.path().join(".jj/repo/config.toml");
+    let config_content = r#"
+[snapshot]
+auto-track = "glob:*.txt"
+"#;
+    fs::write(&config_path, config_content).unwrap();
+
+    let mut session = WorkerSession::default();
+    let mut ws = session.load_directory(repo.path())?;
+
+    // Write two new files, one tracked and one untracked
+    fs::write(repo.path().join("tracked.txt"), "tracked content").unwrap();
+    fs::write(repo.path().join("untracked.dat"), "untracked content").unwrap();
+
+    // Trigger a snapshot by describing the revision
+    DescribeRevision {
+        id: revs::working_copy(),
+        new_description: "test auto-track".to_owned(),
+        reset_author: false,
+    }
+    .execute_unboxed(&mut ws)
+    .await?;
+
+    // Verify: only the .txt file should have been tracked
+    let rev = queries::query_revision(&ws, revs::working_copy()).await?;
+    match rev {
+        RevResult::Detail { changes, .. } => {
+            assert_eq!(changes.len(), 1);
+            assert_eq!(changes[0].path.repo_path, "tracked.txt");
+        }
+        _ => panic!("Expected working copy to exist"),
+    }
+
+    // Verify: the .dat file should exist, but be untracked
+    assert!(repo.path().join("untracked.dat").exists());
+
+    Ok(())
+}
+
 // XXX missing tests for:
 // - branch/ref mutations
 // - git interop
