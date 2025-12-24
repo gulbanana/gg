@@ -2,7 +2,8 @@
     import type { RevId } from "./messages/RevId";
     import type { RevResult } from "./messages/RevResult";
     import type { RepoConfig } from "./messages/RepoConfig";
-    import { type Query, query, trigger, onEvent } from "./ipc.js";
+    import type { RepoStatus } from "./messages/RepoStatus";
+    import { type Query, query, trigger, onEvent, isTauri } from "./ipc.js";
     import {
         currentMutation,
         currentContext,
@@ -65,6 +66,50 @@
             loadTimeout = setTimeout(() => {
                 repoConfigEvent.set({ type: "TimeoutError" });
             }, 10_000);
+        }
+
+        if (!isTauri()) {
+            // signal shutdown on unload, cancel if it was a reload
+            const handleUnload = () => {
+                navigator.sendBeacon("/api/shutdown-intent");
+            };
+            fetch("/api/cancel-shutdown", { method: "POST" }).catch(() => {});
+            window.addEventListener("beforeunload", handleUnload);
+
+            // ping the backend; if either component dies, the other can clean up
+            let heartbeatFailures = 0;
+            const heartbeatInterval = setInterval(async () => {
+                try {
+                    await fetch("/api/heartbeat", { method: "POST" });
+                    heartbeatFailures = 0;
+                } catch {
+                    heartbeatFailures++;
+                    if (heartbeatFailures >= 2) {
+                        repoConfigEvent.set({ type: "WorkerError", message: "Lost connection to server" });
+                        cleanup(); // XXX hoisted :[
+                    }
+                }
+            }, 30_000);
+
+            // snapshot when focusing the browser or returning to the tab
+            const handleSnapshot = async () => {
+                if (document.visibilityState === "visible" && $repoConfigEvent.type === "Workspace") {
+                    const result = await query<RepoStatus>("query_snapshot", null);
+                    if (result.type === "data") {
+                        repoStatusEvent.set(result.value);
+                    }
+                }
+            };
+            document.addEventListener("visibilitychange", handleSnapshot);
+            window.addEventListener("focus", handleSnapshot);
+
+            const cleanup = () => {
+                clearInterval(heartbeatInterval);
+                document.removeEventListener("visibilitychange", handleSnapshot);
+                window.removeEventListener("focus", handleSnapshot);
+                window.removeEventListener("beforeunload", handleUnload);
+            };
+            return cleanup;
         }
     });
 

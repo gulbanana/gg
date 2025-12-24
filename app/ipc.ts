@@ -1,10 +1,12 @@
-import { invoke, type InvokeArgs } from "@tauri-apps/api/core";
-import { emit, listen, type EventCallback } from "@tauri-apps/api/event";
 import type { Readable, Subscriber, Unsubscriber } from "svelte/store";
 import type { MutationResult } from "./messages/MutationResult";
 import { currentInput, currentMutation, repoStatusEvent, revisionSelectEvent } from "./stores";
 import { onMount } from "svelte";
-import { resolve } from "@tauri-apps/api/path";
+
+/** 
+ * structurally equivalent to InvokeArgs from @tauri-apps/api/core
+ */
+export type InvokeArgs = Record<string, unknown>;
 
 export type Query<T> = { type: "wait" } | { type: "data", value: T } | { type: "error", message: string };
 
@@ -12,18 +14,28 @@ export interface Settable<T> extends Readable<T> {
     set: (value: T) => void;
 }
 
+export function isTauri(): boolean {
+    return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+}
+
 /**
- * multiplexes tauri events into a svelte store; never actually unsubscribes because the store protocol isn't async
+ * multiplexes events into a svelte store; never actually unsubscribes because the store protocol isn't async.
+ * web mode: events are handled locally
+ * gui mode: events are also broadcast to and received from the backend
  */
 export async function event<T>(name: string, initialValue: T): Promise<Settable<T>> {
     const subscribers = new Set<Subscriber<T>>();
     let lastValue: T = initialValue;
 
-    const unlisten = await listen<T>(name, event => {
-        for (let subscriber of subscribers) {
-            subscriber(event.payload);
-        }
-    });
+    if (isTauri()) {
+        const { listen } = await import("@tauri-apps/api/event");
+        await listen<T>(name, event => {
+            lastValue = event.payload;
+            for (let subscriber of subscribers) {
+                subscriber(event.payload);
+            }
+        });
+    }
 
     return {
         subscribe(run: Subscriber<T>): Unsubscriber {
@@ -38,19 +50,32 @@ export async function event<T>(name: string, initialValue: T): Promise<Settable<
             return () => subscribers.delete(run);
         },
 
-        set(value: T) {
+        async set(value: T) {
             lastValue = value;
-            emit(name, value);
+            for (let subscriber of subscribers) {
+                subscriber(value);
+            }
+            if (isTauri()) {
+                const { emit } = await import("@tauri-apps/api/event");
+                emit(name, value);
+            }
         }
     }
 }
 
 /**
- * subscribes to tauri events for a component's lifetime
+ * subscribe to tauri events for a component's lifetime.
  */
 export function onEvent<T>(name: string, callback: (payload: T) => void) {
+    if (!isTauri()) {
+        console.error(`onEvent(${name}): web mode doesn't use events`);
+        return;
+    }
+
     onMount(() => {
-        let promise = listen<T>(name, e => callback(e.payload));
+        let promise = import("@tauri-apps/api/event").then(({ listen }) =>
+            listen<T>(name, e => callback(e.payload))
+        );
         return () => {
             promise.then((unlisten) => {
                 unlisten();
@@ -67,15 +92,15 @@ type DelayedQuery<T> = Extract<Query<T>, { type: "wait" }>;
 export async function query<T>(command: string, request: InvokeArgs | null, onWait?: (q: DelayedQuery<T>) => void): Promise<ImmediateQuery<T>> {
     try {
         if (onWait) {
-            let fetch = invoke<T>(command, request ?? undefined).then(value => ({ type: "data", value } as ImmediateQuery<T>));
-            let result = await Promise.race([fetch, delay<T>()]);
+            let fetchPromise = call<T>("query", command, request ?? undefined).then(value => ({ type: "data", value } as ImmediateQuery<T>));
+            let result = await Promise.race([fetchPromise, delay<T>()]);
             if (result.type == "wait") {
                 onWait(result);
-                result = await fetch;
+                result = await fetchPromise;
             }
             return result;
         } else {
-            let result = await invoke<T>(command, request ?? undefined);
+            let result = await call<T>("query", command, request ?? undefined);
             return { type: "data", value: result };
         }
     } catch (error: any) {
@@ -87,10 +112,10 @@ export async function query<T>(command: string, request: InvokeArgs | null, onWa
 /**
  * call an IPC which, if successful, has backend side-effects
  */
-export function trigger(command: string, request?: InvokeArgs) {
+export function trigger(command: string, request?: InvokeArgs): void {
     (async () => {
         try {
-            await invoke(command, request);
+            await call<void>("trigger", command, request);
         }
         catch (error: any) {
             console.log(error);
@@ -105,10 +130,10 @@ export function trigger(command: string, request?: InvokeArgs) {
 export async function mutate<T>(command: string, mutation: T): Promise<boolean> {
     try {
         // set a wait state then the data state, unless the data comes in hella fast
-        let fetch = invoke<MutationResult>(command, { mutation });
-        let result = await Promise.race([fetch.then(r => Promise.resolve<Query<MutationResult>>({ type: "data", value: r })), delay<MutationResult>()]);
+        let fetchPromise = call<MutationResult>("mutate", command, { mutation });
+        let result = await Promise.race([fetchPromise.then(r => Promise.resolve<Query<MutationResult>>({ type: "data", value: r })), delay<MutationResult>()]);
         currentMutation.set(result);
-        let value = await fetch;
+        let value = await fetchPromise;
 
         while (value.type == "InputRequired") {
             // dismiss loading overlay while showing input dialog
@@ -167,6 +192,9 @@ export function delay<T>(): Promise<Query<T>> {
     });
 }
 
+/**
+ * not actually IPC, just opens a modal
+ */
 export function getInput<const T extends string>(title: string, detail: string, fields: T[] | { label: T, choices: string[] }[]): Promise<{ [K in T]: string } | null> {
     return new Promise(resolve => {
         if (typeof fields[0] == "string") {
@@ -179,4 +207,25 @@ export function getInput<const T extends string>(title: string, detail: string, 
             }
         });
     });
+}
+
+/**
+ * route to Tauri or HTTP based on runtime environment
+ */
+async function call<T>(mode: "query" | "mutate" | "trigger", command: string, args?: InvokeArgs): Promise<T> {
+    if (isTauri()) {
+        const { invoke } = await import("@tauri-apps/api/core");
+        return invoke<T>(command, args);
+    } else {
+        const response = await fetch(`/api/${mode}/${command}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(args ?? {}),
+        });
+        if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(errorText || `HTTP ${response.status}`);
+        }
+        return response.json();
+    }
 }
