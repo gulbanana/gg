@@ -1,4 +1,7 @@
-use std::sync::Arc;
+use std::{
+    sync::{Arc, Mutex, mpsc::Sender},
+    time::{Duration, Instant},
+};
 
 use axum::{
     body::Bytes,
@@ -7,6 +10,10 @@ use axum::{
 };
 use tauri_plugin_http::reqwest;
 use tauri_utils::mime_type::MimeType;
+use tokio::sync::oneshot;
+use tokio::task::JoinHandle;
+
+use crate::worker::SessionEvent;
 
 const TAURI_DEV: bool = cfg!(not(feature = "custom-protocol"));
 
@@ -14,13 +21,25 @@ const TAURI_DEV: bool = cfg!(not(feature = "custom-protocol"));
 pub struct AppState {
     context: Arc<tauri::Context<tauri::Wry>>,
     http_client: reqwest::Client,
+    pub worker_tx: Sender<SessionEvent>,
+    shutdown_tx: Arc<Mutex<Option<oneshot::Sender<()>>>>,
+    last_heartbeat: Arc<Mutex<Instant>>,
+    pending_shutdown: Arc<Mutex<Option<JoinHandle<()>>>>,
 }
 
 impl AppState {
-    pub fn new(context: tauri::Context<tauri::Wry>) -> Self {
+    pub fn new(
+        context: tauri::Context<tauri::Wry>,
+        worker_tx: Sender<SessionEvent>,
+        shutdown_tx: oneshot::Sender<()>,
+    ) -> Self {
         Self {
             context: Arc::new(context),
             http_client: reqwest::Client::new(),
+            worker_tx,
+            shutdown_tx: Arc::new(Mutex::new(Some(shutdown_tx))),
+            last_heartbeat: Arc::new(Mutex::new(Instant::now())),
+            pending_shutdown: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -67,6 +86,44 @@ impl AppState {
             .ok_or(StatusCode::NOT_FOUND)?;
         let mime_type = MimeType::parse(&data, path);
         Ok(Asset { mime_type, data })
+    }
+
+    pub fn keep_alive(&self) {
+        *self.last_heartbeat.lock().unwrap() = Instant::now();
+    }
+
+    pub fn is_dead(&self) -> bool {
+        let elapsed: Duration = self.last_heartbeat.lock().unwrap().elapsed();
+        if elapsed > Duration::from_secs(600) {
+            log::debug!("no heartbeat");
+            if let Some(tx) = self.shutdown_tx.lock().unwrap().take() {
+                let _ = tx.send(());
+            }
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn request_shutdown(&self) {
+        let shutdown_tx = self.shutdown_tx.clone();
+        let handle = tokio::spawn(async move {
+            // grace period to allow reloads
+            tokio::time::sleep(Duration::from_secs(1)).await;
+            if let Some(tx) = shutdown_tx.lock().unwrap().take() {
+                let _ = tx.send(());
+            }
+        });
+
+        *self.pending_shutdown.lock().unwrap() = Some(handle);
+        log::debug!("shutdown requested, waiting...");
+    }
+
+    pub fn cancel_shutdown(&self) {
+        if let Some(handle) = self.pending_shutdown.lock().unwrap().take() {
+            handle.abort();
+            log::debug!("shutdown cancelled");
+        }
     }
 }
 
