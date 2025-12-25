@@ -262,7 +262,7 @@ fn run_app(args: Args) -> Result<()> {
         .menu(menu::build_main)
         .setup(|app| {
             // after tauri initialises NSApplication, set the dock icon in case we're running as CLI
-            #[cfg(target_os = "macos")]
+            #[cfg(all(target_os = "macos", not(feature = "gui")))]
             {
                 macos::set_dock_icon();
             }

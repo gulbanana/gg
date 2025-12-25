@@ -1,5 +1,10 @@
 # GG Changelog
 
+## Unreleased
+
+### Fixed
+- MacOS dock icon is no longer overridden if you *aren't* using the CLI build.
+
 ## [0.36.3](releases/tag/v0.36.3)
 
 ### Fixed
