@@ -7,7 +7,7 @@
 ### Launch Modes
 
 - **GUI mode** (`src/gui/mod.rs`): Tauri desktop app with native windowing, menus, and IPC
-- **Web mode** (`src/web.rs`): Axum server that serves the frontend in a browser (in-progress, will have full feature parity)
+- **Web mode** (`src/web/mod.rs`): Axum server that serves the frontend in a browser (in-progress, will have full feature parity)
 
 Mode selection: CLI subcommands (`gg gui`, `gg web`) or `gg.default-mode` config setting.
 
@@ -218,8 +218,8 @@ jj-lib and jj-cli dependencies are pinned to specific versions (see `Cargo.toml`
 - `app/mutators/BinaryMutator.ts` - All drag-drop operation policies
 - `src/worker/mutations.rs` - All mutation implementations
 - `src/config/gg.toml` - Default configuration with inline docs
-- `src/gui/mod.rs` - Tauri GUI mode: windowing, menus, IPC handlers
-- `src/web.rs` - Web mode: Axum server serving embedded assets
+- `src/gui/mod.rs` - GUI mode: Tauri windowing, menus, IPC handlers
+- `src/web/mod.rs` - Web mode: Axum server serving embedded assets
 - `app/stores.ts` - Global Svelte stores for cross-component state
 
 ## Svelte Patterns
