@@ -17,6 +17,8 @@
         font-family: var(--stack-industrial);
         color: var(--ctp-text);
         gap: 3px;
+
+        cursor: pointer;
     }
 
     input:focus-visible {

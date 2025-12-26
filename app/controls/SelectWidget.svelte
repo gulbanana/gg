@@ -33,6 +33,8 @@
         appearance: none;
         padding-left: 3px;
 
+        cursor: pointer;
+
         &:focus-visible {
             padding-left: 2px;
         }

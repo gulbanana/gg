@@ -170,6 +170,7 @@
         }
 
         &:not(:disabled) {
+            cursor: pointer;
             &:hover {
                 background: var(--ctp-flamingo);
                 color: buttontext;
