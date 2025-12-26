@@ -18,6 +18,7 @@ use std::path::PathBuf;
 use anyhow::{Result, anyhow};
 use clap::{Parser, ValueEnum};
 use config::{GGSettings, read_config};
+use jj_lib::settings::UserSettings;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, ValueEnum)]
 enum LaunchMode {
@@ -33,6 +34,20 @@ impl Display for LaunchMode {
             LaunchMode::Web => write!(f, "web"),
         }
     }
+}
+
+#[derive(clap::Subcommand, Debug)]
+enum Subcommand {
+    /// Launch GG in GUI mode (default).
+    Gui {
+        /// Open this directory (instead of the current working directory).
+        workspace: Option<PathBuf>,
+    },
+    /// Launch GG in web mode.
+    Web {
+        /// Open this directory (instead of the current working directory).
+        workspace: Option<PathBuf>,
+    },
 }
 
 #[derive(Parser, Debug)]
@@ -59,20 +74,6 @@ struct Args {
     foreground: bool,
 }
 
-#[derive(clap::Subcommand, Debug)]
-enum Subcommand {
-    /// Launch GG in GUI mode (default).
-    Gui {
-        /// Open this directory (instead of the current working directory).
-        workspace: Option<PathBuf>,
-    },
-    /// Launch GG in web mode.
-    Web {
-        /// Open this directory (instead of the current working directory).
-        workspace: Option<PathBuf>,
-    },
-}
-
 impl Args {
     fn mode(&self) -> Option<LaunchMode> {
         match &self.command {
@@ -90,6 +91,14 @@ impl Args {
             None => self.workspace.clone(),
         }
     }
+}
+
+struct RunOptions {
+    context: tauri::Context<tauri::Wry>,
+    settings: UserSettings,
+    workspace: Option<PathBuf>,
+    debug: bool,
+    is_child: bool,
 }
 
 fn main() -> Result<()> {
@@ -187,8 +196,22 @@ fn run_app(args: Args) -> Result<()> {
     let mode = args.mode().unwrap_or_else(|| settings.default_mode());
     let context = tauri::generate_context!();
 
+    // When spawned as a child process, foreground flag is set by the parent
+    #[cfg(not(feature = "gui"))]
+    let is_child = args.foreground;
+    #[cfg(feature = "gui")]
+    let is_child = false;
+
+    let options = RunOptions {
+        context,
+        settings,
+        workspace: args.workspace(),
+        debug: args.debug,
+        is_child,
+    };
+
     match mode {
-        LaunchMode::Gui => gui::run_gui(args.workspace(), args.debug, settings, context),
-        LaunchMode::Web => web::run_web(args.workspace(), settings, context),
+        LaunchMode::Gui => gui::run_gui(options),
+        LaunchMode::Web => web::run_web(options),
     }
 }

@@ -2,9 +2,9 @@ mod queries;
 mod state;
 mod triggers;
 
+use std::sync::mpsc::channel;
 use std::thread;
 use std::time::Duration;
-use std::{path::PathBuf, sync::mpsc::channel};
 
 use anyhow::{Result, anyhow};
 use axum::{
@@ -15,7 +15,7 @@ use axum::{
     response::{IntoResponse, Response},
     routing::{get, post},
 };
-use jj_lib::settings::UserSettings;
+use log::LevelFilter;
 use serde::Deserialize;
 use tauri_plugin_log::fern;
 use tokio::sync::oneshot;
@@ -45,14 +45,17 @@ impl<E: Into<anyhow::Error>> From<E> for ApiError {
 }
 
 #[tokio::main]
-pub async fn run_web(
-    workspace: Option<PathBuf>,
-    settings: UserSettings,
-    context: tauri::Context<tauri::Wry>,
-) -> Result<()> {
+pub async fn run_web(options: super::RunOptions) -> Result<()> {
     fern::Dispatch::new()
-        .level(log::LevelFilter::Warn)
-        .level_for("gg", log::LevelFilter::Info)
+        .level(LevelFilter::Warn)
+        .level_for(
+            "gg",
+            if options.debug {
+                LevelFilter::Debug
+            } else {
+                LevelFilter::Info
+            },
+        )
         .chain(std::io::stderr())
         .apply()?;
 
@@ -62,7 +65,7 @@ pub async fn run_web(
     thread::spawn(move || {
         tauri::async_runtime::block_on(async {
             log::debug!("start worker");
-            let session = WorkerSession::new(workspace, settings);
+            let session = WorkerSession::new(options.workspace, options.settings);
             if let Err(err) = session.handle_events(&worker_rx).await {
                 log::error!("worker: {err:#}");
             }
@@ -70,7 +73,7 @@ pub async fn run_web(
         });
     });
 
-    let state = AppState::new(context, worker_tx, shutdown_tx);
+    let state = AppState::new(options.context, worker_tx, shutdown_tx);
 
     let app = Router::new()
         // static assets
