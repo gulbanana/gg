@@ -110,6 +110,32 @@ export async function mutate<T>(command: string, mutation: T): Promise<boolean> 
         currentMutation.set(result);
         let value = await fetch;
 
+        while (value.type == "InputRequired") {
+            // dismiss loading overlay while showing input dialog
+            currentMutation.set(null);
+            const fields = await getInput(
+                value.request.title,
+                value.request.detail,
+                value.request.fields
+            );
+
+            // display cancellation as error
+            if (!fields) {
+                currentMutation.set({
+                    type: "data",
+                    value: { type: "PreconditionError", message: "Authentication cancelled" }
+                });
+                return false;
+            }
+
+            // retry with input response
+            const enhancedMutation = { ...mutation, input: { fields } };
+            fetchPromise = call<MutationResult>("mutate", command, { mutation: enhancedMutation });
+            result = await Promise.race([fetchPromise.then(r => Promise.resolve<Query<MutationResult>>({ type: "data", value: r })), delay<MutationResult>()]);
+            currentMutation.set(result);
+            value = await fetchPromise;
+        }
+
         // succeeded; dismiss modals
         if (value.type == "Updated" || value.type == "UpdatedSelection" || value.type == "Unchanged") {
             if (value.type != "Unchanged") {
@@ -119,12 +145,12 @@ export async function mutate<T>(command: string, mutation: T): Promise<boolean> 
                 }
             }
             currentMutation.set(null);
-
-            // failed; transition from overlay or delay to error
-        } else {
-            currentMutation.set({ type: "data", value });
+            return true;
         }
-        return true;
+
+        // failed; transition from overlay or delay to error
+        currentMutation.set({ type: "data", value });
+        return false;
     } catch (error: any) {
         console.log(error);
         currentMutation.set({ type: "error", message: error.toString() });
@@ -149,7 +175,7 @@ export function getInput<const T extends string>(title: string, detail: string, 
         currentInput.set({
             title, detail, fields: fields as { label: T, choices: string[] }[], callback: response => {
                 currentInput.set(null);
-                resolve(response.cancel ? null : response.fields as any);
+                resolve(response ? response.fields as any : null);
             }
         });
     });

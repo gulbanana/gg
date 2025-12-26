@@ -1,6 +1,7 @@
 //! Worker per window, owning repo data (jj-lib is not thread-safe)
 //! The worker thread is a state machine, running different handle functions based on loaded data
 
+mod git_util;
 mod gui_util;
 mod mutations;
 mod queries;
@@ -16,7 +17,7 @@ use std::{
 };
 
 use anyhow::{Error, Result, anyhow};
-use jj_lib::{git::RemoteCallbacks, repo::MutableRepo, settings::UserSettings};
+use jj_lib::settings::UserSettings;
 
 use crate::messages;
 use gui_util::WorkspaceSession;
@@ -43,34 +44,19 @@ pub trait Mutation: Debug {
     }
 }
 
-/// implemented by UI layers to request user input and receive progress
-pub trait WorkerCallbacks {
-    fn with_git(
-        &self,
-        repo: &mut MutableRepo,
-        f: &dyn Fn(&mut MutableRepo, RemoteCallbacks<'_>) -> Result<()>,
-    ) -> Result<()>;
-}
-
 /// state that doesn't depend on jj-lib borrowings
 pub struct WorkerSession {
     pub force_log_page_size: Option<usize>,
     pub latest_query: Option<String>,
-    pub callbacks: Box<dyn WorkerCallbacks>,
     pub working_directory: Option<PathBuf>,
     pub user_settings: UserSettings,
 }
 
 impl WorkerSession {
-    pub fn new<T: WorkerCallbacks + 'static>(
-        callbacks: T,
-        workspace: Option<PathBuf>,
-        user_settings: UserSettings,
-    ) -> Self {
+    pub fn new(workspace: Option<PathBuf>, user_settings: UserSettings) -> Self {
         WorkerSession {
             force_log_page_size: None,
             latest_query: None,
-            callbacks: Box::new(callbacks),
             working_directory: workspace,
             user_settings,
         }

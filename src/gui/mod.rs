@@ -1,4 +1,3 @@
-mod callbacks;
 mod handler;
 mod menu;
 
@@ -32,7 +31,6 @@ struct AppState(Mutex<HashMap<String, WindowState>>);
 struct WindowState {
     _worker: JoinHandle<()>,
     worker_channel: Sender<SessionEvent>,
-    input_channel: Option<Sender<messages::InputResponse>>,
     revision_menu: Menu<Wry>,
     tree_menu: Menu<Wry>,
     ref_menu: Menu<Wry>,
@@ -47,25 +45,6 @@ impl AppState {
             .expect("session not found")
             .worker_channel
             .clone()
-    }
-
-    fn set_input(&self, window_label: &str, tx: Sender<messages::InputResponse>) {
-        self.0
-            .lock()
-            .expect("state mutex poisoned")
-            .get_mut(window_label)
-            .expect("session not found")
-            .input_channel = Some(tx);
-    }
-
-    fn take_input(&self, window_label: &str) -> Option<Sender<messages::InputResponse>> {
-        self.0
-            .lock()
-            .expect("state mutex poisoned")
-            .get_mut(window_label)
-            .expect("session not found")
-            .input_channel
-            .take()
     }
 }
 
@@ -110,7 +89,6 @@ pub fn run_gui(
                 .build(),
         )
         .invoke_handler(tauri::generate_handler![
-            notify_input,
             forward_accelerator,
             forward_context_menu,
             query_workspace,
@@ -185,7 +163,6 @@ pub fn run_gui(
                 WindowState {
                     _worker: window_worker,
                     worker_channel: sender,
-                    input_channel: None,
                     revision_menu,
                     tree_menu,
                     ref_menu,
@@ -208,14 +185,10 @@ async fn work(
 ) {
     log::info!("start worker");
 
-    while let Err(err) = WorkerSession::new(
-        callbacks::FrontendCallbacks(window.clone()),
-        workspace.clone(),
-        settings.clone(),
-    )
-    .handle_events(&rx)
-    .await
-    .context("worker")
+    while let Err(err) = WorkerSession::new(workspace.clone(), settings.clone())
+        .handle_events(&rx)
+        .await
+        .context("worker")
     {
         log::info!("restart worker: {err:#}");
 
@@ -237,19 +210,6 @@ fn query_workspace(
     log::debug!("query_workspace: {path:?}");
     handler::fatal!(window.show());
     try_open_repository(&window, path.map(PathBuf::from)).map_err(InvokeError::from_anyhow)
-}
-
-#[tauri::command(async)]
-fn notify_input(
-    window: Window,
-    app_state: State<AppState>,
-    response: messages::InputResponse,
-) -> Result<(), InvokeError> {
-    let response_tx = app_state
-        .take_input(window.label())
-        .ok_or(anyhow!("Nobody is listening."))
-        .map_err(InvokeError::from_anyhow)?;
-    response_tx.send(response).map_err(InvokeError::from_error)
 }
 
 #[tauri::command]

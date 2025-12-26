@@ -14,6 +14,9 @@ pub enum MutationResult {
         new_status: RepoStatus,
         new_selection: RevHeader,
     },
+    InputRequired {
+        request: InputRequest,
+    },
     PreconditionError {
         message: String,
     },
@@ -169,35 +172,21 @@ pub struct MoveRef {
 }
 
 #[derive(Deserialize, Debug)]
-#[serde(tag = "type")]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
-pub enum GitPush {
-    AllBookmarks {
-        remote_name: String,
-    },
-    AllRemotes {
-        branch_ref: StoreRef,
-    },
-    RemoteBookmark {
-        remote_name: String,
-        branch_ref: StoreRef,
-    },
+pub struct GitPush {
+    pub refspec: GitRefspec,
+    #[serde(default)]
+    pub input: Option<InputResponse>,
 }
 
 #[derive(Deserialize, Debug)]
-#[serde(tag = "type")]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
-pub enum GitFetch {
-    AllBookmarks {
-        remote_name: String,
-    },
-    AllRemotes {
-        branch_ref: StoreRef,
-    },
-    RemoteBookmark {
-        remote_name: String,
-        branch_ref: StoreRef,
-    },
+pub struct GitFetch {
+    pub refspec: GitRefspec,
+    /// Response from a previous InputRequired.
+    /// If None and credentials are needed, the mutation returns InputRequired.
+    #[serde(default)]
+    pub input: Option<InputResponse>,
 }
 
 #[derive(Deserialize, Debug)]

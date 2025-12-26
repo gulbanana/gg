@@ -49,11 +49,11 @@
     }
 
     function onPush(remote: string) {
-        mutate<GitPush>("git_push", { type: "AllBookmarks", remote_name: remote });
+        mutate<GitPush>("git_push", { refspec: { type: "AllBookmarks", remote_name: remote }, input: null });
     }
 
     function onFetch(remote: string) {
-        mutate<GitFetch>("git_fetch", { type: "AllBookmarks", remote_name: remote });
+        mutate<GitFetch>("git_fetch", { refspec: { type: "AllBookmarks", remote_name: remote }, input: null });
     }
 </script>
 

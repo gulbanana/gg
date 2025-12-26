@@ -129,6 +129,23 @@ impl StoreRef {
     }
 }
 
+/// Specifies which branches/remotes to push or fetch
+#[derive(Deserialize, Debug)]
+#[serde(tag = "type")]
+#[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
+pub enum GitRefspec {
+    AllBookmarks {
+        remote_name: String,
+    },
+    AllRemotes {
+        branch_ref: StoreRef,
+    },
+    RemoteBookmark {
+        remote_name: String,
+        branch_ref: StoreRef,
+    },
+}
+
 /// Refers to one of the repository's manipulatable objects
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(tag = "type")]
@@ -165,10 +182,9 @@ pub struct InputRequest {
     pub fields: Vec<InputField>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
 pub struct InputResponse {
-    pub cancel: bool,
     pub fields: HashMap<String, String>,
 }
 

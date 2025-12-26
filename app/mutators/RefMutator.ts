@@ -94,16 +94,22 @@ export default class RefMutator {
 
             case "RemoteBookmark":
                 mutate<GitPush>("git_push", {
-                    type: "RemoteBookmark",
-                    remote_name: this.#ref.remote_name,
-                    branch_ref: this.#ref
+                    refspec: {
+                        type: "RemoteBookmark",
+                        remote_name: this.#ref.remote_name,
+                        branch_ref: this.#ref
+                    },
+                    input: null
                 });
                 break;
 
             case "LocalBookmark":
                 mutate<GitPush>("git_push", {
-                    type: "AllRemotes",
-                    branch_ref: this.#ref
+                    refspec: {
+                        type: "AllRemotes",
+                        branch_ref: this.#ref
+                    },
+                    input: null
                 });
                 break;
         }
@@ -130,9 +136,12 @@ export default class RefMutator {
                 if (response) {
                     let remote_name = response["Remote Name"];
                     mutate<GitPush>("git_push", {
-                        type: "RemoteBookmark",
-                        remote_name,
-                        branch_ref: this.#ref
+                        refspec: {
+                            type: "RemoteBookmark",
+                            remote_name,
+                            branch_ref: this.#ref
+                        },
+                        input: null
                     })
                 }
                 break;
@@ -147,15 +156,21 @@ export default class RefMutator {
 
             case "RemoteBookmark":
                 mutate<GitFetch>("git_fetch", {
-                    type: "AllRemotes",
-                    branch_ref: this.#ref
+                    refspec: {
+                        type: "AllRemotes",
+                        branch_ref: this.#ref
+                    },
+                    input: null
                 });
                 break;
 
             case "LocalBookmark":
                 mutate<GitFetch>("git_fetch", {
-                    type: "AllRemotes",
-                    branch_ref: this.#ref
+                    refspec: {
+                        type: "AllRemotes",
+                        branch_ref: this.#ref
+                    },
+                    input: null
                 });
                 break;
         }
@@ -182,9 +197,12 @@ export default class RefMutator {
                 if (response) {
                     let remote_name = response["Remote Name"];
                     mutate<GitFetch>("git_fetch", {
-                        type: "RemoteBookmark",
-                        remote_name,
-                        branch_ref: this.#ref
+                        refspec: {
+                            type: "RemoteBookmark",
+                            remote_name,
+                            branch_ref: this.#ref
+                        },
+                        input: null
                     })
                 }
                 break;

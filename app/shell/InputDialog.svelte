@@ -7,7 +7,7 @@
     import SelectWidget from "../controls/SelectWidget.svelte";
 
     interface $$Events {
-        response: CustomEvent<InputResponse>;
+        response: CustomEvent<InputResponse | null>;
     }
 
     export let title: string;
@@ -21,10 +21,7 @@
     });
 
     function onCancel() {
-        dispatch("response", {
-            cancel: true,
-            fields: {},
-        });
+        dispatch("response", null);
     }
 
     function onEnter() {
@@ -41,7 +38,6 @@
         }
 
         dispatch("response", {
-            cancel: false,
             fields: responseFields,
         });
     }
