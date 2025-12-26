@@ -169,6 +169,10 @@ pub fn run_gui(options: super::RunOptions) -> Result<()> {
                 },
             );
 
+            if options.is_child {
+                println!("Startup complete.");
+            }
+
             Ok(())
         })
         .manage(AppState::default())
