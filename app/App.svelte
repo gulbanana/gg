@@ -122,6 +122,12 @@
 
     $: if ($repoConfigEvent) loadRepo($repoConfigEvent);
     $: if ($repoStatusEvent && $revisionSelectEvent) loadChange($revisionSelectEvent.id);
+    $: if (!isTauri()) {
+        document.title =
+            $repoConfigEvent.type === "Workspace"
+                ? "GG - " + $repoConfigEvent.absolute_path.split("/").pop()
+                : "GG - Gui for JJ";
+    }
     $: if (
         $repoConfigEvent.type === "LoadError" ||
         $repoConfigEvent.type === "TimeoutError" ||
