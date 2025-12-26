@@ -187,7 +187,6 @@ impl Mutation for CreateRevision {
 #[async_trait::async_trait(?Send)]
 impl Mutation for CreateRevisionBetween {
     async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
-        eprintln!("CreateREvisionBetween execute()");
         let mut tx = ws.start_transaction().await?;
 
         let parent_id = ws
