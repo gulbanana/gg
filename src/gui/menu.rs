@@ -515,7 +515,7 @@ pub fn repo_open(window: &Window) {
     window.dialog().file().pick_folder(move |picked| {
         if let Some(FilePath::Path(cwd)) = picked {
             handler::nonfatal!(
-                super::try_create_window(&app_handle, cwd).context("try_create_window")
+                super::try_create_window(&app_handle, Some(cwd)).context("try_create_window")
             );
         }
     });

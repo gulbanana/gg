@@ -2,12 +2,13 @@ mod handler;
 mod menu;
 
 use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 use std::sync::mpsc::{Sender, channel};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Context, Result};
 use jj_lib::config::ConfigSource;
 use log::LevelFilter;
 use tauri::async_runtime;
@@ -29,7 +30,6 @@ use jj_lib::settings::UserSettings;
 struct AppState {
     windows: Arc<Mutex<HashMap<String, WindowState>>>,
     settings: UserSettings,
-    next_window_id: Mutex<u32>,
 }
 
 impl AppState {
@@ -37,7 +37,6 @@ impl AppState {
         Self {
             windows: Arc::new(Mutex::new(HashMap::new())),
             settings,
-            next_window_id: Mutex::new(1),
         }
     }
 }
@@ -60,13 +59,16 @@ impl AppState {
             .worker_channel
             .clone()
     }
+}
 
-    fn next_label(&self) -> String {
-        let mut id = self.next_window_id.lock().expect("state mutex poisoned");
-        let label = format!("repo-{}", *id);
-        *id += 1;
-        label
-    }
+fn label_for_path(path: Option<&PathBuf>) -> String {
+    let path = path
+        .cloned()
+        .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    path.hash(&mut hasher);
+    let hash = hasher.finish();
+    format!("repo-{:08x}", hash as u32)
 }
 
 pub fn run_gui(options: super::RunOptions) -> Result<()> {
@@ -145,11 +147,7 @@ pub fn run_gui(options: super::RunOptions) -> Result<()> {
                 crate::macos::set_dock_icon();
             }
 
-            let window = app
-                .get_webview_window("repo-0")
-                .ok_or(anyhow!("default window not found"))?;
-
-            setup_window(app.handle(), &window, options.workspace.clone())?;
+            try_create_window(app.handle(), options.workspace.clone())?;
 
             if options.is_child {
                 println!("Startup complete.");
@@ -553,23 +551,30 @@ fn undo_operation(
     try_mutate(window, app_state, UndoOperation)
 }
 
-/// Create a new window for a repository at the given path.
-pub fn try_create_window(app_handle: &AppHandle, path: PathBuf) -> Result<()> {
-    let app_state = app_handle.state::<AppState>();
-    let label = app_state.next_label();
+pub fn try_create_window(app_handle: &AppHandle, path: Option<PathBuf>) -> Result<()> {
+    let label = label_for_path(path.as_ref());
 
-    let window = WebviewWindowBuilder::new(
+    if let Some(existing) = app_handle.get_webview_window(&label) {
+        existing.set_focus()?;
+        return Ok(());
+    }
+
+    let builder = WebviewWindowBuilder::new(
         app_handle,
         &label,
         tauri::WebviewUrl::App("index.html".into()),
     )
     .title("GG - Gui for JJ")
     .inner_size(1280.0, 720.0)
-    .visible(false)
-    .menu(menu::build_main(app_handle)?)
-    .build()?;
+    .focused(true)
+    .visible(false);
 
-    setup_window(app_handle, &window, Some(path))?;
+    #[cfg(windows)]
+    let builder = builder.drag_and_drop(false);
+
+    let window = builder.menu(menu::build_main(app_handle)?).build()?;
+
+    setup_window(app_handle, &window, path)?;
 
     Ok(())
 }
