@@ -108,9 +108,6 @@ windows = { version = "0.60", features = [
     "Win32_UI_Shell_PropertiesSystem",
 ] }
 
-[target.'cfg(unix)'.dependencies]
-libc = { version = "0.2" }
-
 [target."cfg(target_os = \"macos\")".dependencies]
 objc2 = "0.6"
 objc2-foundation = { version = "0.3", default-features = false, features = [

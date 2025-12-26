@@ -9,6 +9,7 @@
 - MacOS dock icon is no longer overridden if you *aren't* using the CLI build.
 - `receiving on a closed channel` error at shutdown.
 - Button icon colours not always responding correctly to modal overlays.
+- Improved child spawning when not built as an app (that is when you install from cargo) - `--foreground` and background modes work more consistently.
 
 ## [0.36.3](releases/tag/v0.36.3)
 

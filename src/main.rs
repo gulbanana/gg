@@ -126,67 +126,35 @@ fn main() -> Result<()> {
 
 #[cfg(not(feature = "gui"))]
 fn spawn_app() -> Result<()> {
-    use std::process::{Command, exit};
+    use std::io::{BufRead, BufReader};
+    use std::process::{Command, Stdio, exit};
 
     let exe = std::env::current_exe()?;
     let mut cmd = Command::new(&exe);
 
     cmd.args(std::env::args().skip(1)); // forward all original arguments
     cmd.arg("--foreground");
+    cmd.stdout(Stdio::piped());
+    cmd.stderr(Stdio::inherit()); // forward logs until startup is complete
 
     #[cfg(windows)]
     {
         use ::windows::Win32::System::Threading::{CREATE_NEW_PROCESS_GROUP, DETACHED_PROCESS};
         use std::os::windows::process::CommandExt;
 
-        // Spawn with DETACHED_PROCESS flag so the child runs independently
+        // suppress console window
         cmd.creation_flags(DETACHED_PROCESS.0 | CREATE_NEW_PROCESS_GROUP.0);
-
-        match cmd.spawn() {
-            Err(err) => Err(anyhow!("Failed to spawn GG: {}", err)),
-            Ok(_) => exit(0),
-        }
     }
 
-    #[cfg(unix)]
-    {
-        use std::ffi::CString;
-        use std::os::unix::process::CommandExt;
-
-        // safety: fork() is ok here because:
-        // 1. We're in a single-threaded context (early in main before any threads spawn)
-        // 2. We only use async-signal-safe functions in the child before exec
-        // 3. The child immediately execs, replacing itself entirely
-        // 4. The parent exits without doing anything else
-        unsafe {
-            match libc::fork() {
-                -1 => Err(anyhow!("fork() failed")),
-
-                // child: detach from terminal, redirect stdio and exec
-                0 => {
-                    if libc::setsid() == -1 {
-                        eprintln!("Warning: setsid() failed");
-                    }
-
-                    let devnull = CString::new("/dev/null")?;
-                    let null_fd = libc::open(devnull.as_ptr(), libc::O_RDWR);
-                    if null_fd != -1 {
-                        if libc::dup2(null_fd, 0) == -1
-                            || libc::dup2(null_fd, 1) == -1
-                            || libc::dup2(null_fd, 2) == -1
-                        {
-                            eprintln!("Warning: failed to redirect stdio");
-                        }
-                        libc::close(null_fd);
-                    }
-
-                    let err = cmd.exec();
-                    Err(anyhow!("exec() failed: {}", err))
-                }
-
-                // parent: we're done
-                _ => exit(0),
+    // wait for startup (which is the only thing on stdout)
+    match cmd.spawn() {
+        Err(err) => Err(anyhow!("Startup error: {}", err)),
+        Ok(mut child) => {
+            if let Some(stdout) = child.stdout.take() {
+                let reader = BufReader::new(stdout);
+                let _ = reader.lines().next();
             }
+            exit(0)
         }
     }
 }

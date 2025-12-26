@@ -107,10 +107,14 @@ pub async fn run_web(options: super::RunOptions) -> Result<()> {
         }
     });
 
+    if options.is_child {
+        println!("Startup complete.");
+    }
+
     axum::serve(listener, app)
         .with_graceful_shutdown(async move {
             let _ = shutdown_rx.await;
-            log::info!("Shutting down");
+            log::info!("Shutdown complete.");
         })
         .await?;
 
