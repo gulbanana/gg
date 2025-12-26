@@ -45,9 +45,22 @@
 
     document.body.addEventListener("click", () => currentContext.set(null), true);
 
-    // this is a special case - most triggers are fire-and-forget, but we really need a
-    // gg://repo/config event in response to this one. if it takes too long, we make our own
-    trigger("notify_window_ready");
+    async function initialize() {
+        const result = await query<RepoConfig>("query_workspace", null);
+        if ($repoConfigEvent.type === "TimeoutError") {
+            return; // too late! we're dead!
+        } else if (result.type === "data") {
+            repoConfigEvent.set(result.value);
+        } else {
+            repoConfigEvent.set({
+                type: "LoadError",
+                absolute_path: "",
+                message: result.message,
+            });
+        }
+    }
+    initialize();
+
     let loadTimeout: number | null;
     onMount(() => {
         if ($repoConfigEvent.type == "Initial") {
