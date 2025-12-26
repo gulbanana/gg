@@ -4,6 +4,7 @@
 
 ### Fixed
 - MacOS dock icon is no longer overridden if you *aren't* using the CLI build.
+- `receiving on a closed channel` error at shutdown.
 
 ## [0.36.3](releases/tag/v0.36.3)
 

@@ -168,9 +168,9 @@ impl Session for WorkerSession {
                         "A repo must be loaded before any other operations"
                     ));
                 }
-                Err(err) => {
-                    log::error!("WorkerSession::handle_events(): {err}");
-                    return Err(anyhow!(err));
+                Err(_) => {
+                    log::debug!("WorkerSession channel closed");
+                    return Ok(());
                 }
             };
         }
