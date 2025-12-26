@@ -2,7 +2,7 @@ use anyhow::{Context, Result, anyhow};
 #[cfg(target_os = "macos")]
 use tauri::menu::AboutMetadata;
 use tauri::{
-    AppHandle, Emitter, Manager, Window, Wry,
+    AppHandle, Emitter, EventTarget, Manager, Window, Wry,
     menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu},
 };
 use tauri_plugin_dialog::{DialogExt, FilePath};
@@ -336,7 +336,7 @@ pub fn handle_context(window: Window, ctx: Operand) -> Result<()> {
     log::debug!("handling context {ctx:?}");
 
     let state = window.state::<AppState>();
-    let guard = state.0.lock().expect("state mutex poisoned");
+    let guard = state.windows.lock().expect("state mutex poisoned");
 
     match ctx {
         Operand::Revision { header } => {
@@ -472,37 +472,38 @@ pub fn handle_context(window: Window, ctx: Operand) -> Result<()> {
 pub fn handle_event(window: &Window, event: MenuEvent) -> Result<()> {
     log::debug!("handling event {event:?}");
 
+    let target = EventTarget::window(window.label());
     match event.id.0.as_str() {
         "menu_repo_open" => repo_open(window),
         "menu_repo_reopen" => repo_reopen(window),
-        "menu_revision_new_child" => window.emit("gg://menu/revision", "new_child")?,
-        "menu_revision_new_parent" => window.emit("gg://menu/revision", "new_parent")?,
-        "menu_revision_edit" => window.emit("gg://menu/revision", "edit")?,
-        "menu_revision_backout" => window.emit("gg://menu/revision", "backout")?,
-        "menu_revision_duplicate" => window.emit("gg://menu/revision", "duplicate")?,
-        "menu_revision_abandon" => window.emit("gg://menu/revision", "abandon")?,
-        "menu_revision_squash" => window.emit("gg://menu/revision", "squash")?,
-        "menu_revision_restore" => window.emit("gg://menu/revision", "restore")?,
-        "menu_revision_branch" => window.emit("gg://menu/revision", "branch")?,
-        "revision_new_child" => window.emit("gg://context/revision", "new_child")?,
-        "revision_new_parent" => window.emit("gg://context/revision", "new_parent")?,
-        "revision_edit" => window.emit("gg://context/revision", "edit")?,
-        "revision_backout" => window.emit("gg://context/revision", "backout")?,
-        "revision_duplicate" => window.emit("gg://context/revision", "duplicate")?,
-        "revision_abandon" => window.emit("gg://context/revision", "abandon")?,
-        "revision_squash" => window.emit("gg://context/revision", "squash")?,
-        "revision_restore" => window.emit("gg://context/revision", "restore")?,
-        "revision_branch" => window.emit("gg://context/revision", "branch")?,
-        "tree_squash" => window.emit("gg://context/tree", "squash")?,
-        "tree_restore" => window.emit("gg://context/tree", "restore")?,
-        "branch_track" => window.emit("gg://context/branch", "track")?,
-        "branch_untrack" => window.emit("gg://context/branch", "untrack")?,
-        "branch_push_all" => window.emit("gg://context/branch", "push-all")?,
-        "branch_push_single" => window.emit("gg://context/branch", "push-single")?,
-        "branch_fetch_all" => window.emit("gg://context/branch", "fetch-all")?,
-        "branch_fetch_single" => window.emit("gg://context/branch", "fetch-single")?,
-        "branch_rename" => window.emit("gg://context/branch", "rename")?,
-        "branch_delete" => window.emit("gg://context/branch", "delete")?,
+        "menu_revision_new_child" => window.emit_to(target, "gg://menu/revision", "new_child")?,
+        "menu_revision_new_parent" => window.emit_to(target, "gg://menu/revision", "new_parent")?,
+        "menu_revision_edit" => window.emit_to(target, "gg://menu/revision", "edit")?,
+        "menu_revision_backout" => window.emit_to(target, "gg://menu/revision", "backout")?,
+        "menu_revision_duplicate" => window.emit_to(target, "gg://menu/revision", "duplicate")?,
+        "menu_revision_abandon" => window.emit_to(target, "gg://menu/revision", "abandon")?,
+        "menu_revision_squash" => window.emit_to(target, "gg://menu/revision", "squash")?,
+        "menu_revision_restore" => window.emit_to(target, "gg://menu/revision", "restore")?,
+        "menu_revision_branch" => window.emit_to(target, "gg://menu/revision", "branch")?,
+        "revision_new_child" => window.emit_to(target, "gg://context/revision", "new_child")?,
+        "revision_new_parent" => window.emit_to(target, "gg://context/revision", "new_parent")?,
+        "revision_edit" => window.emit_to(target, "gg://context/revision", "edit")?,
+        "revision_backout" => window.emit_to(target, "gg://context/revision", "backout")?,
+        "revision_duplicate" => window.emit_to(target, "gg://context/revision", "duplicate")?,
+        "revision_abandon" => window.emit_to(target, "gg://context/revision", "abandon")?,
+        "revision_squash" => window.emit_to(target, "gg://context/revision", "squash")?,
+        "revision_restore" => window.emit_to(target, "gg://context/revision", "restore")?,
+        "revision_branch" => window.emit_to(target, "gg://context/revision", "branch")?,
+        "tree_squash" => window.emit_to(target, "gg://context/tree", "squash")?,
+        "tree_restore" => window.emit_to(target, "gg://context/tree", "restore")?,
+        "branch_track" => window.emit_to(target, "gg://context/branch", "track")?,
+        "branch_untrack" => window.emit_to(target, "gg://context/branch", "untrack")?,
+        "branch_push_all" => window.emit_to(target, "gg://context/branch", "push-all")?,
+        "branch_push_single" => window.emit_to(target, "gg://context/branch", "push-single")?,
+        "branch_fetch_all" => window.emit_to(target, "gg://context/branch", "fetch-all")?,
+        "branch_fetch_single" => window.emit_to(target, "gg://context/branch", "fetch-single")?,
+        "branch_rename" => window.emit_to(target, "gg://context/branch", "rename")?,
+        "branch_delete" => window.emit_to(target, "gg://context/branch", "delete")?,
         _ => (),
     };
 
@@ -510,11 +511,11 @@ pub fn handle_event(window: &Window, event: MenuEvent) -> Result<()> {
 }
 
 pub fn repo_open(window: &Window) {
-    let window = window.clone();
+    let app_handle = window.app_handle().clone();
     window.dialog().file().pick_folder(move |picked| {
         if let Some(FilePath::Path(cwd)) = picked {
-            handler::fatal!(
-                super::try_open_repository(&window, Some(cwd)).context("try_open_repository")
+            handler::nonfatal!(
+                super::try_create_window(&app_handle, Some(cwd)).context("try_create_window")
             );
         }
     });

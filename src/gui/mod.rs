@@ -2,18 +2,21 @@ mod handler;
 mod menu;
 
 use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
-use std::sync::Mutex;
 use std::sync::mpsc::{Sender, channel};
+use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Context, Result};
 use jj_lib::config::ConfigSource;
+use jj_lib::settings::UserSettings;
 use log::LevelFilter;
 use tauri::async_runtime;
+use tauri::ipc::InvokeError;
 use tauri::menu::Menu;
-use tauri::{Emitter, Listener, State, Window, WindowEvent, Wry};
-use tauri::{Manager, ipc::InvokeError};
+use tauri::webview::WebviewWindowBuilder;
+use tauri::{AppHandle, Emitter, EventTarget, Listener, Manager, State, Window, WindowEvent, Wry};
 use tauri_plugin_window_state::StateFlags;
 
 use crate::messages::{
@@ -23,10 +26,20 @@ use crate::messages::{
     MutationResult, RenameBranch, TrackBranch, UndoOperation, UntrackBranch,
 };
 use crate::worker::{Mutation, Session, SessionEvent, WorkerSession};
-use jj_lib::settings::UserSettings;
 
-#[derive(Default)]
-struct AppState(Mutex<HashMap<String, WindowState>>);
+struct AppState {
+    windows: Arc<Mutex<HashMap<String, WindowState>>>,
+    settings: UserSettings,
+}
+
+impl AppState {
+    fn new(settings: UserSettings) -> Self {
+        Self {
+            windows: Arc::new(Mutex::new(HashMap::new())),
+            settings,
+        }
+    }
+}
 
 struct WindowState {
     _worker: JoinHandle<()>,
@@ -34,11 +47,12 @@ struct WindowState {
     revision_menu: Menu<Wry>,
     tree_menu: Menu<Wry>,
     ref_menu: Menu<Wry>,
+    selection: Option<messages::RevHeader>,
 }
 
 impl AppState {
     fn get_session(&self, window_label: &str) -> Sender<SessionEvent> {
-        self.0
+        self.windows
             .lock()
             .expect("state mutex poisoned")
             .get(window_label)
@@ -46,6 +60,24 @@ impl AppState {
             .worker_channel
             .clone()
     }
+
+    fn get_selection(&self, window_label: &str) -> Option<messages::RevHeader> {
+        self.windows
+            .lock()
+            .expect("state mutex poisoned")
+            .get(window_label)
+            .and_then(|state| state.selection.clone())
+    }
+}
+
+fn label_for_path(path: Option<&PathBuf>) -> String {
+    let path = path
+        .cloned()
+        .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    path.hash(&mut hasher);
+    let hash = hasher.finish();
+    format!("repo-{:08x}", hash as u32)
 }
 
 pub fn run_gui(options: super::RunOptions) -> Result<()> {
@@ -124,50 +156,7 @@ pub fn run_gui(options: super::RunOptions) -> Result<()> {
                 crate::macos::set_dock_icon();
             }
 
-            let window = app
-                .get_webview_window("main")
-                .ok_or(anyhow!("preconfigured window not found"))?;
-            let (sender, receiver) = channel();
-
-            let mut handle = window.as_ref().window();
-            let window_worker = thread::spawn(move || {
-                async_runtime::block_on(work(
-                    handle.clone(),
-                    receiver,
-                    options.workspace,
-                    options.settings,
-                ))
-            });
-
-            window.on_menu_event(|w, e| handler::fatal!(menu::handle_event(w, e)));
-
-            handle = window.as_ref().window();
-            window.on_window_event(move |event| handle_window_event(&handle, event));
-
-            handle = window.as_ref().window();
-            window.listen("gg://revision/select", move |event| {
-                let payload: Result<Option<messages::RevHeader>, serde_json::Error> =
-                    serde_json::from_str(event.payload());
-                if let Some(menu) = handle.menu()
-                    && let Ok(selection) = payload
-                {
-                    handler::fatal!(menu::handle_selection(menu, selection));
-                }
-            });
-
-            let (revision_menu, tree_menu, ref_menu) = menu::build_context(app.handle())?;
-
-            let app_state = app.state::<AppState>();
-            app_state.0.lock().unwrap().insert(
-                window.label().to_owned(),
-                WindowState {
-                    _worker: window_worker,
-                    worker_channel: sender,
-                    revision_menu,
-                    tree_menu,
-                    ref_menu,
-                },
-            );
+            try_create_window(app.handle(), options.workspace.clone())?;
 
             if options.is_child {
                 println!("Startup complete.");
@@ -175,35 +164,10 @@ pub fn run_gui(options: super::RunOptions) -> Result<()> {
 
             Ok(())
         })
-        .manage(AppState::default())
+        .manage(AppState::new(options.settings))
         .run(options.context)?;
 
     Ok(())
-}
-
-async fn work(
-    window: Window,
-    rx: std::sync::mpsc::Receiver<SessionEvent>,
-    workspace: Option<PathBuf>,
-    settings: UserSettings,
-) {
-    log::info!("start worker");
-
-    while let Err(err) = WorkerSession::new(workspace.clone(), settings.clone())
-        .handle_events(&rx)
-        .await
-        .context("worker")
-    {
-        log::info!("restart worker: {err:#}");
-
-        // it's ok if the worker has to restart, as long as we can notify the frontend of it
-        handler::fatal!(window.emit(
-            "gg://repo/config",
-            messages::RepoConfig::WorkerError {
-                message: format!("{err:#}"),
-            },
-        ));
-    }
 }
 
 #[tauri::command(async)]
@@ -213,6 +177,7 @@ fn query_workspace(
 ) -> Result<messages::RepoConfig, InvokeError> {
     log::debug!("query_workspace: {path:?}");
     handler::fatal!(window.show());
+    handler::optional!(window.set_focus());
     try_open_repository(&window, path.map(PathBuf::from)).map_err(InvokeError::from_anyhow)
 }
 
@@ -512,8 +477,118 @@ fn undo_operation(
     try_mutate(window, app_state, UndoOperation)
 }
 
+pub fn try_create_window(app_handle: &AppHandle, workspace: Option<PathBuf>) -> Result<()> {
+    log::debug!("try_create_window: {:?}", workspace);
+
+    let label = label_for_path(workspace.as_ref());
+
+    if let Some(existing) = app_handle.get_webview_window(&label) {
+        existing.set_focus()?;
+        return Ok(());
+    }
+
+    // configure and register a new window
+    let window = WebviewWindowBuilder::new(
+        app_handle,
+        &label,
+        tauri::WebviewUrl::App("index.html".into()),
+    )
+    .title("GG - Gui for JJ")
+    .inner_size(1280.0, 720.0)
+    .focused(true)
+    .visible(false)
+    .disable_drag_drop_handler()
+    .build()?;
+
+    let app_state = app_handle.state::<AppState>();
+    let settings = app_state.settings.clone();
+
+    // create a worker for the specified path
+    let (sender, receiver) = channel();
+
+    let handle = window.as_ref().window();
+    let window_worker = thread::spawn(move || {
+        async_runtime::block_on(worker_thread(handle, receiver, workspace, settings))
+    });
+
+    // setup command dependencies
+    let (revision_menu, tree_menu, ref_menu) = menu::build_context(app_handle)?;
+
+    let windows = app_state.windows.clone();
+    windows.lock().unwrap().insert(
+        window.label().to_owned(),
+        WindowState {
+            _worker: window_worker,
+            worker_channel: sender,
+            revision_menu,
+            tree_menu,
+            ref_menu,
+            selection: None,
+        },
+    );
+
+    // listen for menu events
+    window.on_menu_event(|w, e| handler::fatal!(menu::handle_event(w, e)));
+
+    // listen for control events
+    let windows = app_state.windows.clone();
+    let handle = window.as_ref().window();
+    let label = window.label().to_owned();
+    window.on_window_event(move |event| {
+        handle_window_event(&handle, event);
+        if matches!(event, WindowEvent::Destroyed) {
+            windows.lock().unwrap().remove(&label);
+        }
+    });
+
+    // listen for custom events
+    let windows = app_state.windows.clone();
+    let handle = app_handle.clone();
+    let label = window.label().to_owned();
+    window.listen("gg://revision/select", move |event| {
+        let payload: Result<Option<messages::RevHeader>, serde_json::Error> =
+            serde_json::from_str(event.payload());
+        if let Ok(selection) = payload {
+            if let Some(state) = windows.lock().unwrap().get_mut(&label) {
+                state.selection = selection.clone();
+            }
+            if let Some(menu) = handle.menu() {
+                handler::fatal!(menu::handle_selection(menu, selection));
+            }
+        }
+    });
+
+    Ok(())
+}
+
+async fn worker_thread(
+    window: Window,
+    rx: std::sync::mpsc::Receiver<SessionEvent>,
+    workspace: Option<PathBuf>,
+    settings: UserSettings,
+) {
+    log::info!("Worker started.");
+
+    while let Err(err) = WorkerSession::new(workspace.clone(), settings.clone())
+        .handle_events(&rx)
+        .await
+        .context("worker")
+    {
+        log::debug!("restart worker: {err:#}");
+
+        // it's ok if the worker has to restart, as long as we can notify the frontend of it
+        handler::fatal!(window.emit_to(
+            EventTarget::labeled(window.label()),
+            "gg://repo/config",
+            messages::RepoConfig::WorkerError {
+                message: format!("{err:#}"),
+            },
+        ));
+    }
+}
+
 fn try_open_repository(window: &Window, cwd: Option<PathBuf>) -> Result<messages::RepoConfig> {
-    log::info!("load workspace {cwd:#?}");
+    log::debug!("load workspace {cwd:#?}");
 
     let app_state = window.state::<AppState>();
 
@@ -587,6 +662,11 @@ fn handle_window_event(window: &Window, event: &WindowEvent) {
 
         let app_state = window.state::<AppState>();
 
+        let selection = app_state.get_selection(window.label());
+        if let Some(menu) = window.app_handle().menu() {
+            handler::nonfatal!(menu::handle_selection(menu, selection));
+        }
+
         let session_tx: Sender<SessionEvent> = app_state.get_session(window.label());
         let (call_tx, call_rx) = channel();
 
@@ -597,7 +677,11 @@ fn handle_window_event(window: &Window, event: &WindowEvent) {
         let window = window.clone();
         thread::spawn(move || {
             if let Some(status) = handler::nonfatal!(call_rx.recv()) {
-                handler::nonfatal!(window.emit("gg://repo/status", status));
+                handler::nonfatal!(window.emit_to(
+                    EventTarget::labeled(window.label()),
+                    "gg://repo/status",
+                    status
+                ));
             }
         });
     }

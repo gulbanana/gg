@@ -28,8 +28,8 @@ export async function event<T>(name: string, initialValue: T): Promise<Settable<
     let lastValue: T = initialValue;
 
     if (isTauri()) {
-        const { listen } = await import("@tauri-apps/api/event");
-        await listen<T>(name, event => {
+        const { getCurrentWindow } = await import("@tauri-apps/api/window");
+        await getCurrentWindow().listen<T>(name, event => {
             lastValue = event.payload;
             for (let subscriber of subscribers) {
                 subscriber(event.payload);
@@ -57,8 +57,9 @@ export async function event<T>(name: string, initialValue: T): Promise<Settable<
             }
             if (isTauri()) {
                 (async () => {
-                    const { emit } = await import("@tauri-apps/api/event");
-                    emit(name, value);
+                    const { emitTo } = await import("@tauri-apps/api/event");
+                    const { getCurrentWindow } = await import("@tauri-apps/api/window");
+                    emitTo(getCurrentWindow().label, name, value);
                 })();
             }
         }
@@ -75,8 +76,8 @@ export function onEvent<T>(name: string, callback: (payload: T) => void) {
     }
 
     onMount(() => {
-        let promise = import("@tauri-apps/api/event").then(({ listen }) =>
-            listen<T>(name, e => callback(e.payload))
+        let promise = import("@tauri-apps/api/window").then(({ getCurrentWindow }) =>
+            getCurrentWindow().listen<T>(name, e => callback(e.payload))
         );
         return () => {
             promise.then((unlisten) => {

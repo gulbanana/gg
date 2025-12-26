@@ -4,7 +4,10 @@
 
 ### Added
 - **Web Mode**: GG can now be run using `gg web` (or you can change the `gg.default-mode` setting from `gui` to `web`), which will start a web server and a browser instead of a desktop application. It has the same featureset apart from the lack of a top menubar and features inherent to the platform - only gui mode has a taskbar icon to right-click, only web mode supports http-proxy remote access, etc. 
-Web mode uses a standard request-response model with HTML dialogs and context menus instead of the native ones provided by Tauri.
+
+  Web mode uses a standard request-response model with HTML dialogs and context menus instead of the native ones provided by Tauri.
+  
+- Multiple window support in gui mode (the existing default, or `gg gui` if you want to be explicit). The "Open..." command in the Repository menu will now open another workspace. Selections and window positions are preserved independently.
 - Cursor indication when something is clickable.
 
 ### Fixed

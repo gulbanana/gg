@@ -2,30 +2,10 @@ productName = "gg"
 version = "0.36.3"
 identifier = "au.gulbanana.gg"
 
-[build]
-beforeDevCommand = "npm run dev"
-devUrl = "http://localhost:6973"
-beforeBuildCommand = "npm run build"
-frontendDist = "dist"
-features = ["gui"]
-
-[app]
-
-[[app.windows]]
-label = "main"
-title = "GG - Gui for JJ"
-decorations = true
-resizable = true
-focus = true
-width = 1280
-height = 720
-visible = false
-dragDropEnabled = false
-
 [[app.security.capabilities]]
 identifier = "main-capability"
-description = "Capability for the main window"
-windows = ["main"]
+description = "Capability for all windows"
+windows = ["repo-*"]
 permissions = [
     "core:path:default",
     "core:event:default",
@@ -36,6 +16,13 @@ permissions = [
     "core:tray:default",
     "shell:allow-open",
 ]
+
+[build]
+beforeDevCommand = "npm run dev"
+devUrl = "http://localhost:6973"
+beforeBuildCommand = "npm run build"
+frontendDist = "dist"
+features = ["gui"]
 
 [bundle]
 active = true # Comment this out or set to false to disable bundle compilation
