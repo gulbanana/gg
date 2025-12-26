@@ -11,7 +11,9 @@
         repoStatusEvent,
         revisionSelectEvent,
         currentInput,
+        hasMenu,
     } from "./stores.js";
+    import ContextMenu from "./controls/ContextMenu.svelte";
     import RefMutator from "./mutators/RefMutator";
     import ChangeMutator from "./mutators/ChangeMutator";
     import RevisionMutator from "./mutators/RevisionMutator";
@@ -38,7 +40,9 @@
     document.addEventListener("keydown", (event) => {
         if (event.key === "o" && event.ctrlKey) {
             event.preventDefault();
-            trigger("forward_accelerator", { key: "o" });
+            if (isTauri()) {
+                trigger("forward_accelerator", { key: "o" });
+            }
         }
     });
 
@@ -108,9 +112,13 @@
     };
     setContext<Settings>("settings", settings);
 
-    onEvent("gg://context/revision", mutateRevision);
-    onEvent("gg://context/tree", mutateTree);
-    onEvent("gg://context/branch", mutateRef);
+    // web mode: mutations done directly by ContextMenu
+    // gui mode: mutations triggered by native context menu
+    if (isTauri()) {
+        onEvent("gg://context/revision", mutateRevision);
+        onEvent("gg://context/tree", mutateTree);
+        onEvent("gg://context/branch", mutateRef);
+    }
 
     $: if ($repoConfigEvent) loadRepo($repoConfigEvent);
     $: if ($repoStatusEvent && $revisionSelectEvent) loadChange($revisionSelectEvent.id);
@@ -270,6 +278,17 @@
                     </ErrorDialog>
                 {/if}
             </ModalOverlay>
+        {/if}
+
+        {#if $currentContext && $hasMenu}
+            <ContextMenu
+                operand={$currentContext}
+                x={$hasMenu.x}
+                y={$hasMenu.y}
+                onClose={() => {
+                    hasMenu.set(null);
+                    currentContext.set(null);
+                }} />
         {/if}
     </div>
 </Zone>
