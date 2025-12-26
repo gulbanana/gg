@@ -11,7 +11,9 @@
         repoStatusEvent,
         revisionSelectEvent,
         currentInput,
+        hasMenu,
     } from "./stores.js";
+    import ContextMenu from "./controls/ContextMenu.svelte";
     import RefMutator from "./mutators/RefMutator";
     import ChangeMutator from "./mutators/ChangeMutator";
     import RevisionMutator from "./mutators/RevisionMutator";
@@ -38,7 +40,9 @@
     document.addEventListener("keydown", (event) => {
         if (event.key === "o" && event.ctrlKey) {
             event.preventDefault();
-            trigger("forward_accelerator", { key: "o" });
+            if (isTauri()) {
+                trigger("forward_accelerator", { key: "o" });
+            }
         }
     });
 
@@ -280,6 +284,17 @@
                     </ErrorDialog>
                 {/if}
             </ModalOverlay>
+        {/if}
+
+        {#if $currentContext && $hasMenu}
+            <ContextMenu
+                operand={$currentContext}
+                x={$hasMenu.x}
+                y={$hasMenu.y}
+                onClose={() => {
+                    hasMenu.set(null);
+                    currentContext.set(null);
+                }} />
         {/if}
     </div>
 </Zone>

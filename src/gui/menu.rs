@@ -61,6 +61,7 @@ pub fn build_main(app_handle: &AppHandle) -> tauri::Result<Menu<Wry>> {
                 true,
                 Some("cmdorctrl+m"),
             )?,
+            &PredefinedMenuItem::separator(app_handle)?,
             &MenuItem::with_id(
                 app_handle,
                 "menu_revision_edit",
@@ -108,7 +109,7 @@ pub fn build_main(app_handle: &AppHandle) -> tauri::Result<Menu<Wry>> {
             &MenuItem::with_id(
                 app_handle,
                 "menu_revision_branch",
-                "Create bookmark",
+                "Create bookmark...",
                 true,
                 None::<&str>,
             )?,
@@ -179,6 +180,7 @@ pub fn build_context(
                 true,
                 None::<&str>,
             )?,
+            &PredefinedMenuItem::separator(app_handle)?,
             &MenuItem::with_id(
                 app_handle,
                 "revision_edit",
@@ -226,7 +228,7 @@ pub fn build_context(
             &MenuItem::with_id(
                 app_handle,
                 "revision_branch",
-                "Create bookmark",
+                "Create bookmark...",
                 true,
                 None::<&str>,
             )?,
