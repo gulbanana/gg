@@ -48,12 +48,7 @@ impl AppState {
     }
 }
 
-pub fn run_gui(
-    workspace: Option<PathBuf>,
-    debug: bool,
-    settings: UserSettings,
-    context: tauri::Context<tauri::Wry>,
-) -> Result<()> {
+pub fn run_gui(options: super::RunOptions) -> Result<()> {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
@@ -72,7 +67,7 @@ pub fn run_gui(
                 .level(LevelFilter::Warn)
                 .level_for(
                     "gg",
-                    if debug {
+                    if options.debug {
                         LevelFilter::Debug
                     } else {
                         LevelFilter::Warn
@@ -80,7 +75,7 @@ pub fn run_gui(
                 )
                 .level_for(
                     "tao",
-                    if debug {
+                    if options.debug {
                         LevelFilter::Info
                     } else {
                         LevelFilter::Error
@@ -136,7 +131,12 @@ pub fn run_gui(
 
             let mut handle = window.as_ref().window();
             let window_worker = thread::spawn(move || {
-                async_runtime::block_on(work(handle.clone(), receiver, workspace, settings))
+                async_runtime::block_on(work(
+                    handle.clone(),
+                    receiver,
+                    options.workspace,
+                    options.settings,
+                ))
             });
 
             window.on_menu_event(|w, e| handler::fatal!(menu::handle_event(w, e)));
@@ -172,7 +172,7 @@ pub fn run_gui(
             Ok(())
         })
         .manage(AppState::default())
-        .run(context)?;
+        .run(options.context)?;
 
     Ok(())
 }
