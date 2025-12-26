@@ -1,7 +1,22 @@
 <script lang="ts">
-    import { trigger } from "../ipc.js";
+    import { query } from "../ipc.js";
+    import { repoConfigEvent } from "../stores.js";
+    import type { RepoConfig } from "../messages/RepoConfig.js";
 
     export let workspaces: string[] = [];
+
+    async function openWorkspace(path: string) {
+        const result = await query<RepoConfig>("query_workspace", { path });
+        if (result.type === "data") {
+            repoConfigEvent.set(result.value);
+        } else {
+            repoConfigEvent.set({
+                type: "LoadError",
+                absolute_path: path,
+                message: result.message,
+            });
+        }
+    }
 </script>
 
 {#if workspaces.length > 0}
@@ -9,12 +24,7 @@
     <ul>
         {#each workspaces as workspace}
             <li>
-                <button
-                    on:click={() =>
-                        trigger("open_workspace_at_path", {
-                            path: workspace,
-                        })}
-                    title="open this workspace">
+                <button on:click={() => openWorkspace(workspace)} title="open this workspace">
                     {workspace}
                 </button>
             </li>
