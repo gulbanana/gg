@@ -12,7 +12,7 @@ features = ["gui"]
 [app]
 
 [[app.windows]]
-label = "main"
+label = "repo-0"
 title = "GG - Gui for JJ"
 decorations = true
 resizable = true
@@ -24,8 +24,8 @@ dragDropEnabled = false
 
 [[app.security.capabilities]]
 identifier = "main-capability"
-description = "Capability for the main window"
-windows = ["main"]
+description = "Capability for all windows"
+windows = ["repo-*"]
 permissions = [
     "core:path:default",
     "core:event:default",

@@ -3,8 +3,8 @@ mod menu;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::Mutex;
 use std::sync::mpsc::{Sender, channel};
+use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 
 use anyhow::{Context, Result, anyhow};
@@ -12,7 +12,8 @@ use jj_lib::config::ConfigSource;
 use log::LevelFilter;
 use tauri::async_runtime;
 use tauri::menu::Menu;
-use tauri::{Emitter, Listener, State, Window, WindowEvent, Wry};
+use tauri::webview::WebviewWindowBuilder;
+use tauri::{AppHandle, Emitter, EventTarget, Listener, State, Window, WindowEvent, Wry};
 use tauri::{Manager, ipc::InvokeError};
 use tauri_plugin_window_state::StateFlags;
 
@@ -25,8 +26,21 @@ use crate::messages::{
 use crate::worker::{Mutation, Session, SessionEvent, WorkerSession};
 use jj_lib::settings::UserSettings;
 
-#[derive(Default)]
-struct AppState(Mutex<HashMap<String, WindowState>>);
+struct AppState {
+    windows: Arc<Mutex<HashMap<String, WindowState>>>,
+    settings: UserSettings,
+    next_window_id: Mutex<u32>,
+}
+
+impl AppState {
+    fn new(settings: UserSettings) -> Self {
+        Self {
+            windows: Arc::new(Mutex::new(HashMap::new())),
+            settings,
+            next_window_id: Mutex::new(1),
+        }
+    }
+}
 
 struct WindowState {
     _worker: JoinHandle<()>,
@@ -38,13 +52,20 @@ struct WindowState {
 
 impl AppState {
     fn get_session(&self, window_label: &str) -> Sender<SessionEvent> {
-        self.0
+        self.windows
             .lock()
             .expect("state mutex poisoned")
             .get(window_label)
             .expect("session not found")
             .worker_channel
             .clone()
+    }
+
+    fn next_label(&self) -> String {
+        let mut id = self.next_window_id.lock().expect("state mutex poisoned");
+        let label = format!("repo-{}", *id);
+        *id += 1;
+        label
     }
 }
 
@@ -125,49 +146,10 @@ pub fn run_gui(options: super::RunOptions) -> Result<()> {
             }
 
             let window = app
-                .get_webview_window("main")
-                .ok_or(anyhow!("preconfigured window not found"))?;
-            let (sender, receiver) = channel();
+                .get_webview_window("repo-0")
+                .ok_or(anyhow!("default window not found"))?;
 
-            let mut handle = window.as_ref().window();
-            let window_worker = thread::spawn(move || {
-                async_runtime::block_on(work(
-                    handle.clone(),
-                    receiver,
-                    options.workspace,
-                    options.settings,
-                ))
-            });
-
-            window.on_menu_event(|w, e| handler::fatal!(menu::handle_event(w, e)));
-
-            handle = window.as_ref().window();
-            window.on_window_event(move |event| handle_window_event(&handle, event));
-
-            handle = window.as_ref().window();
-            window.listen("gg://revision/select", move |event| {
-                let payload: Result<Option<messages::RevHeader>, serde_json::Error> =
-                    serde_json::from_str(event.payload());
-                if let Some(menu) = handle.menu()
-                    && let Ok(selection) = payload
-                {
-                    handler::fatal!(menu::handle_selection(menu, selection));
-                }
-            });
-
-            let (revision_menu, tree_menu, ref_menu) = menu::build_context(app.handle())?;
-
-            let app_state = app.state::<AppState>();
-            app_state.0.lock().unwrap().insert(
-                window.label().to_owned(),
-                WindowState {
-                    _worker: window_worker,
-                    worker_channel: sender,
-                    revision_menu,
-                    tree_menu,
-                    ref_menu,
-                },
-            );
+            setup_window(app.handle(), &window, options.workspace.clone())?;
 
             if options.is_child {
                 println!("Startup complete.");
@@ -175,8 +157,66 @@ pub fn run_gui(options: super::RunOptions) -> Result<()> {
 
             Ok(())
         })
-        .manage(AppState::default())
+        .manage(AppState::new(options.settings))
         .run(options.context)?;
+
+    Ok(())
+}
+
+/// Set up a window with its own worker thread. Used for both the initial window and new windows.
+fn setup_window(
+    app_handle: &AppHandle,
+    window: &tauri::WebviewWindow,
+    workspace: Option<PathBuf>,
+) -> Result<()> {
+    log::debug!("setup_window: {:?}", workspace);
+
+    let app_state = app_handle.state::<AppState>();
+    let settings = app_state.settings.clone();
+    let windows = app_state.windows.clone();
+
+    let (sender, receiver) = channel();
+
+    let mut handle = window.as_ref().window();
+    let window_worker = thread::spawn(move || {
+        async_runtime::block_on(work(handle.clone(), receiver, workspace, settings))
+    });
+
+    window.on_menu_event(|w, e| handler::fatal!(menu::handle_event(w, e)));
+
+    handle = window.as_ref().window();
+    let window_label = window.label().to_owned();
+    let windows_clone = windows.clone();
+    window.on_window_event(move |event| {
+        handle_window_event(&handle, event);
+        if matches!(event, WindowEvent::Destroyed) {
+            windows_clone.lock().unwrap().remove(&window_label);
+        }
+    });
+
+    handle = window.as_ref().window();
+    window.listen("gg://revision/select", move |event| {
+        let payload: Result<Option<messages::RevHeader>, serde_json::Error> =
+            serde_json::from_str(event.payload());
+        if let Some(menu) = handle.menu()
+            && let Ok(selection) = payload
+        {
+            handler::fatal!(menu::handle_selection(menu, selection));
+        }
+    });
+
+    let (revision_menu, tree_menu, ref_menu) = menu::build_context(app_handle)?;
+
+    windows.lock().unwrap().insert(
+        window.label().to_owned(),
+        WindowState {
+            _worker: window_worker,
+            worker_channel: sender,
+            revision_menu,
+            tree_menu,
+            ref_menu,
+        },
+    );
 
     Ok(())
 }
@@ -197,7 +237,8 @@ async fn work(
         log::info!("restart worker: {err:#}");
 
         // it's ok if the worker has to restart, as long as we can notify the frontend of it
-        handler::fatal!(window.emit(
+        handler::fatal!(window.emit_to(
+            EventTarget::labeled(window.label()),
             "gg://repo/config",
             messages::RepoConfig::WorkerError {
                 message: format!("{err:#}"),
@@ -512,6 +553,27 @@ fn undo_operation(
     try_mutate(window, app_state, UndoOperation)
 }
 
+/// Create a new window for a repository at the given path.
+pub fn try_create_window(app_handle: &AppHandle, path: PathBuf) -> Result<()> {
+    let app_state = app_handle.state::<AppState>();
+    let label = app_state.next_label();
+
+    let window = WebviewWindowBuilder::new(
+        app_handle,
+        &label,
+        tauri::WebviewUrl::App("index.html".into()),
+    )
+    .title("GG - Gui for JJ")
+    .inner_size(1280.0, 720.0)
+    .visible(false)
+    .menu(menu::build_main(app_handle)?)
+    .build()?;
+
+    setup_window(app_handle, &window, Some(path))?;
+
+    Ok(())
+}
+
 fn try_open_repository(window: &Window, cwd: Option<PathBuf>) -> Result<messages::RepoConfig> {
     log::info!("load workspace {cwd:#?}");
 
@@ -597,7 +659,11 @@ fn handle_window_event(window: &Window, event: &WindowEvent) {
         let window = window.clone();
         thread::spawn(move || {
             if let Some(status) = handler::nonfatal!(call_rx.recv()) {
-                handler::nonfatal!(window.emit("gg://repo/status", status));
+                handler::nonfatal!(window.emit_to(
+                    EventTarget::labeled(window.label()),
+                    "gg://repo/status",
+                    status
+                ));
             }
         });
     }
