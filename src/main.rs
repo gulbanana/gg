@@ -3,7 +3,7 @@
 mod callbacks;
 mod config;
 mod handler;
-#[cfg(target_os = "macos")]
+#[cfg(all(target_os = "macos", not(feature = "gui")))]
 mod macos;
 mod menu;
 mod messages;
