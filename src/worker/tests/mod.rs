@@ -3,10 +3,7 @@ mod queries;
 mod session;
 
 use anyhow::Result;
-use jj_lib::{
-    backend::TreeValue, commit::Commit, git::RemoteCallbacks, repo::MutableRepo,
-    repo_path::RepoPath,
-};
+use jj_lib::{backend::TreeValue, commit::Commit, repo_path::RepoPath};
 use std::{
     fs::{self, File},
     path::PathBuf,
@@ -19,26 +16,11 @@ use crate::{
     worker::{WorkerSession, WorkspaceSession},
 };
 
-use super::WorkerCallbacks;
-
-struct NoCallbacks;
-
-impl WorkerCallbacks for NoCallbacks {
-    fn with_git(
-        &self,
-        repo: &mut MutableRepo,
-        f: &dyn Fn(&mut MutableRepo, RemoteCallbacks<'_>) -> Result<()>,
-    ) -> Result<()> {
-        f(repo, RemoteCallbacks::default())
-    }
-}
-
 impl Default for WorkerSession {
     fn default() -> Self {
         WorkerSession {
             force_log_page_size: None,
             latest_query: None,
-            callbacks: Box::new(NoCallbacks),
             working_directory: None,
             user_settings: crate::config::tests::settings_with_gg_defaults(),
         }

@@ -1,6 +1,7 @@
 #![cfg_attr(feature = "gui", windows_subsystem = "windows")]
 
 mod config;
+mod git_util;
 mod gui;
 #[cfg(all(target_os = "macos", not(feature = "gui")))]
 mod macos;

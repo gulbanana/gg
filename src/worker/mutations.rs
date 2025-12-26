@@ -32,11 +32,13 @@ use jj_lib::{
 };
 use tokio::io::AsyncReadExt;
 
+use crate::git_util::AuthContext;
 use crate::messages::{
     AbandonRevisions, BackoutRevisions, CheckoutRevision, CopyChanges, CopyHunk, CreateRef,
     CreateRevision, CreateRevisionBetween, DeleteRef, DescribeRevision, DuplicateRevisions,
-    GitFetch, GitPush, InsertRevision, MoveChanges, MoveHunk, MoveRef, MoveRevision, MoveSource,
-    MutationResult, RenameBranch, StoreRef, TrackBranch, TreePath, UndoOperation, UntrackBranch,
+    GitFetch, GitPush, GitRefspec, InsertRevision, MoveChanges, MoveHunk, MoveRef, MoveRevision,
+    MoveSource, MutationResult, RenameBranch, StoreRef, TrackBranch, TreePath, UndoOperation,
+    UntrackBranch,
 };
 
 use super::Mutation;
@@ -1196,8 +1198,8 @@ impl Mutation for GitPush {
         // determine bookmarks to push, recording the old and new commits
         let mut remote_branch_updates: Vec<(&str, Vec<(RefNameBuf, refs::BookmarkPushUpdate)>)> =
             Vec::new();
-        let remote_branch_refs: Vec<_> = match &*self {
-            GitPush::AllBookmarks { remote_name } => {
+        let remote_branch_refs: Vec<_> = match &self.refspec {
+            GitRefspec::AllBookmarks { remote_name } => {
                 let remote_name_ref = RemoteNameBuf::from(remote_name);
                 let mut branch_updates = Vec::new();
                 for (branch_name, targets) in ws.view().local_remote_bookmarks(&remote_name_ref) {
@@ -1218,7 +1220,7 @@ impl Mutation for GitPush {
                     .map(|(name, remote_ref)| (name.to_owned(), remote_ref))
                     .collect()
             }
-            GitPush::AllRemotes { branch_ref } => {
+            GitRefspec::AllRemotes { branch_ref } => {
                 let branch_name = branch_ref.as_branch()?;
                 let branch_name_ref = RefNameBuf::from(branch_name);
 
@@ -1261,7 +1263,7 @@ impl Mutation for GitPush {
 
                 remote_branch_refs
             }
-            GitPush::RemoteBookmark {
+            GitRefspec::RemoteBookmark {
                 remote_name,
                 branch_ref,
             } => {
@@ -1349,36 +1351,40 @@ impl Mutation for GitPush {
             }
         }
 
+        // accumulate input requirements
+        let git_settings = git::GitSettings::from_settings(&ws.data.workspace_settings)?;
+        let mut auth_ctx = AuthContext::new(self.input);
+
         // push to each remote
         for (remote_name, branch_updates) in remote_branch_updates.into_iter() {
             let targets = GitBranchPushTargets { branch_updates };
-            let git_settings = git::GitSettings::from_settings(&ws.data.workspace_settings)?;
 
-            ws.session.callbacks.with_git(tx.repo_mut(), &|repo, cb| {
+            if let Err(err) = auth_ctx.with_callbacks(|cb| {
                 git::push_branches(
-                    repo,
+                    tx.repo_mut(),
                     &git_settings,
                     RemoteName::new(remote_name),
                     &targets,
                     cb,
-                )?;
-                Ok(())
-            })?;
+                )
+            }) {
+                return Ok(auth_ctx.into_result(err.into()));
+            }
         }
 
         match ws.finish_transaction(
             tx,
-            match *self {
-                GitPush::AllBookmarks { remote_name } => {
+            match &self.refspec {
+                GitRefspec::AllBookmarks { remote_name } => {
                     format!("push all tracked branches to git remote {}", remote_name)
                 }
-                GitPush::AllRemotes { branch_ref } => {
+                GitRefspec::AllRemotes { branch_ref } => {
                     format!(
                         "push {} to all tracked git remotes",
                         branch_ref.as_branch()?
                     )
                 }
-                GitPush::RemoteBookmark {
+                GitRefspec::RemoteBookmark {
                     remote_name,
                     branch_ref,
                 } => {
@@ -1407,41 +1413,47 @@ impl Mutation for GitFetch {
         };
 
         let mut remote_patterns = Vec::new();
-        match *self {
-            GitFetch::AllBookmarks { remote_name } => {
-                remote_patterns.push((remote_name, None));
+        match &self.refspec {
+            GitRefspec::AllBookmarks { remote_name } => {
+                remote_patterns.push((remote_name.clone(), None));
             }
-            GitFetch::AllRemotes { branch_ref } => {
+            GitRefspec::AllRemotes { branch_ref } => {
                 let branch_name = branch_ref.as_branch()?;
                 for remote_name in get_git_remote_names(&git_repo) {
                     remote_patterns.push((remote_name, Some(branch_name.to_owned())));
                 }
             }
-            GitFetch::RemoteBookmark {
+            GitRefspec::RemoteBookmark {
                 remote_name,
                 branch_ref,
             } => {
                 let branch_name = branch_ref.as_branch()?;
-                remote_patterns.push((remote_name, Some(branch_name.to_owned())));
+                remote_patterns.push((remote_name.clone(), Some(branch_name.to_owned())));
             }
         }
-        let git_settings = git::GitSettings::from_settings(&ws.data.workspace_settings)?;
 
-        for (remote_name, pattern) in remote_patterns {
-            ws.session.callbacks.with_git(tx.repo_mut(), &|repo, cb| {
-                let mut fetcher = git::GitFetch::new(repo, &git_settings)?;
-                let bookmark_expr = pattern
-                    .clone()
-                    .map(StringExpression::exact)
-                    .unwrap_or_else(StringExpression::all);
-                let refspecs =
-                    git::expand_fetch_refspecs(&RemoteName::new(&remote_name), bookmark_expr)?;
+        // accumulate input requirements
+        let git_settings = git::GitSettings::from_settings(&ws.data.workspace_settings)?;
+        let mut auth_ctx = AuthContext::new(self.input);
+
+        for (remote_name, pattern) in &remote_patterns {
+            let mut fetcher = git::GitFetch::new(tx.repo_mut(), &git_settings)?;
+            let bookmark_expr = pattern
+                .clone()
+                .map(StringExpression::exact)
+                .unwrap_or_else(StringExpression::all);
+            let refspecs =
+                git::expand_fetch_refspecs(&RemoteName::new(remote_name), bookmark_expr)?;
+            if let Err(err) = auth_ctx.with_callbacks(|cb| {
                 fetcher
-                    .fetch(RemoteName::new(&remote_name), refspecs, cb, None, None)
-                    .context("failed to fetch")?;
-                fetcher.import_refs().context("failed to import refs")?;
-                Ok(())
-            })?;
+                    .fetch(RemoteName::new(remote_name), refspecs, cb, None, None)
+                    .context("failed to fetch")
+            }) {
+                return Ok(auth_ctx.into_result(err));
+            }
+            if let Err(err) = fetcher.import_refs().context("failed to import refs") {
+                return Ok(auth_ctx.into_result(err));
+            }
         }
 
         match ws.finish_transaction(tx, "fetch from git remote(s)".to_string())? {

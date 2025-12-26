@@ -18,7 +18,7 @@ export const currentMutation = writable<Query<MutationResult> | null>(null);
 export const currentContext = writable<Operand | null>();
 export const currentSource = writable<Operand | null>();
 export const currentTarget = writable<Operand | null>();
-export const currentInput = writable<InputRequest & { callback: (response: InputResponse) => void } | null>();
+export const currentInput = writable<InputRequest & { callback: (response: InputResponse | null) => void } | null>();
 
 export const hasModal = writable<boolean>(false);
 

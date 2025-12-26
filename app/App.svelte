@@ -26,8 +26,6 @@
     import { onMount, setContext } from "svelte";
     import IdSpan from "./controls/IdSpan.svelte";
     import InputDialog from "./shell/InputDialog.svelte";
-    import type { InputRequest } from "./messages/InputRequest";
-    import type { InputResponse } from "./messages/InputResponse";
     import type Settings from "./shell/Settings";
 
     let selection: Query<RevResult> = {
@@ -78,7 +76,6 @@
     onEvent("gg://context/revision", mutateRevision);
     onEvent("gg://context/tree", mutateTree);
     onEvent("gg://context/branch", mutateRef);
-    onEvent("gg://input", requestInput);
 
     $: if ($repoConfigEvent) loadRepo($repoConfigEvent);
     $: if ($repoStatusEvent && $revisionSelectEvent) loadChange($revisionSelectEvent.id);
@@ -140,15 +137,6 @@
             new RefMutator($currentContext.ref).handle(event);
         }
         $currentContext = null;
-    }
-
-    function requestInput(event: InputRequest) {
-        $currentInput = Object.assign(event, {
-            callback: (response: InputResponse) => {
-                $currentInput = null;
-                trigger("notify_input", { response });
-            },
-        });
     }
 </script>
 
