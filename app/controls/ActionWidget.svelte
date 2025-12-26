@@ -26,6 +26,7 @@
     button {
         height: 24px;
         font-size: 16px;
+        padding: 1px 6px;
 
         outline: none;
         margin: 0;
@@ -40,7 +41,7 @@
         align-items: center;
         gap: 3px;
 
-        padding: 1px 6px;
+        cursor: pointer;
     }
 
     button:not(:disabled) {
