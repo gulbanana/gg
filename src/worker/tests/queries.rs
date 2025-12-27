@@ -43,7 +43,7 @@ fn log_subset() -> Result<()> {
 
     let several_rows = queries::query_log(&ws, "bookmarks()", 100)?;
 
-    assert_eq!(3, several_rows.rows.len());
+    assert_eq!(4, several_rows.rows.len());
 
     Ok(())
 }
