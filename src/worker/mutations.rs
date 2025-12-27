@@ -1351,6 +1351,33 @@ impl Mutation for GitPush {
             }
         }
 
+        // check if there are any actual updates to push
+        let has_updates = remote_branch_updates
+            .iter()
+            .any(|(_, updates)| !updates.is_empty());
+        if !has_updates {
+            match &self.refspec {
+                GitRefspec::AllBookmarks { remote_name } => {
+                    precondition!(
+                        "No tracked bookmarks to push to remote '{remote_name}'. Track or push a bookmark first."
+                    );
+                }
+                GitRefspec::AllRemotes { branch_ref } => {
+                    let branch_name = branch_ref.as_branch()?;
+                    precondition!("Bookmark '{branch_name}' is not tracked at any remote.");
+                }
+                GitRefspec::RemoteBookmark {
+                    remote_name,
+                    branch_ref,
+                } => {
+                    let branch_name = branch_ref.as_branch()?;
+                    precondition!(
+                        "Bookmark '{branch_name}' is not tracked at remote '{remote_name}'. Track it first."
+                    );
+                }
+            }
+        }
+
         // accumulate input requirements
         let git_settings = git::GitSettings::from_settings(&ws.data.workspace_settings)?;
         let mut auth_ctx = AuthContext::new(self.input);
