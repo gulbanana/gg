@@ -48,7 +48,7 @@
         <p>{detail}</p>
     {/if}
     {#each fields as field}
-        <label for="field-{field.label}">{field.label}:</label>
+        <label for="field-{field.label}">{field.label}{field.label.endsWith(":") ? "" : ":"}</label>
         {#if field.choices.length > 0}
             <SelectWidget
                 id="field-{field.label}"

@@ -79,7 +79,7 @@ impl Args {
         match &self.command {
             Some(Subcommand::Gui { .. }) => Some(LaunchMode::Gui),
             Some(Subcommand::Web { .. }) => Some(LaunchMode::Web),
-            _ => None,
+            None => None,
         }
     }
 
@@ -102,6 +102,11 @@ struct RunOptions {
 }
 
 fn main() -> Result<()> {
+    // may be executed as a git authenticator, which overrides everything else
+    if let Some(result) = git_util::run_askpass() {
+        return result;
+    }
+
     // before parsing args, attach a console on windows - will fail if not started from a shell, but that's fine
     #[cfg(windows)]
     {
