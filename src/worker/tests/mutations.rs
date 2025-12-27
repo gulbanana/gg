@@ -3,12 +3,14 @@ use crate::{
     messages::{
         AbandonRevisions, ChangeHunk, CheckoutRevision, CopyChanges, CopyHunk, CreateRevision,
         DescribeRevision, DuplicateRevisions, FileRange, HunkLocation, InsertRevision, MoveChanges,
-        MoveHunk, MoveSource, MultilineString, MutationResult, RevResult, TreePath,
+        MoveHunk, MoveRef, MoveSource, MultilineString, MutationResult, RevHeader, RevResult,
+        StoreRef, TreePath,
     },
     worker::{Mutation, WorkerSession, queries},
 };
 use anyhow::Result;
 use assert_matches::assert_matches;
+use jj_lib::str_util::StringMatcher;
 use std::fs;
 use tokio::io::AsyncReadExt;
 
@@ -89,6 +91,72 @@ async fn copy_changes() -> Result<()> {
     let to_rev = queries::query_revision(&ws, revs::working_copy()).await?;
     assert_matches!(from_rev, RevResult::Detail { changes, .. } if changes.len() == 1);
     assert_matches!(to_rev, RevResult::Detail { changes, .. } if changes.len() == 1);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn immutability_of_bookmark() -> Result<()> {
+    let repo = mkrepo();
+
+    let mut session = WorkerSession::default();
+    let mut ws = session.load_directory(repo.path())?;
+
+    let immutable_matcher = StringMatcher::Exact("immutable_bookmark".to_string());
+    let (_, ref_at_start) = ws
+        .view()
+        .local_bookmarks_matching(&immutable_matcher)
+        .next()
+        .unwrap();
+    let ref_at_start = ref_at_start.as_normal().unwrap().clone();
+    assert_matches!(ws.check_immutable([ref_at_start.clone()]), Ok(true));
+
+    let RevResult::Detail {
+        header: RevHeader { refs, .. },
+        ..
+    } = queries::query_revision(&ws, revs::immutable_bookmark()).await?
+    else {
+        panic!("Bookmark immutable_bookmark not found");
+    };
+    let immutable_bm = refs
+        .as_slice()
+        .iter()
+        .find(|r| {
+            matches!(
+                r,
+                StoreRef::LocalBookmark {
+                    branch_name,
+                    ..
+                    } if branch_name == "immutable_bookmark"
+            )
+        })
+        .unwrap();
+
+    let MutationResult::UpdatedSelection { new_selection, .. } = CreateRevision {
+        parent_ids: vec![revs::working_copy()],
+    }
+    .execute_unboxed(&mut ws)
+    .await?
+    else {
+        panic!("Creating new revision didn't update the selection");
+    };
+
+    MoveRef {
+        r#ref: immutable_bm.clone(),
+        to_id: new_selection.id.clone(),
+    }
+    .execute_unboxed(&mut ws)
+    .await?;
+
+    let (_, after_change) = ws
+        .view()
+        .local_bookmarks_matching(&immutable_matcher)
+        .next()
+        .unwrap();
+    let after_change = after_change.as_normal().unwrap().clone();
+    assert_ne!(ref_at_start, after_change);
+
+    assert_matches!(ws.check_immutable([after_change]), Ok(true));
 
     Ok(())
 }
@@ -1412,5 +1480,4 @@ auto-track = "glob:*.txt"
 }
 
 // XXX missing tests for:
-// - branch/ref mutations
 // - git interop

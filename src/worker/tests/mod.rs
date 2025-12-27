@@ -84,6 +84,10 @@ mod revs {
         mkid("mnkoropy", "5f4dc18dd03158f9ec72e528ffaca2f4c73d3b4b")
     }
 
+    pub fn immutable_bookmark() -> RevId {
+        mkid("ummxkyyk", "b0d38b770763ab74f297f483f4b42c961647b4fb")
+    }
+
     /// A commit with a conflict in b.txt
     pub fn conflict_bookmark() -> RevId {
         mkid("nwrnuwyp", "702f1b97e561953e44ad254fa1a4e59e0e31cf16")
