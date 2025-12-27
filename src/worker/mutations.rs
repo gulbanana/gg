@@ -1354,6 +1354,7 @@ impl Mutation for GitPush {
         // accumulate input requirements
         let git_settings = git::GitSettings::from_settings(&ws.data.workspace_settings)?;
         let mut auth_ctx = AuthContext::new(self.input);
+        let _askpass_guard = auth_ctx.setup_askpass_env();
 
         // push to each remote
         for (remote_name, branch_updates) in remote_branch_updates.into_iter() {
@@ -1435,6 +1436,7 @@ impl Mutation for GitFetch {
         // accumulate input requirements
         let git_settings = git::GitSettings::from_settings(&ws.data.workspace_settings)?;
         let mut auth_ctx = AuthContext::new(self.input);
+        let _askpass_guard = auth_ctx.setup_askpass_env();
 
         for (remote_name, pattern) in &remote_patterns {
             let mut fetcher = git::GitFetch::new(tx.repo_mut(), &git_settings)?;

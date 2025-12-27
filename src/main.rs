@@ -78,7 +78,7 @@ impl Args {
         match &self.command {
             Some(Subcommand::Gui { .. }) => Some(LaunchMode::Gui),
             Some(Subcommand::Web { .. }) => Some(LaunchMode::Web),
-            _ => None,
+            None => None,
         }
     }
 
@@ -105,6 +105,15 @@ fn main() -> Result<()> {
     #[cfg(windows)]
     {
         windows::reattach_console();
+    }
+
+    // Detect askpass mode BEFORE parsing args.
+    // When git runs GIT_ASKPASS, it calls: /path/to/gg "prompt"
+    // Without this check, the prompt would be interpreted as a workspace path.
+    if std::env::var("GG_ASKPASS_SOCKET").is_ok() {
+        // We're being called as an askpass helper - the first arg is the prompt
+        let prompt = std::env::args().nth(1).unwrap_or_default();
+        return run_askpass(&prompt);
     }
 
     let args = Args::parse();
@@ -180,5 +189,42 @@ fn run_app(args: Args) -> Result<()> {
     match mode {
         LaunchMode::Gui => gui::run_gui(options),
         LaunchMode::Web => web::run_web(options),
+    }
+}
+
+/// Handle askpass requests from git/ssh subprocesses.
+/// Connects to the IPC socket specified in GG_ASKPASS_SOCKET,
+/// sends the prompt, and prints the credential to stdout.
+fn run_askpass(prompt: &str) -> Result<()> {
+    use interprocess::local_socket::{GenericFilePath, Stream, ToFsName, traits::Stream as _};
+    use std::io::{BufRead, BufReader, Write};
+
+    let socket_path = std::env::var("GG_ASKPASS_SOCKET")
+        .map_err(|_| anyhow!("GG_ASKPASS_SOCKET not set"))?;
+
+    let name = socket_path
+        .to_fs_name::<GenericFilePath>()
+        .map_err(|e| anyhow!("invalid socket path: {}", e))?;
+
+    let stream =
+        Stream::connect(name).map_err(|e| anyhow!("failed to connect to askpass socket: {}", e))?;
+
+    // Send prompt (newline-terminated)
+    let mut writer = &stream;
+    writeln!(writer, "{}", prompt)?;
+    writer.flush()?;
+
+    // Read response
+    let mut response = String::new();
+    BufReader::new(&stream).read_line(&mut response)?;
+    let response = response.trim();
+
+    if let Some(credential) = response.strip_prefix("OK:") {
+        // Print credential to stdout (git reads this)
+        println!("{}", credential);
+        Ok(())
+    } else {
+        // "UNAVAILABLE" or error - exit non-zero to signal auth failure
+        Err(anyhow!("credential unavailable"))
     }
 }
