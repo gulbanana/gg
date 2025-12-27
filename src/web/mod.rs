@@ -1,5 +1,7 @@
 mod queries;
 mod state;
+#[cfg(all(test, not(feature = "ts-rs")))]
+mod tests;
 mod triggers;
 
 use std::sync::mpsc::channel;
@@ -59,8 +61,32 @@ pub async fn run_web(options: super::RunOptions) -> Result<()> {
         .chain(std::io::stderr())
         .apply()?;
 
-    let (worker_tx, worker_rx) = channel();
+    let (app, shutdown_rx) = create_app(options)?;
+
+    // bind to random port
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+    let addr = listener.local_addr()?;
+    let url = format!("http://{addr}");
+    log::info!("Listening on {url}");
+
+    // open browser (best-effort)
+    tokio::task::spawn_blocking(move || {
+        let _ = webbrowser::open(&url);
+    });
+
+    axum::serve(listener, app)
+        .with_graceful_shutdown(async move {
+            let _ = shutdown_rx.await;
+            log::info!("Shutdown complete.");
+        })
+        .await?;
+
+    Ok(())
+}
+
+pub(self) fn create_app(options: super::RunOptions) -> Result<(Router, oneshot::Receiver<()>)> {
     let (shutdown_tx, shutdown_rx) = oneshot::channel(); // this one needs async
+    let (worker_tx, worker_rx) = channel();
 
     thread::spawn(move || {
         tauri::async_runtime::block_on(async {
@@ -86,17 +112,6 @@ pub async fn run_web(options: super::RunOptions) -> Result<()> {
         .route("/api/mutate/{command}", post(handle_mutate))
         .with_state(state.clone());
 
-    // bind to random port
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
-    let addr = listener.local_addr()?;
-    let url = format!("http://{addr}");
-    log::info!("Listening on {url}");
-
-    // open browser (best-effort)
-    tokio::task::spawn_blocking(move || {
-        let _ = webbrowser::open(&url);
-    });
-
     // shut down if we don't get a ping for ten minutes
     tokio::spawn(async move {
         loop {
@@ -111,14 +126,7 @@ pub async fn run_web(options: super::RunOptions) -> Result<()> {
         println!("Startup complete.");
     }
 
-    axum::serve(listener, app)
-        .with_graceful_shutdown(async move {
-            let _ = shutdown_rx.await;
-            log::info!("Shutdown complete.");
-        })
-        .await?;
-
-    Ok(())
+    Ok((app, shutdown_rx))
 }
 
 async fn serve_index(State(state): State<AppState>) -> Result<Asset, StatusCode> {
