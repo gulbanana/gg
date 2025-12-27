@@ -11,6 +11,8 @@ Planned Features
 * Structured op descriptions - extracted ids etc, maybe via tags. This would benefit from being in JJ core.
 * "Onboarding" features - init/clone/colocate.
 * Relative timestamps should update on refocus.
+* Predefined menus (Edit, Window) for common OS functions.
+* Automatic creation of a new working copy when the current one becomes immutable.
 
 UI Expansion
 ------------
