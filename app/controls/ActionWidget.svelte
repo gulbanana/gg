@@ -5,22 +5,19 @@
     export let onClick: (event: MouseEvent) => void;
     export let safe: boolean = false;
     export let disabled: boolean = false;
+
+    $: isDisabled = disabled || (!safe && $hasModal);
 </script>
 
-{#if disabled || (!safe && $hasModal)}
-    <button disabled class:safe on:dragenter={dragOverWidget} on:dragover={dragOverWidget}>
-        <slot />
-    </button>
-{:else}
-    <button
-        class:safe
-        on:click={onClick}
-        on:dragenter={dragOverWidget}
-        on:dragover={dragOverWidget}
-        title={safe ? "" : tip}>
-        <slot />
-    </button>
-{/if}
+<button
+    disabled={isDisabled}
+    class:safe
+    on:click={isDisabled ? undefined : onClick}
+    on:dragenter={dragOverWidget}
+    on:dragover={dragOverWidget}
+    title={isDisabled || safe ? "" : tip}>
+    <slot />
+</button>
 
 <style>
     button {

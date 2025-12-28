@@ -5,6 +5,7 @@
 ### Fixed
 - MacOS dock icon is no longer overridden if you *aren't* using the CLI build.
 - `receiving on a closed channel` error at shutdown.
+- Button icon colours not always responding correctly to modal overlays.
 
 ## [0.36.3](releases/tag/v0.36.3)
 
