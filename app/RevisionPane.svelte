@@ -151,34 +151,9 @@
             </ActionWidget>
         </div>
 
-        {#if rev.parents.length > 0}
-            <Zone operand={{ type: "Merge", header: rev.header }} let:target>
-                <div class="parents" class:target>
-                    {#each rev.parents as parent}
-                        <div class="parent">
-                            <span>Parent:</span>
-                            <RevisionObject header={parent} child={rev.header} selected={false} noBranches />
-                        </div>
-                    {/each}
-                </div>
-            </Zone>
-        {/if}
-
         {#if syntheticChanges.length > 0}
             <div class="move-commands">
                 <span>Changes:</span>
-                <ActionWidget
-                    tip="move all changes to parent"
-                    onClick={mutator.onSquash}
-                    disabled={rev.header.is_immutable || rev.header.parent_ids.length != 1}>
-                    <Icon name="upload" /> Squash
-                </ActionWidget>
-                <ActionWidget
-                    tip="copy all changes from parent"
-                    onClick={mutator.onRestore}
-                    disabled={rev.header.is_immutable || rev.header.parent_ids.length != 1}>
-                    <Icon name="download" /> Restore
-                </ActionWidget>
             </div>
 
             <ListWidget {list} type="Change" descendant={$changeSelectEvent?.path.repo_path}>
@@ -203,10 +178,39 @@
                     {/each}
                 </div>
             </ListWidget>
+
+            <div class="move-commands">
+                <span></span>
+                <ActionWidget
+                    tip="move all changes to parent"
+                    onClick={mutator.onSquash}
+                    disabled={rev.header.is_immutable || rev.header.parent_ids.length != 1}>
+                    <Icon name="download" /> Squash
+                </ActionWidget>
+                <ActionWidget
+                    tip="copy all changes from parent"
+                    onClick={mutator.onRestore}
+                    disabled={rev.header.is_immutable || rev.header.parent_ids.length != 1}>
+                    <Icon name="upload" /> Restore
+                </ActionWidget>
+            </div>
         {:else}
             <div class="move-commands">
                 <span>Changes: <span class="no-changes">(empty)</span></span>
             </div>
+        {/if}
+
+        {#if rev.parents.length > 0}
+            <Zone operand={{ type: "Merge", header: rev.header }} let:target>
+                <div class="parents" class:target>
+                    {#each rev.parents as parent}
+                        <div class="parent">
+                            <span>Parent:</span>
+                            <RevisionObject header={parent} child={rev.header} selected={false} noBranches />
+                        </div>
+                    {/each}
+                </div>
+            </Zone>
         {/if}
     </div>
 </Pane>
