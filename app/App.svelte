@@ -83,8 +83,8 @@
             // snapshot when focusing the browser or returning to the tab
             const handleSnapshot = async () => {
                 if (document.visibilityState === "visible" && $repoConfigEvent.type === "Workspace") {
-                    const result = await query<RepoStatus>("query_snapshot", null);
-                    if (result.type === "data") {
+                    const result = await query<RepoStatus | null>("query_snapshot", null);
+                    if (result.type === "data" && result.value) {
                         repoStatusEvent.set(result.value);
                     }
                 }
@@ -152,7 +152,11 @@
     async function loadChange(id: RevId) {
         let rev = await query<RevResult>("query_revision", { id }, (q) => (selection = q));
 
-        if (rev.type == "data" && rev.value.type == "NotFound" && id.commit.hex != $repoStatusEvent?.working_copy.hex) {
+        if (
+            rev.type == "data" &&
+            rev.value.type == "NotFound" &&
+            id.commit.hex !== $repoStatusEvent?.working_copy?.hex
+        ) {
             return loadChange({
                 change: { type: "ChangeId", hex: "@", prefix: "@", rest: "" },
                 commit: $repoStatusEvent!.working_copy,
