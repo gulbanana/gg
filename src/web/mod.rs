@@ -63,11 +63,12 @@ pub async fn run_web(options: super::RunOptions, port: Option<u16>) -> Result<()
         .apply()?;
 
     let (repo_settings, _) = read_config(options.workspace.as_deref())?;
-    let port_setting = port.unwrap_or_else(|| repo_settings.web_default_port());
+    let port = port.unwrap_or_else(|| repo_settings.web_default_port());
+    let client_timeout = repo_settings.web_client_timeout();
 
-    let (app, shutdown_rx) = create_app(options)?;
+    let (app, shutdown_rx) = create_app(options, client_timeout)?;
 
-    let listener = tokio::net::TcpListener::bind(format!("127.0.0.1:{port_setting}")).await?;
+    let listener = tokio::net::TcpListener::bind(format!("127.0.0.1:{port}")).await?;
     let addr = listener.local_addr()?;
     let url = format!("http://{addr}");
     log::info!("Listening on {url}");
@@ -87,7 +88,10 @@ pub async fn run_web(options: super::RunOptions, port: Option<u16>) -> Result<()
     Ok(())
 }
 
-pub(self) fn create_app(options: super::RunOptions) -> Result<(Router, oneshot::Receiver<()>)> {
+pub(self) fn create_app(
+    options: super::RunOptions,
+    client_timeout: Duration,
+) -> Result<(Router, oneshot::Receiver<()>)> {
     let (shutdown_tx, shutdown_rx) = oneshot::channel(); // this one needs async
     let (worker_tx, worker_rx) = channel();
 
@@ -102,12 +106,7 @@ pub(self) fn create_app(options: super::RunOptions) -> Result<(Router, oneshot::
         });
     });
 
-    let state = AppState::new(
-        options.context,
-        worker_tx,
-        shutdown_tx,
-        Duration::from_secs(600),
-    );
+    let state = AppState::new(options.context, worker_tx, shutdown_tx, client_timeout);
 
     let app = Router::new()
         // static assets

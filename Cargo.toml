@@ -93,6 +93,7 @@ chrono = { version = "0.4.42", features = ["serde"] }
 # extra deps not used by JJ
 log = "0.4"
 futures-util = "0.3.31"
+humantime = "2"
 ts-rs = { version = "7.1.1", features = ["chrono-impl"], optional = true }
 axum = "0.8.8"
 webbrowser = { version = "1", features = ["hardened"] }

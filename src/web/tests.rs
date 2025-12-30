@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use super::create_app;
 use crate::{RunOptions, config::tests::settings_with_gg_defaults};
 use anyhow::Result;
@@ -7,13 +9,16 @@ use tower::ServiceExt;
 
 #[tokio::test]
 async fn integration_test() -> Result<()> {
-    let (app, _shutdown_rx) = create_app(RunOptions {
-        context: tauri::generate_context!(),
-        settings: settings_with_gg_defaults(),
-        workspace: None,
-        debug: false,
-        is_child: false,
-    })?;
+    let (app, _shutdown_rx) = create_app(
+        RunOptions {
+            context: tauri::generate_context!(),
+            settings: settings_with_gg_defaults(),
+            workspace: None,
+            debug: false,
+            is_child: false,
+        },
+        Duration::from_secs(600),
+    )?;
 
     let request = http::Request::builder()
         .uri("/")

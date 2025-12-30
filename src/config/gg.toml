@@ -26,4 +26,5 @@ mark-unpushed-bookmarks = true
 # theme-override =
 
 [gg.web]
-default-port = 0 # Port to bind to in web mode (0 = random)
+default-port = 0       # Port to bind to in web mode (0 = random)
+client-timeout = "10m" # Disconnect clients after this duration of inactivity

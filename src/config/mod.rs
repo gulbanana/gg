@@ -2,6 +2,7 @@
 pub mod tests;
 
 use std::path::Path;
+use std::time::Duration;
 
 use anyhow::{Result, anyhow};
 use jj_cli::config::{ConfigEnv, config_from_environment, default_config_layers};
@@ -24,6 +25,7 @@ pub trait GGSettings {
     #[allow(dead_code)]
     fn ui_recent_workspaces(&self) -> Vec<String>;
     fn web_default_port(&self) -> u16;
+    fn web_client_timeout(&self) -> Duration;
 }
 
 impl GGSettings for UserSettings {
@@ -79,6 +81,13 @@ impl GGSettings for UserSettings {
 
     fn web_default_port(&self) -> u16 {
         self.get_int("gg.web.default-port").unwrap_or(0) as u16
+    }
+
+    fn web_client_timeout(&self) -> Duration {
+        self.get_string("gg.web.client-timeout")
+            .ok()
+            .and_then(|s| humantime::parse_duration(&s).ok())
+            .unwrap_or(Duration::from_secs(600))
     }
 }
 
