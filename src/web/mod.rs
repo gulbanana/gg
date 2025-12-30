@@ -129,8 +129,19 @@ pub(self) fn create_app(options: super::RunOptions) -> Result<(Router, oneshot::
     Ok((app, shutdown_rx))
 }
 
-async fn serve_index(State(state): State<AppState>) -> Result<Asset, StatusCode> {
-    state.load_asset("/index.html").await
+async fn serve_index(State(state): State<AppState>) -> Result<impl IntoResponse, StatusCode> {
+    let asset = state.load_asset("/index.html").await?;
+
+    // used to track open tabs; done here so that it works for both vite and static assets
+    let client_id = uuid::Uuid::new_v4().to_string();
+    let injected_script = format!(r#"<script>window.__GG_CLIENT_ID__="{client_id}";</script>"#);
+    let asset_html = String::from_utf8_lossy(asset.data());
+    let modified_html = asset_html.replace("</head>", &format!("{injected_script}</head>"));
+
+    Ok((
+        [(axum::http::header::CONTENT_TYPE, "text/html")],
+        modified_html,
+    ))
 }
 
 async fn serve_asset(

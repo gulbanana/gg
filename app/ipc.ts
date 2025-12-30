@@ -214,6 +214,16 @@ export function getInput<const T extends string>(title: string, detail: string, 
 }
 
 /**
+ * id should be injected by the server, but a random one is ok as long as it's consistent
+ */
+function getClientId(): string {
+    if (!window.__GG_CLIENT_ID__) {
+        window.__GG_CLIENT_ID__ = crypto.randomUUID();
+    }
+    return window.__GG_CLIENT_ID__;
+}
+
+/**
  * route to Tauri or HTTP based on runtime environment
  */
 async function call<T>(mode: "query" | "mutate" | "trigger", command: string, args?: InvokeArgs): Promise<T> {
@@ -222,7 +232,9 @@ async function call<T>(mode: "query" | "mutate" | "trigger", command: string, ar
         return invoke<T>(command, args);
     } else {
         if (mode == "trigger") {
-            navigator.sendBeacon(`/api/${mode}/${command}`, JSON.stringify(args ?? {}));
+            const payload = { ...args, client_id: getClientId() };
+            const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+            navigator.sendBeacon(`/api/${mode}/${command}`, blob);
             return undefined as T;
         } else {
             const response = await fetch(`/api/${mode}/${command}`, {
