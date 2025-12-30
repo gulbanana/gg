@@ -1,0 +1,20 @@
+# Cargo audit configuration
+# See: https://rustsec.org/
+
+[advisories]
+# RUSTSEC-2024-0429: Unsoundness in glib::VariantStrIter (affects glib >=0.15.0, <0.20.0)
+# 
+# This vulnerability is in code paths (VariantStrIter::next, nth, last, etc.) that are not
+# used by this project or by Tauri. The glib crate is pulled in transitively through:
+#   tauri -> webkit2gtk -> gtk -> glib (Linux only)
+#
+# The fix requires glib 0.20.0+ which is part of gtk4-rs. Tauri still depends on gtk3-rs
+# (unmaintained) via webkit2gtk. Upgrading requires Tauri to migrate to gtk4-rs/webkitgtk-6.0.
+#
+# Tracking issues:
+#   - https://github.com/tauri-apps/tauri/issues/12048 (vulnerability discussion)
+#   - https://github.com/tauri-apps/tauri/issues/12563 (gtk4-rs migration)
+#   - https://github.com/tauri-apps/tauri/issues/12561 (tauri-runtime-wry gtk4 upgrade)
+#
+# Risk assessment: Low - the affected VariantStrIter type is not used by this codebase.
+ignore = ["RUSTSEC-2024-0429"]
