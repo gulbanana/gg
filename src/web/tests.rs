@@ -8,6 +8,7 @@ use http_body_util::BodyExt;
 use tower::ServiceExt;
 
 #[tokio::test]
+#[cfg_attr(not(feature = "custom-protocol"), ignore)]
 async fn integration_test() -> Result<()> {
     let (app, _shutdown_rx) = create_app(
         RunOptions {
