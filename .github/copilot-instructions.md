@@ -6,25 +6,36 @@
 
 ### Launch Modes
 
-- **GUI mode** (`src/gui/mod.rs`): Tauri desktop app with native windowing, menus, and IPC
-- **Web mode** (`src/web/mod.rs`): Axum server that serves the frontend in a browser (in-progress, will have full feature parity)
+- **GUI mode** (`src/gui/mod.rs`): Tauri desktop app with native windowing, menus, and IPC. Supports multiple windows (each with its own worker thread).
+- **Web mode** (`src/web/mod.rs`): Axum HTTP server that serves the frontend in a browser. Single worker, single session.
+
+Both modes share the same frontend code. The frontend detects its runtime via `isTauri()` in `app/ipc.ts` and uses the appropriate transport layer (Tauri IPC vs HTTP).
 
 Mode selection: CLI subcommands (`gg gui`, `gg web`) or `gg.default-mode` config setting.
 
+See `.github/specs/gui-mode.md` and `.github/specs/web-mode.md` for detailed technical specifications.
+
 ### Core Architectural Boundaries
 
-- **`app/ipc.ts`**: Frontend IPC abstraction. Four message types:
-  - `trigger()` - fire-and-forget backend actions (native UI)
+- **`app/ipc.ts`**: Frontend IPC abstraction with dual transport support. Key exports:
+  - `isTauri()` - runtime detection: checks for `__TAURI_INTERNALS__` in window
+  - `trigger()` - fire-and-forget backend actions (uses `sendBeacon` in web mode)
   - `query()` - request data without side effects  
   - `mutate()` - structured repository mutations (goes through worker)
-  - Events - server→client and client→client broadcasts via Svelte stores
+  - `event()` - creates event-backed Svelte stores (Tauri events in GUI, local-only in web)
+  
+  In GUI mode, calls route through Tauri's `invoke()`. In web mode, calls use `fetch()` to `/api/{query|trigger|mutate}/{command}` endpoints.
   
 - **`src/worker/mod.rs`**: Worker thread state machine. Session progresses through states:
   - `WorkerSession` - Opening/reopening workspace
   - `WorkspaceSession` - Workspace open, executes mutations
   - `QuerySession` - Paged log query in progress
 
-- **`src/handler.rs`**: Error handling macros (`fatal!`, `nonfatal!`, `optional!`) for worker error propagation
+- **`src/main.rs`**: CLI parsing and `RunOptions` struct shared by both launch modes
+
+- **`src/gui/handler.rs`**: Error handling macros (`fatal!`, `nonfatal!`, `optional!`) for GUI error propagation
+
+- **Multi-window support (GUI only)**: `AppState` contains a `HashMap<String, WindowState>` keyed by window label. Each `WindowState` owns its worker thread and channel. Window labels are hashed from workspace paths.
 
 ### Direct Manipulation System
 
@@ -140,11 +151,14 @@ Access via `GGSettings` trait methods in `src/config/mod.rs`.
 3. If frontend needs the value: add field to message struct (e.g., `RepoConfig::Workspace`), populate in worker, run `cargo gen`
 4. Add tests using `settings_with_gg_defaults()` / `settings_with_overrides()` helpers in `config/tests.rs`
 
-### Error Handling in Workers
+### Error Handling (GUI Mode)
 
-Use macros from `handler.rs`:
+Use macros from `src/gui/handler.rs` for GUI-specific error handling:
 - `fatal!(result)` - panic with logging (unrecoverable)
 - `nonfatal!(result)` - log and return early
+- `optional!(result)` - silently ignore errors (for optional operations like focus)
+
+These macros are GUI-only. In web mode, all operations are strictly request-response, so errors are always returned directly to the frontend via HTTP responses.
 
 In mutations, use the `precondition!` macro (defined in `mutations.rs`) to return `MutationResult::PreconditionError` for user-facing validation errors.
 
@@ -215,11 +229,19 @@ jj-lib and jj-cli dependencies are pinned to specific versions (see `Cargo.toml`
 ## Key Files to Reference
 
 - `DESIGN.md` - Core metaphors, architectural decisions, branch state machine
+- `.github/specs/gui-mode.md` - GUI mode technical specification
+- `.github/specs/web-mode.md` - Web mode technical specification
 - `app/mutators/BinaryMutator.ts` - All drag-drop operation policies
+- `app/ipc.ts` - IPC abstraction with runtime detection and dual transport
+- `src/main.rs` - CLI parsing, `RunOptions` struct, mode dispatch
 - `src/worker/mutations.rs` - All mutation implementations
 - `src/config/gg.toml` - Default configuration with inline docs
-- `src/gui/mod.rs` - GUI mode: Tauri windowing, menus, IPC handlers
-- `src/web/mod.rs` - Web mode: Axum server serving embedded assets
+- `src/gui/mod.rs` - GUI mode: Tauri windowing, multi-window state, IPC handlers
+- `src/gui/menu.rs` - GUI mode native menu bar and context menu definitions
+- `src/web/mod.rs` - Web mode: Axum server, HTTP API routes
+- `src/web/queries.rs` - Web mode query handlers
+- `src/web/triggers.rs` - Web mode trigger handlers
+- `app/controls/ContextMenu.svelte` - Web mode HTML context menu
 - `app/stores.ts` - Global Svelte stores for cross-component state
 
 ## Svelte Patterns
