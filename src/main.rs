@@ -127,8 +127,10 @@ fn main() -> Result<()> {
         return result;
     }
 
-    // before parsing args, attach a console on windows - will fail if not started from a shell, but that's fine
-    #[cfg(windows)]
+    // reattach console on windows for CLI output (--help, errors, etc.)
+    // only needed for "app" builds which have windows_subsystem = "windows"
+    // non-app builds are console apps and already have a console
+    #[cfg(all(windows, feature = "app"))]
     {
         windows::reattach_console();
     }
@@ -162,13 +164,21 @@ fn spawn_app() -> Result<()> {
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::inherit()); // forward logs until startup is complete
 
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+
+        // create pgroup so child survives SIGHUP
+        cmd.process_group(0);
+    }
+
     #[cfg(windows)]
     {
         use ::windows::Win32::System::Threading::{CREATE_NEW_PROCESS_GROUP, DETACHED_PROCESS};
         use std::os::windows::process::CommandExt;
 
-        // suppress console window
-        cmd.creation_flags(DETACHED_PROCESS.0 | CREATE_NEW_PROCESS_GROUP.0);
+        // create pgroup and suppress console window
+        cmd.creation_flags(CREATE_NEW_PROCESS_GROUP.0 | DETACHED_PROCESS.0);
     }
 
     // wait for startup (which is the only thing on stdout)

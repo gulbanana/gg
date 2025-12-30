@@ -13,6 +13,7 @@ use windows::Win32::UI::Shell::{
 };
 use windows::core::{BSTR, HSTRING, Interface, PWSTR, w};
 
+#[cfg_attr(not(feature = "app"), allow(dead_code))]
 pub fn reattach_console() {
     // safety: FFI
     let _ = unsafe { AttachConsole(ATTACH_PARENT_PROCESS) };
