@@ -31,7 +31,7 @@ path = "src/main.rs"
 # custom-protocol is magic - tauri build adds it, tauri dev removes. it's on by default so that cargo run works
 [features]
 default = ["custom-protocol"]
-gui = []
+app = []
 custom-protocol = ["tauri/custom-protocol"]
 ts-rs = ["dep:ts-rs"]
 

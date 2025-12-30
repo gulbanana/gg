@@ -22,7 +22,7 @@ beforeDevCommand = "npm run dev"
 devUrl = "http://localhost:6973"
 beforeBuildCommand = "npm run build"
 frontendDist = "dist"
-features = ["gui"]
+features = ["app"]
 
 [bundle]
 active = true # Comment this out or set to false to disable bundle compilation

@@ -1,9 +1,9 @@
-#![cfg_attr(feature = "gui", windows_subsystem = "windows")]
+#![cfg_attr(feature = "app", windows_subsystem = "windows")]
 
 mod config;
 mod git_util;
 mod gui;
-#[cfg(all(target_os = "macos", not(feature = "gui")))]
+#[cfg(all(target_os = "macos", not(feature = "app")))]
 mod macos;
 mod messages;
 mod web;
@@ -72,7 +72,7 @@ struct Args {
     #[arg(short, long, global = true)]
     debug: bool,
 
-    #[cfg(not(feature = "gui"))]
+    #[cfg(not(feature = "app"))]
     #[arg(
         long,
         global = true,
@@ -136,20 +136,20 @@ fn main() -> Result<()> {
     let args = Args::parse();
 
     // cargo run/install: act like a CLI that spawns a GUI in the background
-    #[cfg(not(feature = "gui"))]
+    #[cfg(not(feature = "app"))]
     if !args.foreground {
         spawn_app()
     } else {
         run_app(args)
     }
 
-    #[cfg(feature = "gui")]
+    #[cfg(feature = "app")]
     {
         run_app(args)
     }
 }
 
-#[cfg(not(feature = "gui"))]
+#[cfg(not(feature = "app"))]
 fn spawn_app() -> Result<()> {
     use std::io::{BufRead, BufReader};
     use std::process::{Command, Stdio, exit};
@@ -190,9 +190,9 @@ fn run_app(args: Args) -> Result<()> {
     let context = tauri::generate_context!();
 
     // When spawned as a child process, foreground flag is set by the parent
-    #[cfg(not(feature = "gui"))]
+    #[cfg(not(feature = "app"))]
     let is_child = args.foreground;
-    #[cfg(feature = "gui")]
+    #[cfg(feature = "app")]
     let is_child = false;
 
     let options = RunOptions {
