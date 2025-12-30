@@ -2,17 +2,17 @@ Planned Features
 ----------------
 > The best laid schemes o' mice an' men / Gang aft a-gley.
 
-* Optimise revdetail loads - we already have the header available.
+* Optimised revdetail loads - we already have the header available.
 * Multiselection, viewing and operating on revsets or changesets.
 * Undo/redo stack, possibly with a menu of recent ops.
 * Some way to access the resolve (mergetool) workflow. Difftools too, although this is less useful.
 * More stuff in the log - timestamps, commit ids... this might have to be configurable. 
-* Progress bar, particularly for git and snapshot operations.
 * Structured op descriptions - extracted ids etc, maybe via tags. This would benefit from being in JJ core.
 * "Onboarding" features - init/clone/colocate.
 * Relative timestamps should update on refocus.
 * Predefined menus (Edit, Window) for common OS functions.
-* Automatic creation of a new working copy when the current one becomes immutable.
+* Better handling of the case where a git remote refuses push because you haven't fetched yet.
+* Improved revset entry, with the ability to save and edit favourite revsets.
 
 UI Expansion
 ------------
@@ -22,3 +22,4 @@ With some dynamic way to show extra panes, replace content, open new windows &c,
 * View a revision at past evolutions (possibly this could be folded into the log).
 * Config UI, both for core stuff and gg's own settings.
 * Revision pinning for split/comparison workflows.
+* Better use of space in web mode.
