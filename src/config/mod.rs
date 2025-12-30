@@ -23,6 +23,7 @@ pub trait GGSettings {
     fn ui_track_recent_workspaces(&self) -> bool;
     #[allow(dead_code)]
     fn ui_recent_workspaces(&self) -> Vec<String>;
+    fn web_default_port(&self) -> u16;
 }
 
 impl GGSettings for UserSettings {
@@ -74,6 +75,10 @@ impl GGSettings for UserSettings {
                     .collect()
             })
             .unwrap_or_default()
+    }
+
+    fn web_default_port(&self) -> u16 {
+        self.get_int("gg.web.default-port").unwrap_or(0) as u16
     }
 }
 

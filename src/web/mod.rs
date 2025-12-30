@@ -22,6 +22,7 @@ use serde::Deserialize;
 use tauri_plugin_log::fern;
 use tokio::sync::oneshot;
 
+use crate::config::{GGSettings, read_config};
 use crate::messages::{
     AbandonRevisions, BackoutRevisions, CheckoutRevision, CopyChanges, CopyHunk, CreateRef,
     CreateRevision, CreateRevisionBetween, DeleteRef, DescribeRevision, DuplicateRevisions,
@@ -47,7 +48,7 @@ impl<E: Into<anyhow::Error>> From<E> for ApiError {
 }
 
 #[tokio::main]
-pub async fn run_web(options: super::RunOptions) -> Result<()> {
+pub async fn run_web(options: super::RunOptions, port: Option<u16>) -> Result<()> {
     fern::Dispatch::new()
         .level(LevelFilter::Warn)
         .level_for(
@@ -61,10 +62,12 @@ pub async fn run_web(options: super::RunOptions) -> Result<()> {
         .chain(std::io::stderr())
         .apply()?;
 
+    let (repo_settings, _) = read_config(options.workspace.as_deref())?;
+    let port_setting = port.unwrap_or_else(|| repo_settings.web_default_port());
+
     let (app, shutdown_rx) = create_app(options)?;
 
-    // bind to random port
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+    let listener = tokio::net::TcpListener::bind(format!("127.0.0.1:{port_setting}")).await?;
     let addr = listener.local_addr()?;
     let url = format!("http://{addr}");
     log::info!("Listening on {url}");
@@ -99,7 +102,12 @@ pub(self) fn create_app(options: super::RunOptions) -> Result<(Router, oneshot::
         });
     });
 
-    let state = AppState::new(options.context, worker_tx, shutdown_tx);
+    let state = AppState::new(
+        options.context,
+        worker_tx,
+        shutdown_tx,
+        Duration::from_secs(600),
+    );
 
     let app = Router::new()
         // static assets

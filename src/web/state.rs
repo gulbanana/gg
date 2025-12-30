@@ -155,12 +155,10 @@ impl AppState {
             return false;
         }
 
-        // Remove stale clients (no heartbeat for 10 minutes)
-        let timeout = Duration::from_secs(600);
         let mut clients = self.clients.lock().unwrap();
         let stale: Vec<String> = clients
             .iter()
-            .filter(|(_, last_seen)| last_seen.elapsed() > timeout)
+            .filter(|(_, last_seen)| last_seen.elapsed() > self.client_timeout)
             .map(|(id, _)| id.clone())
             .collect();
         for id in stale {

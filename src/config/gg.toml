@@ -24,3 +24,6 @@ mark-unpushed-bookmarks = true
 
 # "light" or "dark". If not set, your OS settings will be used.
 # theme-override =
+
+[gg.web]
+default-port = 0 # Port to bind to in web mode (0 = random)

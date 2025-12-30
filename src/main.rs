@@ -47,6 +47,10 @@ enum Subcommand {
     Web {
         /// Open this directory (instead of the current working directory).
         workspace: Option<PathBuf>,
+
+        /// Port to bind to (0 = random).
+        #[arg(short, long)]
+        port: Option<u16>,
     },
 }
 
@@ -85,20 +89,27 @@ impl Args {
 
     fn workspace(&self) -> Option<PathBuf> {
         match &self.command {
-            Some(Subcommand::Gui { workspace }) | Some(Subcommand::Web { workspace }) => {
+            Some(Subcommand::Gui { workspace }) | Some(Subcommand::Web { workspace, .. }) => {
                 workspace.clone()
             }
             None => self.workspace.clone(),
         }
     }
+
+    fn port(&self) -> Option<u16> {
+        match &self.command {
+            Some(Subcommand::Web { port, .. }) => *port,
+            _ => None,
+        }
+    }
 }
 
-struct RunOptions {
-    context: tauri::Context<tauri::Wry>,
-    settings: UserSettings,
-    workspace: Option<PathBuf>,
-    debug: bool,
-    is_child: bool,
+pub struct RunOptions {
+    pub context: tauri::Context<tauri::Wry>,
+    pub settings: UserSettings,
+    pub workspace: Option<PathBuf>,
+    pub debug: bool,
+    pub is_child: bool,
 }
 
 fn main() -> Result<()> {
@@ -185,6 +196,6 @@ fn run_app(args: Args) -> Result<()> {
 
     match mode {
         LaunchMode::Gui => gui::run_gui(options),
-        LaunchMode::Web => web::run_web(options),
+        LaunchMode::Web => web::run_web(options, args.port()),
     }
 }
