@@ -47,8 +47,14 @@ impl<E: Into<anyhow::Error>> From<E> for ApiError {
     }
 }
 
+#[derive(Default)]
+pub struct WebOptions {
+    pub port: Option<u16>,
+    pub no_launch: bool,
+}
+
 #[tokio::main]
-pub async fn run_web(options: super::RunOptions, port: Option<u16>) -> Result<()> {
+pub async fn run_web(options: super::RunOptions, web_options: WebOptions) -> Result<()> {
     fern::Dispatch::new()
         .level(LevelFilter::Warn)
         .level_for(
@@ -63,20 +69,26 @@ pub async fn run_web(options: super::RunOptions, port: Option<u16>) -> Result<()
         .apply()?;
 
     let (repo_settings, _) = read_config(options.workspace.as_deref())?;
-    let port = port.unwrap_or_else(|| repo_settings.web_default_port());
     let client_timeout = repo_settings.web_client_timeout();
-
     let (app, shutdown_rx) = create_app(options, client_timeout)?;
 
+    // bind to selected or random port
+    let port = web_options
+        .port
+        .unwrap_or_else(|| repo_settings.web_default_port());
     let listener = tokio::net::TcpListener::bind(format!("127.0.0.1:{port}")).await?;
     let addr = listener.local_addr()?;
     let url = format!("http://{addr}");
     log::info!("Listening on {url}");
 
     // open browser (best-effort)
-    tokio::task::spawn_blocking(move || {
-        let _ = webbrowser::open(&url);
-    });
+    let launch_browser = !web_options.no_launch && repo_settings.web_launch_browser();
+
+    if launch_browser {
+        tokio::task::spawn_blocking(move || {
+            let _ = webbrowser::open(&url);
+        });
+    }
 
     axum::serve(listener, app)
         .with_graceful_shutdown(async move {

@@ -26,6 +26,7 @@ pub trait GGSettings {
     fn ui_recent_workspaces(&self) -> Vec<String>;
     fn web_default_port(&self) -> u16;
     fn web_client_timeout(&self) -> Duration;
+    fn web_launch_browser(&self) -> bool;
 }
 
 impl GGSettings for UserSettings {
@@ -88,6 +89,10 @@ impl GGSettings for UserSettings {
             .ok()
             .and_then(|s| humantime::parse_duration(&s).ok())
             .unwrap_or(Duration::from_secs(600))
+    }
+
+    fn web_launch_browser(&self) -> bool {
+        self.get_bool("gg.web.launch-browser").unwrap_or(true)
     }
 }
 

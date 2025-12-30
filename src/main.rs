@@ -51,6 +51,10 @@ enum Subcommand {
         /// Port to bind to (0 = random).
         #[arg(short, long)]
         port: Option<u16>,
+
+        /// Don't open a browser automatically.
+        #[arg(long)]
+        no_launch: bool,
     },
 }
 
@@ -96,10 +100,15 @@ impl Args {
         }
     }
 
-    fn port(&self) -> Option<u16> {
+    fn web_options(&self) -> web::WebOptions {
         match &self.command {
-            Some(Subcommand::Web { port, .. }) => *port,
-            _ => None,
+            Some(Subcommand::Web {
+                port, no_launch, ..
+            }) => web::WebOptions {
+                port: *port,
+                no_launch: *no_launch,
+            },
+            _ => web::WebOptions::default(),
         }
     }
 }
@@ -196,6 +205,6 @@ fn run_app(args: Args) -> Result<()> {
 
     match mode {
         LaunchMode::Gui => gui::run_gui(options),
-        LaunchMode::Web => web::run_web(options, args.port()),
+        LaunchMode::Web => web::run_web(options, args.web_options()),
     }
 }

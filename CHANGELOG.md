@@ -7,6 +7,8 @@
 
   New command line options:
   * `-p/--port`: run on a specified port number (it'll be random otherwise).
+  * `--no-launch`: don't attempt to open a browser.
+  These can also be configured using some new `[gg.web]` settings.
 
   Web mode uses a standard request-response model, shutting down when all tabs are closed or haven't pinged the backend in a while. It has HTML dialogs and context menus instead of the native ones provided by Tauri.
 
