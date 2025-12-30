@@ -180,7 +180,7 @@
 
     function mutateTree(event: string) {
         if ($currentContext?.type == "Change") {
-            new ChangeMutator($currentContext.header, $currentContext.path).handle(event);
+            new ChangeMutator($currentContext.header, $currentContext.path, $currentContext.hunk).handle(event);
         }
         $currentContext = null;
     }

@@ -13,6 +13,7 @@
   Web mode uses a standard request-response model, shutting down when all tabs are closed or haven't pinged the backend in a while. It has HTML dialogs and context menus instead of the native ones provided by Tauri.
 
 - Multiple window support in gui mode (the existing default, or `gg gui` if you want to be explicit). The "Open..." command in the Repository menu will now open another workspace. Selections and window positions are preserved independently.
+- Restore and squash for individual hunks. Right-click on the header of a diff section in the right pane to manipulate it.
 - GIT_ASKPASS support - if you don't have a git credential manager set up, GG will configure the git subprocess doing a fetch or push to request credentials using its built-in dialogs. This shouldn't affect most people, as credential managers are generally included with distributions of git.
 - Cursor indication when something is clickable.
 

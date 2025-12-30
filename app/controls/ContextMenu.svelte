@@ -16,7 +16,7 @@
         if (operand.type === "Revision") {
             new RevisionMutator(operand.header).handle(action);
         } else if (operand.type === "Change") {
-            new ChangeMutator(operand.header, operand.path).handle(action);
+            new ChangeMutator(operand.header, operand.path, operand.hunk).handle(action);
         } else if (operand.type === "Ref") {
             new RefMutator(operand.ref).handle(action);
         }
