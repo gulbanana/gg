@@ -159,7 +159,15 @@ pub fn run_gui(options: super::RunOptions) -> Result<()> {
                 crate::macos::set_dock_icon();
             }
 
-            try_create_window(app.handle(), options.workspace.clone())?;
+            // open initial repo, unless a deep link's already done so
+            #[cfg(target_os = "macos")]
+            let has_window = recent_items::received_event();
+            #[cfg(not(target_os = "macos"))]
+            let has_window = false;
+
+            if !has_window {
+                try_create_window(app.handle(), options.workspace.clone())?;
+            }
 
             if options.is_child {
                 println!("Startup complete.");
