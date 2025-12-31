@@ -119,7 +119,7 @@ Core component for direct-manipulation objects. A drag&drop source.
     }
 
     .selected {
-        background: var(--ctp-base);
+        background: white;
     }
 
     .conflict {
