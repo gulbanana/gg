@@ -1,6 +1,6 @@
 # GG Changelog
 
-## Unreleased
+## [0.36.4](releases/tag/v0.36.4)
 
 ### Added
 - **Web Mode**: GG can now be run using `gg web`, which will start a web server and a browser instead of a desktop application. It has the same featureset apart from the lack of a top menubar and features inherent to the platform - only gui mode has a taskbar icon to right-click, only web mode supports http-proxy remote access, etc. 
@@ -18,17 +18,24 @@
 
   Web mode uses a standard request-response model, shutting down when all tabs are closed or haven't pinged the backend in a while. It has HTML dialogs and context menus instead of the native ones provided by Tauri.
 
-- In GUI mode, multiple window support. The "Open..." command in the Repository menu will now open another workspace. Selections and window positions are preserved independently.
-- When built as an app, MacOS recent-items support. The dock icon menu will show recent workspaces and can be used to open or switch between them.
 - Restore and squash for individual hunks. Right-click on the header of a diff section in the right pane to manipulate it.
+
 - GIT_ASKPASS support - if you don't have a git credential manager set up, GG will configure the git subprocess doing a fetch or push to request credentials using its built-in dialogs. This shouldn't affect most people, as credential managers are generally included with distributions of git.
-- Cursor indication when something is clickable.
+
+- There's now a cursor indication when something is clickable.
+
+- In GUI mode, multiple window support. The "Open..." command in the Repository menu will now open another workspace. Selections and window positions are preserved independently.
+
+- When built as an app, MacOS recent-items support. The dock icon menu will show recent workspaces and can be used to open or switch between them.
 
 ### Fixed
-- MacOS dock icon is no longer overridden if you *aren't* using the CLI build.
 - `receiving on a closed channel` error at shutdown.
+
 - Button icon colours not always responding correctly to modal overlays.
-- Improved child spawning when not built as an app (that is when you install from cargo) - `--foreground` and background modes work more consistently.
+
+- When built as an app, the MacOS dock icon is no longer overridden.
+
+- When built as a CLI, improved child spawning - background and `--foreground` modes work more consistently.
 
 ## [0.36.3](releases/tag/v0.36.3)
 
