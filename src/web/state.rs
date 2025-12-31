@@ -58,6 +58,8 @@ impl AppState {
     }
 
     async fn load_proxy(&self, path_and_query: &str) -> Result<Asset, StatusCode> {
+        log::debug!("load proxy asset: {}", path_and_query);
+
         let dev_url = format!("http://localhost:6973{}", path_and_query);
         let resp = self
             .http_client
@@ -84,6 +86,8 @@ impl AppState {
     }
 
     fn load_embedded(&self, path: &str) -> Result<Asset, StatusCode> {
+        log::debug!("load embedded asset: {}", path);
+
         let data: Bytes = self
             .context
             .assets
