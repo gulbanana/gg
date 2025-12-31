@@ -52,8 +52,12 @@ enum Subcommand {
         #[arg(short, long)]
         port: Option<u16>,
 
-        /// Don't open a browser automatically.
-        #[arg(long)]
+        /// Open a browser automatically (overrides gg.web.launch-browser config).
+        #[arg(long, conflicts_with = "no_launch")]
+        launch: bool,
+
+        /// Don't open a browser automatically (overrides gg.web.launch-browser config).
+        #[arg(long, conflicts_with = "launch")]
         no_launch: bool,
     },
 }
@@ -103,9 +107,13 @@ impl Args {
     fn web_options(&self) -> web::WebOptions {
         match &self.command {
             Some(Subcommand::Web {
-                port, no_launch, ..
+                port,
+                launch,
+                no_launch,
+                ..
             }) => web::WebOptions {
                 port: *port,
+                launch: *launch,
                 no_launch: *no_launch,
             },
             _ => web::WebOptions::default(),

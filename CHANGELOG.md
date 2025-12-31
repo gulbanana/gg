@@ -7,13 +7,13 @@
 
   New command line options:
   * `-p/--port`: run on a specified port number (default: random).
-  * `--no-launch`: don't attempt to open a browser.
+  * `--launch`/`--no-launch`: do/don't attempt to open a browser (default: do).
 
   These can also be configured using some new `[gg.web]` settings.
   New config settings:
   `gg.default-mode`: `"gui"` or `"web"`. This controls what `gg` does with no subcommand specified.
   `gg.web.default-port`: equivalent to `--port`.
-  `gg.web.launch-browser`: `true` by default, equivalent to `--no-launch` if `false`.
+  `gg.web.launch-browser`: equivalent to `--launch`/`--no-launch`.
   `gg.web.client-timeout`: how long the server should wait for a client ping before shutting down.
 
   Web mode uses a standard request-response model, shutting down when all tabs are closed or haven't pinged the backend in a while. It has HTML dialogs and context menus instead of the native ones provided by Tauri.

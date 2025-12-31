@@ -50,6 +50,7 @@ impl<E: Into<anyhow::Error>> From<E> for ApiError {
 #[derive(Default)]
 pub struct WebOptions {
     pub port: Option<u16>,
+    pub launch: bool,
     pub no_launch: bool,
 }
 
@@ -82,7 +83,13 @@ pub async fn run_web(options: super::RunOptions, web_options: WebOptions) -> Res
     log::info!("Listening on {url}");
 
     // open browser (best-effort)
-    let launch_browser = !web_options.no_launch && repo_settings.web_launch_browser();
+    let launch_browser = if web_options.launch {
+        true
+    } else if web_options.no_launch {
+        false
+    } else {
+        repo_settings.web_launch_browser()
+    };
 
     if launch_browser {
         tokio::task::spawn_blocking(move || {
