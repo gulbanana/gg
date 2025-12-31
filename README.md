@@ -5,12 +5,15 @@
 GG is a GUI for the version control system [Jujutsu](https://github.com/martinvonz/jj). It takes advantage of Jujutsu's composable primitives to present an interactive view of your repository. Just imagine: what if you were always in the middle of an interactive rebase, but this was actually good?
 
 ## Installation
-GG is a desktop application with a keyboard & mouse interface, written in [Tauri](https://tauri.app/). Binaries are available for several platforms on the [releases page](https://github.com/gulbanana/gg/releases). Use the `.dmg` or `.app.tar.gz` on MacOS, and the `.msi` or `.exe` on Windows. You can also build from source using `cargo install --locked gg-cli`.
+GG is a desktop application with a keyboard & mouse interface, written in [Tauri](https://tauri.app/). Binaries are available for several platforms on the [releases page](https://github.com/gulbanana/gg/releases). Use the `.dmg` or `.app.tar.gz` on MacOS, and the `.msi` or `.exe` on Windows. 
+
+You can also build from source using `cargo install --locked gg-cli`. This non-app build doesn't support as many OS integration features, but it's easier to package and detaches from your shell by default (use `--foreground` to prevent this).
 
 ### Setup 
 Put `gg` on your path and run it from a Jujutsu workspace, pass the workspace directory as an argument or launch it separately and use the Repository->Open menu item. Tips:
+- `gg` or `gg gui` will launch a native application, `gg web` will open a web browser.
 - On MacOS, try adding `/Applications/gg.app/Contents/MacOS/` to your PATH environment variable. On Windows, add `C:\Program Files\gg\`.
-- Using `gg &` on MacOS/Linux or `start gg` on Windows will run in the background without blocking your shell.
+- When using the app build, `gg &` on MacOS/Linux or `start gg` on Windows will run in the background without blocking your shell.
 - `gg --help` will display some possible command-line arguments.
 
 ### Configuration
