@@ -17,7 +17,8 @@
     "@tauri-apps/api": "^2.9.0",
     "@tauri-apps/plugin-shell": "^2.3.0",
     "feather-icons": "^4.29.1",
-    "modern-normalize": "^2.0.0"
+    "modern-normalize": "^2.0.0",
+    "svelte-splitpanes": "^8.0.12"
   },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^6.0.0",

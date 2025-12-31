@@ -1,0 +1,11 @@
+diff --git a/dist/internal/env.js b/dist/internal/env.js
+index 8f54a49f40bc6c81413f7ec9701b5124f48c1dc4..f9c9d8533fb763382e43a74f14039f32e925c671 100644
+--- a/dist/internal/env.js
++++ b/dist/internal/env.js
+@@ -6,4 +6,5 @@
+  *
+  * @see https://kit.svelte.dev/docs/modules#$app-environment
+  */
+-export { browser } from '$app/environment';
++const browser = true;
++export { browser }; //from '$app/environment';
