@@ -66,7 +66,7 @@ jobs:
           CARGO_PROFILE_RELEASE_LTO: 'true'
           CARGO_PROFILE_RELEASE_CODEGEN_UNITS: '1'
         with:
-          args: ${{ matrix.platform == 'macos-latest' && '--target universal-apple-darwin --verbose -- --no-default-features' || '--verbose -- --no-default-features'}}
+          args: ${{ matrix.platform == 'macos-latest' && '--target universal-apple-darwin --verbose' || '--verbose'}}
           tagName: v__VERSION__
           releaseName: 'GG __VERSION__'
           releaseBody: 'See the assets to download this version and install.'
