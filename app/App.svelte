@@ -38,6 +38,7 @@
     import type Settings from "./shell/Settings";
     import type { RepoEvent } from "./messages/RepoEvent";
     import RepositoryMutator from "./mutators/RepositoryMutator";
+    import { Splitpanes, Pane as SplitPane } from "svelte-splitpanes";
 
     let selection: Query<RevsResult> = {
         type: "wait",
@@ -250,31 +251,37 @@
 
             <Pane />
         {:else if $repoConfigEvent.type == "Workspace"}
-            {#key $repoConfigEvent.absolute_path}
-                <LogPane default_query={$repoConfigEvent.default_query} latest_query={$repoConfigEvent.latest_query} />
-            {/key}
+            <Splitpanes>
+                {#key $repoConfigEvent.absolute_path}
+                    <SplitPane minSize={30}>
+                        <LogPane
+                            default_query={$repoConfigEvent.default_query}
+                            latest_query={$repoConfigEvent.latest_query} />
+                    </SplitPane>
+                {/key}
 
-            <div class="separator"></div>
-
-            <BoundQuery query={selection} let:data>
-                {#if data.type == "Detail"}
-                    <RevisionPane revs={data} />
-                {:else}
-                    <Pane>
-                        <h2 slot="header">Not Found</h2>
-                        <p slot="body">
-                            Empty revision set <SetSpan set={data.set} />.
-                        </p>
-                    </Pane>
-                {/if}
-                <Pane slot="error" let:message>
-                    <h2 slot="header">Error</h2>
-                    <p slot="body">{message}</p>
-                </Pane>
-                <Pane slot="wait">
-                    <h2 slot="header">Loading...</h2>
-                </Pane>
-            </BoundQuery>
+                <SplitPane minSize={10}>
+                    <BoundQuery query={selection} let:data>
+                        {#if data.type == "Detail"}
+                            <RevisionPane revs={data} />
+                        {:else}
+                            <Pane>
+                                <h2 slot="header">Not Found</h2>
+                                <p slot="body">
+                                    Empty revision set <SetSpan set={data.set} />.
+                                </p>
+                            </Pane>
+                        {/if}
+                        <Pane slot="error" let:message>
+                            <h2 slot="header">Error</h2>
+                            <p slot="body">{message}</p>
+                        </Pane>
+                        <Pane slot="wait">
+                            <h2 slot="header">Loading...</h2>
+                        </Pane>
+                    </BoundQuery>
+                </SplitPane>
+            </Splitpanes>
         {:else if $repoConfigEvent.type == "LoadError"}
             <ModalOverlay>
                 <ErrorDialog title="No Workspace Loaded">
@@ -354,20 +361,20 @@
 <style>
     #shell {
         width: 100vw;
-        height: 100vh;
+        height: 95vh;
 
-        display: grid;
+        /* display: grid;
         grid-template-columns: 1fr 3px 1fr;
         grid-template-rows: 1fr 3px 30px;
         grid-template-areas:
             "content content content"
             ". . ."
-            "footer footer footer";
+            "footer footer footer"; */
 
         background: var(--ctp-crust);
         color: var(--ctp-text);
 
-        user-select: none;
+        user-select: text;
     }
 
     .separator {
@@ -377,5 +384,11 @@
     p {
         pointer-events: auto;
         user-select: text;
+    }
+    :global(.splitpanes__splitter){
+        pointer-events: auto !important;
+    }
+    :global(.splitpanes__pane){
+        /* overflow-y: auto !important; */
     }
 </style>
