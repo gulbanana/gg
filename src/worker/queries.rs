@@ -298,7 +298,6 @@ pub fn query_log(ws: &WorkspaceSession, revset_str: &str, max_results: usize) ->
     session.get_page()
 }
 
-// XXX this is reloading the header, which the client already has
 pub async fn query_revision(ws: &WorkspaceSession<'_>, id: RevId) -> Result<RevResult> {
     let commit = match ws.resolve_optional_id(&id)? {
         Some(commit) => commit,

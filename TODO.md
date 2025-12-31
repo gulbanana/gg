@@ -2,7 +2,6 @@ Planned Features
 ----------------
 > The best laid schemes o' mice an' men / Gang aft a-gley.
 
-* Optimised revdetail loads - we already have the header available.
 * Multiselection, viewing and operating on revsets or changesets.
 * Undo/redo stack, possibly with a menu of recent ops.
 * Some way to access the resolve (mergetool) workflow. Difftools too, although this is less useful.
