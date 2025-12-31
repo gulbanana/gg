@@ -533,21 +533,16 @@ pub fn try_create_window(app_handle: &AppHandle, workspace: Option<PathBuf>) -> 
         },
     );
 
-    // listen for menu events
-    window.on_menu_event(|w, e| handler::fatal!(menu::handle_event(w, e)));
-
-    // listen for control events
-    let windows = app_state.windows.clone();
+    // window lifecycle events
     let handle = window.as_ref().window();
-    let label = window.label().to_owned();
     window.on_window_event(move |event| {
-        handle_window_event(&handle, event);
-        if matches!(event, WindowEvent::Destroyed) {
-            windows.lock().unwrap().remove(&label);
-        }
+        handler::nonfatal!(handle_window_event(&handle, event));
     });
 
-    // listen for custom events
+    // menu selection events
+    window.on_menu_event(|w, e| handler::fatal!(menu::handle_event(w, e)));
+
+    // menu enablement events
     let windows = app_state.windows.clone();
     let handle = app_handle.clone();
     let label = window.label().to_owned();
@@ -662,35 +657,48 @@ fn try_mutate<T: Mutation + Send + Sync + 'static>(
     call_rx.recv().map_err(InvokeError::from_error)
 }
 
-fn handle_window_event(window: &Window, event: &WindowEvent) {
-    if let WindowEvent::Focused(true) = *event {
-        log::debug!("window focused; requesting snapshot");
-
-        let app_state = window.state::<AppState>();
-
-        let selection = app_state.get_selection(window.label());
-        if let Some(menu) = window.app_handle().menu() {
-            handler::nonfatal!(menu::handle_selection(menu, selection));
+fn handle_window_event(window: &Window, event: &WindowEvent) -> Result<()> {
+    match *event {
+        WindowEvent::CloseRequested { .. } => {
+            // not only does tauri not do this, it's got an internal UAF!
+            window.remove_menu()?;
         }
+        WindowEvent::Destroyed => {
+            let app_state = window.state::<AppState>();
+            app_state.windows.lock().unwrap().remove(window.label());
+        }
+        WindowEvent::Focused(true) => {
+            log::debug!("window focused; requesting snapshot");
 
-        let session_tx: Sender<SessionEvent> = app_state.get_session(window.label());
-        let (call_tx, call_rx) = channel();
+            let app_state = window.state::<AppState>();
 
-        handler::nonfatal!(session_tx.send(SessionEvent::ExecuteSnapshot { tx: call_tx }));
-
-        // events are handled on the main thread, so don't wait for
-        // a worker response - that's a recipe for deadlock
-        let window = window.clone();
-        thread::spawn(move || {
-            if let Some(status) = handler::nonfatal!(call_rx.recv()) {
-                handler::nonfatal!(window.emit_to(
-                    EventTarget::labeled(window.label()),
-                    "gg://repo/status",
-                    status
-                ));
+            let selection = app_state.get_selection(window.label());
+            if let Some(menu) = window.app_handle().menu() {
+                menu::handle_selection(menu, selection)?;
             }
-        });
+
+            let session_tx: Sender<SessionEvent> = app_state.get_session(window.label());
+            let (call_tx, call_rx) = channel();
+
+            session_tx.send(SessionEvent::ExecuteSnapshot { tx: call_tx })?;
+
+            // events are handled on the main thread, so don't wait for
+            // a worker response - that's a recipe for deadlock
+            let window = window.clone();
+            thread::spawn(move || {
+                if let Some(status) = handler::nonfatal!(call_rx.recv()) {
+                    handler::nonfatal!(window.emit_to(
+                        EventTarget::labeled(window.label()),
+                        "gg://repo/status",
+                        status,
+                    ));
+                }
+            });
+        }
+        _ => (),
     }
+
+    Ok(())
 }
 
 // we're working with OS bindings that _don't_ use OsStr/PathBuf
