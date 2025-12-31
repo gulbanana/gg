@@ -395,3 +395,143 @@ async fn config_write() -> Result<()> {
 
     Ok(())
 }
+
+#[tokio::test]
+async fn init_workspace_internal() -> Result<()> {
+    let dir = tempfile::tempdir()?;
+
+    let (tx, rx) = channel::<SessionEvent>();
+    let (tx_init, rx_init) = channel::<Result<PathBuf>>();
+
+    tx.send(SessionEvent::InitWorkspace {
+        tx: tx_init,
+        wd: dir.path().to_owned(),
+        colocated: false,
+    })?;
+    tx.send(SessionEvent::EndSession)?;
+
+    WorkerSession::default().handle_events(&rx).await?;
+
+    let result = rx_init.recv()??;
+    assert_eq!(result, dunce::canonicalize(dir.path())?);
+
+    assert!(dir.path().join(".jj").exists());
+    assert!(!dir.path().join(".git").exists());
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn init_workspace_colocated() -> Result<()> {
+    let dir = tempfile::tempdir()?;
+
+    let (tx, rx) = channel::<SessionEvent>();
+    let (tx_init, rx_init) = channel::<Result<PathBuf>>();
+
+    tx.send(SessionEvent::InitWorkspace {
+        tx: tx_init,
+        wd: dir.path().to_owned(),
+        colocated: true,
+    })?;
+    tx.send(SessionEvent::EndSession)?;
+
+    WorkerSession::default().handle_events(&rx).await?;
+
+    let result = rx_init.recv()??;
+    assert_eq!(result, dunce::canonicalize(dir.path())?);
+
+    // Verify both .jj and .git were created
+    assert!(dir.path().join(".jj").exists());
+    assert!(dir.path().join(".git").exists());
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn init_workspace_colocated_existing_git() -> Result<()> {
+    let dir = tempfile::tempdir()?;
+
+    std::fs::create_dir(dir.path().join(".git"))?;
+    std::fs::write(
+        dir.path().join(".git").join("HEAD"),
+        "ref: refs/heads/main\n",
+    )?;
+    std::fs::create_dir(dir.path().join(".git").join("objects"))?;
+    std::fs::create_dir(dir.path().join(".git").join("refs"))?;
+
+    let (tx, rx) = channel::<SessionEvent>();
+    let (tx_init, rx_init) = channel::<Result<PathBuf>>();
+
+    tx.send(SessionEvent::InitWorkspace {
+        tx: tx_init,
+        wd: dir.path().to_owned(),
+        colocated: true,
+    })?;
+    tx.send(SessionEvent::EndSession)?;
+
+    WorkerSession::default().handle_events(&rx).await?;
+
+    let result = rx_init.recv()??;
+    assert_eq!(result, dunce::canonicalize(dir.path())?);
+
+    assert!(dir.path().join(".jj").exists());
+    assert!(dir.path().join(".git").exists());
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn init_workspace_from_workspace_session() -> Result<()> {
+    let existing_repo = mkrepo();
+    let new_dir = tempfile::tempdir()?;
+
+    let (tx, rx) = channel::<SessionEvent>();
+    let (tx_load, rx_load) = channel::<Result<RepoConfig>>();
+    let (tx_init, rx_init) = channel::<Result<PathBuf>>();
+
+    tx.send(SessionEvent::OpenWorkspace {
+        tx: tx_load,
+        wd: Some(existing_repo.path().to_owned()),
+    })?;
+    tx.send(SessionEvent::InitWorkspace {
+        tx: tx_init,
+        wd: new_dir.path().to_owned(),
+        colocated: false,
+    })?;
+    tx.send(SessionEvent::EndSession)?;
+
+    WorkerSession::default().handle_events(&rx).await?;
+
+    _ = rx_load.recv()??;
+
+    let result = rx_init.recv()??;
+    assert_eq!(result, dunce::canonicalize(new_dir.path())?);
+    assert!(new_dir.path().join(".jj").exists());
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn init_workspace_already_exists() -> Result<()> {
+    let dir = tempfile::tempdir()?;
+
+    std::fs::create_dir(dir.path().join(".jj"))?;
+
+    let (tx, rx) = channel::<SessionEvent>();
+    let (tx_init, rx_init) = channel::<Result<PathBuf>>();
+
+    tx.send(SessionEvent::InitWorkspace {
+        tx: tx_init,
+        wd: dir.path().to_owned(),
+        colocated: false,
+    })?;
+    tx.send(SessionEvent::EndSession)?;
+
+    WorkerSession::default().handle_events(&rx).await?;
+
+    let result = rx_init.recv()?;
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("already exists"));
+
+    Ok(())
+}

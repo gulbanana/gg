@@ -35,6 +35,11 @@ pub enum SessionEvent {
         tx: Sender<Result<messages::RepoConfig>>,
         wd: Option<PathBuf>,
     },
+    InitWorkspace {
+        tx: Sender<Result<PathBuf>>,
+        wd: PathBuf,
+        colocated: bool,
+    },
     QueryRevision {
         tx: Sender<Result<messages::RevResult>>,
         id: messages::RevId,
@@ -117,6 +122,9 @@ impl Session for WorkerSession {
                             .context("read config"),
                     )?;
                 }
+                Ok(SessionEvent::InitWorkspace { tx, wd, colocated }) => {
+                    tx.send(self.init_workspace(&wd, colocated))?;
+                }
                 Ok(SessionEvent::OpenWorkspace { mut tx, mut wd }) => loop {
                     let resolved_wd = match wd.clone().or(latest_wd) {
                         Some(wd) => wd,
@@ -192,6 +200,9 @@ impl Session for WorkspaceSession<'_> {
                 SessionEvent::EndSession => return Ok(WorkspaceResult::SessionComplete),
                 SessionEvent::OpenWorkspace { tx, wd: cwd } => {
                     return Ok(WorkspaceResult::Reopen(tx, cwd));
+                }
+                SessionEvent::InitWorkspace { tx, wd, colocated } => {
+                    tx.send(self.session.init_workspace(&wd, colocated))?;
                 }
                 SessionEvent::QueryRevision { tx, id } => {
                     tx.send(queries::query_revision(&self, id).await)?

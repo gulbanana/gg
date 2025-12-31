@@ -17,7 +17,7 @@ use std::{
 };
 
 use anyhow::{Error, Result, anyhow};
-use jj_lib::settings::UserSettings;
+use jj_lib::{settings::UserSettings, workspace::Workspace};
 use serde::Serialize;
 
 use crate::messages;
@@ -95,5 +95,32 @@ impl WorkerSession {
                 Err(err) => Some(Err(anyhow!(err))),
             })
             .unwrap_or_else(|| env::current_dir().map_err(Error::new))
+    }
+
+    /// actually creates a repository, but jj considers that a special case of creating a workspace
+    pub fn init_workspace(&self, location: &PathBuf, colocated: bool) -> Result<PathBuf> {
+        // precondition: not already a jj repo
+        let jj_path = location.join(".jj");
+        if jj_path.exists() {
+            return Err(anyhow!(
+                "A Jujutsu repository already exists in this directory"
+            ));
+        }
+
+        let canonical_location = dunce::canonicalize(location)?;
+        let (settings, _) = crate::config::read_config(None)?;
+
+        if colocated {
+            let git_path = location.join(".git");
+            if git_path.exists() {
+                Workspace::init_external_git(&settings, &canonical_location, &git_path)?; // existing .git/, create .jj
+            } else {
+                Workspace::init_colocated_git(&settings, &canonical_location)?; // create .git/ and .jj/
+            }
+        } else {
+            Workspace::init_internal_git(&settings, &canonical_location)?; // create .jj/ with a .git/ inside it
+        }
+
+        Ok(canonical_location)
     }
 }
