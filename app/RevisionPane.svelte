@@ -9,7 +9,7 @@
     import Icon from "./controls/Icon.svelte";
     import IdSpan from "./controls/IdSpan.svelte";
     import Pane from "./shell/Pane.svelte";
-    import CheckWidget from "./controls/CheckWidget.svelte";
+    import ToggleWidget from "./controls/ToggleWidget.svelte";
     import Zone from "./objects/Zone.svelte";
     import { onEvent } from "./ipc";
     import AuthorSpan from "./controls/AuthorSpan.svelte";
@@ -141,7 +141,7 @@
         <div class="signature-commands">
             <span>Author:</span>
             <AuthorSpan author={rev.header.author} includeTimestamp />
-            <CheckWidget bind:checked={resetAuthor}>Reset</CheckWidget>
+            <ToggleWidget bind:checked={resetAuthor}>Reset</ToggleWidget>
             <span></span>
             <ActionWidget
                 tip="set commit message"

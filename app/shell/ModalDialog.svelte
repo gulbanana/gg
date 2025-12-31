@@ -69,12 +69,25 @@
         gap: 3px 6px;
     }
 
+    #dialog-content > :global(:nth-child(even)) {
+        justify-self: start;
+    }
+
     #dialog-content :global(select),
     #dialog-content :global(input) {
-        min-height: 30px;
-        min-width: 180px;
+        height: 30px;
+        min-width: 30px;
+
         font-family: var(--stack-code);
         font-size: 14px;
+    }
+    #dialog-content :global(select),
+    #dialog-content :global(input[type="text"]),
+    #dialog-content :global(input[type="password"]) {
+        min-width: 180px;
+    }
+    #dialog-content :global(input[type="checkbox"]) {
+        vertical-align: middle;
     }
 
     #dialog-commands {
