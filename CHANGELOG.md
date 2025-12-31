@@ -3,16 +3,23 @@
 ## Unreleased
 
 ### Added
-- **Web Mode**: GG can now be run using `gg web` (or you can change the `gg.default-mode` setting from `gui` to `web`), which will start a web server and a browser instead of a desktop application. It has the same featureset apart from the lack of a top menubar and features inherent to the platform - only gui mode has a taskbar icon to right-click, only web mode supports http-proxy remote access, etc. 
+- **Web Mode**: GG can now be run using `gg web`, which will start a web server and a browser instead of a desktop application. It has the same featureset apart from the lack of a top menubar and features inherent to the platform - only gui mode has a taskbar icon to right-click, only web mode supports http-proxy remote access, etc. 
 
   New command line options:
-  * `-p/--port`: run on a specified port number (it'll be random otherwise).
+  * `-p/--port`: run on a specified port number (default: random).
   * `--no-launch`: don't attempt to open a browser.
+
   These can also be configured using some new `[gg.web]` settings.
+  New config settings:
+  `gg.default-mode`: `"gui"` or `"web"`. This controls what `gg` does with no subcommand specified.
+  `gg.web.default-port`: equivalent to `--port`.
+  `gg.web.launch-browser`: `true` by default, equivalent to `--no-launch` if `false`.
+  `gg.web.client-timeout`: how long the server should wait for a client ping before shutting down.
 
   Web mode uses a standard request-response model, shutting down when all tabs are closed or haven't pinged the backend in a while. It has HTML dialogs and context menus instead of the native ones provided by Tauri.
 
-- Multiple window support in gui mode (the existing default, or `gg gui` if you want to be explicit). The "Open..." command in the Repository menu will now open another workspace. Selections and window positions are preserved independently.
+- In GUI mode, multiple window support. The "Open..." command in the Repository menu will now open another workspace. Selections and window positions are preserved independently.
+- When built as an app, MacOS recent-items support. The dock icon menu will show recent workspaces and can be used to open or switch between them.
 - Restore and squash for individual hunks. Right-click on the header of a diff section in the right pane to manipulate it.
 - GIT_ASKPASS support - if you don't have a git credential manager set up, GG will configure the git subprocess doing a fetch or push to request credentials using its built-in dialogs. This shouldn't affect most people, as credential managers are generally included with distributions of git.
 - Cursor indication when something is clickable.

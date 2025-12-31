@@ -1,5 +1,7 @@
 mod handler;
 mod menu;
+#[cfg(target_os = "macos")]
+mod recent_items;
 
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
@@ -81,7 +83,7 @@ fn label_for_path(path: Option<&PathBuf>) -> String {
 }
 
 pub fn run_gui(options: super::RunOptions) -> Result<()> {
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(
@@ -149,6 +151,7 @@ pub fn run_gui(options: super::RunOptions) -> Result<()> {
             undo_operation,
         ])
         .menu(menu::build_main)
+        .manage(AppState::new(options.settings))
         .setup(move |app| {
             // after tauri initialises NSApplication, set the dock icon if we're running as CLI
             #[cfg(all(target_os = "macos", not(feature = "app")))]
@@ -163,9 +166,12 @@ pub fn run_gui(options: super::RunOptions) -> Result<()> {
             }
 
             Ok(())
-        })
-        .manage(AppState::new(options.settings))
-        .run(options.context)?;
+        });
+
+    #[cfg(target_os = "macos")]
+    let app = app.plugin(recent_items::init());
+
+    app.run(options.context)?;
 
     Ok(())
 }
@@ -620,14 +626,14 @@ fn try_open_repository(window: &Window, cwd: Option<PathBuf>) -> Result<messages
             track_recent_workspaces,
             ..
         } => {
-            let repo_path = absolute_path.0.clone();
-            _ = window.set_title((String::from("GG - ") + repo_path.as_str()).as_str());
+            let workspace_path = absolute_path.0.clone();
+            _ = window.set_title((String::from("GG - ") + workspace_path.as_str()).as_str());
 
             // update config and jump lists - this can be slow
             if *track_recent_workspaces {
                 let window = window.clone();
                 thread::spawn(move || {
-                    handler::nonfatal!(add_recent_workspaces(window, &repo_path));
+                    handler::nonfatal!(add_recent_workspaces(window, workspace_path));
                 });
             }
         }
@@ -687,7 +693,8 @@ fn handle_window_event(window: &Window, event: &WindowEvent) {
     }
 }
 
-fn add_recent_workspaces(window: Window, repo_path: &str) -> Result<()> {
+// we're working with OS bindings that _don't_ use OsStr/PathBuf
+fn add_recent_workspaces(window: Window, workspace_path: String) -> Result<()> {
     let app_state = window.state::<AppState>();
     let session_tx: Sender<SessionEvent> = app_state.get_session(window.label());
 
@@ -701,13 +708,23 @@ fn add_recent_workspaces(window: Window, repo_path: &str) -> Result<()> {
         tx: read_tx,
     })?;
     let mut recent = read_rx.recv()??;
-    recent.retain(|x| x != repo_path);
-    recent.insert(0, repo_path.to_owned());
+    recent.retain(|x| x != &workspace_path);
+    recent.insert(0, workspace_path.clone());
     recent.truncate(10);
 
     #[cfg(windows)]
     {
         crate::windows::update_jump_list(&mut recent)?;
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        window
+            .app_handle()
+            .run_on_main_thread(move || {
+                crate::macos::note_recent_document(workspace_path);
+            })
+            .ok();
     }
 
     session_tx.send(SessionEvent::WriteConfigArray {

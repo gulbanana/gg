@@ -3,7 +3,7 @@
 mod config;
 mod git_util;
 mod gui;
-#[cfg(all(target_os = "macos", not(feature = "app")))]
+#[cfg(target_os = "macos")]
 mod macos;
 mod messages;
 mod web;
