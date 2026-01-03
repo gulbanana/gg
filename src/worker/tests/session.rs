@@ -3,7 +3,7 @@ use crate::{
     messages::{LogPage, RepoConfig, RevResult},
     worker::{Session, SessionEvent, WorkerSession},
 };
-use anyhow::Result;
+use anyhow::{Context, Result};
 use jj_lib::config::ConfigSource;
 use std::{path::PathBuf, sync::mpsc::channel};
 
@@ -532,6 +532,320 @@ async fn init_workspace_already_exists() -> Result<()> {
     let result = rx_init.recv()?;
     assert!(result.is_err());
     assert!(result.unwrap_err().to_string().contains("already exists"));
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn clone_workspace_internal() -> Result<()> {
+    // Create a source repo to clone from (colocated so it has .git)
+    let source_dir = tempfile::tempdir()?;
+    let dest_dir = tempfile::tempdir()?;
+
+    // First, init a colocated source repo
+    let (tx, rx) = channel::<SessionEvent>();
+    let (tx_init, rx_init) = channel::<Result<PathBuf>>();
+
+    tx.send(SessionEvent::InitWorkspace {
+        tx: tx_init,
+        wd: source_dir.path().to_owned(),
+        colocated: true,
+    })?;
+    tx.send(SessionEvent::EndSession)?;
+
+    WorkerSession::default().handle_events(&rx).await?;
+    rx_init.recv()??;
+
+    // Now clone from the source repo
+    let (tx, rx) = channel::<SessionEvent>();
+    let (tx_clone, rx_clone) = channel::<Result<PathBuf>>();
+
+    let source_path = source_dir.path().to_string_lossy().to_string();
+    tx.send(SessionEvent::CloneWorkspace {
+        tx: tx_clone,
+        source_url: source_path,
+        wd: dest_dir.path().to_owned(),
+        colocated: false,
+    })?;
+    tx.send(SessionEvent::EndSession)?;
+
+    WorkerSession::default().handle_events(&rx).await?;
+
+    let result = rx_clone.recv()??;
+    assert_eq!(result, dunce::canonicalize(dest_dir.path())?);
+
+    // Verify .jj was created but not .git (internal clone)
+    assert!(dest_dir.path().join(".jj").exists());
+    assert!(!dest_dir.path().join(".git").exists());
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn clone_workspace_colocated() -> Result<()> {
+    // Create a source repo to clone from
+    let source_dir = tempfile::tempdir()?;
+    let dest_dir = tempfile::tempdir()?;
+
+    // First, init a colocated source repo
+    let (tx, rx) = channel::<SessionEvent>();
+    let (tx_init, rx_init) = channel::<Result<PathBuf>>();
+
+    tx.send(SessionEvent::InitWorkspace {
+        tx: tx_init,
+        wd: source_dir.path().to_owned(),
+        colocated: true,
+    })?;
+    tx.send(SessionEvent::EndSession)?;
+
+    WorkerSession::default().handle_events(&rx).await?;
+    rx_init.recv()??;
+
+    // Now clone from the source repo with colocated option
+    let (tx, rx) = channel::<SessionEvent>();
+    let (tx_clone, rx_clone) = channel::<Result<PathBuf>>();
+
+    let source_path = source_dir.path().to_string_lossy().to_string();
+    tx.send(SessionEvent::CloneWorkspace {
+        tx: tx_clone,
+        source_url: source_path,
+        wd: dest_dir.path().to_owned(),
+        colocated: true,
+    })?;
+    tx.send(SessionEvent::EndSession)?;
+
+    WorkerSession::default().handle_events(&rx).await?;
+
+    let result = rx_clone.recv()??;
+    assert_eq!(result, dunce::canonicalize(dest_dir.path())?);
+
+    // Verify both .jj and .git were created
+    assert!(dest_dir.path().join(".jj").exists());
+    assert!(dest_dir.path().join(".git").exists());
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn clone_workspace_from_workspace_session() -> Result<()> {
+    let existing_repo = mkrepo();
+    let source_dir = tempfile::tempdir()?;
+    let dest_dir = tempfile::tempdir()?;
+
+    // First, init a source repo to clone from
+    {
+        let (tx, rx) = channel::<SessionEvent>();
+        let (tx_init, rx_init) = channel::<Result<PathBuf>>();
+
+        tx.send(SessionEvent::InitWorkspace {
+            tx: tx_init,
+            wd: source_dir.path().to_owned(),
+            colocated: true,
+        })?;
+        tx.send(SessionEvent::EndSession)?;
+
+        WorkerSession::default().handle_events(&rx).await?;
+        rx_init.recv()??;
+    }
+
+    // Now open an existing workspace and clone from there
+    let (tx, rx) = channel::<SessionEvent>();
+    let (tx_load, rx_load) = channel::<Result<RepoConfig>>();
+    let (tx_clone, rx_clone) = channel::<Result<PathBuf>>();
+
+    tx.send(SessionEvent::OpenWorkspace {
+        tx: tx_load,
+        wd: Some(existing_repo.path().to_owned()),
+    })?;
+
+    let source_path = source_dir.path().to_string_lossy().to_string();
+    tx.send(SessionEvent::CloneWorkspace {
+        tx: tx_clone,
+        source_url: source_path,
+        wd: dest_dir.path().to_owned(),
+        colocated: false,
+    })?;
+    tx.send(SessionEvent::EndSession)?;
+
+    WorkerSession::default().handle_events(&rx).await?;
+
+    _ = rx_load.recv()??;
+
+    let result = rx_clone.recv()??;
+    assert_eq!(result, dunce::canonicalize(dest_dir.path())?);
+    assert!(dest_dir.path().join(".jj").exists());
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn clone_workspace_dest_nonempty_error() -> Result<()> {
+    let source_dir = tempfile::tempdir()?;
+    let dest_dir = tempfile::tempdir()?;
+
+    // First, init a source repo
+    {
+        let (tx, rx) = channel::<SessionEvent>();
+        let (tx_init, rx_init) = channel::<Result<PathBuf>>();
+
+        tx.send(SessionEvent::InitWorkspace {
+            tx: tx_init,
+            wd: source_dir.path().to_owned(),
+            colocated: true,
+        })?;
+        tx.send(SessionEvent::EndSession)?;
+
+        WorkerSession::default().handle_events(&rx).await?;
+        rx_init.recv()??;
+    }
+
+    // Create a file in destination to make it non-empty
+    std::fs::write(dest_dir.path().join("existing_file.txt"), "content")?;
+
+    // Try to clone - should fail
+    let (tx, rx) = channel::<SessionEvent>();
+    let (tx_clone, rx_clone) = channel::<Result<PathBuf>>();
+
+    let source_path = source_dir.path().to_string_lossy().to_string();
+    tx.send(SessionEvent::CloneWorkspace {
+        tx: tx_clone,
+        source_url: source_path,
+        wd: dest_dir.path().to_owned(),
+        colocated: false,
+    })?;
+    tx.send(SessionEvent::EndSession)?;
+
+    WorkerSession::default().handle_events(&rx).await?;
+
+    let result = rx_clone.recv()?;
+    assert!(result.is_err());
+    assert!(result.unwrap_err().to_string().contains("not empty"));
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn clone_workspace_dest_empty_ok() -> Result<()> {
+    let source_dir = tempfile::tempdir()?;
+    let dest_dir = tempfile::tempdir()?;
+
+    // First, init a source repo
+    {
+        let (tx, rx) = channel::<SessionEvent>();
+        let (tx_init, rx_init) = channel::<Result<PathBuf>>();
+
+        tx.send(SessionEvent::InitWorkspace {
+            tx: tx_init,
+            wd: source_dir.path().to_owned(),
+            colocated: true,
+        })?;
+        tx.send(SessionEvent::EndSession)?;
+
+        WorkerSession::default().handle_events(&rx).await?;
+        rx_init.recv()??;
+    }
+
+    // Destination exists but is empty - should succeed
+    let (tx, rx) = channel::<SessionEvent>();
+    let (tx_clone, rx_clone) = channel::<Result<PathBuf>>();
+
+    let source_path = source_dir.path().to_string_lossy().to_string();
+    tx.send(SessionEvent::CloneWorkspace {
+        tx: tx_clone,
+        source_url: source_path,
+        wd: dest_dir.path().to_owned(),
+        colocated: false,
+    })?;
+    tx.send(SessionEvent::EndSession)?;
+
+    WorkerSession::default().handle_events(&rx).await?;
+
+    let result = rx_clone.recv()??;
+    assert_eq!(result, dunce::canonicalize(dest_dir.path())?);
+    assert!(dest_dir.path().join(".jj").exists());
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn clone_workspace_checks_out_file_content() -> Result<()> {
+    use std::process::Command;
+
+    let source_dir = tempfile::tempdir()?;
+    let dest_dir = tempfile::tempdir()?;
+
+    // Init a colocated source repo
+    {
+        let (tx, rx) = channel::<SessionEvent>();
+        let (tx_init, rx_init) = channel::<Result<PathBuf>>();
+
+        tx.send(SessionEvent::InitWorkspace {
+            tx: tx_init,
+            wd: source_dir.path().to_owned(),
+            colocated: true,
+        })?;
+        tx.send(SessionEvent::EndSession)?;
+
+        WorkerSession::default().handle_events(&rx).await?;
+        rx_init.recv()??;
+    }
+
+    // Create a file with content in the source repo
+    let test_content = "Hello from test repository!\nLine 2\n";
+    std::fs::write(source_dir.path().join("test_file.txt"), test_content)?;
+
+    // Use git commands to add and commit the file
+    let add_status = Command::new("git")
+        .args(["add", "test_file.txt"])
+        .current_dir(source_dir.path())
+        .status()
+        .context("Failed to run git add")?;
+    assert!(add_status.success(), "git add should succeed");
+
+    let commit_status = Command::new("git")
+        .args([
+            "-c",
+            "user.name=Test",
+            "-c",
+            "user.email=test@test.com",
+            "commit",
+            "-m",
+            "Add test file",
+        ])
+        .current_dir(source_dir.path())
+        .status()
+        .context("Failed to run git commit")?;
+    assert!(commit_status.success(), "git commit should succeed");
+
+    // Clone from the source repo
+    let (tx, rx) = channel::<SessionEvent>();
+    let (tx_clone, rx_clone) = channel::<Result<PathBuf>>();
+
+    let source_path = source_dir.path().to_string_lossy().to_string();
+    tx.send(SessionEvent::CloneWorkspace {
+        tx: tx_clone,
+        source_url: source_path,
+        wd: dest_dir.path().to_owned(),
+        colocated: false,
+    })?;
+    tx.send(SessionEvent::EndSession)?;
+
+    WorkerSession::default().handle_events(&rx).await?;
+
+    let result = rx_clone.recv()??;
+    assert_eq!(result, dunce::canonicalize(dest_dir.path())?);
+
+    // Verify the file content was checked out
+    let cloned_file = dest_dir.path().join("test_file.txt");
+    assert!(
+        cloned_file.exists(),
+        "test_file.txt should exist in cloned repo"
+    );
+
+    let cloned_content = std::fs::read_to_string(&cloned_file)?;
+    // Normalize line endings for cross-platform comparison
+    let normalized_content = cloned_content.replace("\r\n", "\n");
+    assert_eq!(normalized_content, test_content, "File content should match");
 
     Ok(())
 }

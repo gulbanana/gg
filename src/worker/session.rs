@@ -12,7 +12,7 @@ use jj_lib::config::{ConfigNamePathBuf, ConfigSource};
 use super::{
     Mutation, WorkerSession,
     gui_util::WorkspaceSession,
-    queries::{self, QueryState},
+    queries::{self, QuerySession, QueryState},
 };
 
 use crate::{
@@ -37,6 +37,12 @@ pub enum SessionEvent {
     },
     InitWorkspace {
         tx: Sender<Result<PathBuf>>,
+        wd: PathBuf,
+        colocated: bool,
+    },
+    CloneWorkspace {
+        tx: Sender<Result<PathBuf>>,
+        source_url: String,
         wd: PathBuf,
         colocated: bool,
     },
@@ -125,6 +131,14 @@ impl Session for WorkerSession {
                 Ok(SessionEvent::InitWorkspace { tx, wd, colocated }) => {
                     tx.send(self.init_workspace(&wd, colocated))?;
                 }
+                Ok(SessionEvent::CloneWorkspace {
+                    tx,
+                    source_url,
+                    wd,
+                    colocated,
+                }) => {
+                    tx.send(self.clone_workspace(&source_url, &wd, colocated))?;
+                }
                 Ok(SessionEvent::OpenWorkspace { mut tx, mut wd }) => loop {
                     let resolved_wd = match wd.clone().or(latest_wd) {
                         Some(wd) => wd,
@@ -203,6 +217,14 @@ impl Session for WorkspaceSession<'_> {
                 }
                 SessionEvent::InitWorkspace { tx, wd, colocated } => {
                     tx.send(self.session.init_workspace(&wd, colocated))?;
+                }
+                SessionEvent::CloneWorkspace {
+                    tx,
+                    source_url,
+                    wd,
+                    colocated,
+                } => {
+                    tx.send(self.session.clone_workspace(&source_url, &wd, colocated))?;
                 }
                 SessionEvent::QueryRevision { tx, id } => {
                     tx.send(queries::query_revision(&self, id).await)?
@@ -336,7 +358,7 @@ impl Session for WorkspaceSession<'_> {
     }
 }
 
-impl Session for queries::QuerySession<'_, '_> {
+impl Session for QuerySession<'_, '_> {
     type Transition = QueryResult;
 
     async fn handle_events(mut self, rx: &Receiver<SessionEvent>) -> Result<Self::Transition> {
