@@ -36,6 +36,13 @@ pub fn build_main(app_handle: &AppHandle) -> tauri::Result<Menu<Wry>> {
                 true,
                 Some("cmdorctrl+shift+n"),
             )?,
+            &MenuItem::with_id(
+                app_handle,
+                "menu_repo_clone",
+                "Clone...",
+                true,
+                Some("cmdorctrl+shift+o"),
+            )?,
             &PredefinedMenuItem::separator(app_handle)?,
             &MenuItem::with_id(
                 app_handle,
@@ -483,6 +490,7 @@ pub fn handle_event(window: &Window, event: MenuEvent) -> Result<()> {
     let target = EventTarget::window(window.label());
     match event.id.0.as_str() {
         "menu_repo_init" => repo_init(window),
+        "menu_repo_clone" => repo_clone(window),
         "menu_repo_open" => repo_open(window),
         "menu_repo_reopen" => repo_reopen(window),
         "menu_revision_new_child" => window.emit_to(target, "gg://menu/revision", "new_child")?,
@@ -538,18 +546,62 @@ pub fn repo_init(window: &Window) {
         if let Some(FilePath::Path(cwd)) = picked {
             let git_path = cwd.join(".git");
 
-            let payload = RepoEvent {
+            let payload = RepoEvent::InitConfirm {
                 path: cwd.to_string_lossy().to_string(),
                 has_git: git_path.exists(),
             };
 
             handler::nonfatal!(window.emit_to(
                 EventTarget::window(window.label()),
-                "gg://menu/repo/init",
+                "gg://menu/repo",
                 payload
             ));
         }
     });
+}
+
+pub fn repo_clone(window: &Window) {
+    let payload = RepoEvent::CloneURL;
+
+    handler::nonfatal!(window.emit_to(
+        EventTarget::window(window.label()),
+        "gg://menu/repo",
+        payload
+    ));
+}
+
+pub fn repo_clone_with_url(window: &Window, url: String) {
+    let window = window.clone();
+    window.dialog().file().pick_folder(move |picked| {
+        if let Some(FilePath::Path(parent_dir)) = picked {
+            let repo_name = extract_repo_name(&url);
+            let dest_path = parent_dir.join(&repo_name);
+            let path = dest_path.to_string_lossy().to_string();
+
+            let payload = RepoEvent::CloneConfirm { url, path };
+
+            handler::nonfatal!(window.emit_to(
+                EventTarget::window(window.label()),
+                "gg://menu/repo",
+                payload
+            ));
+        }
+    });
+}
+
+// https://github.com/user/repo.git -> repo
+// git@github.com:user/repo.git -> repo
+// /path/to/repo -> repo
+// /path/to/repo.git -> repo
+fn extract_repo_name(url: &str) -> String {
+    let url = url.trim_end_matches('/');
+    let name = url
+        .rsplit('/')
+        .next()
+        .or_else(|| url.rsplit(':').next())
+        .unwrap_or("repo");
+
+    name.strip_suffix(".git").unwrap_or(name).to_string()
 }
 
 trait Enabler {

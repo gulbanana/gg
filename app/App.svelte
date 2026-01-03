@@ -33,6 +33,7 @@
     import InputDialog from "./shell/InputDialog.svelte";
     import type Settings from "./shell/Settings";
     import type { RepoEvent } from "./messages/RepoEvent";
+    import RepositoryMutator from "./mutators/RepositoryMutator";
 
     let selection: Query<RevResult> = {
         type: "wait",
@@ -126,7 +127,7 @@
         onEvent("gg://context/revision", mutateRevision);
         onEvent("gg://context/tree", mutateTree);
         onEvent("gg://context/branch", mutateRef);
-        onEvent<{ path: string; has_git: boolean }>("gg://menu/repo/init", mutateRepository);
+        onEvent("gg://menu/repo", mutateRepository);
     }
 
     $: if ($repoConfigEvent) loadRepo($repoConfigEvent);
@@ -201,22 +202,8 @@
         $currentContext = null;
     }
 
-    async function mutateRepository(payload: RepoEvent) {
-        const fields = [
-            { label: "Destination", choices: [payload.path] },
-            { label: "Colocated", choices: payload.has_git ? ["true", "false"] : ["false", "true"] },
-        ];
-
-        const result = await getInput("Initialize Repository", "", fields);
-        if (!result) return;
-
-        const destination = result["Destination"];
-        const colocated = result["Colocated"] === "true";
-
-        mutate("init_repository", {
-            path: destination,
-            colocated,
-        });
+    function mutateRepository(event: RepoEvent) {
+        new RepositoryMutator().handle(event);
     }
 </script>
 

@@ -192,7 +192,7 @@ impl WorkerSession {
         let mut auth_ctx = AuthContext::new(None);
         let git_settings = GitSettings::from_settings(&settings)?;
 
-        let git_head_id = auth_ctx.with_callbacks(None, |cb| {
+        let git_head_id = auth_ctx.with_callbacks(Some(self.sink.clone()), |cb| {
             let mut tx = repo.start_transaction();
             let mut fetcher = GitFetch::new(tx.repo_mut(), &git_settings)?;
             let refspecs = git::expand_fetch_refspecs(&remote_name, StringExpression::all())?;

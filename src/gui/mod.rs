@@ -23,10 +23,11 @@ use tauri::{AppHandle, Emitter, EventTarget, Listener, Manager, State, Window, W
 use tauri_plugin_window_state::StateFlags;
 
 use crate::messages::{
-    self, AbandonRevisions, BackoutRevisions, CheckoutRevision, CopyChanges, CopyHunk, CreateRef,
-    CreateRevision, CreateRevisionBetween, DeleteRef, DescribeRevision, DuplicateRevisions,
-    GitFetch, GitPush, InsertRevision, MoveChanges, MoveHunk, MoveRef, MoveRevision, MoveSource,
-    MutationResult, RenameBranch, TrackBranch, UndoOperation, UntrackBranch,
+    self, AbandonRevisions, BackoutRevisions, CheckoutRevision, CloneRepository, CopyChanges,
+    CopyHunk, CreateRef, CreateRevision, CreateRevisionBetween, DeleteRef, DescribeRevision,
+    DuplicateRevisions, GitFetch, GitPush, InitRepository, InsertRevision, MoveChanges, MoveHunk,
+    MoveRef, MoveRevision, MoveSource, MutationResult, RenameBranch, TrackBranch, UndoOperation,
+    UntrackBranch,
 };
 use crate::worker::{Mutation, Session, SessionEvent, WorkerSession};
 use sink::TauriSink;
@@ -143,7 +144,9 @@ pub fn run_gui(options: super::RunOptions) -> Result<()> {
         .invoke_handler(tauri::generate_handler![
             forward_accelerator,
             forward_context_menu,
+            forward_clone_url,
             init_repository,
+            clone_repository,
             query_workspace,
             query_recent_workspaces,
             query_log,
@@ -223,6 +226,7 @@ fn query_workspace(
 fn forward_accelerator(window: Window, state: State<AppState>, key: char, ctrl: bool, shift: bool) {
     match (key, ctrl, shift) {
         ('o', true, false) => menu::repo_open(&window),
+        ('o', true, true) => menu::repo_clone(&window),
         ('n', true, true) => menu::repo_init(&window),
         ('n', true, false) => {
             if state.get_selection(window.label()).is_some() {
@@ -255,13 +259,21 @@ fn forward_context_menu(window: Window, context: messages::Operand) -> Result<()
 }
 
 #[tauri::command(async)]
+fn forward_clone_url(window: Window, url: String) {
+    menu::repo_clone_with_url(&window, url);
+}
+
+#[tauri::command]
 fn init_repository(
     window: Window,
     app_state: State<AppState>,
-    path: String,
-    colocated: bool,
+    mutation: InitRepository,
 ) -> Result<MutationResult, InvokeError> {
-    log::debug!("init_repository {path}, colocated: {colocated}");
+    log::debug!(
+        "init_repository {}, colocated: {}",
+        mutation.path,
+        mutation.colocated
+    );
 
     let session_tx: Sender<SessionEvent> = app_state.get_session(window.label());
     let (call_tx, call_rx) = channel();
@@ -269,8 +281,8 @@ fn init_repository(
     session_tx
         .send(SessionEvent::InitWorkspace {
             tx: call_tx,
-            wd: PathBuf::from(&path),
-            colocated,
+            wd: PathBuf::from(&mutation.path),
+            colocated: mutation.colocated,
         })
         .map_err(InvokeError::from_error)?;
 
@@ -280,6 +292,47 @@ fn init_repository(
         .map_err(InvokeError::from_anyhow)?;
 
     let result = match try_reopen_repository(&window, initialized_path) {
+        Ok(None) => MutationResult::Unchanged,
+        Ok(Some(new_config)) => MutationResult::Reconfigured { new_config },
+        Err(err) => MutationResult::InternalError {
+            message: (&*format!("{err:?}")).into(),
+        },
+    };
+
+    Ok(result)
+}
+
+#[tauri::command(async)]
+fn clone_repository(
+    window: Window,
+    app_state: State<AppState>,
+    mutation: CloneRepository,
+) -> Result<MutationResult, InvokeError> {
+    log::debug!(
+        "clone_repository {} -> {}, colocated: {}",
+        mutation.url,
+        mutation.path,
+        mutation.colocated
+    );
+
+    let session_tx: Sender<SessionEvent> = app_state.get_session(window.label());
+    let (call_tx, call_rx) = channel();
+
+    session_tx
+        .send(SessionEvent::CloneWorkspace {
+            tx: call_tx,
+            source_url: mutation.url.clone(),
+            wd: PathBuf::from(&mutation.path),
+            colocated: mutation.colocated,
+        })
+        .map_err(InvokeError::from_error)?;
+
+    let cloned_path = call_rx
+        .recv()
+        .map_err(InvokeError::from_error)?
+        .map_err(InvokeError::from_anyhow)?;
+
+    let result = match try_reopen_repository(&window, cloned_path) {
         Ok(None) => MutationResult::Unchanged,
         Ok(Some(new_config)) => MutationResult::Reconfigured { new_config },
         Err(err) => MutationResult::InternalError {

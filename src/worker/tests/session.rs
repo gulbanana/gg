@@ -845,7 +845,10 @@ async fn clone_workspace_checks_out_file_content() -> Result<()> {
     let cloned_content = std::fs::read_to_string(&cloned_file)?;
     // Normalize line endings for cross-platform comparison
     let normalized_content = cloned_content.replace("\r\n", "\n");
-    assert_eq!(normalized_content, test_content, "File content should match");
+    assert_eq!(
+        normalized_content, test_content,
+        "File content should match"
+    );
 
     Ok(())
 }

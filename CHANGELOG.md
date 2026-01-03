@@ -3,8 +3,8 @@
 ## Unreleased
 
 ### Added
-- Repository -> Init... menuitem, which creates a new repository.
-- Progress bar for slow git operations.
+- Repository -> Init... and Repository -> Clone... menuitems, for creating repositories.
+- Progress bar for slow git operations (fetch, push, clone).
 - GG now respects the `snapshot.auto-update-stale` setting. Additionally, when first opening a repo, it will always update the working copy if it's stale.
 
 ### Fixed
