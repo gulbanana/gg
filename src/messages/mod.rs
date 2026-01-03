@@ -88,6 +88,13 @@ pub struct RepoStatus {
     pub working_copy: CommitId,
 }
 
+#[derive(Serialize, Clone, Debug)]
+#[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
+pub struct RepoEvent {
+    pub path: String,
+    pub has_git: bool,
+}
+
 /// Bookmark or tag name with metadata.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(tag = "type")]

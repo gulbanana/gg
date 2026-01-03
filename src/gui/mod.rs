@@ -143,6 +143,7 @@ pub fn run_gui(options: super::RunOptions) -> Result<()> {
         .invoke_handler(tauri::generate_handler![
             forward_accelerator,
             forward_context_menu,
+            init_repository,
             query_workspace,
             query_recent_workspaces,
             query_log,
@@ -219,9 +220,31 @@ fn query_workspace(
 }
 
 #[tauri::command]
-fn forward_accelerator(window: Window, key: char) {
-    if key == 'o' {
-        menu::repo_open(&window);
+fn forward_accelerator(window: Window, state: State<AppState>, key: char, ctrl: bool, shift: bool) {
+    match (key, ctrl, shift) {
+        ('o', true, false) => menu::repo_open(&window),
+        ('n', true, true) => menu::repo_init(&window),
+        ('n', true, false) => {
+            if state.get_selection(window.label()).is_some() {
+                handler::nonfatal!(window.emit_to(
+                    EventTarget::window(window.label()),
+                    "gg://menu/revision",
+                    "new_child"
+                ));
+            }
+        }
+        ('m', true, false) => {
+            if let Some(header) = state.get_selection(window.label()) {
+                if !header.is_immutable && header.parent_ids.len() == 1 {
+                    handler::nonfatal!(window.emit_to(
+                        EventTarget::window(window.label()),
+                        "gg://menu/revision",
+                        "new_parent"
+                    ));
+                }
+            }
+        }
+        _ => (),
     }
 }
 
@@ -229,6 +252,42 @@ fn forward_accelerator(window: Window, key: char) {
 fn forward_context_menu(window: Window, context: messages::Operand) -> Result<(), InvokeError> {
     menu::handle_context(window, context).map_err(InvokeError::from_anyhow)?;
     Ok(())
+}
+
+#[tauri::command(async)]
+fn init_repository(
+    window: Window,
+    app_state: State<AppState>,
+    path: String,
+    colocated: bool,
+) -> Result<MutationResult, InvokeError> {
+    log::debug!("init_repository {path}, colocated: {colocated}");
+
+    let session_tx: Sender<SessionEvent> = app_state.get_session(window.label());
+    let (call_tx, call_rx) = channel();
+
+    session_tx
+        .send(SessionEvent::InitWorkspace {
+            tx: call_tx,
+            wd: PathBuf::from(&path),
+            colocated,
+        })
+        .map_err(InvokeError::from_error)?;
+
+    let initialized_path = call_rx
+        .recv()
+        .map_err(InvokeError::from_error)?
+        .map_err(InvokeError::from_anyhow)?;
+
+    let result = match try_reopen_repository(&window, initialized_path) {
+        Ok(None) => MutationResult::Unchanged,
+        Ok(Some(new_config)) => MutationResult::Reconfigured { new_config },
+        Err(err) => MutationResult::InternalError {
+            message: (&*format!("{err:?}")).into(),
+        },
+    };
+
+    Ok(result)
 }
 
 #[tauri::command(async)]

@@ -8,7 +8,7 @@ use tauri::{
 use tauri_plugin_dialog::{DialogExt, FilePath};
 
 use super::{AppState, handler};
-use crate::messages::{Operand, RevHeader, StoreRef};
+use crate::messages::{Operand, RepoEvent, RevHeader, StoreRef};
 
 pub fn build_main(app_handle: &AppHandle) -> tauri::Result<Menu<Wry>> {
     #[cfg(target_os = "macos")]
@@ -29,6 +29,14 @@ pub fn build_main(app_handle: &AppHandle) -> tauri::Result<Menu<Wry>> {
         "Repository",
         true,
         &[
+            &MenuItem::with_id(
+                app_handle,
+                "menu_repo_init",
+                "Init...",
+                true,
+                Some("cmdorctrl+shift+n"),
+            )?,
+            &PredefinedMenuItem::separator(app_handle)?,
             &MenuItem::with_id(
                 app_handle,
                 "menu_repo_open",
@@ -67,7 +75,7 @@ pub fn build_main(app_handle: &AppHandle) -> tauri::Result<Menu<Wry>> {
                 "menu_revision_edit",
                 "Edit as working copy",
                 true,
-                None::<&str>,
+                Some("enter"),
             )?,
             &MenuItem::with_id(
                 app_handle,
@@ -474,6 +482,7 @@ pub fn handle_event(window: &Window, event: MenuEvent) -> Result<()> {
 
     let target = EventTarget::window(window.label());
     match event.id.0.as_str() {
+        "menu_repo_init" => repo_init(window),
         "menu_repo_open" => repo_open(window),
         "menu_repo_reopen" => repo_reopen(window),
         "menu_revision_new_child" => window.emit_to(target, "gg://menu/revision", "new_child")?,
@@ -521,6 +530,26 @@ pub fn repo_open(window: &Window) {
 
 fn repo_reopen(window: &Window) {
     handler::fatal!(super::try_open_repository(window, None).context("try_open_repository"));
+}
+
+pub fn repo_init(window: &Window) {
+    let window = window.clone();
+    window.dialog().file().pick_folder(move |picked| {
+        if let Some(FilePath::Path(cwd)) = picked {
+            let git_path = cwd.join(".git");
+
+            let payload = RepoEvent {
+                path: cwd.to_string_lossy().to_string(),
+                has_git: git_path.exists(),
+            };
+
+            handler::nonfatal!(window.emit_to(
+                EventTarget::window(window.label()),
+                "gg://menu/repo/init",
+                payload
+            ));
+        }
+    });
 }
 
 trait Enabler {

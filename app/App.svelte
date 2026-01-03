@@ -3,7 +3,7 @@
     import type { RevResult } from "./messages/RevResult";
     import type { RepoConfig } from "./messages/RepoConfig";
     import type { RepoStatus } from "./messages/RepoStatus";
-    import { type Query, query, trigger, onEvent, isTauri } from "./ipc.js";
+    import { type Query, query, mutate, trigger, onEvent, isTauri, getInput } from "./ipc.js";
     import {
         currentMutation,
         currentContext,
@@ -32,6 +32,7 @@
     import IdSpan from "./controls/IdSpan.svelte";
     import InputDialog from "./shell/InputDialog.svelte";
     import type Settings from "./shell/Settings";
+    import type { RepoEvent } from "./messages/RepoEvent";
 
     let selection: Query<RevResult> = {
         type: "wait",
@@ -39,14 +40,19 @@
     // for open recent workspaces when error dialogs happen
     let recentWorkspaces: string[] = [];
 
-    document.addEventListener("keydown", (event) => {
-        if (event.key === "o" && event.ctrlKey) {
-            event.preventDefault();
-            if (isTauri()) {
-                trigger("forward_accelerator", { key: "o" });
+    if (isTauri()) {
+        document.addEventListener("keydown", (event) => {
+            const key = event.key.toLowerCase();
+            if ((key === "n" || key === "m" || key === "o") && event.ctrlKey) {
+                event.preventDefault();
+                trigger("forward_accelerator", {
+                    key,
+                    ctrl: event.ctrlKey,
+                    shift: event.shiftKey,
+                });
             }
-        }
-    });
+        });
+    }
 
     document.body.addEventListener("click", () => currentContext.set(null), true);
 
@@ -120,6 +126,7 @@
         onEvent("gg://context/revision", mutateRevision);
         onEvent("gg://context/tree", mutateTree);
         onEvent("gg://context/branch", mutateRef);
+        onEvent<{ path: string; has_git: boolean }>("gg://menu/repo/init", mutateRepository);
     }
 
     $: if ($repoConfigEvent) loadRepo($repoConfigEvent);
@@ -192,6 +199,24 @@
             new RefMutator($currentContext.ref).handle(event);
         }
         $currentContext = null;
+    }
+
+    async function mutateRepository(payload: RepoEvent) {
+        const fields = [
+            { label: "Destination", choices: [payload.path] },
+            { label: "Colocated", choices: payload.has_git ? ["true", "false"] : ["false", "true"] },
+        ];
+
+        const result = await getInput("Initialize Repository", "", fields);
+        if (!result) return;
+
+        const destination = result["Destination"];
+        const colocated = result["Colocated"] === "true";
+
+        mutate("init_repository", {
+            path: destination,
+            colocated,
+        });
     }
 </script>
 

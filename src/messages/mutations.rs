@@ -25,6 +25,14 @@ pub enum MutationResult {
     },
 }
 
+/// Global pseudomutation: creates a repository
+#[derive(Deserialize)]
+#[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
+pub struct InitRepository {
+    pub path: String,
+    pub colocated: bool,
+}
+
 /// Makes a revision the working copy
 #[derive(Deserialize, Debug)]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
