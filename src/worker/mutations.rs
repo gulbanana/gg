@@ -1379,22 +1379,25 @@ impl Mutation for GitPush {
         }
 
         // accumulate input requirements
-        let git_settings = git::GitSettings::from_settings(&ws.data.workspace_settings)?;
         let mut auth_ctx = AuthContext::new(self.input);
+        let event_sink = ws.sink();
+        let git_settings = git::GitSettings::from_settings(&ws.data.workspace_settings)?;
 
         // push to each remote
         for (remote_name, branch_updates) in remote_branch_updates.into_iter() {
             let targets = GitBranchPushTargets { branch_updates };
 
-            if let Err(err) = auth_ctx.with_callbacks(|cb| {
+            let result = auth_ctx.with_callbacks(Some(event_sink.clone()), |cb| {
                 git::push_branches(
                     tx.repo_mut(),
                     &git_settings,
-                    RemoteName::new(remote_name),
+                    RemoteName::new(&remote_name),
                     &targets,
                     cb,
                 )
-            }) {
+            });
+
+            if let Err(err) = result {
                 return Ok(auth_ctx.into_result(err.into()));
             }
         }
@@ -1460,8 +1463,9 @@ impl Mutation for GitFetch {
         }
 
         // accumulate input requirements
-        let git_settings = git::GitSettings::from_settings(&ws.data.workspace_settings)?;
         let mut auth_ctx = AuthContext::new(self.input);
+        let progress_sender = ws.sink();
+        let git_settings = git::GitSettings::from_settings(&ws.data.workspace_settings)?;
 
         for (remote_name, pattern) in &remote_patterns {
             let mut fetcher = git::GitFetch::new(tx.repo_mut(), &git_settings)?;
@@ -1471,11 +1475,14 @@ impl Mutation for GitFetch {
                 .unwrap_or_else(StringExpression::all);
             let refspecs =
                 git::expand_fetch_refspecs(&RemoteName::new(remote_name), bookmark_expr)?;
-            if let Err(err) = auth_ctx.with_callbacks(|cb| {
+
+            let result = auth_ctx.with_callbacks(Some(progress_sender.clone()), |cb| {
                 fetcher
                     .fetch(RemoteName::new(remote_name), refspecs, cb, None, None)
                     .context("failed to fetch")
-            }) {
+            });
+
+            if let Err(err) = result {
                 return Ok(auth_ctx.into_result(err));
             }
             if let Err(err) = fetcher.import_refs().context("failed to import refs") {

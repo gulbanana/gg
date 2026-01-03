@@ -48,12 +48,20 @@
         mutate<UndoOperation>("undo_operation", null);
     }
 
-    function onPush(remote: string) {
-        mutate<GitPush>("git_push", { refspec: { type: "AllBookmarks", remote_name: remote }, input: null });
+    function onPush(remote_name: string) {
+        mutate<GitPush>(
+            "git_push",
+            { refspec: { type: "AllBookmarks", remote_name }, input: null },
+            { operation: `Pushing to ${remote_name}...` },
+        );
     }
 
-    function onFetch(remote: string) {
-        mutate<GitFetch>("git_fetch", { refspec: { type: "AllBookmarks", remote_name: remote }, input: null });
+    function onFetch(remote_name: string) {
+        mutate<GitFetch>(
+            "git_fetch",
+            { refspec: { type: "AllBookmarks", remote_name }, input: null },
+            { operation: `Fetching from ${remote_name}...` },
+        );
     }
 </script>
 

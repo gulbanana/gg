@@ -1,5 +1,5 @@
 import type { MutationResult } from "./messages/MutationResult";
-import { currentInput, currentMutation, repoConfigEvent, repoStatusEvent, revisionSelectEvent } from "./stores";
+import { currentInput, currentMutation, progressEvent, repoConfigEvent, repoStatusEvent, revisionSelectEvent } from "./stores";
 import { isTauri, type Query } from "./events";
 
 export { isTauri, onEvent, type Query, type Settable } from "./events";
@@ -54,6 +54,12 @@ export function trigger(command: string, request?: InvokeArgs, onError?: () => v
  * call an IPC which, if successful, modifies the repo
  */
 export async function mutate<T>(command: string, mutation: T, options?: { operation?: string }): Promise<boolean> {
+    if (options?.operation) {
+        progressEvent.set({ type: "Message", text: options.operation });
+    } else {
+        progressEvent.set(undefined);
+    }
+
     try {
         // set a wait state then the data state, unless the data comes in hella fast
         let fetchPromise = call<MutationResult>("mutate", command, { mutation });

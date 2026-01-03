@@ -100,7 +100,7 @@ export default class RefMutator {
                         branch_ref: this.#ref
                     },
                     input: null
-                });
+                }, { operation: `Pushing ${this.#ref.branch_name} to ${this.#ref.remote_name}...` });
                 break;
 
             case "LocalBookmark":
@@ -110,7 +110,7 @@ export default class RefMutator {
                         branch_ref: this.#ref
                     },
                     input: null
-                });
+                }, { operation: `Pushing ${this.#ref.branch_name}...` });
                 break;
         }
     };
@@ -142,7 +142,7 @@ export default class RefMutator {
                             branch_ref: this.#ref
                         },
                         input: null
-                    })
+                    }, { operation: `Pushing ${this.#ref.branch_name} to ${remote_name}...` })
                 }
                 break;
         }
@@ -161,7 +161,7 @@ export default class RefMutator {
                         branch_ref: this.#ref
                     },
                     input: null
-                });
+                }, { operation: `Fetching ${this.#ref.branch_name} from ${this.#ref.branch_name}...` });
                 break;
 
             case "LocalBookmark":
@@ -171,7 +171,7 @@ export default class RefMutator {
                         branch_ref: this.#ref
                     },
                     input: null
-                });
+                }, { operation: `Fetching ${this.#ref.branch_name}...` });
                 break;
         }
     };
@@ -203,7 +203,7 @@ export default class RefMutator {
                             branch_ref: this.#ref
                         },
                         input: null
-                    })
+                    }, { operation: `Fetching ${this.#ref.branch_name} from ${remote_name}...` })
                 }
                 break;
         }

@@ -6,12 +6,13 @@
 //! to provision an InputRequest first.
 
 use crate::messages::{InputField, InputRequest, InputResponse, MultilineString, MutationResult};
+use crate::worker::EventSinkExt;
 use anyhow::{Context, Result, anyhow};
 use interprocess::local_socket::{
     GenericFilePath, ListenerOptions, Stream, ToFsName,
     traits::{Listener as _, Stream as _},
 };
-use jj_lib::git::RemoteCallbacks;
+use jj_lib::git::{Progress, RemoteCallbacks};
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -34,8 +35,12 @@ impl AuthContext {
         }
     }
 
-    /// Run a callback with git authentication via callbacks or GIT_ASKPASS
-    pub fn with_callbacks<T>(&mut self, f: impl FnOnce(RemoteCallbacks) -> T) -> T {
+    /// Run a callback with git authentication and optional progress reporting.
+    pub fn with_callbacks<T>(
+        &mut self,
+        sink: Option<Arc<dyn crate::worker::EventSink>>,
+        f: impl FnOnce(RemoteCallbacks) -> T,
+    ) -> T {
         let _env_guard: MutexGuard<'_, ()> =
             CRITICAL_SECTION.lock().expect("critical section poisoned");
 
@@ -110,6 +115,53 @@ impl AuthContext {
         let mut get_username_password = |url: &str| self.get_username_password(url);
         callbacks.get_username_password = Some(&mut get_username_password);
 
+        // progress callbacks, delegating to a mode-specific event sink
+        let mut progress_cb;
+        let mut sideband_cb;
+        if let Some(sink1) = sink {
+            let sink2 = sink1.clone();
+
+            progress_cb = Some(move |progress: &Progress| {
+                sink2.send_typed(
+                    "gg://progress",
+                    &crate::messages::ProgressEvent::Progress {
+                        overall_percent: (progress.overall * 100.0) as u32,
+                        bytes_downloaded: progress.bytes_downloaded,
+                    },
+                );
+            });
+            callbacks.progress = progress_cb
+                .as_mut()
+                .map(|cb| cb as &mut dyn FnMut(&Progress));
+
+            sideband_cb = Some(move |message: &[u8]| {
+                if let Ok(text) = std::str::from_utf8(message) {
+                    let trimmed = text.trim();
+                    if !trimmed.is_empty() {
+                        sink1.send_typed(
+                            "gg://progress",
+                            &crate::messages::ProgressEvent::Message {
+                                text: trimmed.to_string(),
+                            },
+                        );
+                    }
+                }
+            });
+            callbacks.sideband_progress =
+                sideband_cb.as_mut().map(|cb| cb as &mut dyn FnMut(&[u8]));
+        }
+
+        self.run_with_callbacks(callbacks, f, stop_flag, handle, env_set)
+    }
+
+    fn run_with_callbacks<T>(
+        &self,
+        callbacks: RemoteCallbacks,
+        f: impl FnOnce(RemoteCallbacks) -> T,
+        stop_flag: Arc<AtomicBool>,
+        handle: Option<thread::JoinHandle<()>>,
+        env_set: bool,
+    ) -> T {
         let result = f(callbacks);
 
         // shut down the server
@@ -402,7 +454,7 @@ mod tests {
         let mut ctx = AuthContext::new(input);
 
         // with_callbacks sets up the askpass server, so we test IPC inside it
-        ctx.with_callbacks(|_cb| {
+        ctx.with_callbacks(None, |_cb| {
             let socket_path = std::env::var("GG_ASKPASS_SOCKET").expect("socket env set");
             let name = socket_path
                 .to_fs_name::<GenericFilePath>()
@@ -426,7 +478,7 @@ mod tests {
     fn test_askpass_ipc_without_credentials() {
         let mut ctx = AuthContext::new(None);
 
-        ctx.with_callbacks(|_cb| {
+        ctx.with_callbacks(None, |_cb| {
             let socket_path = std::env::var("GG_ASKPASS_SOCKET").expect("socket env set");
             let name = socket_path
                 .to_fs_name::<GenericFilePath>()

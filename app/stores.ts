@@ -1,4 +1,5 @@
 import type { MutationResult } from "./messages/MutationResult";
+import type { ProgressEvent } from "./messages/ProgressEvent";
 import type { RepoConfig } from "./messages/RepoConfig";
 import type { RepoStatus } from "./messages/RepoStatus";
 import type { RevHeader } from "./messages/RevHeader";
@@ -13,6 +14,7 @@ export const repoConfigEvent = await event<RepoConfig>("gg://repo/config", { typ
 export const repoStatusEvent = await event<RepoStatus | undefined>("gg://repo/status", undefined);
 export const revisionSelectEvent = await event<RevHeader | undefined>("gg://revision/select", undefined);
 export const changeSelectEvent = await event<RevChange | undefined>("gg://change/select", undefined);
+export const progressEvent = await event<ProgressEvent | undefined>("gg://progress", undefined);
 
 export const currentMutation = writable<Query<MutationResult> | null>(null);
 export const currentContext = writable<Operand | null>();

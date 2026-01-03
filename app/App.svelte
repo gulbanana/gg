@@ -12,6 +12,7 @@
         revisionSelectEvent,
         currentInput,
         hasMenu,
+        progressEvent,
     } from "./stores.js";
     import ContextMenu from "./controls/ContextMenu.svelte";
     import RefMutator from "./mutators/RefMutator";
@@ -25,6 +26,7 @@
     import StatusBar from "./shell/StatusBar.svelte";
     import ModalOverlay from "./shell/ModalOverlay.svelte";
     import ErrorDialog from "./shell/ErrorDialog.svelte";
+    import ProgressDialog from "./shell/ProgressDialog.svelte";
     import RecentWorkspaces from "./shell/RecentWorkspaces.svelte";
     import { onMount, setContext } from "svelte";
     import IdSpan from "./controls/IdSpan.svelte";
@@ -270,7 +272,9 @@
             </ModalOverlay>
         {:else if $currentMutation}
             <ModalOverlay>
-                {#if $currentMutation.type == "data" && ($currentMutation.value.type == "InternalError" || $currentMutation.value.type == "PreconditionError")}
+                {#if $currentMutation.type == "wait" && $progressEvent !== undefined}
+                    <ProgressDialog progress={$progressEvent} />
+                {:else if $currentMutation.type == "data" && ($currentMutation.value.type == "InternalError" || $currentMutation.value.type == "PreconditionError")}
                     <ErrorDialog title="Command Error" onClose={() => ($currentMutation = null)} severe>
                         {#if $currentMutation.value.type == "InternalError"}
                             <p>
