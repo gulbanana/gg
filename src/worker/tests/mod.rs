@@ -7,14 +7,21 @@ use jj_lib::{backend::TreeValue, commit::Commit, repo_path::RepoPath};
 use std::{
     fs::{self, File},
     path::PathBuf,
+    sync::Arc,
 };
 use tempfile::{TempDir, tempdir};
 use zip::ZipArchive;
 
 use crate::{
     messages::{ChangeId, CommitId, RevId},
-    worker::{WorkerSession, WorkspaceSession},
+    worker::{EventSink, WorkerSession, WorkspaceSession},
 };
+
+pub struct NoProgress;
+
+impl EventSink for NoProgress {
+    fn send(&self, _event_name: &str, _payload: serde_json::Value) {}
+}
 
 impl Default for WorkerSession {
     fn default() -> Self {
@@ -23,6 +30,7 @@ impl Default for WorkerSession {
             latest_query: None,
             working_directory: None,
             user_settings: crate::config::tests::settings_with_gg_defaults(),
+            sink: Arc::new(NoProgress),
         }
     }
 }

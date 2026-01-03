@@ -161,6 +161,10 @@ impl WorkspaceSession<'_> {
         &self.operation.wc_id
     }
 
+    pub fn sink(&self) -> Arc<dyn super::EventSink> {
+        self.session.sink.clone()
+    }
+
     // XXX maybe: hunt down uses and make nonpub
     pub fn repo(&self) -> &ReadonlyRepo {
         self.operation.repo.as_ref()

@@ -1,9 +1,11 @@
 mod queries;
+mod sink;
 mod state;
 #[cfg(all(test, not(feature = "ts-rs")))]
 mod tests;
 mod triggers;
 
+use std::convert::Infallible;
 use std::sync::mpsc::channel;
 use std::thread;
 use std::time::Duration;
@@ -14,13 +16,17 @@ use axum::{
     body::Body,
     extract::{Path, State},
     http::{Request, StatusCode},
-    response::{IntoResponse, Response},
+    response::{
+        IntoResponse, Response,
+        sse::{Event, KeepAlive, Sse},
+    },
     routing::{get, post},
 };
+use futures_util::stream::{self, Stream};
 use log::LevelFilter;
 use serde::Deserialize;
 use tauri_plugin_log::fern;
-use tokio::sync::oneshot;
+use tokio::sync::{broadcast, oneshot};
 
 use crate::config::{GGSettings, read_config};
 use crate::messages::{
@@ -30,6 +36,7 @@ use crate::messages::{
     RenameBranch, TrackBranch, UndoOperation, UntrackBranch,
 };
 use crate::worker::{Mutation, Session, SessionEvent, WorkerSession};
+use sink::{SseEvent, SseSink};
 use state::{AppState, Asset};
 
 /// anyhow -> http 500 wrapper
@@ -113,11 +120,14 @@ pub(self) fn create_app(
 ) -> Result<(Router, oneshot::Receiver<()>)> {
     let (shutdown_tx, shutdown_rx) = oneshot::channel(); // this one needs async
     let (worker_tx, worker_rx) = channel();
+    let (progress_tx, _progress_rx) = broadcast::channel::<SseEvent>(16);
+
+    let progress_sender = SseSink::new(progress_tx.clone());
 
     thread::spawn(move || {
         tauri::async_runtime::block_on(async {
             log::debug!("start worker");
-            let session = WorkerSession::new(options.workspace, options.settings);
+            let session = WorkerSession::new(options.workspace, options.settings, progress_sender);
             if let Err(err) = session.handle_events(&worker_rx).await {
                 log::error!("worker: {err:#}");
             }
@@ -125,7 +135,13 @@ pub(self) fn create_app(
         });
     });
 
-    let state = AppState::new(options.context, worker_tx, shutdown_tx, client_timeout);
+    let state = AppState::new(
+        options.context,
+        worker_tx,
+        progress_tx,
+        shutdown_tx,
+        client_timeout,
+    );
 
     let app = Router::new()
         // static assets
@@ -136,6 +152,7 @@ pub(self) fn create_app(
         .nest("/api/query", queries::router())
         .nest("/api/trigger", triggers::router())
         .route("/api/mutate/{command}", post(handle_mutate))
+        .route("/api/events", get(stream_events))
         .with_state(state.clone());
 
     // shut down if we don't get a ping for ten minutes
@@ -187,6 +204,29 @@ async fn serve_fallback(
         .map(|pq| pq.as_str())
         .unwrap_or(uri.path());
     state.load_asset(path_and_query).await
+}
+
+async fn stream_events(
+    State(state): State<AppState>,
+) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+    let rx = state.progress_tx.subscribe();
+
+    let stream = stream::unfold(rx, |mut rx| async move {
+        match rx.recv().await {
+            Ok((event_name, payload)) => {
+                let sse_event = Event::default()
+                    .event(event_name)
+                    .data(serde_json::to_string(&payload).unwrap_or_default());
+                Some((Ok(sse_event), rx))
+            }
+            Err(broadcast::error::RecvError::Closed) => None,
+            Err(broadcast::error::RecvError::Lagged(_)) => {
+                Some((Ok(Event::default().comment("lagged")), rx))
+            }
+        }
+    });
+
+    Sse::new(stream).keep_alive(KeepAlive::default())
 }
 
 async fn handle_mutate(

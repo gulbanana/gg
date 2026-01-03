@@ -13,10 +13,12 @@ use std::{
     fmt::Debug,
     fs,
     path::PathBuf,
+    sync::Arc,
 };
 
 use anyhow::{Error, Result, anyhow};
 use jj_lib::settings::UserSettings;
+use serde::Serialize;
 
 use crate::messages;
 use gui_util::WorkspaceSession;
@@ -43,21 +45,42 @@ pub trait Mutation: Debug {
     }
 }
 
+/// mode-specific dispatch mechanism for sending events to the frontend
+pub trait EventSink: Send + Sync {
+    fn send(&self, event_name: &str, payload: serde_json::Value);
+}
+
+// extension trait to keep EventSink dyn-compatible
+pub trait EventSinkExt: EventSink {
+    fn send_typed<T: Serialize>(&self, event_name: &str, payload: &T) {
+        let value = serde_json::to_value(payload).expect("T: Serialize");
+        self.send(event_name, value)
+    }
+}
+
+impl<S: EventSink + ?Sized> EventSinkExt for S {}
+
 /// state that doesn't depend on jj-lib borrowings
 pub struct WorkerSession {
     pub force_log_page_size: Option<usize>,
     pub latest_query: Option<String>,
     pub working_directory: Option<PathBuf>,
     pub user_settings: UserSettings,
+    pub sink: Arc<dyn EventSink>,
 }
 
 impl WorkerSession {
-    pub fn new(workspace: Option<PathBuf>, user_settings: UserSettings) -> Self {
+    pub fn new(
+        workspace: Option<PathBuf>,
+        user_settings: UserSettings,
+        sink: Arc<dyn EventSink>,
+    ) -> Self {
         WorkerSession {
             force_log_page_size: None,
             latest_query: None,
             working_directory: workspace,
             user_settings,
+            sink,
         }
     }
 

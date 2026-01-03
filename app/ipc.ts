@@ -1,91 +1,13 @@
-import type { Readable, Subscriber, Unsubscriber } from "svelte/store";
 import type { MutationResult } from "./messages/MutationResult";
 import { currentInput, currentMutation, repoConfigEvent, repoStatusEvent, revisionSelectEvent } from "./stores";
-import { onMount } from "svelte";
+import { isTauri, type Query } from "./events";
+
+export { isTauri, onEvent, type Query, type Settable } from "./events";
 
 /** 
  * structurally equivalent to InvokeArgs from @tauri-apps/api/core
  */
 export type InvokeArgs = Record<string, unknown>;
-
-export type Query<T> = { type: "wait" } | { type: "data", value: T } | { type: "error", message: string };
-
-export interface Settable<T> extends Readable<T> {
-    set: (value: T) => void;
-}
-
-export function isTauri(): boolean {
-    return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
-}
-
-/**
- * multiplexes events into a svelte store; never actually unsubscribes because the store protocol isn't async.
- * web mode: events are handled locally
- * gui mode: events are also broadcast to and received from the backend
- */
-export async function event<T>(name: string, initialValue: T): Promise<Settable<T>> {
-    const subscribers = new Set<Subscriber<T>>();
-    let lastValue: T = initialValue;
-
-    if (isTauri()) {
-        const { getCurrentWindow } = await import("@tauri-apps/api/window");
-        await getCurrentWindow().listen<T>(name, event => {
-            lastValue = event.payload;
-            for (let subscriber of subscribers) {
-                subscriber(event.payload);
-            }
-        });
-    }
-
-    return {
-        subscribe(run: Subscriber<T>): Unsubscriber {
-            // send current value to stream
-            if (typeof lastValue != "undefined") {
-                run(lastValue);
-            }
-
-            // listen for new values
-            subscribers.add(run);
-
-            return () => subscribers.delete(run);
-        },
-
-        set(value: T) {
-            lastValue = value;
-            for (let subscriber of subscribers) {
-                subscriber(value);
-            }
-            if (isTauri()) {
-                (async () => {
-                    const { emitTo } = await import("@tauri-apps/api/event");
-                    const { getCurrentWindow } = await import("@tauri-apps/api/window");
-                    emitTo(getCurrentWindow().label, name, value);
-                })();
-            }
-        }
-    }
-}
-
-/**
- * subscribe to tauri events for a component's lifetime.
- */
-export function onEvent<T>(name: string, callback: (payload: T) => void) {
-    if (!isTauri()) {
-        console.error(`onEvent(${name}): web mode doesn't use events`);
-        return;
-    }
-
-    onMount(() => {
-        let promise = import("@tauri-apps/api/window").then(({ getCurrentWindow }) =>
-            getCurrentWindow().listen<T>(name, e => callback(e.payload))
-        );
-        return () => {
-            promise.then((unlisten) => {
-                unlisten();
-            });
-        };
-    });
-}
 
 /**
  * call an IPC which provides readonly information about the repo
@@ -131,7 +53,7 @@ export function trigger(command: string, request?: InvokeArgs, onError?: () => v
 /**
  * call an IPC which, if successful, modifies the repo
  */
-export async function mutate<T>(command: string, mutation: T): Promise<boolean> {
+export async function mutate<T>(command: string, mutation: T, options?: { operation?: string }): Promise<boolean> {
     try {
         // set a wait state then the data state, unless the data comes in hella fast
         let fetchPromise = call<MutationResult>("mutate", command, { mutation });

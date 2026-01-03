@@ -2,6 +2,7 @@ mod handler;
 mod menu;
 #[cfg(target_os = "macos")]
 mod recent_items;
+mod sink;
 
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
@@ -28,6 +29,7 @@ use crate::messages::{
     MutationResult, RenameBranch, TrackBranch, UndoOperation, UntrackBranch,
 };
 use crate::worker::{Mutation, Session, SessionEvent, WorkerSession};
+use sink::TauriSink;
 
 struct AppState {
     windows: Arc<Mutex<HashMap<String, WindowState>>>,
@@ -600,7 +602,9 @@ async fn worker_thread(
 ) {
     log::info!("Worker started.");
 
-    while let Err(err) = WorkerSession::new(workspace.clone(), settings.clone())
+    let progress = TauriSink::new(window.clone());
+
+    while let Err(err) = WorkerSession::new(workspace.clone(), settings.clone(), progress.clone())
         .handle_events(&rx)
         .await
         .context("worker")
