@@ -86,7 +86,10 @@ impl Mutation for AbandonRevisions {
         };
 
         match ws.finish_transaction(tx, transaction_description)? {
-            Some(new_status) => Ok(MutationResult::Updated { new_status }),
+            Some(new_status) => Ok(MutationResult::Updated {
+                new_status,
+                new_selection: None,
+            }),
             None => Ok(MutationResult::Unchanged),
         }
     }
@@ -116,7 +119,10 @@ impl Mutation for BackoutRevisions {
             .write()?;
 
         match ws.finish_transaction(tx, format!("back out commit {}", reverted[0].id().hex()))? {
-            Some(new_status) => Ok(MutationResult::Updated { new_status }),
+            Some(new_status) => Ok(MutationResult::Updated {
+                new_status,
+                new_selection: None,
+            }),
             None => Ok(MutationResult::Unchanged),
         }
     }
@@ -141,8 +147,8 @@ impl Mutation for CheckoutRevision {
 
         match ws.finish_transaction(tx, format!("edit commit {}", edited.id().hex()))? {
             Some(new_status) => {
-                let new_selection = ws.format_header(&edited, Some(false))?;
-                Ok(MutationResult::UpdatedSelection {
+                let new_selection = Some(ws.format_header(&edited, Some(false))?);
+                Ok(MutationResult::Updated {
                     new_status,
                     new_selection,
                 })
@@ -175,8 +181,8 @@ impl Mutation for CreateRevision {
 
         match ws.finish_transaction(tx, "new empty commit")? {
             Some(new_status) => {
-                let new_selection = ws.format_header(&new_commit, Some(false))?;
-                Ok(MutationResult::UpdatedSelection {
+                let new_selection = Some(ws.format_header(&new_commit, Some(false))?);
+                Ok(MutationResult::Updated {
                     new_status,
                     new_selection,
                 })
@@ -213,8 +219,8 @@ impl Mutation for CreateRevisionBetween {
 
         match ws.finish_transaction(tx, "new empty commit")? {
             Some(new_status) => {
-                let new_selection = ws.format_header(&new_commit, Some(false))?;
-                Ok(MutationResult::UpdatedSelection {
+                let new_selection = Some(ws.format_header(&new_commit, Some(false))?);
+                Ok(MutationResult::Updated {
                     new_status,
                     new_selection,
                 })
@@ -252,7 +258,10 @@ impl Mutation for DescribeRevision {
         commit_builder.write()?;
 
         match ws.finish_transaction(tx, format!("describe commit {}", described.id().hex()))? {
-            Some(new_status) => Ok(MutationResult::Updated { new_status }),
+            Some(new_status) => Ok(MutationResult::Updated {
+                new_status,
+                new_selection: None,
+            }),
             None => Ok(MutationResult::Unchanged),
         }
     }
@@ -298,13 +307,16 @@ impl Mutation for DuplicateRevisions {
                         .get_index(0)
                         .ok_or(anyhow!("single source should have single copy"))?
                         .1;
-                    let new_selection = ws.format_header(new_commit, None)?;
-                    Ok(MutationResult::UpdatedSelection {
+                    let new_selection = Some(ws.format_header(new_commit, None)?);
+                    Ok(MutationResult::Updated {
                         new_status,
                         new_selection,
                     })
                 } else {
-                    Ok(MutationResult::Updated { new_status })
+                    Ok(MutationResult::Updated {
+                        new_status,
+                        new_selection: None,
+                    })
                 }
             }
             None => Ok(MutationResult::Unchanged),
@@ -346,7 +358,10 @@ impl Mutation for InsertRevision {
         rewrite::rebase_commit(tx.repo_mut(), before, vec![target.id().clone()]).await?;
 
         match ws.finish_transaction(tx, format!("rebase commit {}", rebased_id))? {
-            Some(new_status) => Ok(MutationResult::Updated { new_status }),
+            Some(new_status) => Ok(MutationResult::Updated {
+                new_status,
+                new_selection: None,
+            }),
             None => Ok(MutationResult::Unchanged),
         }
     }
@@ -383,7 +398,10 @@ impl Mutation for MoveRevision {
         rewrite::rebase_commit(tx.repo_mut(), target, parent_ids).await?;
 
         match ws.finish_transaction(tx, format!("rebase commit {}", rebased_id))? {
-            Some(new_status) => Ok(MutationResult::Updated { new_status }),
+            Some(new_status) => Ok(MutationResult::Updated {
+                new_status,
+                new_selection: None,
+            }),
             None => Ok(MutationResult::Unchanged),
         }
     }
@@ -410,7 +428,10 @@ impl Mutation for MoveSource {
         rewrite::rebase_commit(tx.repo_mut(), target, parent_ids).await?;
 
         match ws.finish_transaction(tx, format!("rebase commit {}", rebased_id))? {
-            Some(new_status) => Ok(MutationResult::Updated { new_status }),
+            Some(new_status) => Ok(MutationResult::Updated {
+                new_status,
+                new_selection: None,
+            }),
             None => Ok(MutationResult::Unchanged),
         }
     }
@@ -484,7 +505,10 @@ impl Mutation for MoveChanges {
             tx,
             format!("move changes from {} to {}", from.id().hex(), to.id().hex()),
         )? {
-            Some(new_status) => Ok(MutationResult::Updated { new_status }),
+            Some(new_status) => Ok(MutationResult::Updated {
+                new_status,
+                new_selection: None,
+            }),
             None => Ok(MutationResult::Unchanged),
         }
     }
@@ -517,7 +541,10 @@ impl Mutation for CopyChanges {
             tx.repo_mut().rebase_descendants()?;
 
             match ws.finish_transaction(tx, format!("restore into commit {}", to.id().hex()))? {
-                Some(new_status) => Ok(MutationResult::Updated { new_status }),
+                Some(new_status) => Ok(MutationResult::Updated {
+                    new_status,
+                    new_selection: None,
+                }),
                 None => Ok(MutationResult::Unchanged),
             }
         }
@@ -568,7 +595,10 @@ impl Mutation for TrackBranch {
                         remote_name_ref.as_str()
                     ),
                 )? {
-                    Some(new_status) => Ok(MutationResult::Updated { new_status }),
+                    Some(new_status) => Ok(MutationResult::Updated {
+                        new_status,
+                        new_selection: None,
+                    }),
                     None => Ok(MutationResult::Unchanged),
                 }
             }
@@ -639,7 +669,10 @@ impl Mutation for UntrackBranch {
             tx,
             format!("untrack remote {}", combine_bookmarks(&untracked)),
         )? {
-            Some(new_status) => Ok(MutationResult::Updated { new_status }),
+            Some(new_status) => Ok(MutationResult::Updated {
+                new_status,
+                new_selection: None,
+            }),
             None => Ok(MutationResult::Unchanged),
         }
     }
@@ -676,7 +709,10 @@ impl Mutation for RenameBranch {
                 new_name_ref.as_str()
             ),
         )? {
-            Some(new_status) => Ok(MutationResult::Updated { new_status }),
+            Some(new_status) => Ok(MutationResult::Updated {
+                new_status,
+                new_selection: None,
+            }),
             None => Ok(MutationResult::Unchanged),
         }
     }
@@ -721,7 +757,10 @@ impl Mutation for CreateRef {
                         ws.format_commit_id(commit.id()).hex
                     ),
                 )? {
-                    Some(new_status) => Ok(MutationResult::Updated { new_status }),
+                    Some(new_status) => Ok(MutationResult::Updated {
+                        new_status,
+                        new_selection: None,
+                    }),
                     None => Ok(MutationResult::Unchanged),
                 }
             }
@@ -743,7 +782,10 @@ impl Mutation for CreateRef {
                         ws.format_commit_id(commit.id()).hex
                     ),
                 )? {
-                    Some(new_status) => Ok(MutationResult::Updated { new_status }),
+                    Some(new_status) => Ok(MutationResult::Updated {
+                        new_status,
+                        new_selection: None,
+                    }),
                     None => Ok(MutationResult::Unchanged),
                 }
             }
@@ -785,7 +827,10 @@ impl Mutation for DeleteRef {
                         remote_name_ref.as_str()
                     ),
                 )? {
-                    Some(new_status) => Ok(MutationResult::Updated { new_status }),
+                    Some(new_status) => Ok(MutationResult::Updated {
+                        new_status,
+                        new_selection: None,
+                    }),
                     None => Ok(MutationResult::Unchanged),
                 }
             }
@@ -797,7 +842,10 @@ impl Mutation for DeleteRef {
                     .set_local_bookmark_target(&branch_name_ref, RefTarget::absent());
 
                 match ws.finish_transaction(tx, format!("forget {}", branch_name_ref.as_str()))? {
-                    Some(new_status) => Ok(MutationResult::Updated { new_status }),
+                    Some(new_status) => Ok(MutationResult::Updated {
+                        new_status,
+                        new_selection: None,
+                    }),
                     None => Ok(MutationResult::Unchanged),
                 }
             }
@@ -809,7 +857,10 @@ impl Mutation for DeleteRef {
                     .set_local_tag_target(&tag_name_ref, RefTarget::absent());
 
                 match ws.finish_transaction(tx, format!("forget tag {}", tag_name_ref.as_str()))? {
-                    Some(new_status) => Ok(MutationResult::Updated { new_status }),
+                    Some(new_status) => Ok(MutationResult::Updated {
+                        new_status,
+                        new_selection: None,
+                    }),
                     None => Ok(MutationResult::Unchanged),
                 }
             }
@@ -853,7 +904,10 @@ impl Mutation for MoveRef {
                         commit.id().hex()
                     ),
                 )? {
-                    Some(new_status) => Ok(MutationResult::Updated { new_status }),
+                    Some(new_status) => Ok(MutationResult::Updated {
+                        new_status,
+                        new_selection: None,
+                    }),
                     None => Ok(MutationResult::Unchanged),
                 }
             }
@@ -875,7 +929,10 @@ impl Mutation for MoveRef {
                         commit.id().hex()
                     ),
                 )? {
-                    Some(new_status) => Ok(MutationResult::Updated { new_status }),
+                    Some(new_status) => Ok(MutationResult::Updated {
+                        new_status,
+                        new_selection: None,
+                    }),
                     None => Ok(MutationResult::Unchanged),
                 }
             }
@@ -1030,7 +1087,10 @@ impl Mutation for MoveHunk {
                 to.id().hex()
             ),
         )? {
-            Some(new_status) => Ok(MutationResult::Updated { new_status }),
+            Some(new_status) => Ok(MutationResult::Updated {
+                new_status,
+                new_selection: None,
+            }),
             None => Ok(MutationResult::Unchanged),
         }
     }
@@ -1184,7 +1244,10 @@ impl Mutation for CopyHunk {
                 self.path.repo_path, self.from_id.hex, self.to_id.commit.hex
             ),
         )? {
-            Some(new_status) => Ok(MutationResult::Updated { new_status }),
+            Some(new_status) => Ok(MutationResult::Updated {
+                new_status,
+                new_selection: None,
+            }),
             None => Ok(MutationResult::Unchanged),
         }
     }
@@ -1426,7 +1489,10 @@ impl Mutation for GitPush {
                 }
             },
         )? {
-            Some(new_status) => Ok(MutationResult::Updated { new_status }),
+            Some(new_status) => Ok(MutationResult::Updated {
+                new_status,
+                new_selection: None,
+            }),
             None => Ok(MutationResult::Unchanged),
         }
     }
@@ -1491,7 +1557,10 @@ impl Mutation for GitFetch {
         }
 
         match ws.finish_transaction(tx, "fetch from git remote(s)".to_string())? {
-            Some(new_status) => Ok(MutationResult::Updated { new_status }),
+            Some(new_status) => Ok(MutationResult::Updated {
+                new_status,
+                new_selection: None,
+            }),
             None => Ok(MutationResult::Unchanged),
         }
     }
@@ -1523,8 +1592,8 @@ impl Mutation for UndoOperation {
         match ws.finish_transaction(tx, format!("undo operation {}", head_op.id().hex()))? {
             Some(new_status) => {
                 let working_copy = ws.get_commit(ws.wc_id())?;
-                let new_selection = ws.format_header(&working_copy, None)?;
-                Ok(MutationResult::UpdatedSelection {
+                let new_selection = Some(ws.format_header(&working_copy, None)?);
+                Ok(MutationResult::Updated {
                     new_status,
                     new_selection,
                 })

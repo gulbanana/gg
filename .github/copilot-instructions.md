@@ -100,7 +100,7 @@ cargo run -- web             # Launch in web mode (opens browser)
            // Perform mutation logic...
            
            match ws.finish_transaction(tx, "description")? {
-               Some(new_status) => Ok(MutationResult::Updated { new_status }),
+               Some(new_status) => Ok(MutationResult::Updated { new_status, new_selection: None }),
                None => Ok(MutationResult::Unchanged),
            }
        }

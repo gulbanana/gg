@@ -9,10 +9,10 @@ pub enum MutationResult {
     Unchanged,
     Updated {
         new_status: RepoStatus,
+        new_selection: Option<RevHeader>,
     },
-    UpdatedSelection {
-        new_status: RepoStatus,
-        new_selection: RevHeader,
+    Reconfigured {
+        new_config: RepoConfig,
     },
     InputRequired {
         request: InputRequest,

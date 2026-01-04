@@ -94,10 +94,12 @@ export async function mutate<T>(command: string, mutation: T, options?: { operat
         }
 
         // succeeded; dismiss modals
-        if (value.type == "Updated" || value.type == "UpdatedSelection" || value.type == "Unchanged") {
-            if (value.type != "Unchanged") {
+        if (value.type == "Unchanged" || value.type == "Updated" || value.type == "Reconfigured") {
+            if (value.type == "Reconfigured") {
+                repoConfigEvent.set(value.new_config);
+            } else if (value.type == "Updated") {
                 repoStatusEvent.set(value.new_status);
-                if (value.type == "UpdatedSelection") {
+                if (value.new_selection) {
                     revisionSelectEvent.set(value.new_selection);
                 }
             }

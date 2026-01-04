@@ -54,7 +54,7 @@ pub struct TreePath {
     pub relative_path: DisplayPath,
 }
 
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Clone, Debug)]
 #[serde(tag = "type")]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
 pub enum RepoConfig {

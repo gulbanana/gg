@@ -53,7 +53,7 @@ async fn checkout_revision() -> Result<()> {
     }
     .execute_unboxed(&mut ws)
     .await?;
-    assert_matches!(result, MutationResult::UpdatedSelection { .. });
+    assert_matches!(result, MutationResult::Updated { .. });
 
     let head_rev = queries::query_revision(&ws, revs::working_copy()).await?;
     let conflict_rev = queries::query_revision(&ws, revs::conflict_bookmark()).await?;
@@ -132,7 +132,10 @@ async fn immutability_of_bookmark() -> Result<()> {
         })
         .unwrap();
 
-    let MutationResult::UpdatedSelection { new_selection, .. } = CreateRevision {
+    let MutationResult::Updated {
+        new_selection: Some(new_selection),
+        ..
+    } = CreateRevision {
         parent_ids: vec![revs::working_copy()],
     }
     .execute_unboxed(&mut ws)
@@ -239,7 +242,10 @@ async fn create_revision_single_parent() -> Result<()> {
     .await?;
 
     match result {
-        MutationResult::UpdatedSelection { new_selection, .. } => {
+        MutationResult::Updated {
+            new_selection: Some(new_selection),
+            ..
+        } => {
             let parent_rev = queries::query_revision(&ws, revs::working_copy()).await?;
             let child_rev = queries::query_revision(&ws, new_selection.id).await?;
             assert!(
@@ -272,7 +278,10 @@ async fn create_revision_multi_parent() -> Result<()> {
     .await?;
 
     match result {
-        MutationResult::UpdatedSelection { new_selection, .. } => {
+        MutationResult::Updated {
+            new_selection: Some(new_selection),
+            ..
+        } => {
             let child_rev = queries::query_revision(&ws, new_selection.id).await?;
             assert_matches!(child_rev, RevResult::Detail { parents, .. } if parents.len() == 2);
         }
@@ -354,7 +363,7 @@ async fn duplicate_revisions() -> Result<()> {
     }
     .execute_unboxed(&mut ws)
     .await?;
-    assert_matches!(result, MutationResult::UpdatedSelection { .. });
+    assert_matches!(result, MutationResult::Updated { .. });
 
     let page = queries::query_log(&ws, "description(unsynced)", 3)?;
     assert_eq!(2, page.rows.len());
