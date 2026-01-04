@@ -86,6 +86,9 @@
     #dialog-content :global(input[type="password"]) {
         min-width: 180px;
     }
+    #dialog-content :global(input[type="url"]) {
+        min-width: 360px;
+    }
     #dialog-content :global(input[type="checkbox"]) {
         vertical-align: middle;
     }

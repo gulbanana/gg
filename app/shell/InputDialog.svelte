@@ -7,7 +7,7 @@
     import ModalDialog from "./ModalDialog.svelte";
     import SelectWidget from "../controls/SelectWidget.svelte";
 
-    type FieldType = "text" | "password" | "select" | "check";
+    type FieldType = "text" | "password" | "url" | "select" | "check";
 
     function getType(field: InputField): FieldType {
         if (field.choices.length === 2 && field.choices.includes("true") && field.choices.includes("false")) {
@@ -16,6 +16,11 @@
             return "select";
         } else if (field.label.toLowerCase().includes("password")) {
             return "password";
+        } else if (
+            field.label.toLowerCase().includes("repository") ||
+            field.label.toLowerCase().includes("destination")
+        ) {
+            return "url";
         } else {
             return "text";
         }
@@ -45,6 +50,7 @@
             switch (getType(field)) {
                 case "text":
                 case "password":
+                case "url":
                     let textInput = document.getElementById(`field-${field.label}`) as HTMLInputElement;
                     responseFields[field.label] = textInput.value;
                     break;
@@ -80,6 +86,14 @@
                 value={field.choices.length == 1 ? field.choices[0] : ""} />
         {:else if getType(field) == "password"}
             <input id="field-{field.label}" type="password" />
+        {:else if getType(field) == "url"}
+            <input
+                id="field-{field.label}"
+                type="url"
+                autocapitalize="off"
+                autocorrect="off"
+                autocomplete="off"
+                value={field.choices.length == 1 ? field.choices[0] : ""} />
         {:else if getType(field) == "select"}
             <SelectWidget
                 id="field-{field.label}"
