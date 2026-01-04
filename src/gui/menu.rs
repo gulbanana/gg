@@ -514,7 +514,7 @@ pub fn repo_open(window: &Window) {
     let window = window.clone();
     window.dialog().file().pick_folder(move |picked| {
         if let Some(FilePath::Path(wd)) = picked {
-            handler::nonfatal!(super::open_repository(&window, wd));
+            handler::nonfatal!(super::reopen_repository(&window, wd));
         }
     });
 }

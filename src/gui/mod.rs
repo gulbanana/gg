@@ -626,16 +626,8 @@ async fn worker_thread(
     }
 }
 
-fn open_repository(window: &Window, wd: PathBuf) -> Result<()> {
-    let state = window.state::<AppState>();
-
-    if state.get_has_workspace(window.label()) {
-        let app = window.app_handle().clone();
-        tauri::async_runtime::spawn(async move {
-            handler::nonfatal!(try_create_window(&app, Some(wd)).context("try_create_window"));
-        });
-    } else {
-        let config = try_open_repository(&window, Some(wd)).context("try_open_repository")?;
+fn reopen_repository(window: &Window, wd: PathBuf) -> Result<()> {
+    if let Some(config) = try_reopen_repository(window, wd)? {
         window.emit_to(
             EventTarget::window(window.label()),
             "gg://repo/config",
@@ -644,6 +636,22 @@ fn open_repository(window: &Window, wd: PathBuf) -> Result<()> {
     }
 
     Ok(())
+}
+
+fn try_reopen_repository(window: &Window, wd: PathBuf) -> Result<Option<messages::RepoConfig>> {
+    let state = window.state::<AppState>();
+
+    if state.get_has_workspace(window.label()) {
+        let app = window.app_handle().clone();
+        tauri::async_runtime::spawn(async move {
+            handler::nonfatal!(try_create_window(&app, Some(wd)).context("try_create_window"));
+        });
+        Ok(None)
+    } else {
+        Ok(Some(
+            try_open_repository(&window, Some(wd)).context("try_open_repository")?,
+        ))
+    }
 }
 
 fn try_open_repository(window: &Window, cwd: Option<PathBuf>) -> Result<messages::RepoConfig> {
