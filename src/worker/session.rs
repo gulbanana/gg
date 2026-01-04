@@ -147,7 +147,7 @@ impl Session for WorkerSession {
 
                     latest_wd = Some(resolved_wd);
 
-                    ws.import_and_snapshot(false).await?;
+                    ws.import_and_snapshot(false, true).await?;
 
                     tx.send(ws.format_config())?;
 
@@ -226,7 +226,12 @@ impl Session for WorkspaceSession<'_> {
                 }
                 SessionEvent::ExecuteSnapshot { tx } => {
                     let updated_head = self.load_at_head()?; // alternatively, this could be folded into snapshot so that it's done by all mutations
-                    if self.import_and_snapshot(false).await? || updated_head {
+                    let auto_update_stale = self
+                        .data
+                        .workspace_settings
+                        .get_bool("snapshot.auto-update-stale")
+                        .unwrap_or(false);
+                    if self.import_and_snapshot(false, auto_update_stale).await? || updated_head {
                         tx.send(Some(self.format_status()))?;
                     } else {
                         tx.send(None)?;

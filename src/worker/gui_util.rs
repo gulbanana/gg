@@ -570,7 +570,12 @@ impl WorkspaceSession<'_> {
      *********************************************************************/
 
     pub async fn start_transaction(&mut self) -> Result<Transaction> {
-        self.import_and_snapshot(true).await?;
+        let auto_update_stale = self
+            .data
+            .workspace_settings
+            .get_bool("snapshot.auto-update-stale")
+            .unwrap_or(false);
+        self.import_and_snapshot(true, auto_update_stale).await?;
         Ok(self.operation.repo.start_transaction())
     }
 
@@ -626,8 +631,11 @@ impl WorkspaceSession<'_> {
         Ok(Some(self.format_status()))
     }
 
-    // XXX does this need to do any operation merging in case of other writers?
-    pub async fn import_and_snapshot(&mut self, force: bool) -> Result<bool> {
+    pub async fn import_and_snapshot(
+        &mut self,
+        force: bool,
+        auto_update_stale: bool,
+    ) -> Result<bool> {
         if !(force
             || self
                 .data
@@ -642,7 +650,7 @@ impl WorkspaceSession<'_> {
             self.import_git_head().await?;
         }
 
-        let updated_working_copy = self.snapshot_working_copy().await?;
+        let updated_working_copy = self.snapshot_working_copy(auto_update_stale).await?;
 
         if self.is_colocated {
             self.import_git_refs()?;
@@ -651,7 +659,7 @@ impl WorkspaceSession<'_> {
         Ok(updated_working_copy)
     }
 
-    async fn snapshot_working_copy(&mut self) -> Result<bool> {
+    async fn snapshot_working_copy(&mut self, auto_update_stale: bool) -> Result<bool> {
         let workspace_name = self.workspace.workspace_name().to_owned();
         let get_wc_commit = |repo: &ReadonlyRepo| -> Result<Option<_>, _> {
             repo.view()
@@ -685,10 +693,38 @@ impl WorkspaceSession<'_> {
                 (repo, wc_commit)
             }
             WorkingCopyFreshness::WorkingCopyStale => {
-                return Err(anyhow!(
-                    "The working copy is stale (not updated since operation {}). Run `jj workspace update-stale` to update it.",
+                if !auto_update_stale {
+                    return Err(anyhow!(
+                        "The working copy is stale (not updated since operation {}). Run `jj workspace update-stale` to update it.",
+                        short_operation_hash(&old_op_id)
+                    ));
+                }
+
+                log::info!(
+                    "Updating stale working copy (last updated at operation {})",
                     short_operation_hash(&old_op_id)
-                ));
+                );
+
+                let new_wc_commit = wc_commit;
+                let old_op = repo.op_store().read_operation(&old_op_id).await?;
+                let old_view = repo.op_store().read_view(&old_op.view_id).await?;
+                let old_wc_commit = old_view
+                    .wc_commit_ids
+                    .get(&workspace_name)
+                    .map(|id| repo.store().get_commit(id))
+                    .transpose()?;
+                let old_tree = old_wc_commit.as_ref().map(|c: &Commit| c.tree());
+
+                // drop the lock, checkout, reacquire and and restart the mutation
+                drop(locked_ws);
+                self.workspace.check_out(
+                    repo.op_id().clone(),
+                    old_tree.as_ref(),
+                    &new_wc_commit,
+                )?;
+                locked_ws = self.workspace.start_working_copy_mutation()?;
+
+                (repo, new_wc_commit)
             }
             WorkingCopyFreshness::SiblingOperation => {
                 return Err(anyhow!(

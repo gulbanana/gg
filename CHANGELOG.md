@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Added
+- GG now respects the `snapshot.auto-update-stale` setting. Additionally, when first opening a repo, it will always update the working copy if it's stale.
+
 ### Fixed
 - In GUI mode, the Repository -> Open... menuitem always opened a new window even if you didn't have a workspace loaded in the current window.
 

@@ -183,12 +183,12 @@ async fn snapshot_updates_wc_if_changed() -> Result<()> {
     let mut ws = session.load_directory(repo.path())?;
     let old_wc = ws.wc_id().clone();
 
-    assert!(!ws.import_and_snapshot(true).await?);
+    assert!(!ws.import_and_snapshot(true, false).await?);
     assert_eq!(&old_wc, ws.wc_id());
 
     fs::write(repo.path().join("new.txt"), []).unwrap();
 
-    assert!(ws.import_and_snapshot(true).await?);
+    assert!(ws.import_and_snapshot(true, false).await?);
     assert_ne!(&old_wc, ws.wc_id());
 
     Ok(())
