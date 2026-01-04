@@ -1,5 +1,10 @@
 # GG Changelog
 
+## Unreleased
+
+### Fixed
+- In GUI mode, the Repository -> Open... menuitem always opened a new window even if you didn't have a workspace loaded in the current window.
+
 ## [0.36.4](releases/tag/v0.36.4)
 
 ### Added

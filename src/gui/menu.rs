@@ -511,12 +511,10 @@ pub fn handle_event(window: &Window, event: MenuEvent) -> Result<()> {
 }
 
 pub fn repo_open(window: &Window) {
-    let app_handle = window.app_handle().clone();
+    let window = window.clone();
     window.dialog().file().pick_folder(move |picked| {
-        if let Some(FilePath::Path(cwd)) = picked {
-            handler::nonfatal!(
-                super::try_create_window(&app_handle, Some(cwd)).context("try_create_window")
-            );
+        if let Some(FilePath::Path(wd)) = picked {
+            handler::nonfatal!(super::open_repository(&window, wd));
         }
     });
 }

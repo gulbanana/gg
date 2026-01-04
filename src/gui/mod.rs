@@ -50,6 +50,7 @@ struct WindowState {
     tree_menu: Menu<Wry>,
     ref_menu: Menu<Wry>,
     selection: Option<messages::RevHeader>,
+    has_workspace: bool,
 }
 
 impl AppState {
@@ -69,6 +70,26 @@ impl AppState {
             .expect("state mutex poisoned")
             .get(window_label)
             .and_then(|state| state.selection.clone())
+    }
+
+    fn get_has_workspace(&self, window_label: &str) -> bool {
+        self.windows
+            .lock()
+            .expect("state mutex poisoned")
+            .get(window_label)
+            .map(|state| state.has_workspace)
+            .unwrap_or(false)
+    }
+
+    fn set_has_workspace(&self, window_label: &str, has_workspace: bool) {
+        if let Some(state) = self
+            .windows
+            .lock()
+            .expect("state mutex poisoned")
+            .get_mut(window_label)
+        {
+            state.has_workspace = has_workspace;
+        }
     }
 }
 
@@ -538,6 +559,7 @@ pub fn try_create_window(app_handle: &AppHandle, workspace: Option<PathBuf>) -> 
             tree_menu,
             ref_menu,
             selection: None,
+            has_workspace: false,
         },
     );
 
@@ -585,6 +607,10 @@ async fn worker_thread(
     {
         log::debug!("restart worker: {err:#}");
 
+        // mark window as unloaded
+        let app_state = window.state::<AppState>();
+        app_state.set_has_workspace(window.label(), false);
+
         // it's ok if the worker has to restart, as long as we can notify the frontend of it
         handler::fatal!(window.emit_to(
             EventTarget::labeled(window.label()),
@@ -594,6 +620,26 @@ async fn worker_thread(
             },
         ));
     }
+}
+
+fn open_repository(window: &Window, wd: PathBuf) -> Result<()> {
+    let state = window.state::<AppState>();
+
+    if state.get_has_workspace(window.label()) {
+        let app = window.app_handle().clone();
+        tauri::async_runtime::spawn(async move {
+            handler::nonfatal!(try_create_window(&app, Some(wd)).context("try_create_window"));
+        });
+    } else {
+        let config = try_open_repository(&window, Some(wd)).context("try_open_repository")?;
+        window.emit_to(
+            EventTarget::window(window.label()),
+            "gg://repo/config",
+            config,
+        )?;
+    }
+
+    Ok(())
 }
 
 fn try_open_repository(window: &Window, cwd: Option<PathBuf>) -> Result<messages::RepoConfig> {
@@ -623,12 +669,16 @@ fn try_open_repository(window: &Window, cwd: Option<PathBuf>) -> Result<messages
         }
     };
 
+    // mark window as loaded/unloaded
+    let app_state = window.state::<AppState>();
     match &config {
         messages::RepoConfig::Workspace {
             absolute_path,
             track_recent_workspaces,
             ..
         } => {
+            app_state.set_has_workspace(window.label(), true);
+
             let workspace_path = absolute_path.0.clone();
             _ = window.set_title((String::from("GG - ") + workspace_path.as_str()).as_str());
 
@@ -641,6 +691,8 @@ fn try_open_repository(window: &Window, cwd: Option<PathBuf>) -> Result<messages
             }
         }
         _ => {
+            app_state.set_has_workspace(window.label(), false);
+
             let _ = window.set_title("GG - Gui for JJ");
         }
     }
