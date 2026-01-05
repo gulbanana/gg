@@ -65,9 +65,14 @@
             return syntheticChanges.length;
         },
         getSelection() {
-            return syntheticChanges.findIndex((row) => row.path.repo_path == $changeSelectEvent?.path.repo_path) ?? -1;
+            let index =
+                syntheticChanges.findIndex((row) => row.path.repo_path == $changeSelectEvent?.path.repo_path) ?? -1;
+            return { from: index, to: index };
         },
         selectRow(row: number) {
+            $changeSelectEvent = syntheticChanges[row];
+        },
+        extendSelection(row: number) {
             $changeSelectEvent = syntheticChanges[row];
         },
         editRow(row: number) {},

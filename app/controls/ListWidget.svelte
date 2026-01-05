@@ -1,8 +1,14 @@
 <script lang="ts" context="module">
+    export interface Selection {
+        from: number;
+        to: number;
+    }
+
     export interface List {
         getSize(): number;
-        getSelection(): number;
+        getSelection(): Selection;
         selectRow(row: number): void;
+        extendSelection(row: number): void;
         editRow(row: number): void;
     }
 </script>
@@ -47,39 +53,57 @@
             return;
         }
 
-        let index: number;
+        let selection: Selection;
+        let minIdx: number;
+        let maxIdx: number;
         let pageRows: number;
         switch (event.key) {
             case "ArrowUp":
                 event.preventDefault();
-                index = list.getSelection();
-                if (index > 0) {
-                    onSelect(index - 1);
+                selection = list.getSelection();
+                if (event.shiftKey) {
+                    if (selection.to > 0) {
+                        onExtend(selection.to - 1);
+                    }
+                } else {
+                    minIdx = Math.min(selection.from, selection.to);
+                    if (minIdx > 0) {
+                        onSelect(minIdx - 1);
+                    }
                 }
                 break;
 
             case "ArrowDown":
                 event.preventDefault();
-                index = list.getSelection();
-                if (index != -1 && list.getSize() > index + 1) {
-                    onSelect(index + 1);
+                selection = list.getSelection();
+                if (event.shiftKey) {
+                    if (selection.to != -1 && list.getSize() > selection.to + 1) {
+                        onExtend(selection.to + 1);
+                    }
+                } else {
+                    maxIdx = Math.max(selection.from, selection.to);
+                    if (maxIdx != -1 && list.getSize() > maxIdx + 1) {
+                        onSelect(maxIdx + 1);
+                    }
                 }
                 break;
 
             case "PageUp":
                 event.preventDefault();
-                index = list.getSelection();
+                selection = list.getSelection();
+                minIdx = Math.min(selection.from, selection.to);
                 pageRows = Math.round(box.clientHeight / 30);
-                index = Math.max(index - pageRows, 0);
-                onSelect(index);
+                minIdx = Math.max(minIdx - pageRows, 0);
+                onSelect(minIdx);
                 break;
 
             case "PageDown":
                 event.preventDefault();
-                index = list.getSelection();
+                selection = list.getSelection();
+                maxIdx = Math.max(selection.from, selection.to);
                 pageRows = Math.round(box.clientHeight / 30);
-                index = Math.min(index + pageRows, list.getSize() - 1);
-                onSelect(index);
+                maxIdx = Math.min(maxIdx + pageRows, list.getSize() - 1);
+                onSelect(maxIdx);
                 break;
 
             case "Home":
@@ -93,15 +117,26 @@
                 break;
 
             case "Enter":
-                list.editRow(list.getSelection());
+                selection = list.getSelection();
+                if (selection.from == selection.to) {
+                    list.editRow(selection.from);
+                }
         }
     }
 
     function onSelect(index: number) {
         box.focus();
-
         list.selectRow(index);
+        scrollToRow(index);
+    }
 
+    function onExtend(index: number) {
+        box.focus();
+        list.extendSelection(index);
+        scrollToRow(index);
+    }
+
+    function scrollToRow(index: number) {
         let y = index * 30;
         if (box.scrollTop + box.clientHeight < y + 30) {
             box.scrollTo({

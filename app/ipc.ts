@@ -100,7 +100,10 @@ export async function mutate<T>(command: string, mutation: T, options?: { operat
             } else if (value.type == "Updated") {
                 repoStatusEvent.set(value.new_status);
                 if (value.new_selection) {
-                    revisionSelectEvent.set(value.new_selection);
+                    revisionSelectEvent.set({
+                        from: value.new_selection.id,
+                        to: value.new_selection.id,
+                    });
                 }
             }
             currentMutation.set(null);

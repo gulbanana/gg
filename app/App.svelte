@@ -1,5 +1,5 @@
 <script lang="ts">
-    import type { RevId } from "./messages/RevId";
+    import type { RevSet } from "./messages/RevSet";
     import type { RevResult } from "./messages/RevResult";
     import type { RepoConfig } from "./messages/RepoConfig";
     import type { RepoStatus } from "./messages/RepoStatus";
@@ -126,7 +126,7 @@
     }
 
     $: if ($repoConfigEvent) loadRepo($repoConfigEvent);
-    $: if ($repoStatusEvent && $revisionSelectEvent) loadChange($revisionSelectEvent.id);
+    $: if ($repoStatusEvent && $revisionSelectEvent) loadChange($revisionSelectEvent);
     $: if (!isTauri()) {
         document.title =
             $repoConfigEvent.type === "Workspace"
@@ -154,17 +154,24 @@
         }
     }
 
-    async function loadChange(id: RevId) {
-        let rev = await query<RevResult>("query_revision", { id }, (q) => (selection = q));
+    async function loadChange(set: RevSet) {
+        let rev = await query<RevResult>("query_revisions", { set }, (q) => (selection = q));
 
         if (
             rev.type == "data" &&
             rev.value.type == "NotFound" &&
-            id.commit.hex !== $repoStatusEvent?.working_copy?.hex
+            (set.from.commit.hex !== $repoStatusEvent?.working_copy?.hex ||
+                set.to.commit.hex !== $repoStatusEvent?.working_copy?.hex)
         ) {
             return loadChange({
-                change: { type: "ChangeId", hex: "@", prefix: "@", rest: "" },
-                commit: $repoStatusEvent!.working_copy,
+                from: {
+                    change: { type: "ChangeId", hex: "@", prefix: "@", rest: "" },
+                    commit: $repoStatusEvent!.working_copy,
+                },
+                to: {
+                    change: { type: "ChangeId", hex: "@", prefix: "@", rest: "" },
+                    commit: $repoStatusEvent!.working_copy,
+                },
             });
         }
 

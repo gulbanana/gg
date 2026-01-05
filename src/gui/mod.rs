@@ -154,7 +154,7 @@ pub fn run_gui(options: super::RunOptions) -> Result<()> {
             query_recent_workspaces,
             query_log,
             query_log_next_page,
-            query_revision,
+            query_revisions,
             query_remotes,
             query_snapshot,
             abandon_revisions,
@@ -387,16 +387,19 @@ fn query_log_next_page(
 }
 
 #[tauri::command(async)]
-fn query_revision(
+fn query_revisions(
     window: Window,
     app_state: State<AppState>,
-    id: messages::RevId,
+    set: messages::RevSet,
 ) -> Result<messages::RevResult, InvokeError> {
     let session_tx: Sender<SessionEvent> = app_state.get_session(window.label());
     let (call_tx, call_rx) = channel();
 
     session_tx
-        .send(SessionEvent::QueryRevision { tx: call_tx, id })
+        .send(SessionEvent::QueryRevision {
+            tx: call_tx,
+            id: set.from,
+        })
         .map_err(InvokeError::from_error)?;
     call_rx
         .recv()

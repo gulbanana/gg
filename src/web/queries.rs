@@ -6,7 +6,7 @@ use std::sync::mpsc::channel;
 use axum::{Json, Router, extract::State, routing::post};
 use serde::Deserialize;
 
-use crate::messages::{self, LogPage, RepoConfig, RevId, RevResult};
+use crate::messages::{self, LogPage, RepoConfig, RevResult, RevSet};
 use crate::worker::SessionEvent;
 
 use super::ApiError;
@@ -17,7 +17,7 @@ pub fn router() -> Router<AppState> {
         .route("/query_workspace", post(query_workspace))
         .route("/query_log", post(query_log))
         .route("/query_log_next_page", post(query_log_next_page))
-        .route("/query_revision", post(query_revision))
+        .route("/query_revisions", post(query_revisions))
         .route("/query_remotes", post(query_remotes))
         .route("/query_recent_workspaces", post(query_recent_workspaces))
         .route("/query_snapshot", post(query_snapshot))
@@ -84,18 +84,19 @@ async fn query_log_next_page(State(state): State<AppState>) -> Result<Json<LogPa
 }
 
 #[derive(Deserialize)]
-pub struct QueryRevision {
-    id: RevId,
+pub struct QueryRevisions {
+    set: RevSet,
 }
 
-async fn query_revision(
+async fn query_revisions(
     State(state): State<AppState>,
-    Json(req): Json<QueryRevision>,
+    Json(req): Json<QueryRevisions>,
 ) -> Result<Json<RevResult>, ApiError> {
     let (tx, rx) = channel();
-    state
-        .worker_tx
-        .send(SessionEvent::QueryRevision { tx, id: req.id })?;
+    state.worker_tx.send(SessionEvent::QueryRevision {
+        tx,
+        id: req.set.from,
+    })?;
     let result = rx.recv()??;
     Ok(Json(result))
 }

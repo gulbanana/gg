@@ -14,11 +14,28 @@
     export let child: RevHeader | null = null;
     export let selected: boolean; // same as the imported event, but parent may want to force a value
     export let noBranches: boolean = false;
+    export let onClick: ((header: RevHeader) => void) | undefined = undefined;
+    export let onShiftClick: ((header: RevHeader) => void) | undefined = undefined;
 
     $: operand = (child ? { type: "Parent", header, child } : { type: "Revision", header }) as Operand;
 
-    function onSelect() {
-        revisionSelectEvent.set(header);
+    /*
+     * Select this revision by default, or callback to a list that needs more complex behaviour.
+     */
+    function onSelect(event: CustomEvent<MouseEvent>) {
+        if (event.detail.shiftKey) {
+            if (onShiftClick) {
+                onShiftClick(header);
+            } else {
+                revisionSelectEvent.set({ from: header.id, to: header.id });
+            }
+        } else {
+            if (onClick) {
+                onClick(header);
+            } else {
+                revisionSelectEvent.set({ from: header.id, to: header.id });
+            }
+        }
     }
 
     function onEdit() {

@@ -62,6 +62,14 @@ pub struct RevId {
     pub commit: CommitId,
 }
 
+/// A sequence (specifically) of revision ids. Equivalent to either `from::to` or `to::from` - whichever one is nonempty.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
+pub struct RevSet {
+    pub from: RevId,
+    pub to: RevId,
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
 pub struct RevHeader {
