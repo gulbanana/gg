@@ -1,5 +1,5 @@
-use super::{mkrepo, revs};
-use crate::messages::{RevHeader, RevResult, StoreRef};
+use super::{mkid, mkrepo, revs};
+use crate::messages::{RevHeader, RevResult, RevSet, RevsResult, StoreRef};
 use crate::worker::{WorkerSession, queries};
 use anyhow::Result;
 use assert_matches::assert_matches;
@@ -206,6 +206,29 @@ async fn revision_resolves_conflict() -> Result<()> {
     Ok(())
 }
 
+#[tokio::test]
+async fn revisions_nonexistent_range_returns_not_found() -> Result<()> {
+    let repo = mkrepo();
+
+    let mut session = WorkerSession::default();
+    let ws = session.load_directory(repo.path())?;
+
+    // use fake change IDs that don't exist in the repo
+    let nonexistent_set = RevSet {
+        from: mkid("aaaaaaaa", "0000000000000000000000000000000000000000"),
+        to: mkid("bbbbbbbb", "1111111111111111111111111111111111111111"),
+    };
+
+    let result = queries::query_revisions(&ws, nonexistent_set).await?;
+    assert_matches!(
+        result,
+        RevsResult::NotFound { .. },
+        "Querying non-existent range should return NotFound"
+    );
+
+    Ok(())
+}
+
 #[test]
 fn remotes_all() -> Result<()> {
     let repo = mkrepo();
@@ -235,4 +258,152 @@ fn remotes_tracking_bookmark() -> Result<()> {
     assert!(remotes.contains(&String::from("origin")));
 
     Ok(())
+}
+
+mod revisions_immutability {
+    //! Tests for query_revisions immutability checking.
+    //!
+    //! The test repository has a linear chain: root -> ... -> immutable_grandparent ->
+    //! immutable_parent -> immutable_bookmark -> main_bookmark -> working_copy
+    //!
+    //! immutable_bookmark and its ancestors are immutable; main_bookmark and working_copy are mutable.
+
+    use super::*;
+    use crate::messages::{RevSet, RevsResult};
+
+    /// Helper to create a RevSet from two RevIds
+    fn mkset(from: crate::messages::RevId, to: crate::messages::RevId) -> RevSet {
+        RevSet { from, to }
+    }
+
+    /// Helper to extract immutability flags from query result
+    fn get_immutability(result: &RevsResult) -> Vec<bool> {
+        match result {
+            RevsResult::Detail { headers, .. } => headers.iter().map(|h| h.is_immutable).collect(),
+            RevsResult::NotFound { .. } => panic!("Expected Detail, got NotFound"),
+        }
+    }
+
+    #[tokio::test]
+    async fn single_revision_immutable() -> Result<()> {
+        let repo = mkrepo();
+        let mut session = WorkerSession::default();
+        let ws = session.load_directory(repo.path())?;
+
+        let set = mkset(revs::immutable_bookmark(), revs::immutable_bookmark());
+        let result = queries::query_revisions(&ws, set).await?;
+
+        let flags = get_immutability(&result);
+        assert_eq!(
+            flags,
+            vec![true],
+            "Single immutable revision should be marked immutable"
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn single_revision_mutable() -> Result<()> {
+        let repo = mkrepo();
+        let mut session = WorkerSession::default();
+        let ws = session.load_directory(repo.path())?;
+
+        let set = mkset(revs::main_bookmark(), revs::main_bookmark());
+        let result = queries::query_revisions(&ws, set).await?;
+
+        let flags = get_immutability(&result);
+        assert_eq!(
+            flags,
+            vec![false],
+            "Single mutable revision should be marked mutable"
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn sequence_all_immutable() -> Result<()> {
+        let repo = mkrepo();
+        let mut session = WorkerSession::default();
+        let ws = session.load_directory(repo.path())?;
+
+        // immutable_grandparent -> immutable_parent -> immutable_bookmark (all immutable)
+        let set = mkset(revs::immutable_grandparent(), revs::immutable_bookmark());
+        let result = queries::query_revisions(&ws, set).await?;
+
+        let flags = get_immutability(&result);
+        assert_eq!(flags.len(), 3, "Should have 3 revisions in range");
+        assert!(
+            flags.iter().all(|&f| f),
+            "All revisions in immutable range should be immutable: {:?}",
+            flags
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn sequence_all_mutable() -> Result<()> {
+        let repo = mkrepo();
+        let mut session = WorkerSession::default();
+        let ws = session.load_directory(repo.path())?;
+
+        // main_bookmark -> working_copy (both mutable)
+        let set = mkset(revs::main_bookmark(), revs::working_copy());
+        let result = queries::query_revisions(&ws, set).await?;
+
+        let flags = get_immutability(&result);
+        assert_eq!(flags.len(), 2, "Should have 2 revisions in range");
+        assert!(
+            flags.iter().all(|&f| !f),
+            "All revisions in mutable range should be mutable: {:?}",
+            flags
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn sequence_oldest_immutable_newest_mutable() -> Result<()> {
+        let repo = mkrepo();
+        let mut session = WorkerSession::default();
+        let ws = session.load_directory(repo.path())?;
+
+        // immutable_bookmark -> main_bookmark (oldest immutable, newest mutable)
+        let set = mkset(revs::immutable_bookmark(), revs::main_bookmark());
+        let result = queries::query_revisions(&ws, set).await?;
+
+        let flags = get_immutability(&result);
+        assert_eq!(flags.len(), 2, "Should have 2 revisions in range");
+        assert_eq!(
+            flags,
+            vec![false, true],
+            "Oldest should be immutable, newest should be mutable"
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn sequence_mixed_immutability_longer() -> Result<()> {
+        let repo = mkrepo();
+        let mut session = WorkerSession::default();
+        let ws = session.load_directory(repo.path())?;
+
+        // immutable_parent -> immutable_bookmark -> main_bookmark -> working_copy
+        // First two immutable, last two mutable
+        let set = mkset(revs::immutable_parent(), revs::working_copy());
+        let result = queries::query_revisions(&ws, set).await?;
+
+        let flags = get_immutability(&result);
+        assert_eq!(flags.len(), 4, "Should have 4 revisions in range");
+        assert_eq!(
+            flags,
+            vec![false, false, true, true],
+            "First two should be immutable, last two should be mutable"
+        );
+
+        Ok(())
+    }
 }

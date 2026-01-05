@@ -104,8 +104,19 @@ mod revs {
         mkid("mnkoropy", "5f4dc18dd03158f9ec72e528ffaca2f4c73d3b4b")
     }
 
+    /// Bookmark added to immutable_heads()
     pub fn immutable_bookmark() -> RevId {
         mkid("ummxkyyk", "b0d38b770763ab74f297f483f4b42c961647b4fb")
+    }
+
+    /// An immutable commit (parent of immutable_bookmark)
+    pub fn immutable_parent() -> RevId {
+        mkid("qxpuyyzu", "7c115c5a32ae0347fe63559f2869891bd5e942cd")
+    }
+
+    /// An immutable commit (grandparent of immutable_bookmark)
+    pub fn immutable_grandparent() -> RevId {
+        mkid("lkqlzmoy", "f74aa777a736687d1e8c4a2ea55a6821a3ef16ca")
     }
 
     /// A commit with a conflict in b.txt

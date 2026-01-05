@@ -165,6 +165,28 @@ pub enum RevResult {
     },
 }
 
+#[derive(Serialize, Debug)]
+#[serde(tag = "type")]
+#[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
+#[allow(clippy::large_enum_variant)]
+pub enum RevsResult {
+    NotFound {
+        set: RevSet,
+    },
+    Detail {
+        /// The revision set that was queried.
+        set: RevSet,
+        /// All revisions in the set, ordered ancestors-first.
+        headers: Vec<RevHeader>,
+        /// Parents of the oldest revision in the set.
+        parents: Vec<RevHeader>,
+        /// Combined changes: diff from oldest parent to newest revision.
+        changes: Vec<RevChange>,
+        /// Conflicts present in the parent tree of the oldest revision.
+        conflicts: Vec<RevConflict>,
+    },
+}
+
 #[derive(Serialize, Clone, Copy, Debug)]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
 pub struct LogCoordinates(pub usize, pub usize);

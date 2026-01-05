@@ -32,14 +32,16 @@ use jj_lib::{
     ref_name::{RefNameBuf, RemoteNameBuf, RemoteRefSymbol},
     repo::Repo,
     repo_path::RepoPath,
-    revset::{Revset, RevsetEvaluationError},
+    revset::{Revset, RevsetEvaluationError, RevsetResolutionError},
     rewrite,
     tree_merge::MergeOptions,
 };
 
+use super::gui_util::RevsetError;
+
 use crate::messages::{
     ChangeHunk, ChangeKind, FileRange, HunkLocation, LogCoordinates, LogLine, LogPage, LogRow,
-    MultilineString, RevChange, RevConflict, RevId, RevResult,
+    MultilineString, RevChange, RevConflict, RevId, RevResult, RevSet, RevsResult,
 };
 
 use super::{WorkspaceSession, gui_util::get_git_remote_names};
@@ -377,6 +379,116 @@ pub async fn query_revision(ws: &WorkspaceSession<'_>, id: RevId) -> Result<RevR
 
     Ok(RevResult::Detail {
         header,
+        parents,
+        changes,
+        conflicts,
+    })
+}
+
+/// Read display details for a revset (limited to sequences). Returns headers in topological order (children first).
+pub async fn query_revisions(ws: &WorkspaceSession<'_>, set: RevSet) -> Result<RevsResult> {
+    // resolve singleton or arbitrary revset
+    let commits = if set.from.change.hex == set.to.change.hex {
+        match ws.resolve_optional_id(&set.from)? {
+            Some(commit) => vec![commit],
+            None => return Ok(RevsResult::NotFound { set }),
+        }
+    } else {
+        let revset_str = format!("{}::{}", set.from.change.hex, set.to.change.hex);
+        let revset = match ws.evaluate_revset_str(&revset_str) {
+            Ok(revset) => revset,
+            Err(RevsetError::Resolution(RevsetResolutionError::NoSuchRevision { .. })) => {
+                return Ok(RevsResult::NotFound { set });
+            }
+            Err(err) => return Err(err.into()),
+        };
+
+        match ws.resolve_multiple(revset)? {
+            commits if commits.is_empty() => return Ok(RevsResult::NotFound { set }),
+            commits => commits,
+        }
+    };
+
+    // trees before and after the revset
+    let oldest_commit = commits.last().ok_or(anyhow!("slice is_empty()"))?;
+    let oldest_parents: Result<Vec<_>, _> = oldest_commit.parents().collect();
+    let parent_tree = rewrite::merge_commit_trees(ws.repo(), &oldest_parents?).await?;
+
+    let newest_commit = commits.first().ok_or(anyhow!("slice is_empty()"))?;
+    let final_tree = newest_commit.tree();
+
+    // compute combined changes: diff from parents to final
+    let mut changes = Vec::new();
+    let tree_diff = parent_tree.diff_stream(&final_tree, &EverythingMatcher);
+    let conflict_labels = Diff::new(parent_tree.labels(), final_tree.labels());
+    format_tree_changes(ws, &mut changes, tree_diff, conflict_labels).await?;
+
+    let mut conflicts = Vec::new();
+    for (path, entry) in final_tree.entries() {
+        if let Ok(entry) = entry
+            && !entry.is_resolved()
+        {
+            match conflicts::materialize_tree_value(
+                ws.repo().store(),
+                &path,
+                entry,
+                final_tree.labels(),
+            )
+            .await?
+            {
+                MaterializedTreeValue::FileConflict(file) => {
+                    let mut hunk_content = vec![];
+                    conflicts::materialize_merge_result(
+                        &file.contents,
+                        &file.labels,
+                        &mut hunk_content,
+                        &ConflictMaterializeOptions {
+                            marker_style: ConflictMarkerStyle::Git,
+                            marker_len: None,
+                            merge: MergeOptions {
+                                hunk_level: FileMergeHunkLevel::Line,
+                                same_change: SameChange::Accept,
+                            },
+                        },
+                    )?;
+                    let mut hunks = get_unified_hunks(3, &hunk_content, &[])?;
+                    if let Some(hunk) = hunks.pop() {
+                        conflicts.push(RevConflict {
+                            path: ws.format_path(path)?,
+                            hunk,
+                        });
+                    }
+                }
+                _ => {
+                    log::warn!("nonresolved tree entry did not materialise as conflict");
+                }
+            }
+        }
+    }
+
+    // details for each revision in the set
+    let mut headers = Vec::new();
+    let mut known_immutable: Option<bool> = None;
+    for commit in &commits {
+        // optimization: once we find an immutable revision, its ancestors must be immutable too
+        let header = ws.format_header(commit, known_immutable)?;
+        if known_immutable.is_none() && header.is_immutable {
+            known_immutable = Some(true);
+        }
+        headers.push(header);
+    }
+
+    // optimization: if anything was immutable, the oldest revision's parents must also be immutable
+    let parents = oldest_commit
+        .parents()
+        .map_ok(|p| ws.format_header(&p, known_immutable))
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()?;
+
+    Ok(RevsResult::Detail {
+        set,
+        headers,
         parents,
         changes,
         conflicts,

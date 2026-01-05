@@ -553,8 +553,9 @@ impl WorkspaceSession<'_> {
         let check_revset = RevsetExpression::commits(ids.into_iter().collect());
 
         let mut diagnostics = RevsetDiagnostics::new();
-        let immutable_revset =
+        let immutable_heads =
             revset_util::parse_immutable_heads_expression(&mut diagnostics, &self.parse_context())?;
+        let immutable_revset = immutable_heads.ancestors();
         let intersection_revset = check_revset.intersection(&immutable_revset);
 
         // note: slow! jj has added a caching contains_fn to revsets, but this codepath is used in one-offs where
