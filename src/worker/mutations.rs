@@ -16,7 +16,7 @@ use jj_lib::ref_name::{RefNameBuf, RemoteName, RemoteNameBuf, RemoteRefSymbol};
 use jj_lib::tree_merge::MergeOptions;
 use jj_lib::{
     backend::{BackendError, CommitId},
-    commit::Commit,
+    commit::{Commit, conflict_label_for_commits},
     git::{self, GitBranchPushTargets, REMOTE_NAME_FOR_LOCAL_GIT_REPO},
     matchers::{EverythingMatcher, FilesMatcher, Matcher},
     object_id::ObjectId as ObjectIdTrait,
@@ -109,13 +109,26 @@ impl Mutation for BackoutRevisions {
         let reverted = ws.resolve_multiple_changes(self.ids)?;
         let reverted_parents: Result<Vec<_>, BackendError> = reverted[0].parents().collect();
 
-        let old_base_tree = rewrite::merge_commit_trees(tx.repo(), &reverted_parents?).await?;
+        let reverted_parents = reverted_parents?;
+        let old_base_tree = rewrite::merge_commit_trees(tx.repo(), &reverted_parents).await?;
         let new_base_tree = working_copy.tree();
         let old_tree = reverted[0].tree();
         let new_tree = MergedTree::merge(Merge::from_vec(vec![
-            (new_base_tree, String::new()),
-            (old_tree, String::new()),
-            (old_base_tree, String::new()),
+            (
+                new_base_tree,
+                format!("{} (backout destination)", working_copy.conflict_label()),
+            ),
+            (
+                old_tree,
+                format!("{} (backed out revision)", reverted[0].conflict_label()),
+            ),
+            (
+                old_base_tree,
+                format!(
+                    "{} (parents of backed out revision)",
+                    conflict_label_for_commits(&reverted_parents)
+                ),
+            ),
         ]))
         .await?;
 
@@ -500,9 +513,18 @@ impl Mutation for MoveChanges {
         // apply changes to destination
         let to_tree = to.tree();
         let new_to_tree = MergedTree::merge(Merge::from_vec(vec![
-            (to_tree, String::new()),
-            (parent_tree, String::new()),
-            (split_tree, String::new()),
+            (
+                to_tree,
+                format!("{} (move destination)", to.conflict_label()),
+            ),
+            (
+                parent_tree,
+                format!("{} (parents of moved revision)", from.conflict_label()),
+            ),
+            (
+                split_tree,
+                format!("{} (moved changes)", from.conflict_label()),
+            ),
         ]))
         .await?;
         let description = combine_messages(&from, &to, abandon_source);
@@ -1000,9 +1022,21 @@ impl Mutation for MoveHunk {
 
         // Remove hunk from source: backout the base→sibling diff from from_tree
         let remainder_tree = MergedTree::merge(Merge::from_vec(vec![
-            (from_tree.clone(), String::new()),
-            (sibling_tree.clone(), String::new()),
-            (base_tree.clone(), String::new()),
+            (
+                from_tree.clone(),
+                format!("{} (hunk source)", from.conflict_label()),
+            ),
+            (
+                sibling_tree.clone(),
+                format!("{} (moved hunk)", from.conflict_label()),
+            ),
+            (
+                base_tree.clone(),
+                format!(
+                    "{} (parent of hunk source)",
+                    from_parents[0].conflict_label()
+                ),
+            ),
         ]))
         .await?;
 
@@ -1010,9 +1044,21 @@ impl Mutation for MoveHunk {
         // (may be recomputed after rebase in the from_is_ancestor case)
         let to_tree = to.tree();
         let mut new_to_tree = MergedTree::merge(Merge::from_vec(vec![
-            (to_tree, String::new()),
-            (base_tree.clone(), String::new()),
-            (sibling_tree.clone(), String::new()),
+            (
+                to_tree,
+                format!("{} (hunk destination)", to.conflict_label()),
+            ),
+            (
+                base_tree.clone(),
+                format!(
+                    "{} (parent of hunk source)",
+                    from_parents[0].conflict_label()
+                ),
+            ),
+            (
+                sibling_tree.clone(),
+                format!("{} (moved hunk)", from.conflict_label()),
+            ),
         ]))
         .await?;
 
@@ -1078,9 +1124,21 @@ impl Mutation for MoveHunk {
                     .clone();
                 to = tx.repo().store().get_commit(&rebased_to_id)?;
                 new_to_tree = MergedTree::merge(Merge::from_vec(vec![
-                    (to.tree(), String::new()),
-                    (base_tree.clone(), String::new()),
-                    (sibling_tree.clone(), String::new()),
+                    (
+                        to.tree(),
+                        format!("{} (rebased hunk destination)", to.conflict_label()),
+                    ),
+                    (
+                        base_tree.clone(),
+                        format!(
+                            "{} (parent of hunk source)",
+                            from_parents[0].conflict_label()
+                        ),
+                    ),
+                    (
+                        sibling_tree.clone(),
+                        format!("{} (moved hunk)", from.conflict_label()),
+                    ),
                 ]))
                 .await?;
             }
