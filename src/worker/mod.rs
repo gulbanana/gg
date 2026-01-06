@@ -8,7 +8,6 @@ mod session;
 #[cfg(all(test, not(feature = "ts-rs")))]
 mod tests;
 
-use std::collections::HashMap;
 use std::env::{self, VarError};
 use std::fmt::Debug;
 use std::fs;
@@ -16,7 +15,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::{Context, Error, Result, anyhow};
-use jj_lib::git::{GitFetch, GitImportOptions, GitSettings};
+use jj_lib::git::{GitFetch, GitSettings};
 use jj_lib::ref_name::{RefNameBuf, RemoteName, RemoteNameBuf, RemoteRefSymbol};
 use jj_lib::repo::{Repo, StoreFactories};
 use jj_lib::settings::UserSettings;
@@ -29,7 +28,7 @@ use serde::Serialize;
 
 use crate::git_util::AuthContext;
 use crate::messages;
-use gui_util::WorkspaceSession;
+use gui_util::{WorkspaceSession, load_git_import_options};
 pub use session::{Session, SessionEvent};
 
 /// implemented by structured-change commands
@@ -193,11 +192,7 @@ impl WorkerSession {
         // fetch from origin
         let mut auth_ctx = AuthContext::new(None);
         let git_settings = GitSettings::from_settings(&settings)?;
-        let import_options = GitImportOptions {
-            auto_local_bookmark: git_settings.auto_local_bookmark,
-            abandon_unreachable_commits: git_settings.abandon_unreachable_commits,
-            remote_auto_track_bookmarks: HashMap::new(),
-        };
+        let import_options = load_git_import_options(&git_settings, &settings)?;
 
         let git_head_id = auth_ctx.with_callbacks(Some(self.sink.clone()), |cb, env| {
             let mut subprocess_options = git_settings.to_subprocess_options();

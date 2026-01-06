@@ -33,7 +33,7 @@ use jj_lib::{
     object_id::ObjectId,
     op_heads_store,
     operation::Operation,
-    ref_name::WorkspaceName,
+    ref_name::{RemoteNameBuf, WorkspaceName},
     repo::{ReadonlyRepo, Repo, RepoLoaderError, StoreFactories},
     repo_path::{RepoPath, RepoPathUiConverter},
     revset::{
@@ -42,7 +42,8 @@ use jj_lib::{
         RevsetWorkspaceContext, SymbolResolverExtension, UserRevsetExpression,
     },
     rewrite::{self, RebaseOptions, RebasedCommit},
-    settings::{HumanByteSize, UserSettings},
+    settings::{HumanByteSize, RemoteSettingsMap, UserSettings},
+    str_util::StringMatcher,
     transaction::Transaction,
     view::View,
     working_copy::{CheckoutStats, SnapshotOptions, WorkingCopyFreshness},
@@ -848,11 +849,7 @@ impl WorkspaceSession<'_> {
 
     fn import_git_refs(&mut self) -> Result<()> {
         let git_settings = GitSettings::from_settings(&self.data.workspace_settings)?;
-        let import_options = GitImportOptions {
-            auto_local_bookmark: git_settings.auto_local_bookmark,
-            abandon_unreachable_commits: git_settings.abandon_unreachable_commits,
-            remote_auto_track_bookmarks: HashMap::new(),
-        };
+        let import_options = load_git_import_options(&git_settings, &self.data.workspace_settings)?;
         let mut tx = self.operation.repo.start_transaction();
         let stats = git::import_refs(tx.repo_mut(), &import_options)
             .context("automated import failed despite reserved remote name")?;
@@ -1186,6 +1183,38 @@ fn build_ref_index(repo: &ReadonlyRepo) -> RefIndex {
     index
 }
 
+/********************/
+/* from revset_util */
+/********************/
+
+fn parse_remote_auto_track_bookmarks(
+    remote_settings: &RemoteSettingsMap,
+) -> Result<HashMap<RemoteNameBuf, StringMatcher>> {
+    let mut matchers = HashMap::new();
+    for (name, settings) in remote_settings {
+        let Some(text) = &settings.auto_track_bookmarks else {
+            continue;
+        };
+        let mut diagnostics = RevsetDiagnostics::new();
+        let expr = revset::parse_string_expression(&mut diagnostics, text).map_err(|err| {
+            anyhow!(
+                "Invalid `remotes.{}.auto-track-bookmarks`: {}",
+                name.as_symbol(),
+                err.kind()
+            )
+        })?;
+        for diagnostic in diagnostics.iter() {
+            log::warn!(
+                "In `remotes.{}.auto-track-bookmarks`: {}",
+                name.as_symbol(),
+                diagnostic
+            );
+        }
+        matchers.insert(name.clone(), expr.to_matcher());
+    }
+    Ok(matchers)
+}
+
 /************************************************/
 /* misc helpers that should be better organised */
 /************************************************/
@@ -1238,4 +1267,17 @@ pub fn get_git_remote_names(git_repo: &gix::Repository) -> Vec<String> {
         })
         .map(|remote| remote.to_string())
         .collect()
+}
+
+pub fn load_git_import_options(
+    git_settings: &GitSettings,
+    settings: &UserSettings,
+) -> Result<GitImportOptions> {
+    let remote_settings = settings.remote_settings()?;
+    let remote_auto_track_bookmarks = parse_remote_auto_track_bookmarks(&remote_settings)?;
+    Ok(GitImportOptions {
+        auto_local_bookmark: git_settings.auto_local_bookmark,
+        abandon_unreachable_commits: git_settings.abandon_unreachable_commits,
+        remote_auto_track_bookmarks,
+    })
 }

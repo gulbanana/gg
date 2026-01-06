@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::fmt::Display;
 use std::sync::Arc;
 
@@ -10,7 +9,7 @@ use jj_lib::conflicts::{
     self, ConflictMarkerStyle, ConflictMaterializeOptions, MaterializedTreeValue,
 };
 use jj_lib::files::FileMergeHunkLevel;
-use jj_lib::git::{GitImportOptions, GitSettings, GitSubprocessOptions};
+use jj_lib::git::{GitSettings, GitSubprocessOptions};
 use jj_lib::merge::{Merge, SameChange};
 use jj_lib::merged_tree::{MergedTree, MergedTreeBuilder};
 use jj_lib::ref_name::{RefNameBuf, RemoteName, RemoteNameBuf, RemoteRefSymbol};
@@ -44,7 +43,7 @@ use crate::messages::{
 };
 
 use super::Mutation;
-use super::gui_util::{WorkspaceSession, get_git_remote_names};
+use super::gui_util::{WorkspaceSession, get_git_remote_names, load_git_import_options};
 
 macro_rules! precondition {
     ($($args:tt)*) => {
@@ -1554,11 +1553,7 @@ impl Mutation for GitFetch {
         let mut auth_ctx = AuthContext::new(self.input);
         let progress_sender = ws.sink();
         let git_settings = GitSettings::from_settings(&ws.data.workspace_settings)?;
-        let import_options = GitImportOptions {
-            auto_local_bookmark: git_settings.auto_local_bookmark,
-            abandon_unreachable_commits: git_settings.abandon_unreachable_commits,
-            remote_auto_track_bookmarks: HashMap::new(),
-        };
+        let import_options = load_git_import_options(&git_settings, &ws.data.workspace_settings)?;
 
         for (remote_name, pattern) in &remote_patterns {
             let bookmark_expr = pattern
