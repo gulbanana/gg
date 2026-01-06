@@ -27,7 +27,7 @@ use jj_lib::{
     files::FileMergeHunkLevel,
     graph::{GraphEdge, GraphEdgeType, TopoGroupedGraphIterator},
     matchers::EverythingMatcher,
-    merge::SameChange,
+    merge::{Diff, SameChange},
     merged_tree::{TreeDiffEntry, TreeDiffStream},
     ref_name::{RefNameBuf, RemoteNameBuf, RemoteRefSymbol},
     repo::Repo,
@@ -354,7 +354,8 @@ pub async fn query_revision(ws: &WorkspaceSession<'_>, id: RevId) -> Result<RevR
 
     let mut changes = Vec::new();
     let tree_diff = parent_tree.diff_stream(&tree, &EverythingMatcher);
-    format_tree_changes(ws, &mut changes, tree_diff).await?;
+    let conflict_labels = Diff::new(parent_tree.labels(), tree.labels());
+    format_tree_changes(ws, &mut changes, tree_diff, conflict_labels).await?;
 
     let header = ws.format_header(&commit, None)?;
 
@@ -417,6 +418,7 @@ async fn format_tree_changes(
     ws: &WorkspaceSession<'_>,
     changes: &mut Vec<RevChange>,
     mut tree_diff: TreeDiffStream<'_>,
+    conflict_labels: Diff<&ConflictLabels>,
 ) -> Result<()> {
     let store = ws.repo().store();
 
@@ -435,10 +437,10 @@ async fn format_tree_changes(
 
         let has_conflict = !after.is_resolved();
 
-        let labels = ConflictLabels::unlabeled();
         let before_future =
-            conflicts::materialize_tree_value(store, &path, before.clone(), &labels);
-        let after_future = conflicts::materialize_tree_value(store, &path, after.clone(), &labels);
+            conflicts::materialize_tree_value(store, &path, before.clone(), conflict_labels.before);
+        let after_future =
+            conflicts::materialize_tree_value(store, &path, after.clone(), conflict_labels.after);
         let (before_value, after_value) = try_join!(before_future, after_future)?;
 
         let hunks = get_value_hunks(3, &path, before_value, after_value).await?;
