@@ -8,6 +8,7 @@ mod session;
 #[cfg(all(test, not(feature = "ts-rs")))]
 mod tests;
 
+use std::collections::HashMap;
 use std::env::{self, VarError};
 use std::fmt::Debug;
 use std::fs;
@@ -15,7 +16,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::{Context, Error, Result, anyhow};
-use jj_lib::git::{GitFetch, GitSettings};
+use jj_lib::git::{GitFetch, GitImportOptions, GitSettings};
 use jj_lib::ref_name::{RefNameBuf, RemoteName, RemoteNameBuf, RemoteRefSymbol};
 use jj_lib::repo::{Repo, StoreFactories};
 use jj_lib::settings::UserSettings;
@@ -172,6 +173,7 @@ impl WorkerSession {
                 tx.repo_mut(),
                 &remote_name,
                 source_url,
+                None, // push_url = fetch_url
                 gix::remote::fetch::Tags::Included,
                 &StringExpression::all(),
             )
@@ -191,10 +193,18 @@ impl WorkerSession {
         // fetch from origin
         let mut auth_ctx = AuthContext::new(None);
         let git_settings = GitSettings::from_settings(&settings)?;
+        let import_options = GitImportOptions {
+            auto_local_bookmark: git_settings.auto_local_bookmark,
+            abandon_unreachable_commits: git_settings.abandon_unreachable_commits,
+            remote_auto_track_bookmarks: HashMap::new(),
+        };
 
-        let git_head_id = auth_ctx.with_callbacks(Some(self.sink.clone()), |cb| {
+        let git_head_id = auth_ctx.with_callbacks(Some(self.sink.clone()), |cb, env| {
+            let mut subprocess_options = git_settings.to_subprocess_options();
+            subprocess_options.environment = env;
+
             let mut tx = repo.start_transaction();
-            let mut fetcher = GitFetch::new(tx.repo_mut(), &git_settings)?;
+            let mut fetcher = GitFetch::new(tx.repo_mut(), subprocess_options, &import_options)?;
             let refspecs = git::expand_fetch_refspecs(&remote_name, StringExpression::all())?;
 
             fetcher

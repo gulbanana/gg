@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fmt::Display;
 use std::sync::Arc;
 
@@ -9,6 +10,7 @@ use jj_lib::conflicts::{
     self, ConflictMarkerStyle, ConflictMaterializeOptions, MaterializedTreeValue,
 };
 use jj_lib::files::FileMergeHunkLevel;
+use jj_lib::git::{GitImportOptions, GitSettings, GitSubprocessOptions};
 use jj_lib::merge::{Merge, SameChange};
 use jj_lib::merged_tree::{MergedTree, MergedTreeBuilder};
 use jj_lib::ref_name::{RefNameBuf, RemoteName, RemoteNameBuf, RemoteRefSymbol};
@@ -111,7 +113,12 @@ impl Mutation for BackoutRevisions {
         let old_base_tree = rewrite::merge_commit_trees(tx.repo(), &reverted_parents?).await?;
         let new_base_tree = working_copy.tree();
         let old_tree = reverted[0].tree();
-        let new_tree = new_base_tree.merge(old_tree, old_base_tree).await?;
+        let new_tree = MergedTree::merge(Merge::from_vec(vec![
+            (new_base_tree, String::new()),
+            (old_tree, String::new()),
+            (old_base_tree, String::new()),
+        ]))
+        .await?;
 
         tx.repo_mut()
             .rewrite_commit(&working_copy)
@@ -493,7 +500,12 @@ impl Mutation for MoveChanges {
 
         // apply changes to destination
         let to_tree = to.tree();
-        let new_to_tree = to_tree.merge(parent_tree, split_tree).await?;
+        let new_to_tree = MergedTree::merge(Merge::from_vec(vec![
+            (to_tree, String::new()),
+            (parent_tree, String::new()),
+            (split_tree, String::new()),
+        ]))
+        .await?;
         let description = combine_messages(&from, &to, abandon_source);
         tx.repo_mut()
             .rewrite_commit(&to)
@@ -988,17 +1000,22 @@ impl Mutation for MoveHunk {
         )?;
 
         // Remove hunk from source: backout the base→sibling diff from from_tree
-        let remainder_tree = from_tree
-            .clone()
-            .merge(sibling_tree.clone(), base_tree.clone())
-            .await?;
+        let remainder_tree = MergedTree::merge(Merge::from_vec(vec![
+            (from_tree.clone(), String::new()),
+            (sibling_tree.clone(), String::new()),
+            (base_tree.clone(), String::new()),
+        ]))
+        .await?;
 
         // Apply hunk to destination: merge the base→sibling diff into to_tree
         // (may be recomputed after rebase in the from_is_ancestor case)
         let to_tree = to.tree();
-        let mut new_to_tree = to_tree
-            .merge(base_tree.clone(), sibling_tree.clone())
-            .await?;
+        let mut new_to_tree = MergedTree::merge(Merge::from_vec(vec![
+            (to_tree, String::new()),
+            (base_tree.clone(), String::new()),
+            (sibling_tree.clone(), String::new()),
+        ]))
+        .await?;
 
         let abandon_source = remainder_tree.tree_ids() == base_tree.tree_ids();
         let description = combine_messages(&from, &to, abandon_source);
@@ -1061,10 +1078,12 @@ impl Mutation for MoveHunk {
                     .ok_or_else(|| anyhow!("descendant to_commit not found in rebase map"))?
                     .clone();
                 to = tx.repo().store().get_commit(&rebased_to_id)?;
-                new_to_tree = to
-                    .tree()
-                    .merge(base_tree.clone(), sibling_tree.clone())
-                    .await?;
+                new_to_tree = MergedTree::merge(Merge::from_vec(vec![
+                    (to.tree(), String::new()),
+                    (base_tree.clone(), String::new()),
+                    (sibling_tree.clone(), String::new()),
+                ]))
+                .await?;
             }
 
             // Apply hunk to destination
@@ -1444,16 +1463,19 @@ impl Mutation for GitPush {
         // accumulate input requirements
         let mut auth_ctx = AuthContext::new(self.input);
         let event_sink = ws.sink();
-        let git_settings = git::GitSettings::from_settings(&ws.data.workspace_settings)?;
+        let subprocess_options = GitSubprocessOptions::from_settings(&ws.data.workspace_settings)?;
 
         // push to each remote
         for (remote_name, branch_updates) in remote_branch_updates.into_iter() {
             let targets = GitBranchPushTargets { branch_updates };
 
-            let result = auth_ctx.with_callbacks(Some(event_sink.clone()), |cb| {
+            let result = auth_ctx.with_callbacks(Some(event_sink.clone()), |cb, env| {
+                let mut subprocess_options = subprocess_options.clone();
+                subprocess_options.environment = env;
+
                 git::push_branches(
                     tx.repo_mut(),
-                    &git_settings,
+                    subprocess_options,
                     RemoteName::new(&remote_name),
                     &targets,
                     cb,
@@ -1531,10 +1553,14 @@ impl Mutation for GitFetch {
         // accumulate input requirements
         let mut auth_ctx = AuthContext::new(self.input);
         let progress_sender = ws.sink();
-        let git_settings = git::GitSettings::from_settings(&ws.data.workspace_settings)?;
+        let git_settings = GitSettings::from_settings(&ws.data.workspace_settings)?;
+        let import_options = GitImportOptions {
+            auto_local_bookmark: git_settings.auto_local_bookmark,
+            abandon_unreachable_commits: git_settings.abandon_unreachable_commits,
+            remote_auto_track_bookmarks: HashMap::new(),
+        };
 
         for (remote_name, pattern) in &remote_patterns {
-            let mut fetcher = git::GitFetch::new(tx.repo_mut(), &git_settings)?;
             let bookmark_expr = pattern
                 .clone()
                 .map(StringExpression::exact)
@@ -1542,16 +1568,23 @@ impl Mutation for GitFetch {
             let refspecs =
                 git::expand_fetch_refspecs(&RemoteName::new(remote_name), bookmark_expr)?;
 
-            let result = auth_ctx.with_callbacks(Some(progress_sender.clone()), |cb| {
+            let result = auth_ctx.with_callbacks(Some(progress_sender.clone()), |cb, env| {
+                let mut subprocess_options = git_settings.to_subprocess_options();
+                subprocess_options.environment = env;
+
+                let mut fetcher =
+                    git::GitFetch::new(tx.repo_mut(), subprocess_options, &import_options)?;
+
                 fetcher
                     .fetch(RemoteName::new(remote_name), refspecs, cb, None, None)
-                    .context("failed to fetch")
+                    .context("failed to fetch")?;
+
+                fetcher.import_refs().context("failed to import refs")?;
+
+                Ok(())
             });
 
             if let Err(err) = result {
-                return Ok(auth_ctx.into_result(err));
-            }
-            if let Err(err) = fetcher.import_refs().context("failed to import refs") {
                 return Ok(auth_ctx.into_result(err));
             }
         }
@@ -1676,11 +1709,19 @@ async fn read_file_content(
         Ok(None) => Ok(Vec::new()),
         Err(_) => {
             // handle conflicts by materializing them
-            match conflicts::materialize_tree_value(store, path, tree.path_value(path)?).await? {
+            match conflicts::materialize_tree_value(
+                store,
+                path,
+                tree.path_value(path)?,
+                tree.labels(),
+            )
+            .await?
+            {
                 MaterializedTreeValue::FileConflict(file) => {
                     let mut content = Vec::new();
                     conflicts::materialize_merge_result(
                         &file.contents,
+                        &file.labels,
                         &mut content,
                         &ConflictMaterializeOptions {
                             marker_style: ConflictMarkerStyle::Git,

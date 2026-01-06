@@ -25,7 +25,7 @@ use jj_lib::{
     default_index::DefaultReadonlyIndex,
     file_util,
     fileset::{self, FilesetDiagnostics},
-    git::{self, REMOTE_NAME_FOR_LOCAL_GIT_REPO},
+    git::{self, GitImportOptions, GitSettings, REMOTE_NAME_FOR_LOCAL_GIT_REPO},
     git_backend::GitBackend,
     gitignore::GitIgnoreFile,
     id_prefix::{IdPrefixContext, IdPrefixIndex},
@@ -847,10 +847,15 @@ impl WorkspaceSession<'_> {
     }
 
     fn import_git_refs(&mut self) -> Result<()> {
-        let git_settings = git::GitSettings::from_settings(&self.data.workspace_settings)?;
+        let git_settings = GitSettings::from_settings(&self.data.workspace_settings)?;
+        let import_options = GitImportOptions {
+            auto_local_bookmark: git_settings.auto_local_bookmark,
+            abandon_unreachable_commits: git_settings.abandon_unreachable_commits,
+            remote_auto_track_bookmarks: HashMap::new(),
+        };
         let mut tx = self.operation.repo.start_transaction();
-        // Automated import shouldn't fail because of reserved remote name.
-        let stats = jj_lib::git::import_refs(tx.repo_mut(), &git_settings)?;
+        let stats = git::import_refs(tx.repo_mut(), &import_options)
+            .context("automated import failed despite reserved remote name")?;
         if !tx.repo().has_changes() {
             return Ok(());
         }

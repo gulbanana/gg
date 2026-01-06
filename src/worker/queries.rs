@@ -14,6 +14,7 @@ use itertools::Itertools;
 use jj_cli::diff_util::LineDiffOptions;
 use jj_lib::{
     backend::CommitId,
+    conflict_labels::ConflictLabels,
     conflicts::{
         self, ConflictMarkerStyle, ConflictMaterializeOptions, MaterializedFileValue,
         MaterializedTreeValue,
@@ -313,11 +314,19 @@ pub async fn query_revision(ws: &WorkspaceSession<'_>, id: RevId) -> Result<RevR
         if let Ok(entry) = entry
             && !entry.is_resolved()
         {
-            match conflicts::materialize_tree_value(ws.repo().store(), &path, entry).await? {
+            match conflicts::materialize_tree_value(
+                ws.repo().store(),
+                &path,
+                entry,
+                parent_tree.labels(),
+            )
+            .await?
+            {
                 MaterializedTreeValue::FileConflict(file) => {
                     let mut hunk_content = vec![];
                     conflicts::materialize_merge_result(
                         &file.contents,
+                        &file.labels,
                         &mut hunk_content,
                         &ConflictMaterializeOptions {
                             marker_style: ConflictMarkerStyle::Git,
@@ -426,8 +435,10 @@ async fn format_tree_changes(
 
         let has_conflict = !after.is_resolved();
 
-        let before_future = conflicts::materialize_tree_value(store, &path, before.clone());
-        let after_future = conflicts::materialize_tree_value(store, &path, after.clone());
+        let labels = ConflictLabels::unlabeled();
+        let before_future =
+            conflicts::materialize_tree_value(store, &path, before.clone(), &labels);
+        let after_future = conflicts::materialize_tree_value(store, &path, after.clone(), &labels);
         let (before_value, after_value) = try_join!(before_future, after_future)?;
 
         let hunks = get_value_hunks(3, &path, before_value, after_value).await?;
@@ -486,6 +497,7 @@ async fn get_value_contents(path: &RepoPath, value: MaterializedTreeValue) -> Re
             let mut hunk_content = vec![];
             conflicts::materialize_merge_result(
                 &file.contents,
+                &file.labels,
                 &mut hunk_content,
                 &ConflictMaterializeOptions {
                     marker_style: ConflictMarkerStyle::Git,
@@ -498,7 +510,9 @@ async fn get_value_contents(path: &RepoPath, value: MaterializedTreeValue) -> Re
             )?;
             Ok(hunk_content)
         }
-        MaterializedTreeValue::OtherConflict { id } => Ok(id.describe().into_bytes()),
+        MaterializedTreeValue::OtherConflict { id, labels } => {
+            Ok(id.describe(&labels).into_bytes())
+        }
         MaterializedTreeValue::Tree(_) => Err(anyhow!("Unexpected tree in diff at path {path:?}")),
         MaterializedTreeValue::AccessDenied(error) => Err(anyhow!(error)),
     }

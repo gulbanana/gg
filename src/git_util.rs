@@ -5,22 +5,32 @@
 //! prompts to the server, which responds with either OK:<existing InputResponse> or NO if it needs
 //! to provision an InputRequest first.
 
-use crate::messages::{InputField, InputRequest, InputResponse, MultilineString, MutationResult};
-use crate::worker::EventSinkExt;
+use std::{
+    collections::HashMap,
+    env,
+    ffi::OsString,
+    io::{self, BufRead, BufReader, ErrorKind, Write},
+    path::PathBuf,
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
+    thread,
+    time::Duration,
+};
+
 use anyhow::{Context, Result, anyhow};
 use interprocess::local_socket::{
     GenericFilePath, ListenerOptions, Stream, ToFsName,
     traits::{Listener as _, Stream as _},
 };
 use jj_lib::git::{Progress, RemoteCallbacks};
-use std::io::{BufRead, BufReader, Write};
-use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard};
-use std::thread;
 use uuid::Uuid;
 
-static CRITICAL_SECTION: Mutex<()> = Mutex::new(());
+use crate::{
+    messages::{InputField, InputRequest, InputResponse, MultilineString, MutationResult},
+    worker::EventSinkExt,
+};
 
 pub struct AuthContext {
     input: Option<InputResponse>,
@@ -39,11 +49,8 @@ impl AuthContext {
     pub fn with_callbacks<T>(
         &mut self,
         sink: Option<Arc<dyn crate::worker::EventSink>>,
-        f: impl FnOnce(RemoteCallbacks) -> T,
+        f: impl FnOnce(RemoteCallbacks, HashMap<OsString, OsString>) -> T,
     ) -> T {
-        let _env_guard: MutexGuard<'_, ()> =
-            CRITICAL_SECTION.lock().expect("critical section poisoned");
-
         let stop_flag = Arc::new(AtomicBool::new(false));
 
         // socket for the askpass process to call back into this process
@@ -51,7 +58,7 @@ impl AuthContext {
         let socket_path = if cfg!(windows) {
             PathBuf::from(format!(r"\\.\pipe\{}", socket_name))
         } else {
-            std::env::temp_dir().join(format!("{}.sock", socket_name))
+            env::temp_dir().join(format!("{}.sock", socket_name))
         };
 
         // try to set up IPC, but allow failure - most people don't actually need it
@@ -85,35 +92,22 @@ impl AuthContext {
             }
         };
 
-        // if we did manage to start a server, specify an environment variable which causes gg to run as a client
-        let env_set = if handle.is_some()
-            && let Ok(exe_path) = std::env::current_exe()
+        // if we did manage to start a server, specify environment variables which cause git to invoke gg as a client
+        let environment = if handle.is_some()
+            && let Ok(exe_path) = env::current_exe()
         {
-            // SAFETY: called in a critical section, doesn't do any FFI
-            // even so, we should remove this as soon as https://github.com/jj-vcs/jj/pull/8428 is merged
-            unsafe {
-                std::env::set_var("GIT_ASKPASS", &exe_path);
-                std::env::set_var("GIT_TERMINAL_PROMPT", "0");
-                std::env::set_var("SSH_ASKPASS", &exe_path);
-                std::env::set_var("SSH_ASKPASS_REQUIRE", "force");
-                std::env::set_var("GG_ASKPASS_SOCKET", &socket_path);
-            }
-            true
+            HashMap::from([
+                ("GIT_ASKPASS".into(), exe_path.clone().into()),
+                ("GIT_TERMINAL_PROMPT".into(), "0".into()),
+                ("SSH_ASKPASS".into(), exe_path.into()),
+                ("SSH_ASKPASS_REQUIRE".into(), "force".into()),
+                ("GG_ASKPASS_SOCKET".into(), socket_path.into()),
+            ])
         } else {
-            false
+            HashMap::new()
         };
 
-        // legacy libgit2 callbacks, no longer used by jj-lib but kept here until support is formally removed
         let mut callbacks = RemoteCallbacks::default();
-
-        let mut get_ssh_keys = Self::get_ssh_keys;
-        callbacks.get_ssh_keys = Some(&mut get_ssh_keys);
-
-        let mut get_password = |url: &str, username: &str| self.get_password(url, username);
-        callbacks.get_password = Some(&mut get_password);
-
-        let mut get_username_password = |url: &str| self.get_username_password(url);
-        callbacks.get_username_password = Some(&mut get_username_password);
 
         // progress callbacks, delegating to a mode-specific event sink
         let mut progress_cb;
@@ -135,7 +129,7 @@ impl AuthContext {
                 .map(|cb| cb as &mut dyn FnMut(&Progress));
 
             sideband_cb = Some(move |message: &[u8]| {
-                if let Ok(text) = std::str::from_utf8(message) {
+                if let Ok(text) = str::from_utf8(message) {
                     let trimmed = text.trim();
                     if !trimmed.is_empty() {
                         sink1.send_typed(
@@ -151,18 +145,7 @@ impl AuthContext {
                 sideband_cb.as_mut().map(|cb| cb as &mut dyn FnMut(&[u8]));
         }
 
-        self.run_with_callbacks(callbacks, f, stop_flag, handle, env_set)
-    }
-
-    fn run_with_callbacks<T>(
-        &self,
-        callbacks: RemoteCallbacks,
-        f: impl FnOnce(RemoteCallbacks) -> T,
-        stop_flag: Arc<AtomicBool>,
-        handle: Option<thread::JoinHandle<()>>,
-        env_set: bool,
-    ) -> T {
-        let result = f(callbacks);
+        let result = f(callbacks, environment);
 
         // shut down the server
         stop_flag.store(true, Ordering::Relaxed);
@@ -170,70 +153,7 @@ impl AuthContext {
             let _ = handle.join();
         }
 
-        // clean up the environment before exiting the global lock
-        if env_set {
-            // SAFETY: called in a critical section, doesn't do any FFI
-            unsafe {
-                std::env::remove_var("GIT_ASKPASS");
-                std::env::remove_var("GIT_TERMINAL_PROMPT");
-                std::env::remove_var("SSH_ASKPASS");
-                std::env::remove_var("SSH_ASKPASS_REQUIRE");
-                std::env::remove_var("GG_ASKPASS_SOCKET");
-            }
-        }
-
         result
-    }
-
-    // simplistic, but it's the same as the version in jj_cli::git_util
-    fn get_ssh_keys(_username: &str) -> Vec<PathBuf> {
-        let mut paths = vec![];
-        if let Some(home_dir) = dirs::home_dir() {
-            let ssh_dir = Path::new(&home_dir).join(".ssh");
-            for filename in ["id_ed25519_sk", "id_ed25519", "id_rsa"] {
-                let key_path = ssh_dir.join(filename);
-                if key_path.is_file() {
-                    log::debug!("found ssh key {key_path:?}");
-                    paths.push(key_path);
-                }
-            }
-        }
-        if paths.is_empty() {
-            log::warn!("No SSH key found.");
-        }
-        paths
-    }
-
-    // return input if available, record requirement otherwise
-    fn get_password(&self, url: &str, username: &str) -> Option<String> {
-        let password_prompt = format!("Password for '{username}@{url}':");
-        if let Some(input) = &self.input
-            && let Some(password) = input.fields.get(&password_prompt)
-        {
-            Some(password.clone())
-        } else {
-            self.prompts.lock().unwrap().push(password_prompt);
-            None
-        }
-    }
-
-    // return inputs if available, record requirement otherwise
-    fn get_username_password(&self, url: &str) -> Option<(String, String)> {
-        let username_prompt = format!("Username for '{url}':");
-        let password_prompt = format!("Password for '{url}':");
-        if let Some(input) = &self.input
-            && let (Some(username), Some(password)) = (
-                input.fields.get(&username_prompt),
-                input.fields.get(&password_prompt),
-            )
-        {
-            Some((username.clone(), password.clone()))
-        } else {
-            let mut prompts = self.prompts.lock().unwrap();
-            prompts.push(username_prompt);
-            prompts.push(password_prompt);
-            None
-        }
     }
 
     pub fn into_result(self, err: anyhow::Error) -> MutationResult {
@@ -260,7 +180,7 @@ impl AuthContext {
 }
 
 pub fn run_askpass() -> Option<Result<()>> {
-    if let Ok(socket_path) = std::env::var("GG_ASKPASS_SOCKET") {
+    if let Ok(socket_path) = env::var("GG_ASKPASS_SOCKET") {
         Some(askpass_client(socket_path).context("askpass_client"))
     } else {
         None
@@ -269,7 +189,7 @@ pub fn run_askpass() -> Option<Result<()>> {
 
 fn askpass_client(socket_path: String) -> Result<()> {
     // the prompt is supplied to askpass as our first argument
-    let prompt = std::env::args().nth(1).unwrap_or_default();
+    let prompt = env::args().nth(1).unwrap_or_default();
 
     // send it to the server over the socket we've been given
     let name = socket_path
@@ -314,9 +234,9 @@ fn askpass_server(
                 handle_askpass_request(stream, &response, &prompts)
                     .context("handle_askpass_request")?;
             }
-            Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+            Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
                 // spin until the client starts
-                thread::sleep(std::time::Duration::from_millis(100));
+                thread::sleep(Duration::from_millis(100));
             }
             Err(e) => {
                 return Err(e.into());
@@ -332,7 +252,7 @@ fn handle_askpass_request(
     mut stream: Stream,
     response: &Option<InputResponse>,
     prompts: &Mutex<Vec<String>>,
-) -> std::io::Result<()> {
+) -> io::Result<()> {
     stream.set_nonblocking(false)?;
 
     let mut reader = BufReader::new(&stream);
@@ -362,80 +282,6 @@ fn handle_askpass_request(
 mod tests {
     use super::*;
     use assert_matches::assert_matches;
-    use std::collections::HashMap;
-
-    #[test]
-    fn test_context_with_password() {
-        let mut fields = HashMap::new();
-        fields.insert(
-            "Password for 'user@https://github.com':".to_string(),
-            "secret".to_string(),
-        );
-        let input = Some(InputResponse { fields });
-        let ctx = AuthContext::new(input);
-
-        let result = ctx.get_password("https://github.com", "user");
-
-        assert_eq!(result, Some("secret".to_string()));
-        assert!(ctx.prompts.lock().unwrap().is_empty());
-    }
-
-    #[test]
-    fn test_context_without_password() {
-        let ctx = AuthContext::new(None);
-
-        let result = ctx.get_password("https://github.com", "user");
-
-        assert_eq!(result, None);
-        let prompts = ctx.prompts.lock().unwrap();
-        assert_eq!(prompts.len(), 1);
-        assert_eq!(
-            prompts[0],
-            "Password for 'user@https://github.com':".to_string()
-        );
-    }
-
-    #[test]
-    fn test_context_with_username_password() {
-        let mut fields = HashMap::new();
-        fields.insert(
-            "Username for 'https://github.com':".to_string(),
-            "user".to_string(),
-        );
-        fields.insert(
-            "Password for 'https://github.com':".to_string(),
-            "secret".to_string(),
-        );
-        let input = Some(InputResponse { fields });
-        let ctx = AuthContext::new(input);
-
-        let result = ctx.get_username_password("https://github.com");
-
-        assert_eq!(result, Some(("user".to_string(), "secret".to_string())));
-    }
-
-    #[test]
-    fn test_context_without_username_password() {
-        let ctx = AuthContext::new(None);
-
-        let result = ctx.get_username_password("https://github.com");
-
-        assert_eq!(result, None);
-        let prompts = ctx.prompts.lock().unwrap();
-        assert_eq!(prompts.len(), 2);
-        assert_eq!(prompts[0], "Username for 'https://github.com':".to_string());
-        assert_eq!(prompts[1], "Password for 'https://github.com':".to_string());
-    }
-
-    #[test]
-    fn test_into_result_with_auth_required() {
-        let ctx = AuthContext::new(None);
-        ctx.get_password("https://github.com", "user"); // records auth requirement
-
-        let result = ctx.into_result(anyhow::anyhow!("some error"));
-
-        assert_matches!(result, MutationResult::InputRequired { .. });
-    }
 
     #[test]
     fn test_into_result_without_auth_required() {
@@ -453,9 +299,11 @@ mod tests {
         let input = Some(InputResponse { fields });
         let mut ctx = AuthContext::new(input);
 
-        // with_callbacks sets up the askpass server, so we test IPC inside it
-        ctx.with_callbacks(None, |_cb| {
-            let socket_path = std::env::var("GG_ASKPASS_SOCKET").expect("socket env set");
+        ctx.with_callbacks(None, |_cb, environment| {
+            let socket_path = environment
+                .get(&OsString::from("GG_ASKPASS_SOCKET"))
+                .expect("socket env set")
+                .clone();
             let name = socket_path
                 .to_fs_name::<GenericFilePath>()
                 .expect("valid path");
@@ -478,8 +326,11 @@ mod tests {
     fn test_askpass_ipc_without_credentials() {
         let mut ctx = AuthContext::new(None);
 
-        ctx.with_callbacks(None, |_cb| {
-            let socket_path = std::env::var("GG_ASKPASS_SOCKET").expect("socket env set");
+        ctx.with_callbacks(None, |_cb, environment| {
+            let socket_path = environment
+                .get(&OsString::from("GG_ASKPASS_SOCKET"))
+                .expect("socket env set")
+                .clone();
             let name = socket_path
                 .to_fs_name::<GenericFilePath>()
                 .expect("valid path");
