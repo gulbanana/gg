@@ -122,7 +122,7 @@ export async function mutate<T>(command: string, mutation: T, options?: { operat
  */
 export function delay<T>(): Promise<Query<T>> {
     return new Promise(function (resolve) {
-        setTimeout(() => resolve({ type: "wait" }), 250);
+        setTimeout(() => resolve({ type: "wait" }), 500);
     });
 }
 
