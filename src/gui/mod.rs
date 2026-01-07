@@ -239,15 +239,14 @@ fn forward_accelerator(window: Window, state: State<AppState>, key: char, ctrl: 
             }
         }
         ('m', true, false) => {
-            if let Some(header) = state.get_selection(window.label()) {
-                if !header.is_immutable && header.parent_ids.len() == 1 {
+            if let Some(header) = state.get_selection(window.label())
+                && !header.is_immutable && header.parent_ids.len() == 1 {
                     handler::nonfatal!(window.emit_to(
                         EventTarget::window(window.label()),
                         "gg://menu/revision",
                         "new_parent"
                     ));
                 }
-            }
         }
         _ => (),
     }
