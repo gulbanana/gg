@@ -98,16 +98,17 @@ GUI mode uses Tauri's bidirectional event system for push updates:
 | Event | Payload | Trigger |
 |-------|---------|---------|
 | `gg://repo/config` | `RepoConfig` | Workspace opened, worker error |
-| `gg://repo/status` | `RepoStatus` | Window focused (snapshot), mutation completed |
+| `gg://repo/status` | `RepoStatus` | Mutation completed |
 | `gg://menu/revision` | `string` | Menu item selected |
+| `gg://focus` | `()` | Window focused |
 
 Events are emitted via `window.emit_to()`:
 
 ```rust
 window.emit_to(
     EventTarget::labeled(window.label()),
-    "gg://repo/status",
-    status
+    "gg://focus",
+    ()
 )
 ```
 
@@ -149,7 +150,7 @@ Opening the same workspace twice focuses the existing window.
 
 1. **Creation**: `try_create_window()` builds a `WebviewWindow` with plugins
 2. **Setup**: `setup_window()` spawns worker thread, registers event handlers
-3. **Focus**: Triggers snapshot refresh via `SessionEvent::ExecuteSnapshot`
+3. **Focus**: Emits `gg://focus` event; frontend calls `query_snapshot` to refresh
 4. **Destruction**: Worker channel dropped, thread exits, state removed
 
 ## Native Menus

@@ -13,6 +13,7 @@
         currentInput,
         hasMenu,
         progressEvent,
+        lastFocus,
     } from "./stores.js";
     import ContextMenu from "./controls/ContextMenu.svelte";
     import RefMutator from "./mutators/RefMutator";
@@ -90,16 +91,8 @@
             window.addEventListener("beforeunload", handleUnload);
 
             // snapshot when focusing the browser or returning to the tab
-            const handleSnapshot = async () => {
-                if (document.visibilityState === "visible" && $repoConfigEvent.type === "Workspace") {
-                    const result = await query<RepoStatus | null>("query_snapshot", null);
-                    if (result.type === "data" && result.value) {
-                        repoStatusEvent.set(result.value);
-                    }
-                }
-            };
-            document.addEventListener("visibilitychange", handleSnapshot);
-            window.addEventListener("focus", handleSnapshot);
+            document.addEventListener("visibilitychange", handleFocus);
+            window.addEventListener("focus", handleFocus);
 
             // ping the backend; if either component dies, the other can clean up
             const heartbeatInterval = setInterval(async () => {
@@ -108,8 +101,8 @@
 
             const cleanup = () => {
                 clearInterval(heartbeatInterval);
-                document.removeEventListener("visibilitychange", handleSnapshot);
-                window.removeEventListener("focus", handleSnapshot);
+                document.removeEventListener("visibilitychange", handleFocus);
+                window.removeEventListener("focus", handleFocus);
                 window.removeEventListener("beforeunload", handleUnload);
             };
             return cleanup;
@@ -121,13 +114,15 @@
     };
     setContext<Settings>("settings", settings);
 
-    // web mode: mutations done directly by ContextMenu
-    // gui mode: mutations triggered by native context menu
     if (isTauri()) {
+        // web mode: mutations done directly by ContextMenu
+        // gui mode: mutations triggered by native context menu
         onEvent("gg://context/revision", mutateRevision);
         onEvent("gg://context/tree", mutateTree);
         onEvent("gg://context/branch", mutateRef);
         onEvent("gg://menu/repo", mutateRepository);
+        // gui mode: snapshot when window gains focus
+        onEvent("gg://focus", handleFocus);
     }
 
     $: if ($repoConfigEvent) loadRepo($repoConfigEvent);
@@ -174,6 +169,19 @@
         }
 
         selection = rev;
+    }
+
+    async function handleFocus() {
+        if (!isTauri() && document.visibilityState !== "visible") {
+            return;
+        }
+        if ($repoConfigEvent.type === "Workspace") {
+            const result = await query<RepoStatus | null>("query_snapshot", null);
+            if (result.type === "data" && result.value) {
+                repoStatusEvent.set(result.value);
+            }
+        }
+        lastFocus.set(Date.now());
     }
 
     async function queryRecentWorkspaces() {

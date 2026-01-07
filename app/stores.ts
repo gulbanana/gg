@@ -24,6 +24,7 @@ export const currentInput = writable<InputRequest & { callback: (response: Input
 
 export const hasModal = writable<boolean>(false);
 export const hasMenu = writable<{ x: number; y: number } | null>(null);
+export const lastFocus = writable<number>(Date.now());
 
 export function dragOverWidget(event: DragEvent) {
     event.stopPropagation();

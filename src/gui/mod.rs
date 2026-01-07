@@ -153,6 +153,7 @@ pub fn run_gui(options: super::RunOptions) -> Result<()> {
             query_log_next_page,
             query_revision,
             query_remotes,
+            query_snapshot,
             abandon_revisions,
             backout_revisions,
             checkout_revision,
@@ -418,6 +419,20 @@ fn query_remotes(
         .recv()
         .map_err(InvokeError::from_error)?
         .map_err(InvokeError::from_anyhow)
+}
+
+#[tauri::command(async)]
+fn query_snapshot(
+    window: Window,
+    app_state: State<AppState>,
+) -> Result<Option<messages::RepoStatus>, InvokeError> {
+    let session_tx: Sender<SessionEvent> = app_state.get_session(window.label());
+    let (call_tx, call_rx) = channel();
+
+    session_tx
+        .send(SessionEvent::ExecuteSnapshot { tx: call_tx })
+        .map_err(InvokeError::from_error)?;
+    call_rx.recv().map_err(InvokeError::from_error)
 }
 
 #[tauri::command(async)]
@@ -852,7 +867,7 @@ fn handle_window_event(window: &Window, event: &WindowEvent) -> Result<()> {
             app_state.windows.lock().unwrap().remove(window.label());
         }
         WindowEvent::Focused(true) => {
-            log::debug!("window focused; requesting snapshot");
+            log::debug!("window focused; notifying frontend");
 
             let app_state = window.state::<AppState>();
 
@@ -861,23 +876,7 @@ fn handle_window_event(window: &Window, event: &WindowEvent) -> Result<()> {
                 menu::handle_selection(menu, selection)?;
             }
 
-            let session_tx: Sender<SessionEvent> = app_state.get_session(window.label());
-            let (call_tx, call_rx) = channel();
-
-            session_tx.send(SessionEvent::ExecuteSnapshot { tx: call_tx })?;
-
-            // events are handled on the main thread, so don't wait for
-            // a worker response - that's a recipe for deadlock
-            let window = window.clone();
-            thread::spawn(move || {
-                if let Some(status) = handler::nonfatal!(call_rx.recv()) {
-                    handler::nonfatal!(window.emit_to(
-                        EventTarget::labeled(window.label()),
-                        "gg://repo/status",
-                        status,
-                    ));
-                }
-            });
+            window.emit_to(EventTarget::labeled(window.label()), "gg://focus", ())?;
         }
         _ => (),
     }

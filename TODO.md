@@ -7,7 +7,6 @@ Planned Features
 * Some way to access the resolve (mergetool) workflow. Difftools too, although this is less useful.
 * More stuff in the log - timestamps, commit ids... this might have to be configurable. 
 * Structured op descriptions - extracted ids etc, maybe via tags. This would benefit from being in JJ core.
-* Relative timestamps should update on refocus.
 * Window menu for common OS functions.
 * Better handling of the case where a git remote refuses push because you haven't fetched yet.
 * Improved revset entry, with the ability to save and edit favourite revsets.
