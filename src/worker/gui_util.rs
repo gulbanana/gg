@@ -1053,7 +1053,7 @@ impl SessionOperation {
         if let Some(git_backend) = self.git_backend() {
             let git_repo = git_backend.git_repo();
             if let Some(excludes_file_path) =
-                get_excludes_file_path(&git_repo.config_snapshot().plumbing())
+                get_excludes_file_path(git_repo.config_snapshot().plumbing())
             {
                 git_ignores = git_ignores.chain_with_file("", excludes_file_path)?;
             }

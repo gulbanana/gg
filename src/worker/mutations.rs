@@ -1002,12 +1002,12 @@ impl Mutation for MoveHunk {
         // Construct the "sibling tree": base_tree with just this hunk applied.
         // This represents a virtual sibling commit containing only the hunk.
         let store = tx.repo().store();
-        let base_content = read_file_content(store, &base_tree, &repo_path).await?;
+        let base_content = read_file_content(store, &base_tree, repo_path).await?;
         let sibling_content = apply_hunk_to_base(&base_content, &self.hunk)?;
         let sibling_blob_id = store
-            .write_file(&repo_path, &mut sibling_content.as_slice())
+            .write_file(repo_path, &mut sibling_content.as_slice())
             .await?;
-        let sibling_executable = match from_tree.path_value(&repo_path)?.into_resolved() {
+        let sibling_executable = match from_tree.path_value(repo_path)?.into_resolved() {
             Ok(Some(TreeValue::File { executable, .. })) => executable,
             Ok(_) => false,
             Err(_) => false,
@@ -1015,7 +1015,7 @@ impl Mutation for MoveHunk {
         let sibling_tree = update_tree_entry(
             store,
             &base_tree,
-            &repo_path,
+            repo_path,
             sibling_blob_id,
             sibling_executable,
         )?;
@@ -1189,13 +1189,13 @@ impl Mutation for CopyHunk {
         let to_tree = to.tree();
 
         // vheck for conflicts in destination
-        let to_path_value = to_tree.path_value(&repo_path)?;
+        let to_path_value = to_tree.path_value(repo_path)?;
         if to_path_value.into_resolved().is_err() {
             precondition!("Cannot restore hunk: destination file has conflicts");
         }
 
         // read destination content
-        let to_content = read_file_content(store, &to_tree, &repo_path).await?;
+        let to_content = read_file_content(store, &to_tree, repo_path).await?;
         let to_text = String::from_utf8_lossy(&to_content);
         let to_lines: Vec<&str> = to_text.lines().collect();
 
@@ -1250,7 +1250,7 @@ impl Mutation for CopyHunk {
 
         // read source content
         let from_tree = from.tree();
-        let from_content = read_file_content(store, &from_tree, &repo_path).await?;
+        let from_content = read_file_content(store, &from_tree, repo_path).await?;
         let from_text = String::from_utf8_lossy(&from_content);
         let from_lines: Vec<&str> = from_text.lines().collect();
 
@@ -1294,16 +1294,16 @@ impl Mutation for CopyHunk {
 
         // create new destination tree with preserved executable bit
         let new_to_blob_id = store
-            .write_file(&repo_path, &mut new_to_content.as_slice())
+            .write_file(repo_path, &mut new_to_content.as_slice())
             .await?;
 
-        let to_executable = match to_tree.path_value(&repo_path)?.into_resolved() {
+        let to_executable = match to_tree.path_value(repo_path)?.into_resolved() {
             Ok(Some(TreeValue::File { executable, .. })) => executable,
             _ => false,
         };
 
         let new_to_tree =
-            update_tree_entry(store, &to_tree, &repo_path, new_to_blob_id, to_executable)?;
+            update_tree_entry(store, &to_tree, repo_path, new_to_blob_id, to_executable)?;
 
         // rewrite destination
         tx.repo_mut()
@@ -1533,7 +1533,7 @@ impl Mutation for GitPush {
                 git::push_branches(
                     tx.repo_mut(),
                     subprocess_options,
-                    RemoteName::new(&remote_name),
+                    RemoteName::new(remote_name),
                     &targets,
                     cb,
                 )
@@ -1618,8 +1618,7 @@ impl Mutation for GitFetch {
                 .clone()
                 .map(StringExpression::exact)
                 .unwrap_or_else(StringExpression::all);
-            let refspecs =
-                git::expand_fetch_refspecs(&RemoteName::new(remote_name), bookmark_expr)?;
+            let refspecs = git::expand_fetch_refspecs(RemoteName::new(remote_name), bookmark_expr)?;
 
             let result = auth_ctx.with_callbacks(Some(progress_sender.clone()), |cb, env| {
                 let mut subprocess_options = git_settings.to_subprocess_options();

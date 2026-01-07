@@ -170,7 +170,7 @@ impl WorkerSession {
             let mut tx = repo.start_transaction();
             git::add_remote(
                 tx.repo_mut(),
-                &remote_name,
+                remote_name,
                 source_url,
                 None, // push_url = fetch_url
                 gix::remote::fetch::Tags::Included,
@@ -200,10 +200,10 @@ impl WorkerSession {
 
             let mut tx = repo.start_transaction();
             let mut fetcher = GitFetch::new(tx.repo_mut(), subprocess_options, &import_options)?;
-            let refspecs = git::expand_fetch_refspecs(&remote_name, StringExpression::all())?;
+            let refspecs = git::expand_fetch_refspecs(remote_name, StringExpression::all())?;
 
             fetcher
-                .fetch(&remote_name, refspecs, cb, None, None)
+                .fetch(remote_name, refspecs, cb, None, None)
                 .context("Failed to fetch from remote")?;
 
             fetcher.import_refs().context("Failed to import refs")?;

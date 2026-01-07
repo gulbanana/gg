@@ -776,7 +776,7 @@ fn try_reopen_repository(window: &Window, wd: PathBuf) -> Result<Option<messages
         Ok(None)
     } else {
         Ok(Some(
-            try_open_repository(&window, Some(wd)).context("try_open_repository")?,
+            try_open_repository(window, Some(wd)).context("try_open_repository")?,
         ))
     }
 }
