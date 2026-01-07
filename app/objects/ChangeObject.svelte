@@ -7,11 +7,11 @@
     import Zone from "./Zone.svelte";
     import { changeSelectEvent } from "../stores";
 
-    export let header: RevHeader;
+    export let header: RevHeader | null;
     export let change: RevChange;
     export let selected: boolean;
 
-    let operand: Operand = { type: "Change", header, path: change.path, hunk: null };
+    let operand: Operand | null = header ? { type: "Change", header, path: change.path, hunk: null } : null;
 
     let icon = "file";
     let state: "add" | "change" | "remove" | null = null;

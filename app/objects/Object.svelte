@@ -23,11 +23,11 @@ Core component for direct-manipulation objects. A drag&drop source.
     export let label: string;
     export let selected: boolean = false;
     export let conflicted: boolean;
-    export let operand: Operand;
+    export let operand: Operand | null;
 
     let dispatch = createEventDispatcher();
 
-    let id = suffix == null ? null : `${operand.type}-${suffix}`;
+    let id = suffix == null ? null : operand == null ? null : `${operand.type}-${suffix}`;
     let dragging: boolean;
     let dragHint: string | null = null;
 
@@ -40,7 +40,7 @@ Core component for direct-manipulation objects. A drag&drop source.
     }
 
     function onMenu(event: Event) {
-        if (operand.type == "Ref" || operand.type == "Change" || operand.type == "Revision") {
+        if (operand?.type == "Ref" || operand?.type == "Change" || operand?.type == "Revision") {
             event.preventDefault();
             event.stopPropagation();
 
@@ -59,7 +59,7 @@ Core component for direct-manipulation objects. A drag&drop source.
         currentContext.set(null);
         event.stopPropagation();
 
-        let canDrag = BinaryMutator.canDrag(operand);
+        let canDrag = operand == null ? { type: "no", hint: "" } : BinaryMutator.canDrag(operand);
 
         if (canDrag.type == "no") {
             return;
@@ -87,10 +87,10 @@ Core component for direct-manipulation objects. A drag&drop source.
     {id}
     class:selected
     class:conflict={conflicted}
-    class:context={dragging || $currentContext == operand}
+    class:context={dragging || (operand != null && $currentContext == operand)}
     class:hint={dragHint}
     tabindex="-1"
-    draggable="true"
+    draggable={operand != null}
     role="option"
     aria-label={label}
     aria-selected={selected}
@@ -99,7 +99,7 @@ Core component for direct-manipulation objects. A drag&drop source.
     on:contextmenu={onMenu}
     on:dragstart={onDragStart}
     on:dragend={onDragEnd}>
-    <slot context={dragging || $currentContext == operand} hint={dragHint} />
+    <slot context={dragging || (operand != null && $currentContext == operand)} hint={dragHint} />
 </button>
 
 <style>
@@ -112,10 +112,13 @@ Core component for direct-manipulation objects. A drag&drop source.
         color: inherit;
         text-align: left;
 
-        cursor: grab;
         width: 100%;
         display: flex;
         align-items: center;
+    }
+
+    button[draggable="true"] {
+        cursor: grab;
     }
 
     .selected {

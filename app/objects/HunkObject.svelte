@@ -6,16 +6,19 @@
     import Object from "./Object.svelte";
     import Zone from "./Zone.svelte";
 
-    export let header: RevHeader;
+    export let header: RevHeader | null;
     export let path: TreePath;
     export let hunk: ChangeHunk;
 
-    let operand: Operand = {
-        type: "Change",
-        header,
-        path,
-        hunk,
-    };
+    let operand: Operand | null =
+        header == null
+            ? null
+            : {
+                  type: "Change",
+                  header,
+                  path,
+                  hunk,
+              };
 
     function getHunkDescription(hunk: ChangeHunk): string {
         return `@@ -${hunk.location.from_file.start},${hunk.location.from_file.len} +${hunk.location.to_file.start},${hunk.location.to_file.len} @@`;

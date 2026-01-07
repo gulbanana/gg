@@ -12,7 +12,7 @@ A drop target for direct-manipulation objects.
         default: { target: boolean; hint: string | null };
     }
 
-    export let operand: Operand;
+    export let operand: Operand | null;
     export let alwaysTarget: boolean = false;
 
     let dropHint: string | null = null;
@@ -21,15 +21,16 @@ A drop target for direct-manipulation objects.
 
     function match(target: Operand | null): boolean {
         return (
-            target == operand ||
-            (operand.type == "Merge" && target?.type == "Merge" && operand.header.id.commit == target.header.id.commit)
+            (operand && target == operand) ||
+            (operand?.type == "Merge" && target?.type == "Merge" && operand.header.id.commit == target.header.id.commit)
         );
     }
 
     function onDragOver(event: DragEvent) {
         event.stopPropagation();
 
-        let canDrop = new BinaryMutator($currentSource!, operand).canDrop();
+        let canDrop =
+            operand == null ? { type: "no", hint: "" } : new BinaryMutator($currentSource!, operand).canDrop();
         if (canDrop.type == "yes") {
             event.preventDefault();
             if (!match($currentTarget)) {
@@ -52,9 +53,11 @@ A drop target for direct-manipulation objects.
     function onDrop(event: DragEvent) {
         event.stopPropagation();
 
-        let mutator = new BinaryMutator($currentSource!, operand);
-        if (mutator.canDrop().type == "yes") {
-            mutator.doDrop();
+        if (operand) {
+            let mutator = new BinaryMutator($currentSource!, operand);
+            if (mutator.canDrop().type == "yes") {
+                mutator.doDrop();
+            }
         }
 
         $currentSource = null;
