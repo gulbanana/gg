@@ -1799,6 +1799,7 @@ async fn read_file_content(
 /// would exist in a virtual "sibling" commit containing only this hunk.
 ///
 /// Line numbers must match exactly since the hunk was computed against this base.
+#[allow(clippy::manual_strip)]
 fn apply_hunk_to_base(base_content: &[u8], hunk: &crate::messages::ChangeHunk) -> Result<Vec<u8>> {
     let base_text = String::from_utf8_lossy(base_content);
     let base_lines: Vec<&str> = base_text.lines().collect();
