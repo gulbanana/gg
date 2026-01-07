@@ -1,6 +1,6 @@
 <script lang="ts">
     import type { RevSet } from "./messages/RevSet";
-    import type { RevResult } from "./messages/RevResult";
+    import type { RevsResult } from "./messages/RevsResult";
     import type { RepoConfig } from "./messages/RepoConfig";
     import type { RepoStatus } from "./messages/RepoStatus";
     import { type Query, query, mutate, trigger, onEvent, isTauri, getInput } from "./ipc.js";
@@ -31,12 +31,13 @@
     import RecentWorkspaces from "./shell/RecentWorkspaces.svelte";
     import { onMount, setContext } from "svelte";
     import IdSpan from "./controls/IdSpan.svelte";
+    import SetSpan from "./controls/SetSpan.svelte";
     import InputDialog from "./shell/InputDialog.svelte";
     import type Settings from "./shell/Settings";
     import type { RepoEvent } from "./messages/RepoEvent";
     import RepositoryMutator from "./mutators/RepositoryMutator";
 
-    let selection: Query<RevResult> = {
+    let selection: Query<RevsResult> = {
         type: "wait",
     };
     // for open recent workspaces when error dialogs happen
@@ -155,7 +156,7 @@
     }
 
     async function loadChange(set: RevSet) {
-        let rev = await query<RevResult>("query_revisions", { set }, (q) => (selection = q));
+        let rev = await query<RevsResult>("query_revisions", { set }, (q) => (selection = q));
 
         if (
             rev.type == "data" &&
@@ -241,12 +242,12 @@
 
             <BoundQuery query={selection} let:data>
                 {#if data.type == "Detail"}
-                    <RevisionPane rev={data} />
+                    <RevisionPane revs={data} />
                 {:else}
                     <Pane>
                         <h2 slot="header">Not Found</h2>
                         <p slot="body">
-                            Revision <IdSpan id={data.id.change} />|<IdSpan id={data.id.commit} /> does not exist.
+                            Empty revision set <SetSpan set={data.set} />.
                         </p>
                     </Pane>
                 {/if}

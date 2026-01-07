@@ -1,5 +1,5 @@
 <script lang="ts">
-    import type { RevResult } from "./messages/RevResult";
+    import type { RevsResult } from "./messages/RevsResult";
     import { changeSelectEvent, dragOverWidget } from "./stores";
     import ChangeObject from "./objects/ChangeObject.svelte";
     import HunkObject from "./objects/HunkObject.svelte";
@@ -14,33 +14,54 @@
     import { onEvent } from "./ipc";
     import AuthorSpan from "./controls/AuthorSpan.svelte";
     import ListWidget, { type List } from "./controls/ListWidget.svelte";
+    import SetSpan from "./controls/SetSpan.svelte";
     import type { RevChange } from "./messages/RevChange";
+    import TimestampSpan from "./controls/TimestampSpan.svelte";
+    import TimestampRangeSpan from "./controls/TimestampRangeSpan.svelte";
 
-    export let rev: Extract<RevResult, { type: "Detail" }>;
+    export let revs: Extract<RevsResult, { type: "Detail" }>;
 
     const CONTEXT = 3;
 
-    let mutator = new RevisionMutator(rev.header);
+    // headers are in descendant-first order
+    $: newest = revs.headers[0];
+    $: oldest = revs.headers[revs.headers.length - 1];
+    $: singleton = revs.set.from.commit.hex == revs.set.to.commit.hex;
 
-    const currentDescription = rev.header.description.lines.join("\n");
-    let fullDescription = currentDescription;
-    $: descriptionChanged = fullDescription !== currentDescription;
+    // XXX implement plural mutate
+    $: mutator = new RevisionMutator(newest);
+
+    // debounce for change detection
+    let lastSelectionKey = `${revs.set.from.commit.hex}::${revs.set.to.commit.hex}`;
+    $: selectionKey = `${revs.set.from.commit.hex}::${revs.set.to.commit.hex}`;
+
+    // editable description for single-revision mode
+    let originalDescription = revs.headers[revs.headers.length - 1].description.lines.join("\n");
+    $: editableDescription = revs.headers[revs.headers.length - 1].description.lines.join("\n");
+    $: {
+        if (selectionKey !== lastSelectionKey) {
+            lastSelectionKey = selectionKey;
+            originalDescription = editableDescription;
+        }
+    }
+    $: descriptionChanged = originalDescription !== editableDescription;
+    let resetAuthor = false;
     function updateDescription() {
-        mutator.onDescribe(fullDescription, resetAuthor);
+        mutator.onDescribe(editableDescription, resetAuthor);
     }
 
-    let resetAuthor = false;
+    // grouped authors for range mode
+    $: firstTimestamp = new Date(
+        Math.min(...revs.headers.map((h) => new Date(h.author.timestamp).getTime())),
+    ).toISOString();
+    $: lastTimestamp = new Date(
+        Math.max(...revs.headers.map((h) => new Date(h.author.timestamp).getTime())),
+    ).toISOString();
+    $: authors = [...new Map(revs.headers.map((h) => [h.author.email, h.author])).values()];
 
-    let unresolvedConflicts = rev.conflicts.filter(
-        (conflict) =>
-            rev.changes.findIndex(
-                (change) => !change.has_conflict && change.path.repo_path == conflict.path.repo_path,
-            ) == -1,
-    );
-
-    let syntheticChanges = rev.changes
+    let syntheticChanges = revs.changes
         .concat(
-            unresolvedConflicts.map((conflict) => ({
+            revs.conflicts.map((conflict) => ({
                 kind: "None",
                 path: conflict.path,
                 has_conflict: true,
@@ -107,22 +128,29 @@
 <Pane>
     <h2 slot="header" class="header">
         <span class="title">
-            <IdSpan selectable id={rev.header.id.change} /> | <IdSpan selectable id={rev.header.id.commit} />
-            {#if rev.header.is_working_copy}
-                | Working copy
+            {#if singleton}
+                <IdSpan selectable id={newest.id.change} /> | <IdSpan selectable id={newest.id.commit} />
+                {#if newest.is_working_copy}
+                    | Working copy
+                {/if}
+            {:else}
+                <SetSpan selectable set={revs.set} /> | {revs.headers.length} revisions
             {/if}
-            {#if rev.header.is_immutable}
+            {#if revs.headers.some((header) => header.is_immutable)}
                 | Immutable
             {/if}
         </span>
 
         <div class="checkout-commands">
-            <ActionWidget
-                tip="make working copy"
-                onClick={mutator.onEdit}
-                disabled={rev.header.is_immutable || rev.header.is_working_copy}>
-                <Icon name="edit-2" /> Edit
-            </ActionWidget>
+            {#if singleton}
+                <ActionWidget
+                    tip="make working copy"
+                    onClick={mutator.onEdit}
+                    disabled={newest.is_immutable || newest.is_working_copy}>
+                    <Icon name="edit-2" /> Edit
+                </ActionWidget>
+            {/if}
+
             <ActionWidget tip="create a child" onClick={mutator.onNewChild}>
                 <Icon name="edit" /> New
             </ActionWidget>
@@ -130,39 +158,62 @@
     </h2>
 
     <div slot="body" class="body">
-        <textarea
-            class="description"
-            spellcheck="false"
-            disabled={rev.header.is_immutable}
-            bind:value={fullDescription}
-            on:dragenter={dragOverWidget}
-            on:dragover={dragOverWidget}
-            on:keydown={(ev) => {
-                if (descriptionChanged && ev.key === "Enter" && (ev.metaKey || ev.ctrlKey)) {
-                    updateDescription();
-                }
-            }}></textarea>
+        {#if !singleton}
+            <!-- prettier-ignore -->
+            <div class="description-list">{#each revs.headers as header, i}{#if i > 0}<hr class="description-divider" />{/if}<div class="description-row">{header.description.lines.join("\n")}</div>{/each}</div>
+        {:else}
+            <textarea
+                class="description"
+                spellcheck="false"
+                disabled={newest.is_immutable}
+                bind:value={editableDescription}
+                on:dragenter={dragOverWidget}
+                on:dragover={dragOverWidget}
+                on:keydown={(ev) => {
+                    if (descriptionChanged && ev.key === "Enter" && (ev.metaKey || ev.ctrlKey)) {
+                        updateDescription();
+                    }
+                }}></textarea>
+        {/if}
 
         <div class="signature-commands">
-            <span>Author:</span>
-            <AuthorSpan author={rev.header.author} includeTimestamp />
-            <ToggleWidget bind:checked={resetAuthor}>Reset</ToggleWidget>
-            <span></span>
-            <ActionWidget
-                tip="set commit message"
-                onClick={() => mutator.onDescribe(fullDescription, resetAuthor)}
-                disabled={rev.header.is_immutable || !descriptionChanged}>
-                <Icon name="file-text" /> Describe
-            </ActionWidget>
+            {#if singleton}
+                <span>Author:</span>
+                <AuthorSpan author={newest.author} />
+                <TimestampSpan timestamp={newest.author.timestamp} />
+
+                <ToggleWidget bind:checked={resetAuthor}>Reset</ToggleWidget>
+                <span></span>
+                <ActionWidget
+                    tip="set commit message"
+                    onClick={() => mutator.onDescribe(editableDescription, resetAuthor)}
+                    disabled={newest.is_immutable || !descriptionChanged}>
+                    <Icon name="file-text" /> Describe
+                </ActionWidget>
+            {:else}
+                {#if authors.length > 1}
+                    <span>Authors:</span>
+                {:else}
+                    <span>Author:</span>
+                {/if}
+                <span>
+                    {#each authors as author, ix}
+                        <!-- prettier-ignore -->
+                        <AuthorSpan {author} />{#if ix < authors.length - 1},&nbsp;
+                        {/if}
+                    {/each}
+                </span>
+                <TimestampRangeSpan from={firstTimestamp} to={lastTimestamp} />
+            {/if}
         </div>
 
-        {#if rev.parents.length > 0}
-            <Zone operand={{ type: "Merge", header: rev.header }} let:target>
+        {#if revs.parents.length > 0}
+            <Zone operand={{ type: "Merge", header: oldest }} let:target>
                 <div class="parents" class:target>
-                    {#each rev.parents as parent}
+                    {#each revs.parents as parent}
                         <div class="parent">
                             <span>Parent:</span>
-                            <RevisionObject header={parent} child={rev.header} selected={false} noBranches />
+                            <RevisionObject header={parent} child={oldest} selected={false} noBranches />
                         </div>
                     {/each}
                 </div>
@@ -172,16 +223,20 @@
         {#if syntheticChanges.length > 0}
             <div class="move-commands">
                 <span>Changes:</span>
+
+                <!-- XXX implement plural squash -->
                 <ActionWidget
                     tip="move all changes to parent"
                     onClick={mutator.onSquash}
-                    disabled={rev.header.is_immutable || rev.header.parent_ids.length != 1}>
+                    disabled={!singleton || newest.is_immutable || newest.parent_ids.length != 1}>
                     <Icon name="upload" /> Squash
                 </ActionWidget>
+
+                <!-- XXX implement plural restore... maybe. doesn't seem very useful -->
                 <ActionWidget
                     tip="copy all changes from parent"
                     onClick={mutator.onRestore}
-                    disabled={rev.header.is_immutable || rev.header.parent_ids.length != 1}>
+                    disabled={!singleton || newest.is_immutable || newest.parent_ids.length != 1}>
                     <Icon name="download" /> Restore
                 </ActionWidget>
             </div>
@@ -189,15 +244,16 @@
             <ListWidget {list} type="Change" descendant={$changeSelectEvent?.path.repo_path}>
                 <div class="changes">
                     {#each syntheticChanges as change}
+                        <!-- XXX implement, somehow, plural squash/restore -->
                         <ChangeObject
                             {change}
-                            header={rev.header}
+                            header={singleton ? newest : null}
                             selected={$changeSelectEvent?.path?.repo_path === change.path.repo_path} />
                         {#if $changeSelectEvent?.path?.repo_path === change.path.repo_path}
                             <div class="change" style="--lines: {minLines(change)}">
                                 {#each change.hunks as hunk}
                                     <div class="hunk">
-                                        <HunkObject header={rev.header} path={change.path} {hunk} />
+                                        <HunkObject header={singleton ? newest : null} path={change.path} {hunk} />
                                     </div>
                                     <pre class="diff">{#each hunk.lines.lines as line}<span class={lineColour(line)}
                                                 >{line}</span
@@ -256,11 +312,36 @@
         overflow: auto;
     }
 
+    .description-list {
+        min-height: 90px;
+        overflow: auto;
+        pointer-events: auto;
+
+        border: 1px solid transparent;
+        border-radius: 4px;
+        padding: 1px;
+
+        white-space: pre-wrap;
+        user-select: text;
+
+        color: var(--ctp-subtext0);
+    }
+
+    .description-row {
+        white-space: pre-wrap;
+    }
+
+    .description-divider {
+        border: none;
+        border-top: 1px dashed var(--ctp-overlay0);
+        margin: 4px 1px;
+    }
+
     .signature-commands {
         height: 30px;
         width: 100%;
         display: grid;
-        grid-template-columns: 63px auto auto 1fr auto;
+        grid-template-columns: 63px auto auto auto 1fr auto;
         align-items: center;
         gap: 6px;
         padding: 0 3px;

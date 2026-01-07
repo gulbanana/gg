@@ -46,9 +46,14 @@ pub enum SessionEvent {
         wd: PathBuf,
         colocated: bool,
     },
+    #[allow(dead_code)] // used by tests and QuerySession handler
     QueryRevision {
         tx: Sender<Result<messages::RevResult>>,
         id: messages::RevId,
+    },
+    QueryRevisions {
+        tx: Sender<Result<messages::RevsResult>>,
+        set: messages::RevSet,
     },
     QueryRemotes {
         tx: Sender<Result<Vec<String>>>,
@@ -228,6 +233,9 @@ impl Session for WorkspaceSession<'_> {
                 }
                 SessionEvent::QueryRevision { tx, id } => {
                     tx.send(queries::query_revision(&self, id).await)?
+                }
+                SessionEvent::QueryRevisions { tx, set } => {
+                    tx.send(queries::query_revisions(&self, set).await)?
                 }
                 SessionEvent::QueryRemotes {
                     tx,

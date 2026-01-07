@@ -6,7 +6,7 @@ use std::sync::mpsc::channel;
 use axum::{Json, Router, extract::State, routing::post};
 use serde::Deserialize;
 
-use crate::messages::{self, LogPage, RepoConfig, RevResult, RevSet};
+use crate::messages::{self, LogPage, RepoConfig, RevSet, RevsResult};
 use crate::worker::SessionEvent;
 
 use super::ApiError;
@@ -91,12 +91,11 @@ pub struct QueryRevisions {
 async fn query_revisions(
     State(state): State<AppState>,
     Json(req): Json<QueryRevisions>,
-) -> Result<Json<RevResult>, ApiError> {
+) -> Result<Json<RevsResult>, ApiError> {
     let (tx, rx) = channel();
-    state.worker_tx.send(SessionEvent::QueryRevision {
-        tx,
-        id: req.set.from,
-    })?;
+    state
+        .worker_tx
+        .send(SessionEvent::QueryRevisions { tx, set: req.set })?;
     let result = rx.recv()??;
     Ok(Json(result))
 }

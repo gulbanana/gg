@@ -391,15 +391,12 @@ fn query_revisions(
     window: Window,
     app_state: State<AppState>,
     set: messages::RevSet,
-) -> Result<messages::RevResult, InvokeError> {
+) -> Result<messages::RevsResult, InvokeError> {
     let session_tx: Sender<SessionEvent> = app_state.get_session(window.label());
     let (call_tx, call_rx) = channel();
 
     session_tx
-        .send(SessionEvent::QueryRevision {
-            tx: call_tx,
-            id: set.from,
-        })
+        .send(SessionEvent::QueryRevisions { tx: call_tx, set })
         .map_err(InvokeError::from_error)?;
     call_rx
         .recv()
