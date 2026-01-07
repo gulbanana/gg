@@ -114,7 +114,7 @@ pub async fn run_web(options: super::RunOptions, web_options: WebOptions) -> Res
     Ok(())
 }
 
-pub(self) fn create_app(
+ fn create_app(
     options: super::RunOptions,
     client_timeout: Duration,
 ) -> Result<(Router, oneshot::Receiver<()>)> {

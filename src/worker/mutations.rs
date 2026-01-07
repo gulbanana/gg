@@ -1805,7 +1805,7 @@ fn apply_hunk_to_base(base_content: &[u8], hunk: &crate::messages::ChangeHunk) -
     let ends_with_newline = base_content.ends_with(b"\n");
 
     let mut result_lines: Vec<String> = Vec::new();
-    let mut hunk_lines = hunk.lines.lines.iter().peekable();
+    let hunk_lines = hunk.lines.lines.iter().peekable();
 
     // Convert 1-indexed line number to 0-indexed
     let hunk_start = hunk.location.from_file.start.saturating_sub(1);
@@ -1814,7 +1814,7 @@ fn apply_hunk_to_base(base_content: &[u8], hunk: &crate::messages::ChangeHunk) -
     result_lines.extend(base_lines[..hunk_start].iter().map(|s| s.to_string()));
     let mut base_idx = hunk_start;
 
-    while let Some(diff_line) = hunk_lines.next() {
+    for diff_line in hunk_lines {
         if diff_line.starts_with(' ') || diff_line.starts_with('-') {
             // Context or deletion: verify the base content matches
             let expected = &diff_line[1..];
