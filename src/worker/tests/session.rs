@@ -4,6 +4,7 @@ use crate::{
     worker::{Session, SessionEvent, WorkerSession},
 };
 use anyhow::{Context, Result};
+use assert_matches::assert_matches;
 use jj_lib::config::ConfigSource;
 use std::{path::PathBuf, sync::mpsc::channel};
 
@@ -102,9 +103,7 @@ async fn reload_with_default_query() -> Result<()> {
     _ = rx_load.recv()??;
     _ = rx_query.recv()??;
     let config = rx_reload.recv()??;
-    assert!(
-        matches!(config, RepoConfig::Workspace { latest_query, .. } if latest_query == "none()")
-    );
+    assert_matches!(config, RepoConfig::Workspace { latest_query, .. } if latest_query == "none()");
 
     Ok(())
 }
@@ -328,9 +327,7 @@ async fn query_rev_not_found() -> Result<()> {
     _ = rx_load.recv()??;
     let result = rx_query.recv()??;
 
-    assert!(
-        matches!(result, RevResult::NotFound { id } if id.change.hex == "abcdefghijklmnopqrstuvwxyz")
-    );
+    assert_matches!(result, RevResult::NotFound { id } if id.change.hex == "abcdefghijklmnopqrstuvwxyz");
 
     Ok(())
 }

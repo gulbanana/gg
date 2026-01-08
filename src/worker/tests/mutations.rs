@@ -248,12 +248,8 @@ async fn create_revision_single_parent() -> Result<()> {
         } => {
             let parent_rev = queries::query_revision(&ws, revs::working_copy()).await?;
             let child_rev = queries::query_revision(&ws, new_selection.id).await?;
-            assert!(
-                matches!(parent_rev, RevResult::Detail { header, .. } if !header.is_working_copy)
-            );
-            assert!(
-                matches!(child_rev, RevResult::Detail { header, .. } if header.is_working_copy)
-            );
+            assert_matches!(parent_rev, RevResult::Detail { header, .. } if !header.is_working_copy);
+            assert_matches!(child_rev, RevResult::Detail { header, .. } if header.is_working_copy);
         }
         _ => panic!("CreateRevision failed"),
     }
@@ -311,9 +307,7 @@ async fn describe_revision() -> Result<()> {
     assert_matches!(result, MutationResult::Updated { .. });
 
     let rev = queries::query_revision(&ws, revs::working_copy()).await?;
-    assert!(
-        matches!(rev, RevResult::Detail { header, .. } if header.description.lines[0] == "wip")
-    );
+    assert_matches!(rev, RevResult::Detail { header, .. } if header.description.lines[0] == "wip");
 
     Ok(())
 }
@@ -326,9 +320,7 @@ async fn describe_revision_with_snapshot() -> Result<()> {
     let mut ws = session.load_directory(repo.path())?;
 
     let rev = queries::query_revision(&ws, revs::working_copy()).await?;
-    assert!(
-        matches!(rev, RevResult::Detail { header, changes, .. } if header.description.lines[0].is_empty() && changes.is_empty())
-    );
+    assert_matches!(rev, RevResult::Detail { header, changes, .. } if header.description.lines[0].is_empty() && changes.is_empty());
 
     fs::write(repo.path().join("new.txt"), []).unwrap(); // changes the WC commit
 
@@ -341,9 +333,7 @@ async fn describe_revision_with_snapshot() -> Result<()> {
     .await?;
 
     let rev = queries::query_revision(&ws, revs::working_copy()).await?;
-    assert!(
-        matches!(rev, RevResult::Detail { header, changes, .. } if header.description.lines[0] == "wip" && !changes.is_empty())
-    );
+    assert_matches!(rev, RevResult::Detail { header, changes, .. } if header.description.lines[0] == "wip" && !changes.is_empty());
 
     Ok(())
 }
