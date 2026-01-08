@@ -1,6 +1,6 @@
 [package]
 name = "gg-cli"
-version = "0.36.4"
+version = "0.37.0"
 description = "GG - Gui for JJ"
 authors = ["Thomas Castiglione"]
 edition = "2024"

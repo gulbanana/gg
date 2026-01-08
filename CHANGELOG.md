@@ -1,6 +1,7 @@
 # GG Changelog
 
-## Unreleased
+## [0.37.0](releases/tag/v0.37)
+This release is based on Jujutsu 0.37.
 
 ### Added
 - Repository -> Init... and Repository -> Clone... menuitems, for creating repositories.
