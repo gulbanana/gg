@@ -1,3 +1,5 @@
+use std::path::{self, Path, PathBuf};
+
 use anyhow::{Context, Result, anyhow};
 #[cfg(target_os = "macos")]
 use tauri::menu::AboutMetadata;
@@ -10,7 +12,7 @@ use tauri_plugin_dialog::{DialogExt, FilePath};
 use super::{AppState, handler};
 use crate::messages::{Operand, RepoEvent, RevHeader, StoreRef};
 
-pub fn build_main(app_handle: &AppHandle) -> tauri::Result<Menu<Wry>> {
+pub fn build_main(app_handle: &AppHandle, recent_items: &[String]) -> tauri::Result<Menu<Wry>> {
     #[cfg(target_os = "macos")]
     let pkg_info = app_handle.package_info();
     #[cfg(target_os = "macos")]
@@ -24,37 +26,58 @@ pub fn build_main(app_handle: &AppHandle) -> tauri::Result<Menu<Wry>> {
         ..Default::default()
     };
 
-    let repo_menu = Submenu::with_items(
+    let repo_menu = Submenu::new(app_handle, "Repository", true)?;
+
+    repo_menu.append(&MenuItem::with_id(
         app_handle,
-        "Repository",
+        "menu_repo_init",
+        "Init...",
         true,
-        &[
-            &MenuItem::with_id(
-                app_handle,
-                "menu_repo_init",
-                "Init...",
-                true,
-                Some("cmdorctrl+shift+n"),
-            )?,
-            &MenuItem::with_id(
-                app_handle,
-                "menu_repo_clone",
-                "Clone...",
-                true,
-                Some("cmdorctrl+shift+o"),
-            )?,
-            &PredefinedMenuItem::separator(app_handle)?,
-            &MenuItem::with_id(
-                app_handle,
-                "menu_repo_open",
-                "Open...",
-                true,
-                Some("cmdorctrl+o"),
-            )?,
-            &MenuItem::with_id(app_handle, "menu_repo_reopen", "Reopen", true, Some("f5"))?,
-            &PredefinedMenuItem::close_window(app_handle, Some("Close"))?,
-        ],
-    )?;
+        Some("cmdorctrl+shift+n"),
+    )?)?;
+    repo_menu.append(&MenuItem::with_id(
+        app_handle,
+        "menu_repo_clone",
+        "Clone...",
+        true,
+        Some("cmdorctrl+shift+o"),
+    )?)?;
+
+    repo_menu.append(&PredefinedMenuItem::separator(app_handle)?)?;
+
+    repo_menu.append(&MenuItem::with_id(
+        app_handle,
+        "menu_repo_open",
+        "Open...",
+        true,
+        Some("cmdorctrl+o"),
+    )?)?;
+    repo_menu.append(&MenuItem::with_id(
+        app_handle,
+        "menu_repo_reopen",
+        "Reopen",
+        true,
+        Some("f5"),
+    )?)?;
+
+    if !recent_items.is_empty() {
+        let recent_submenu = Submenu::new(app_handle, "Open Recent", true)?;
+        for path in recent_items.iter().take(10) {
+            let label = abbreviate_path(path);
+            let id = format!("recent:{}", path);
+            if let Ok(item) = MenuItem::with_id(app_handle, id, label, true, None::<&str>) {
+                recent_submenu.append(&item)?;
+            }
+        }
+        repo_menu.append(&recent_submenu)?;
+    }
+
+    repo_menu.append(&PredefinedMenuItem::separator(app_handle)?)?;
+
+    repo_menu.append(&PredefinedMenuItem::close_window(
+        app_handle,
+        Some("Close"),
+    )?)?;
 
     let revision_menu = Submenu::with_id_and_items(
         app_handle,
@@ -172,6 +195,12 @@ pub fn build_main(app_handle: &AppHandle) -> tauri::Result<Menu<Wry>> {
     )?;
 
     Ok(menu)
+}
+
+pub fn rebuild_main(app_handle: &AppHandle, recent_items: Vec<String>) -> Result<()> {
+    let menu = build_main(app_handle, &recent_items)?;
+    app_handle.set_menu(menu)?;
+    Ok(())
 }
 
 #[allow(clippy::type_complexity)]
@@ -521,6 +550,15 @@ pub fn handle_event(window: &Window, event: MenuEvent) -> Result<()> {
         "branch_fetch_single" => window.emit_to(target, "gg://context/branch", "fetch-single")?,
         "branch_rename" => window.emit_to(target, "gg://context/branch", "rename")?,
         "branch_delete" => window.emit_to(target, "gg://context/branch", "delete")?,
+        recent_id if recent_id.starts_with("recent:") => {
+            let path = PathBuf::from(&recent_id["recent:".len()..]);
+            let app_handle = window.app_handle().clone();
+            tauri::async_runtime::spawn(async move {
+                if let Err(e) = super::try_create_window(&app_handle, Some(path)) {
+                    log::error!("Failed to open recent workspace: {e:#}");
+                }
+            });
+        }
         _ => (),
     };
 
@@ -602,6 +640,19 @@ fn extract_repo_name(url: &str) -> String {
         .unwrap_or("repo");
 
     name.strip_suffix(".git").unwrap_or(name).to_string()
+}
+
+fn abbreviate_path(path: &str) -> String {
+    let path = Path::new(path);
+
+    if let Some(home) = dirs::home_dir() {
+        if let Ok(relative) = path.strip_prefix(&home) {
+            let sep = path::MAIN_SEPARATOR;
+            return format!("~{sep}{}", relative.display());
+        }
+    }
+
+    path.display().to_string()
 }
 
 trait Enabler {

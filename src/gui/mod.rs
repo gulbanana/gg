@@ -22,6 +22,7 @@ use tauri::webview::WebviewWindowBuilder;
 use tauri::{AppHandle, Emitter, EventTarget, Listener, Manager, State, Window, WindowEvent, Wry};
 use tauri_plugin_window_state::StateFlags;
 
+use crate::config::GGSettings;
 use crate::messages::{
     self, AbandonRevisions, BackoutRevisions, CheckoutRevision, CloneRepository, CopyChanges,
     CopyHunk, CreateRef, CreateRevision, CreateRevisionBetween, DeleteRef, DescribeRevision,
@@ -107,6 +108,8 @@ fn label_for_path(path: Option<&PathBuf>) -> String {
 }
 
 pub fn run_gui(options: super::RunOptions) -> Result<()> {
+    let recent_workspaces = options.settings.ui_recent_workspaces();
+
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
@@ -178,7 +181,7 @@ pub fn run_gui(options: super::RunOptions) -> Result<()> {
             git_fetch,
             undo_operation,
         ])
-        .menu(menu::build_main)
+        .menu(move |handle| menu::build_main(handle, &recent_workspaces))
         .manage(AppState::new(options.settings))
         .setup(move |app| {
             // after tauri initialises NSApplication, set the dock icon if we're running as CLI
@@ -240,13 +243,15 @@ fn forward_accelerator(window: Window, state: State<AppState>, key: char, ctrl: 
         }
         ('m', true, false) => {
             if let Some(header) = state.get_selection(window.label())
-                && !header.is_immutable && header.parent_ids.len() == 1 {
-                    handler::nonfatal!(window.emit_to(
-                        EventTarget::window(window.label()),
-                        "gg://menu/revision",
-                        "new_parent"
-                    ));
-                }
+                && !header.is_immutable
+                && header.parent_ids.len() == 1
+            {
+                handler::nonfatal!(window.emit_to(
+                    EventTarget::window(window.label()),
+                    "gg://menu/revision",
+                    "new_parent"
+                ));
+            }
         }
         _ => (),
     }
@@ -902,6 +907,10 @@ fn add_recent_workspaces(window: Window, workspace_path: String) -> Result<()> {
     recent.insert(0, workspace_path.clone());
     recent.truncate(10);
 
+    // update os-specific recent items. macos and windows have dedicated
+    // dock/taskbar registration apis; on macos this also covers the menubar,
+    // then on other operating systems we rebuild the menu to show recent items
+
     #[cfg(windows)]
     {
         crate::windows::update_jump_list(&mut recent)?;
@@ -916,6 +925,15 @@ fn add_recent_workspaces(window: Window, workspace_path: String) -> Result<()> {
             })
             .ok();
     }
+
+    let app_handle = window.app_handle().clone();
+    let recent_for_menu = recent.clone();
+    let app_handle_inner = app_handle.clone();
+    app_handle
+        .run_on_main_thread(move || {
+            handler::nonfatal!(menu::rebuild_main(&app_handle_inner, recent_for_menu));
+        })
+        .ok();
 
     session_tx.send(SessionEvent::WriteConfigArray {
         key: vec![

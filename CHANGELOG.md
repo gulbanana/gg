@@ -1,5 +1,10 @@
 # GG Changelog
 
+## Unreleased
+
+### Added
+- Repository -> Recent Items menu.
+
 ## [0.37.0](releases/tag/v0.37)
 This release is based on Jujutsu 0.37.
 

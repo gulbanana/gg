@@ -114,8 +114,30 @@ cargo run -- web             # Launch in web mode (opens browser)
 - Use consistent variable names: `from`/`to` not `source`/`target` or `from_commit`/`to_commit`
 - Check immutability immediately after resolving commits
 - Use `precondition!` macro for user-facing validation errors
-- Keep comments minimal - code should be self-documenting
 - Match style of similar mutations (e.g., `MoveChanges` for tree operations)
+
+### Comment Style
+
+Use lowercase, and prefer minimal comments. Don't describe *what* the code does - that's what the code is for. Comments should explain *why* when the reason isn't obvious, or warn about non-obvious gotchas.
+
+```rust
+// BAD: Describes what the code does, uses uppercase
+// Read recent workspaces for initial menu build
+let recent_workspaces = settings.ui_recent_workspaces();
+build_menu(recent_workspaces);
+
+// BAD: Obvious from the code
+// check if the revision is immutable
+if ws.check_immutable(vec![commit.id().clone()])? { ... }
+
+// GOOD: Explains why (non-obvious reason)
+// must clone before the builder chain - settings moves into .manage()
+let recent_workspaces = settings.ui_recent_workspaces();
+
+// GOOD: Warns about a gotcha
+// jj-lib is not thread-safe; each window needs its own worker
+let window_worker = thread::spawn(move || { ... });
+```
 
 ## Project-Specific Patterns
 
