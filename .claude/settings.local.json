@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(jj log:*)",
+      "Bash(jj diff:*)",
+      "Bash(npm run check:*)",
+      "Bash(cargo check:*)",
+      "Bash(cargo test:*)",
+      "Bash(jj status:*)",
+      "Bash(npm run build:*)",
+      "mcp__ide__getDiagnostics",
+      "Bash(cargo gen:*)",
+      "Bash(cargo build:*)",
+      "Bash(cargo tree:*)",
+      "Bash(jj show:*)"
+    ]
+  },
+  "outputStyle": "default"
+}
