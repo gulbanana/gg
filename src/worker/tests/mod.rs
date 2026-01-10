@@ -96,78 +96,78 @@ mod revs {
 
     /// The working copy commit (empty, child of main)
     pub fn working_copy() -> RevId {
-        mkid("qtvuvvns", "79943c33f366b4c5a47ee6aac93a4074ebe155a4")
+        mkid("lytrmqtm", "4b457150faf1560b9a0dec917dae9cdeccbbfac7")
     }
 
     /// The main bookmark commit (renamed c.txt)
     pub fn main_bookmark() -> RevId {
-        mkid("mnkoropy", "5f4dc18dd03158f9ec72e528ffaca2f4c73d3b4b")
+        mkid("wnpusytq", "025843422c8f5374a4160fe79195b92d6ec3c6ee")
     }
 
     /// Bookmark added to immutable_heads()
     pub fn immutable_bookmark() -> RevId {
-        mkid("ummxkyyk", "b0d38b770763ab74f297f483f4b42c961647b4fb")
+        mkid("ywknyuol", "f86298e8166104062708cde7c1cf697022b4cf8b")
     }
 
     /// An immutable commit (parent of immutable_bookmark)
     pub fn immutable_parent() -> RevId {
-        mkid("qxpuyyzu", "7c115c5a32ae0347fe63559f2869891bd5e942cd")
+        mkid("nxxylmpu", "fa32b17fcc7f44f176539feec6c13af413924329")
     }
 
     /// An immutable commit (grandparent of immutable_bookmark)
     pub fn immutable_grandparent() -> RevId {
-        mkid("lkqlzmoy", "f74aa777a736687d1e8c4a2ea55a6821a3ef16ca")
+        mkid("tqnnuvwv", "983d594962e861aa155c8cee9e49122978cec40f")
     }
 
     /// A commit with a conflict in b.txt
     pub fn conflict_bookmark() -> RevId {
-        mkid("nwrnuwyp", "702f1b97e561953e44ad254fa1a4e59e0e31cf16")
+        mkid("pkullrwy", "18edcaea9423cd9975c3f1ffbf07e00fe3ecc47a")
     }
 
     /// Child of conflict_bookmark that resolves the conflict
     pub fn resolve_conflict() -> RevId {
-        mkid("rrxroxys", "28b2d99e4b39a7aea7277c4408427c7733f4f626")
+        mkid("yvtwywll", "461b914dbab3347a7c789bac200f0e135d03807e")
     }
 
     /// Mutable commit that changed b.txt from "1" to "11"
     pub fn hunk_source() -> RevId {
-        mkid("kmtstztw", "25f44e213721c7be11ac1d3f5d26bea2b7d472db")
+        mkid("xoooutru", "1b3949ce69432a74966165308ac30f5501fd9a83")
     }
 
     /// Contains hunk_test.txt with 5 lines: line1-line5
     pub fn hunk_base() -> RevId {
-        mkid("vkwrnurr", "6efa7f9eade075121b33679efe232dac1a612a2d")
+        mkid("xrqnzmzy", "71627400c7459f17fa45ea5dfd2572830f5c26ab")
     }
 
     /// Child of hunk_base, modifies line 2: line2 -> modified2
     pub fn hunk_child_single() -> RevId {
-        mkid("nkrxruxq", "45835b6809b4def71e04b7823c6b3ac08a2f217d")
+        mkid("rwpmyumq", "cb56950fd81e14bcf30ea657f3c69a99ca743229")
     }
 
     /// Child of hunk_base, modifies lines 2 and 4: line2 -> changed2, line4 -> changed4
     pub fn hunk_child_multi() -> RevId {
-        mkid("nqwrstxx", "e2f7f467dce1ed7ff6087c01ca986e24cc039d8c")
+        mkid("nwywsplo", "b234894cba9641611cbd3e0648dd2ac3c634c272")
     }
 
     /// Child of hunk_base, adds lines 6-8: new6, new7, new8
     pub fn hunk_sibling() -> RevId {
-        mkid("xwsxmqwz", "5dd18b61b3e94d60019265a0b6e5e74dff93d482")
+        mkid("lpvoqxrx", "489cf8d28d84c3477c65f89a856ba70ac91081bb")
     }
 
     /// Child of hunk_child_single, modifies line 3: line3 -> grandchild3
     /// This creates a 3-level hierarchy: hunk_base -> hunk_child_single -> hunk_grandchild
     pub fn hunk_grandchild() -> RevId {
-        mkid("ywskwwql", "56ec47c934036e08f99c55302d328eb8f163c74e")
+        mkid("onsonsrz", "1c073dfca738cdca246a1f8818f8f67bb3b4c8e6")
     }
 
     /// Contains small.txt with 2 lines: line1, line2
     pub fn small_parent() -> RevId {
-        mkid("nwzznmzm", "aebc9a99fb78a1717a008ed30619f55075bc65b1")
+        mkid("uqpmkpqu", "cd1a7fc72d71051f3a336a40da45d01d1d1a624c")
     }
 
     /// Child of small_parent, modifies line 2: line2 -> changed
     pub fn small_child() -> RevId {
-        mkid("mvttnyym", "d18a83638ec0c7f1918f4e3ac14d07812880cab1")
+        mkid("vnstymnv", "f08d8a81983eb0c7849359b1555dca2d93016b54")
     }
 }
 

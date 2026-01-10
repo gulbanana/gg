@@ -55,7 +55,7 @@ fn log_mutable() -> Result<()> {
     let mut session = WorkerSession::default();
     let ws = session.load_directory(repo.path())?;
 
-    let single_row = queries::query_log(&ws, "mnkoropy", 100)?
+    let single_row = queries::query_log(&ws, "wnpusytq", 100)?
         .rows
         .pop()
         .unwrap();
@@ -72,7 +72,7 @@ fn log_immutable() -> Result<()> {
     let mut session = WorkerSession::default();
     let ws = session.load_directory(repo.path())?;
 
-    let single_row = queries::query_log(&ws, "ummxkyyk", 100)?
+    let single_row = queries::query_log(&ws, "ywknyuol", 100)?
         .rows
         .pop()
         .unwrap();
@@ -101,11 +101,6 @@ fn revision() -> Result<()> {
 
 /// Test that querying a conflicted revision includes conflict markers in the hunks.
 /// The conflict labels from the trees should be passed through to materialize_tree_value().
-///
-/// Note: The test repo was created before jj stored conflict labels, so conflicts use
-/// fallback labels like "side #1" and "base" instead of commit-specific labels.
-/// A future improvement would be to recreate the test repo with labeled conflicts
-/// and assert on the actual label content (e.g., change ID and commit ID).
 #[tokio::test]
 async fn revision_with_conflict() -> Result<()> {
     let repo = mkrepo();
@@ -138,7 +133,7 @@ async fn revision_with_conflict() -> Result<()> {
         "Expected header.has_conflict to be true"
     );
 
-    // The conflicts field should contain the conflict info (inherited from parent)
+    // The conflicts field should contain the conflict info from the final tree
     assert!(!conflicts.is_empty(), "Expected conflicts to be non-empty");
 
     // The conflict hunks should contain conflict markers (<<<<<<< and >>>>>>>)
@@ -157,11 +152,48 @@ async fn revision_with_conflict() -> Result<()> {
     Ok(())
 }
 
-/// Test that resolving a conflict produces a change diff that includes conflict markers
-/// from the "before" side (the conflicted parent tree).
-///
-/// Note: Same caveat as revision_with_conflict - the test repo lacks stored conflict labels,
-/// so we only verify that conflict markers appear, not their specific label content.
+/// Test that querying a revision without conflicts returns an empty conflicts list.
+#[tokio::test]
+async fn revision_without_conflict() -> Result<()> {
+    let repo = mkrepo();
+
+    let mut session = WorkerSession::default();
+    let ws = session.load_directory(repo.path())?;
+
+    let id = revs::main_bookmark();
+    let result = queries::query_revisions(
+        &ws,
+        RevSet {
+            from: id.clone(),
+            to: id,
+        },
+    )
+    .await?;
+
+    let RevsResult::Detail {
+        headers, conflicts, ..
+    } = result
+    else {
+        panic!("Expected RevsResult::Detail");
+    };
+
+    let header = headers.last().expect("at least one header");
+
+    assert!(
+        !header.has_conflict,
+        "Expected header.has_conflict to be false"
+    );
+
+    assert!(
+        conflicts.is_empty(),
+        "Expected conflicts to be empty for non-conflicted revision"
+    );
+
+    Ok(())
+}
+
+/// Test that resolving a conflict results in no conflicts in the final tree.
+/// The diff shows removal of labeled conflict markers from the parent tree.
 #[tokio::test]
 async fn revision_resolves_conflict() -> Result<()> {
     let repo = mkrepo();
@@ -181,7 +213,10 @@ async fn revision_resolves_conflict() -> Result<()> {
     .await?;
 
     let RevsResult::Detail {
-        headers, changes, ..
+        headers,
+        changes,
+        conflicts,
+        ..
     } = result
     else {
         panic!("Expected RevsResult::Detail");
@@ -193,6 +228,13 @@ async fn revision_resolves_conflict() -> Result<()> {
     assert!(
         !header.has_conflict,
         "Expected header.has_conflict to be false for resolved commit"
+    );
+
+    // The conflicts field should be empty since the final tree has no conflicts
+    assert!(
+        conflicts.is_empty(),
+        "Expected conflicts to be empty for resolved commit, got {} conflicts",
+        conflicts.len()
     );
 
     // There should be at least one change (the conflict resolution)
