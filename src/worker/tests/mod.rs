@@ -96,7 +96,7 @@ mod revs {
 
     /// The working copy commit (empty, child of main)
     pub fn working_copy() -> RevId {
-        mkid("lytrmqtm", "4b457150faf1560b9a0dec917dae9cdeccbbfac7")
+        mkid("kvptxrkr", "e7080cd830960125c13e276aa056c811e7ce600a")
     }
 
     /// The main bookmark commit (renamed c.txt)
@@ -127,6 +127,23 @@ mod revs {
     /// Child of conflict_bookmark that resolves the conflict
     pub fn resolve_conflict() -> RevId {
         mkid("yvtwywll", "461b914dbab3347a7c789bac200f0e135d03807e")
+    }
+
+    /// Child of conflict_bookmark that does NOT resolve the conflict
+    /// Adds unrelated.txt but keeps b.txt in conflict state
+    pub fn inherited_conflict() -> RevId {
+        mkid("tlxnptkw", "7241ca5bfef9f77eccb9544f8a69c61025d766c1")
+    }
+
+    /// Merge commit that introduces conflict in conflict_chain.txt
+    /// Child of resolve_conflict via two branches (chain branch A and B)
+    pub fn chain_conflict() -> RevId {
+        mkid("vwxxopnk", "f80d4defdcf8627e7e8dca52fefb250e2e05d133")
+    }
+
+    /// Child of chain_conflict that resolves the conflict in conflict_chain.txt
+    pub fn chain_resolved() -> RevId {
+        mkid("lwzoqltx", "8c812d8bacb3ccb4ce4a3eff30e1221eef3373ca")
     }
 
     /// Mutable commit that changed b.txt from "1" to "11"

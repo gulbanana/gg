@@ -37,7 +37,7 @@ async fn abandon_revisions() -> Result<()> {
     let mut ws = session.load_directory(repo.path())?;
 
     let page = queries::query_log(&ws, "all()", 100)?;
-    assert_eq!(19, page.rows.len());
+    assert_eq!(24, page.rows.len());
 
     AbandonRevisions {
         ids: vec![revs::resolve_conflict().commit],
@@ -46,7 +46,7 @@ async fn abandon_revisions() -> Result<()> {
     .await?;
 
     let page = queries::query_log(&ws, "all()", 100)?;
-    assert_eq!(18, page.rows.len());
+    assert_eq!(23, page.rows.len());
 
     Ok(())
 }
