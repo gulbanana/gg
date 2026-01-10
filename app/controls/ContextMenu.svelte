@@ -14,7 +14,7 @@
 
     function onClick(action: string) {
         if (operand.type === "Revision") {
-            new RevisionMutator(operand.header).handle(action);
+            new RevisionMutator([operand.header]).handle(action);
         } else if (operand.type === "Change") {
             new ChangeMutator(operand.header, operand.path, operand.hunk).handle(action);
         } else if (operand.type === "Ref") {

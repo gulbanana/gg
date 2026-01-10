@@ -91,7 +91,7 @@
         },
         editRow(row: number) {
             if (row != -1) {
-                new RevisionMutator(graphRows![row].revision).onEdit();
+                new RevisionMutator([graphRows![row].revision]).onEdit();
             }
         },
     };

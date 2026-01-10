@@ -199,7 +199,7 @@
 
     function mutateRevision(event: string) {
         if ($currentContext?.type == "Revision") {
-            new RevisionMutator($currentContext.header).handle(event);
+            new RevisionMutator([$currentContext.header]).handle(event);
         }
         $currentContext = null;
     }

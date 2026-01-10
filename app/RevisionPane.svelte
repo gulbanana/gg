@@ -28,8 +28,7 @@
     $: oldest = revs.headers[revs.headers.length - 1];
     $: singleton = revs.set.from.commit.hex == revs.set.to.commit.hex;
 
-    // XXX implement plural mutate
-    $: mutator = new RevisionMutator(newest);
+    $: mutator = new RevisionMutator(revs.headers);
 
     // debounce for change detection
     let lastSelectionKey = `${revs.set.from.commit.hex}::${revs.set.to.commit.hex}`;

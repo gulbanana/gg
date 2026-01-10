@@ -39,7 +39,7 @@
     }
 
     function onEdit() {
-        new RevisionMutator(header).onEdit();
+        new RevisionMutator([header]).onEdit();
     }
 </script>
 

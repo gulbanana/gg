@@ -164,7 +164,7 @@ export default class BinaryMutator {
                 return;
             } else if (this.#to.type == "Repository") {
                 // abandon source
-                new RevisionMutator(this.#from.header).onAbandon();
+                new RevisionMutator([this.#from.header]).onAbandon();
                 return;
             }
         }
