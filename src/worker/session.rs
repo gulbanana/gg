@@ -28,6 +28,7 @@ pub trait Session {
 
 /// messages sent to a worker from other threads. most come with a channel allowing a response
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)] // QueryRevisions ~300b, but CloneWorkspace is >72b as well
 pub enum SessionEvent {
     #[allow(dead_code)] // used by tests
     EndSession,
@@ -45,11 +46,6 @@ pub enum SessionEvent {
         source_url: String,
         wd: PathBuf,
         colocated: bool,
-    },
-    #[allow(dead_code)] // used by tests and QuerySession handler
-    QueryRevision {
-        tx: Sender<Result<messages::RevResult>>,
-        id: messages::RevId,
     },
     QueryRevisions {
         tx: Sender<Result<messages::RevsResult>>,
@@ -231,9 +227,6 @@ impl Session for WorkspaceSession<'_> {
                 } => {
                     tx.send(self.session.clone_workspace(&source_url, &wd, colocated))?;
                 }
-                SessionEvent::QueryRevision { tx, id } => {
-                    tx.send(queries::query_revision(&self, id).await)?
-                }
                 SessionEvent::QueryRevisions { tx, set } => {
                     tx.send(queries::query_revisions(&self, set).await)?
                 }
@@ -374,8 +367,8 @@ impl Session for QuerySession<'_, '_> {
             let evt = rx.recv();
             log::debug!("LogQuery handling {evt:?}");
             match evt {
-                Ok(SessionEvent::QueryRevision { tx, id }) => {
-                    tx.send(queries::query_revision(self.ws, id).await)?
+                Ok(SessionEvent::QueryRevisions { tx, set }) => {
+                    tx.send(queries::query_revisions(self.ws, set).await)?
                 }
                 Ok(SessionEvent::QueryRemotes {
                     tx,

@@ -41,8 +41,10 @@ use super::gui_util::RevsetError;
 
 use crate::messages::{
     ChangeHunk, ChangeKind, FileRange, HunkLocation, LogCoordinates, LogLine, LogPage, LogRow,
-    MultilineString, RevChange, RevConflict, RevId, RevResult, RevSet, RevsResult,
+    MultilineString, RevChange, RevConflict, RevSet, RevsResult,
 };
+#[cfg(test)]
+use crate::messages::{RevHeader, RevId};
 
 use super::{WorkspaceSession, gui_util::get_git_remote_names};
 
@@ -301,88 +303,11 @@ pub fn query_log(ws: &WorkspaceSession, revset_str: &str, max_results: usize) ->
     session.get_page()
 }
 
-pub async fn query_revision(ws: &WorkspaceSession<'_>, id: RevId) -> Result<RevResult> {
-    let commit = match ws.resolve_optional_id(&id)? {
-        Some(commit) => commit,
-        None => return Ok(RevResult::NotFound { id }),
-    };
-
-    let commit_parents: Result<Vec<_>, _> = commit.parents().collect();
-    let parent_tree = rewrite::merge_commit_trees(ws.repo(), &commit_parents?).await?;
-    let tree = commit.tree();
-
-    let mut conflicts = Vec::new();
-    for (path, entry) in parent_tree.entries() {
-        if let Ok(entry) = entry
-            && !entry.is_resolved()
-        {
-            match conflicts::materialize_tree_value(
-                ws.repo().store(),
-                &path,
-                entry,
-                parent_tree.labels(),
-            )
-            .await?
-            {
-                MaterializedTreeValue::FileConflict(file) => {
-                    let mut hunk_content = vec![];
-                    conflicts::materialize_merge_result(
-                        &file.contents,
-                        &file.labels,
-                        &mut hunk_content,
-                        &ConflictMaterializeOptions {
-                            marker_style: ConflictMarkerStyle::Git,
-                            marker_len: None,
-                            merge: MergeOptions {
-                                hunk_level: FileMergeHunkLevel::Line,
-                                same_change: SameChange::Accept,
-                            },
-                        },
-                    )?;
-                    let mut hunks = get_unified_hunks(3, &hunk_content, &[])?;
-                    if let Some(hunk) = hunks.pop() {
-                        conflicts.push(RevConflict {
-                            path: ws.format_path(path)?,
-                            hunk,
-                        });
-                    }
-                }
-                _ => {
-                    log::warn!("nonresolved tree entry did not materialise as conflict");
-                }
-            }
-        }
-    }
-
-    let mut changes = Vec::new();
-    let tree_diff = parent_tree.diff_stream(&tree, &EverythingMatcher);
-    let conflict_labels = Diff::new(parent_tree.labels(), tree.labels());
-    format_tree_changes(ws, &mut changes, tree_diff, conflict_labels).await?;
-
-    let header = ws.format_header(&commit, None)?;
-
-    let parents = commit
-        .parents()
-        .map_ok(|p| {
-            ws.format_header(
-                &p,
-                if header.is_immutable {
-                    Some(true)
-                } else {
-                    None
-                },
-            )
-        })
-        .collect::<Result<Vec<_>, _>>()?
-        .into_iter()
-        .collect::<Result<Vec<_>, _>>()?;
-
-    Ok(RevResult::Detail {
-        header,
-        parents,
-        changes,
-        conflicts,
-    })
+#[cfg(test)]
+pub fn query_revision(ws: &WorkspaceSession<'_>, id: &RevId) -> Result<Option<RevHeader>> {
+    ws.resolve_optional_id(id)?
+        .map(|c| ws.format_header(&c, None))
+        .transpose()
 }
 
 /// Read display details for a revset (limited to sequences). Returns headers in topological order (children first).

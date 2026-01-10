@@ -153,22 +153,6 @@ pub struct FileRange {
 #[serde(tag = "type")]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
 #[allow(clippy::large_enum_variant)]
-pub enum RevResult {
-    NotFound {
-        id: RevId,
-    },
-    Detail {
-        header: RevHeader,
-        parents: Vec<RevHeader>,
-        changes: Vec<RevChange>,
-        conflicts: Vec<RevConflict>,
-    },
-}
-
-#[derive(Serialize, Debug)]
-#[serde(tag = "type")]
-#[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
-#[allow(clippy::large_enum_variant)]
 pub enum RevsResult {
     NotFound {
         set: RevSet,

@@ -1,6 +1,6 @@
 use super::{mkid, mkrepo, revs};
 use crate::{
-    messages::{LogPage, RepoConfig, RevResult},
+    messages::{LogPage, RepoConfig, RevSet, RevsResult},
     worker::{Session, SessionEvent, WorkerSession},
 };
 use anyhow::{Context, Result};
@@ -229,7 +229,7 @@ async fn query_log_multi_interrupt() -> Result<()> {
     let (tx, rx) = channel::<SessionEvent>();
     let (tx_load, rx_load) = channel::<Result<RepoConfig>>();
     let (tx_page1, rx_page1) = channel::<Result<LogPage>>();
-    let (tx_rev, rx_rev) = channel::<Result<RevResult>>();
+    let (tx_rev, rx_rev) = channel::<Result<RevsResult>>();
     let (tx_page2, rx_page2) = channel::<Result<LogPage>>();
 
     tx.send(SessionEvent::OpenWorkspace {
@@ -240,9 +240,12 @@ async fn query_log_multi_interrupt() -> Result<()> {
         tx: tx_page1,
         query: "all()".to_owned(),
     })?;
-    tx.send(SessionEvent::QueryRevision {
+    tx.send(SessionEvent::QueryRevisions {
         tx: tx_rev,
-        id: revs::working_copy(),
+        set: RevSet {
+            from: revs::working_copy(),
+            to: revs::working_copy(),
+        },
     })?;
     tx.send(SessionEvent::QueryLogNextPage { tx: tx_page2 })?;
     tx.send(SessionEvent::EndSession)?;
@@ -261,7 +264,9 @@ async fn query_log_multi_interrupt() -> Result<()> {
     assert!(page1.has_more);
 
     let rev = rx_rev.recv()??;
-    assert!(matches!(rev, RevResult::Detail { header, .. } if header.is_working_copy));
+    assert!(
+        matches!(rev, RevsResult::Detail { headers, .. } if headers.last().unwrap().is_working_copy)
+    );
 
     let page2 = rx_page2.recv()??;
     assert_eq!(7, page2.rows.len());
@@ -305,20 +310,24 @@ async fn query_check_immutable() -> Result<()> {
 }
 
 #[tokio::test]
-async fn query_rev_not_found() -> Result<()> {
+async fn query_revs_not_found() -> Result<()> {
     let repo = mkrepo();
 
     let (tx, rx) = channel::<SessionEvent>();
     let (tx_load, rx_load) = channel::<Result<RepoConfig>>();
-    let (tx_query, rx_query) = channel::<Result<RevResult>>();
+    let (tx_query, rx_query) = channel::<Result<RevsResult>>();
 
+    let bad_id = mkid("abcdefghijklmnopqrstuvwxyz", "00000000");
     tx.send(SessionEvent::OpenWorkspace {
         tx: tx_load,
         wd: Some(repo.path().to_owned()),
     })?;
-    tx.send(SessionEvent::QueryRevision {
+    tx.send(SessionEvent::QueryRevisions {
         tx: tx_query,
-        id: mkid("abcdefghijklmnopqrstuvwxyz", "00000000"),
+        set: RevSet {
+            from: bad_id.clone(),
+            to: bad_id,
+        },
     })?;
     tx.send(SessionEvent::EndSession)?;
 
@@ -327,7 +336,7 @@ async fn query_rev_not_found() -> Result<()> {
     _ = rx_load.recv()??;
     let result = rx_query.recv()??;
 
-    assert_matches!(result, RevResult::NotFound { id } if id.change.hex == "abcdefghijklmnopqrstuvwxyz");
+    assert_matches!(result, RevsResult::NotFound { set } if set.from.change.hex == "abcdefghijklmnopqrstuvwxyz");
 
     Ok(())
 }

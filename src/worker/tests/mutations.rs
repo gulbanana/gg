@@ -3,7 +3,7 @@ use crate::{
     messages::{
         AbandonRevisions, ChangeHunk, CheckoutRevision, CopyChanges, CopyHunk, CreateRevision,
         DescribeRevision, DuplicateRevisions, FileRange, HunkLocation, InsertRevision, MoveChanges,
-        MoveHunk, MoveRef, MoveSource, MultilineString, MutationResult, RevHeader, RevResult,
+        MoveHunk, MoveRef, MoveSource, MultilineString, MutationResult, RevId, RevSet, RevsResult,
         StoreRef, TreePath,
     },
     worker::{Mutation, WorkerSession, queries},
@@ -13,6 +13,21 @@ use assert_matches::assert_matches;
 use jj_lib::str_util::StringMatcher;
 use std::fs;
 use tokio::io::AsyncReadExt;
+
+/// Helper to get a single revision's display details (changes, conflicts, etc.)
+async fn query_revision_details(
+    ws: &crate::worker::gui_util::WorkspaceSession<'_>,
+    id: RevId,
+) -> Result<RevsResult> {
+    queries::query_revisions(
+        ws,
+        RevSet {
+            from: id.clone(),
+            to: id,
+        },
+    )
+    .await
+}
 
 #[tokio::test]
 async fn abandon_revisions() -> Result<()> {
@@ -43,10 +58,10 @@ async fn checkout_revision() -> Result<()> {
     let mut session = WorkerSession::default();
     let mut ws = session.load_directory(repo.path())?;
 
-    let head_rev = queries::query_revision(&ws, revs::working_copy()).await?;
-    let conflict_rev = queries::query_revision(&ws, revs::conflict_bookmark()).await?;
-    assert_matches!(head_rev, RevResult::Detail { header, .. } if header.is_working_copy);
-    assert_matches!(conflict_rev, RevResult::Detail { header, .. } if !header.is_working_copy);
+    let head_header = queries::query_revision(&ws, &revs::working_copy())?;
+    let conflict_header = queries::query_revision(&ws, &revs::conflict_bookmark())?;
+    assert!(head_header.expect("exists").is_working_copy);
+    assert!(!conflict_header.expect("exists").is_working_copy);
 
     let result = CheckoutRevision {
         id: revs::conflict_bookmark(),
@@ -55,10 +70,13 @@ async fn checkout_revision() -> Result<()> {
     .await?;
     assert_matches!(result, MutationResult::Updated { .. });
 
-    let head_rev = queries::query_revision(&ws, revs::working_copy()).await?;
-    let conflict_rev = queries::query_revision(&ws, revs::conflict_bookmark()).await?;
-    assert_matches!(head_rev, RevResult::NotFound { .. });
-    assert_matches!(conflict_rev, RevResult::Detail { header, .. } if header.is_working_copy);
+    let head_header = queries::query_revision(&ws, &revs::working_copy())?;
+    let conflict_header = queries::query_revision(&ws, &revs::conflict_bookmark())?;
+    assert!(
+        head_header.is_none(),
+        "old working copy revision should not exist"
+    );
+    assert!(conflict_header.expect("exists").is_working_copy);
 
     Ok(())
 }
@@ -70,10 +88,10 @@ async fn copy_changes() -> Result<()> {
     let mut session = WorkerSession::default();
     let mut ws = session.load_directory(repo.path())?;
 
-    let from_rev = queries::query_revision(&ws, revs::resolve_conflict()).await?;
-    let to_rev = queries::query_revision(&ws, revs::working_copy()).await?;
-    assert_matches!(from_rev, RevResult::Detail { changes, .. } if changes.len() == 1);
-    assert_matches!(to_rev, RevResult::Detail { changes, .. } if changes.is_empty());
+    let from_rev = query_revision_details(&ws, revs::resolve_conflict()).await?;
+    let to_rev = query_revision_details(&ws, revs::working_copy()).await?;
+    assert_matches!(from_rev, RevsResult::Detail { changes, .. } if changes.len() == 1);
+    assert_matches!(to_rev, RevsResult::Detail { changes, .. } if changes.is_empty());
 
     let result = CopyChanges {
         from_id: revs::resolve_conflict().commit,
@@ -87,10 +105,10 @@ async fn copy_changes() -> Result<()> {
     .await?;
     assert_matches!(result, MutationResult::Updated { .. });
 
-    let from_rev = queries::query_revision(&ws, revs::resolve_conflict()).await?;
-    let to_rev = queries::query_revision(&ws, revs::working_copy()).await?;
-    assert_matches!(from_rev, RevResult::Detail { changes, .. } if changes.len() == 1);
-    assert_matches!(to_rev, RevResult::Detail { changes, .. } if changes.len() == 1);
+    let from_rev = query_revision_details(&ws, revs::resolve_conflict()).await?;
+    let to_rev = query_revision_details(&ws, revs::working_copy()).await?;
+    assert_matches!(from_rev, RevsResult::Detail { changes, .. } if changes.len() == 1);
+    assert_matches!(to_rev, RevsResult::Detail { changes, .. } if changes.len() == 1);
 
     Ok(())
 }
@@ -111,15 +129,10 @@ async fn immutability_of_bookmark() -> Result<()> {
     let ref_at_start = ref_at_start.as_normal().unwrap().clone();
     assert_matches!(ws.check_immutable([ref_at_start.clone()]), Ok(true));
 
-    let RevResult::Detail {
-        header: RevHeader { refs, .. },
-        ..
-    } = queries::query_revision(&ws, revs::immutable_bookmark()).await?
-    else {
-        panic!("Bookmark immutable_bookmark not found");
-    };
-    let immutable_bm = refs
-        .as_slice()
+    let header = queries::query_revision(&ws, &revs::immutable_bookmark())?
+        .expect("immutable_bookmark exists");
+    let immutable_bm = header
+        .refs
         .iter()
         .find(|r| {
             matches!(
@@ -173,15 +186,10 @@ async fn immutable_workspace_head() -> Result<()> {
 
     let immutable_matcher = StringMatcher::Exact("immutable_bookmark".to_string());
 
-    let RevResult::Detail {
-        header: RevHeader { refs, .. },
-        ..
-    } = queries::query_revision(&ws, revs::immutable_bookmark()).await?
-    else {
-        panic!("Bookmark immutable_bookmark not found");
-    };
-    let immutable_bm = refs
-        .as_slice()
+    let header = queries::query_revision(&ws, &revs::immutable_bookmark())?
+        .expect("immutable_bookmark exists");
+    let immutable_bm = header
+        .refs
         .iter()
         .find(|r| {
             matches!(
@@ -232,8 +240,8 @@ async fn create_revision_single_parent() -> Result<()> {
     let mut session = WorkerSession::default();
     let mut ws = session.load_directory(repo.path())?;
 
-    let parent_rev = queries::query_revision(&ws, revs::working_copy()).await?;
-    assert_matches!(parent_rev, RevResult::Detail { header, .. } if header.is_working_copy);
+    let parent_header = queries::query_revision(&ws, &revs::working_copy())?.expect("exists");
+    assert!(parent_header.is_working_copy);
 
     let result = CreateRevision {
         parent_ids: vec![revs::working_copy()],
@@ -246,10 +254,11 @@ async fn create_revision_single_parent() -> Result<()> {
             new_selection: Some(new_selection),
             ..
         } => {
-            let parent_rev = queries::query_revision(&ws, revs::working_copy()).await?;
-            let child_rev = queries::query_revision(&ws, new_selection.id).await?;
-            assert_matches!(parent_rev, RevResult::Detail { header, .. } if !header.is_working_copy);
-            assert_matches!(child_rev, RevResult::Detail { header, .. } if header.is_working_copy);
+            let parent_header =
+                queries::query_revision(&ws, &revs::working_copy())?.expect("exists");
+            let child_header = queries::query_revision(&ws, &new_selection.id)?.expect("exists");
+            assert!(!parent_header.is_working_copy);
+            assert!(child_header.is_working_copy);
         }
         _ => panic!("CreateRevision failed"),
     }
@@ -264,8 +273,8 @@ async fn create_revision_multi_parent() -> Result<()> {
     let mut session = WorkerSession::default();
     let mut ws = session.load_directory(repo.path())?;
 
-    let parent_rev = queries::query_revision(&ws, revs::working_copy()).await?;
-    assert_matches!(parent_rev, RevResult::Detail { header, .. } if header.is_working_copy);
+    let parent_header = queries::query_revision(&ws, &revs::working_copy())?.expect("exists");
+    assert!(parent_header.is_working_copy);
 
     let result = CreateRevision {
         parent_ids: vec![revs::working_copy(), revs::conflict_bookmark()],
@@ -278,8 +287,8 @@ async fn create_revision_multi_parent() -> Result<()> {
             new_selection: Some(new_selection),
             ..
         } => {
-            let child_rev = queries::query_revision(&ws, new_selection.id).await?;
-            assert_matches!(child_rev, RevResult::Detail { parents, .. } if parents.len() == 2);
+            let child_rev = query_revision_details(&ws, new_selection.id).await?;
+            assert_matches!(child_rev, RevsResult::Detail { parents, .. } if parents.len() == 2);
         }
         _ => panic!("CreateRevision failed"),
     }
@@ -294,8 +303,8 @@ async fn describe_revision() -> Result<()> {
     let mut session = WorkerSession::default();
     let mut ws = session.load_directory(repo.path())?;
 
-    let rev = queries::query_revision(&ws, revs::working_copy()).await?;
-    assert_matches!(rev, RevResult::Detail { header, .. } if header.description.lines[0].is_empty());
+    let header = queries::query_revision(&ws, &revs::working_copy())?.expect("exists");
+    assert!(header.description.lines[0].is_empty());
 
     let result = DescribeRevision {
         id: revs::working_copy(),
@@ -306,8 +315,8 @@ async fn describe_revision() -> Result<()> {
     .await?;
     assert_matches!(result, MutationResult::Updated { .. });
 
-    let rev = queries::query_revision(&ws, revs::working_copy()).await?;
-    assert_matches!(rev, RevResult::Detail { header, .. } if header.description.lines[0] == "wip");
+    let header = queries::query_revision(&ws, &revs::working_copy())?.expect("exists");
+    assert_eq!(header.description.lines[0], "wip");
 
     Ok(())
 }
@@ -319,8 +328,8 @@ async fn describe_revision_with_snapshot() -> Result<()> {
     let mut session = WorkerSession::default();
     let mut ws = session.load_directory(repo.path())?;
 
-    let rev = queries::query_revision(&ws, revs::working_copy()).await?;
-    assert_matches!(rev, RevResult::Detail { header, changes, .. } if header.description.lines[0].is_empty() && changes.is_empty());
+    let rev = query_revision_details(&ws, revs::working_copy()).await?;
+    assert_matches!(rev, RevsResult::Detail { headers, changes, .. } if headers.last().unwrap().description.lines[0].is_empty() && changes.is_empty());
 
     fs::write(repo.path().join("new.txt"), []).unwrap(); // changes the WC commit
 
@@ -332,8 +341,8 @@ async fn describe_revision_with_snapshot() -> Result<()> {
     .execute_unboxed(&mut ws)
     .await?;
 
-    let rev = queries::query_revision(&ws, revs::working_copy()).await?;
-    assert_matches!(rev, RevResult::Detail { header, changes, .. } if header.description.lines[0] == "wip" && !changes.is_empty());
+    let rev = query_revision_details(&ws, revs::working_copy()).await?;
+    assert_matches!(rev, RevsResult::Detail { headers, changes, .. } if headers.last().unwrap().description.lines[0] == "wip" && !changes.is_empty());
 
     Ok(())
 }
@@ -345,8 +354,8 @@ async fn duplicate_revisions() -> Result<()> {
     let mut session = WorkerSession::default();
     let mut ws = session.load_directory(repo.path())?;
 
-    let rev = queries::query_revision(&ws, revs::working_copy()).await?;
-    assert_matches!(rev, RevResult::Detail { header, .. } if header.description.lines[0].is_empty());
+    let header = queries::query_revision(&ws, &revs::working_copy())?.expect("exists");
+    assert!(header.description.lines[0].is_empty());
 
     let result = DuplicateRevisions {
         ids: vec![revs::main_bookmark()],
@@ -392,8 +401,8 @@ async fn move_changes_all_paths() -> Result<()> {
     let mut session = WorkerSession::default();
     let mut ws = session.load_directory(repo.path())?;
 
-    let parent_rev = queries::query_revision(&ws, revs::conflict_bookmark()).await?;
-    assert_matches!(parent_rev, RevResult::Detail { header, .. } if header.has_conflict);
+    let parent_header = queries::query_revision(&ws, &revs::conflict_bookmark())?.expect("exists");
+    assert!(parent_header.has_conflict);
 
     let result = MoveChanges {
         from_id: revs::resolve_conflict(),
@@ -404,8 +413,8 @@ async fn move_changes_all_paths() -> Result<()> {
     .await?;
     assert_matches!(result, MutationResult::Updated { .. });
 
-    let parent_rev = queries::query_revision(&ws, revs::conflict_bookmark()).await?;
-    assert_matches!(parent_rev, RevResult::Detail { header, .. } if !header.has_conflict);
+    let parent_header = queries::query_revision(&ws, &revs::conflict_bookmark())?.expect("exists");
+    assert!(!parent_header.has_conflict);
 
     Ok(())
 }
@@ -417,10 +426,10 @@ async fn move_changes_single_path() -> Result<()> {
     let mut session = WorkerSession::default();
     let mut ws = session.load_directory(repo.path())?;
 
-    let from_rev = queries::query_revision(&ws, revs::main_bookmark()).await?;
-    let to_rev = queries::query_revision(&ws, revs::working_copy()).await?;
-    assert_matches!(from_rev, RevResult::Detail { changes, .. } if changes.len() == 2);
-    assert_matches!(to_rev, RevResult::Detail { changes, .. } if changes.is_empty());
+    let from_rev = query_revision_details(&ws, revs::main_bookmark()).await?;
+    let to_rev = query_revision_details(&ws, revs::working_copy()).await?;
+    assert_matches!(from_rev, RevsResult::Detail { changes, .. } if changes.len() == 2);
+    assert_matches!(to_rev, RevsResult::Detail { changes, .. } if changes.is_empty());
 
     let result = MoveChanges {
         from_id: revs::main_bookmark(),
@@ -434,10 +443,10 @@ async fn move_changes_single_path() -> Result<()> {
     .await?;
     assert_matches!(result, MutationResult::Updated { .. });
 
-    let from_rev = queries::query_revision(&ws, revs::main_bookmark()).await?;
-    let to_rev = queries::query_revision(&ws, revs::working_copy()).await?;
-    assert_matches!(from_rev, RevResult::Detail { changes, .. } if changes.len() == 1);
-    assert_matches!(to_rev, RevResult::Detail { changes, .. } if changes.len() == 1);
+    let from_rev = query_revision_details(&ws, revs::main_bookmark()).await?;
+    let to_rev = query_revision_details(&ws, revs::working_copy()).await?;
+    assert_matches!(from_rev, RevsResult::Detail { changes, .. } if changes.len() == 1);
+    assert_matches!(to_rev, RevsResult::Detail { changes, .. } if changes.len() == 1);
 
     Ok(())
 }
@@ -576,26 +585,18 @@ async fn move_hunk_message() -> anyhow::Result<()> {
     assert_matches!(result, MutationResult::Updated { .. });
 
     // Source should be abandoned (not found in repo)
-    let source_rev = queries::query_revision(&ws, revs::hunk_child_single()).await?;
-    assert_matches!(
-        source_rev,
-        RevResult::NotFound { .. },
-        "Source should be abandoned"
-    );
+    let source_header = queries::query_revision(&ws, &revs::hunk_child_single())?;
+    assert!(source_header.is_none(), "Source should be abandoned");
 
     // Target should have combined description
-    let target_rev = queries::query_revision(&ws, revs::hunk_sibling()).await?;
-    match target_rev {
-        RevResult::Detail { header, .. } => {
-            let desc = header.description.lines.join("\n");
-            assert!(
-                desc.contains("hunk sibling") && desc.contains("hunk child single"),
-                "Target description should combine both: got '{}'",
-                desc
-            );
-        }
-        _ => panic!("Expected target to exist"),
-    }
+    let target_header =
+        queries::query_revision(&ws, &revs::hunk_sibling())?.expect("target exists");
+    let desc = target_header.description.lines.join("\n");
+    assert!(
+        desc.contains("hunk sibling") && desc.contains("hunk child single"),
+        "Target description should combine both: got '{}'",
+        desc
+    );
 
     Ok(())
 }
@@ -672,12 +673,8 @@ async fn move_hunk_descendant_abandons_source() -> anyhow::Result<()> {
     assert_matches!(result, MutationResult::Updated { .. });
 
     // Source should be abandoned (not found in repo)
-    let source_rev = queries::query_revision(&ws, revs::hunk_child_single()).await?;
-    assert_matches!(
-        source_rev,
-        RevResult::NotFound { .. },
-        "Source should be abandoned"
-    );
+    let source_header = queries::query_revision(&ws, &revs::hunk_child_single())?;
+    assert!(source_header.is_none(), "Source should be abandoned");
 
     // Target (hunk_base) should have the change
     let target_commit = get_rev(&ws, &revs::hunk_base())?;
@@ -741,11 +738,11 @@ async fn move_hunk_unrelated() -> anyhow::Result<()> {
     assert_matches!(result, MutationResult::Updated { .. });
 
     // Verify source has the hunk removed (becomes empty and should be abandoned or have no changes)
-    let from_rev = queries::query_revision(&ws, revs::hunk_child_single()).await?;
-    match from_rev {
-        RevResult::NotFound { .. } => (),
-        RevResult::Detail { changes, .. } if changes.is_empty() => (),
-        _ => panic!("Expected source commit to have no changes after hunk move"),
+    let from_header = queries::query_revision(&ws, &revs::hunk_child_single())?;
+    if from_header.is_some() {
+        let from_rev = query_revision_details(&ws, revs::hunk_child_single()).await?;
+        assert_matches!(from_rev, RevsResult::Detail { changes, .. } if changes.is_empty(),
+            "Expected source commit to have no changes after hunk move");
     }
 
     // Verify target has the hunk applied (with the new lines still there)
@@ -811,16 +808,12 @@ async fn move_hunk_unrelated_different_structure_creates_conflict() -> anyhow::R
     assert_matches!(result, MutationResult::Updated { .. });
 
     // The target should have a conflict because the file structures differ
-    let to_rev = queries::query_revision(&ws, revs::working_copy()).await?;
-    match to_rev {
-        RevResult::Detail { header, .. } => {
-            assert!(
-                header.has_conflict,
-                "Expected conflict when moving hunk to file with different structure"
-            );
-        }
-        _ => panic!("Expected working copy to exist"),
-    }
+    let to_header =
+        queries::query_revision(&ws, &revs::working_copy())?.expect("working copy exists");
+    assert!(
+        to_header.has_conflict,
+        "Expected conflict when moving hunk to file with different structure"
+    );
 
     Ok(())
 }
@@ -919,10 +912,9 @@ async fn move_hunk_ancestor_to_descendant() -> anyhow::Result<()> {
     assert_matches!(result, MutationResult::Updated { .. });
 
     // Verify source (hunk_child_single) was ABANDONED because its only change was moved
-    let source_rev = queries::query_revision(&ws, revs::hunk_child_single()).await?;
-    assert_matches!(
-        source_rev,
-        RevResult::NotFound { .. },
+    let source_header = queries::query_revision(&ws, &revs::hunk_child_single())?;
+    assert!(
+        source_header.is_none(),
         "Source should be abandoned (its only change was moved)"
     );
 
@@ -1524,9 +1516,9 @@ auto-track = "glob:*.txt"
     .await?;
 
     // Verify: only the .txt file should have been tracked
-    let rev = queries::query_revision(&ws, revs::working_copy()).await?;
+    let rev = query_revision_details(&ws, revs::working_copy()).await?;
     match rev {
-        RevResult::Detail { changes, .. } => {
+        RevsResult::Detail { changes, .. } => {
             assert_eq!(changes.len(), 1);
             assert_eq!(changes[0].path.repo_path, "tracked.txt");
         }

@@ -1,5 +1,5 @@
 use super::{mkid, mkrepo, revs};
-use crate::messages::{RevHeader, RevResult, RevSet, RevsResult, StoreRef};
+use crate::messages::{RevSet, RevsResult, StoreRef};
 use crate::worker::{WorkerSession, queries};
 use anyhow::Result;
 use assert_matches::assert_matches;
@@ -82,21 +82,18 @@ fn log_immutable() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
-async fn revision() -> Result<()> {
+#[test]
+fn revision() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
     let ws = session.load_directory(repo.path())?;
 
-    let rev = queries::query_revision(&ws, revs::main_bookmark()).await?;
+    let header = queries::query_revision(&ws, &revs::main_bookmark())?.expect("revision exists");
 
     assert_matches!(
-        rev,
-        RevResult::Detail {
-            header: RevHeader { refs, .. },
-            ..
-        } if matches!(refs.as_slice(), [StoreRef::LocalBookmark { branch_name, .. }] if branch_name == "main")
+        header.refs.as_slice(),
+        [StoreRef::LocalBookmark { branch_name, .. }] if branch_name == "main"
     );
 
     Ok(())
@@ -116,17 +113,24 @@ async fn revision_with_conflict() -> Result<()> {
     let mut session = WorkerSession::default();
     let ws = session.load_directory(repo.path())?;
 
-    let rev = queries::query_revision(&ws, revs::conflict_bookmark()).await?;
+    let id = revs::conflict_bookmark();
+    let result = queries::query_revisions(
+        &ws,
+        RevSet {
+            from: id.clone(),
+            to: id,
+        },
+    )
+    .await?;
 
-    let RevResult::Detail {
-        header,
-        changes: _,
-        conflicts,
-        ..
-    } = rev
+    let RevsResult::Detail {
+        headers, conflicts, ..
+    } = result
     else {
-        panic!("Expected RevResult::Detail");
+        panic!("Expected RevsResult::Detail");
     };
+
+    let header = headers.last().expect("at least one header");
 
     // The conflict_bookmark commit should be marked as having conflicts
     assert!(
@@ -166,14 +170,24 @@ async fn revision_resolves_conflict() -> Result<()> {
     let ws = session.load_directory(repo.path())?;
 
     // resolve_conflict is a child of conflict_bookmark that resolves the conflict
-    let rev = queries::query_revision(&ws, revs::resolve_conflict()).await?;
+    let id = revs::resolve_conflict();
+    let result = queries::query_revisions(
+        &ws,
+        RevSet {
+            from: id.clone(),
+            to: id,
+        },
+    )
+    .await?;
 
-    let RevResult::Detail {
-        header, changes, ..
-    } = rev
+    let RevsResult::Detail {
+        headers, changes, ..
+    } = result
     else {
-        panic!("Expected RevResult::Detail");
+        panic!("Expected RevsResult::Detail");
     };
+
+    let header = headers.last().expect("at least one header");
 
     // This commit resolved the conflict, so it should not be conflicted
     assert!(
