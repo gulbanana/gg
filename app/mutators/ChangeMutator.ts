@@ -45,7 +45,7 @@ export default class ChangeMutator {
             });
         } else {
             mutate<MoveChanges>("move_changes", {
-                from_id: this.#revision.id,
+                from: { from: this.#revision.id, to: this.#revision.id },
                 to_id: this.#revision.parent_ids[0],
                 paths: [this.#path]
             });

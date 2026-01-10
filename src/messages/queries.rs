@@ -78,6 +78,10 @@ impl RevSet {
             to: id,
         }
     }
+
+    pub fn sequence(from: RevId, to: RevId) -> Self {
+        Self { from, to }
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]

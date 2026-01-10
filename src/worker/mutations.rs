@@ -462,35 +462,71 @@ impl Mutation for MoveChanges {
     async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
 
-        let from = ws.resolve_single_change(&self.from_id)?;
-        let mut to = ws.resolve_single_commit(&self.to_id)?;
-        let matcher = build_matcher(&self.paths)?;
-
-        if ws.check_immutable(vec![from.id().clone(), to.id().clone()])? {
-            precondition!("Revisions are immutable");
+        // resolve & check destination
+        let to_id = CommitId::try_from_hex(&self.to_id.hex).expect("frontend-validated id");
+        if ws.check_immutable([to_id.clone()])? {
+            precondition!("Destination revision is immutable");
         }
 
-        // construct a split tree and a remainder tree by copying changes from child to parent and from parent to child
-        let from_tree = from.tree();
-        let from_parents: Result<Vec<_>, _> = from.parents().collect();
-        let parent_tree = rewrite::merge_commit_trees(tx.repo(), &from_parents?).await?;
-        let split_tree = rewrite::restore_tree(&from_tree, &parent_tree, matcher.as_ref()).await?;
-        let remainder_tree =
-            rewrite::restore_tree(&parent_tree, &from_tree, matcher.as_ref()).await?;
+        let mut to = ws.get_commit(&to_id)?;
 
-        // abandon or rewrite source
-        let abandon_source = remainder_tree.tree_ids() == parent_tree.tree_ids();
-        if abandon_source {
-            tx.repo_mut().record_abandoned_commit(&from);
+        // resolve & check source, which is assumed to be a singleton or a linear range
+        let from_commits = if self.from.from.change.hex == self.from.to.change.hex {
+            let commit = ws.resolve_single_change(&self.from.from)?;
+            if ws.check_immutable([commit.id().clone()])? {
+                precondition!("Source revisions are immutable");
+            }
+            vec![commit]
         } else {
-            tx.repo_mut()
-                .rewrite_commit(&from)
-                .set_tree(remainder_tree)
-                .write()?;
+            let revset_str = format!("{}::{}", self.from.from.change.hex, self.from.to.change.hex);
+            let revset = ws.evaluate_revset_str(&revset_str)?;
+            let commits = ws.resolve_multiple(&revset)?;
+            if ws.check_immutable_revset(&*revset)? {
+                precondition!("Source revisions are immutable");
+            }
+            commits
+        };
+
+        let from_newest = from_commits
+            .first()
+            .ok_or_else(|| anyhow!("empty revset"))?;
+        let from_oldest = from_commits.last().ok_or_else(|| anyhow!("empty revset"))?;
+
+        // construct trees: from_tree is newest state, parent_tree is base before oldest
+        let matcher = build_matcher(&self.paths)?;
+        let from_tree = from_newest.tree();
+        let oldest_parents: Result<Vec<_>, _> = from_oldest.parents().collect();
+        let parent_tree = rewrite::merge_commit_trees(tx.repo(), &oldest_parents?).await?;
+        let split_tree = rewrite::restore_tree(&from_tree, &parent_tree, matcher.as_ref()).await?;
+
+        // all sources will be abandoned if all changes in the range were selected
+        let abandon_all = split_tree.tree_ids() == from_tree.tree_ids();
+
+        // process each source commit: abandon, rewrite, or leave unchanged
+        for commit in &from_commits {
+            let commit_tree = commit.tree();
+            let commit_parents: Result<Vec<_>, _> = commit.parents().collect();
+            let commit_parent_tree =
+                rewrite::merge_commit_trees(tx.repo(), &commit_parents?).await?;
+            let commit_remainder =
+                rewrite::restore_tree(&commit_parent_tree, &commit_tree, matcher.as_ref()).await?;
+
+            if commit_remainder.tree_ids() == commit_tree.tree_ids() {
+                // commit didn't touch selected paths - leave unchanged
+            } else if commit_remainder.tree_ids() == commit_parent_tree.tree_ids() {
+                // commit only touched selected paths - abandon it
+                tx.repo_mut().record_abandoned_commit(commit);
+            } else {
+                // commit touched both - rewrite with remaining changes
+                tx.repo_mut()
+                    .rewrite_commit(commit)
+                    .set_tree(commit_remainder)
+                    .write()?;
+            }
         }
 
         // rebase descendants of source, which may include destination
-        if tx.repo().index().is_ancestor(from.id(), to.id())? {
+        if tx.repo().index().is_ancestor(from_oldest.id(), to.id())? {
             let mut rebase_map = std::collections::HashMap::new();
             tx.repo_mut().rebase_descendants_with_options(
                 &RebaseOptions::default(),
@@ -520,15 +556,19 @@ impl Mutation for MoveChanges {
             ),
             (
                 parent_tree,
-                format!("{} (parents of moved revision)", from.conflict_label()),
+                format!(
+                    "{} (parents of moved revision)",
+                    from_oldest.conflict_label()
+                ),
             ),
             (
                 split_tree,
-                format!("{} (moved changes)", from.conflict_label()),
+                format!("{} (moved changes)", from_newest.conflict_label()),
             ),
         ]))
         .await?;
-        let description = combine_messages(&from, &to, abandon_source);
+        let source_refs: Vec<_> = from_commits.iter().collect();
+        let description = combine_messages(&source_refs, &to, abandon_all);
         tx.repo_mut()
             .rewrite_commit(&to)
             .set_tree(new_to_tree)
@@ -537,7 +577,12 @@ impl Mutation for MoveChanges {
 
         match ws.finish_transaction(
             tx,
-            format!("move changes from {} to {}", from.id().hex(), to.id().hex()),
+            format!(
+                "move changes from {}::{} to {}",
+                from_oldest.id().hex(),
+                from_newest.id().hex(),
+                to.id().hex()
+            ),
         )? {
             Some(new_status) => Ok(MutationResult::Updated {
                 new_status,
@@ -1064,7 +1109,7 @@ impl Mutation for MoveHunk {
         .await?;
 
         let abandon_source = remainder_tree.tree_ids() == base_tree.tree_ids();
-        let description = combine_messages(&from, &to, abandon_source);
+        let description = combine_messages(&[&from], &to, abandon_source);
 
         // Check ancestry to determine rebase strategy. The hunk must be applied to the destination's
         // tree AFTER any ancestry-related rebasing, so we do it early if moving from an ancestor.
@@ -1689,15 +1734,14 @@ impl Mutation for UndoOperation {
     }
 }
 
-fn combine_messages(source: &Commit, destination: &Commit, abandon_source: bool) -> String {
+fn combine_messages(sources: &[&Commit], destination: &Commit, abandon_source: bool) -> String {
     if abandon_source {
-        if source.description().is_empty() {
-            destination.description().to_owned()
-        } else if destination.description().is_empty() {
-            source.description().to_owned()
-        } else {
-            destination.description().to_owned() + "\n" + source.description()
-        }
+        // collect non-empty descriptions: destination first, then sources (newest to oldest)
+        let descriptions: Vec<_> = std::iter::once(destination.description())
+            .chain(sources.iter().map(|c| c.description()))
+            .filter(|d| !d.is_empty())
+            .collect();
+        descriptions.join("\n")
     } else {
         destination.description().to_owned()
     }

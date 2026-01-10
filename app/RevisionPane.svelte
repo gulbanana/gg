@@ -223,21 +223,21 @@
             <div class="move-commands">
                 <span>Changes:</span>
 
-                <!-- XXX implement plural squash -->
                 <ActionWidget
                     tip="move all changes to parent"
                     onClick={mutator.onSquash}
-                    disabled={!singleton || newest.is_immutable || newest.parent_ids.length != 1}>
+                    disabled={oldest.is_immutable || oldest.parent_ids.length != 1}>
                     <Icon name="upload" /> Squash
                 </ActionWidget>
 
-                <!-- XXX implement plural restore... maybe. doesn't seem very useful -->
-                <ActionWidget
-                    tip="copy all changes from parent"
-                    onClick={mutator.onRestore}
-                    disabled={!singleton || newest.is_immutable || newest.parent_ids.length != 1}>
-                    <Icon name="download" /> Restore
-                </ActionWidget>
+                {#if singleton}
+                    <ActionWidget
+                        tip="copy all changes from parent"
+                        onClick={mutator.onRestore}
+                        disabled={newest.is_immutable || newest.parent_ids.length != 1}>
+                        <Icon name="download" /> Restore
+                    </ActionWidget>
+                {/if}
             </div>
 
             <ListWidget {list} type="Change" descendant={$changeSelectEvent?.path.repo_path}>

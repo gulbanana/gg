@@ -545,7 +545,7 @@ impl WorkspaceSession<'_> {
         })
     }
 
-    pub fn check_immutable_with_repo<'r>(
+    fn check_immutable_with_repo<'r>(
         &'r self,
         repo: &'r dyn Repo,
         ids: impl IntoIterator<Item = CommitId>,
@@ -558,16 +558,29 @@ impl WorkspaceSession<'_> {
         let immutable_revset = immutable_heads.ancestors();
         let intersection_revset = check_revset.intersection(&immutable_revset);
 
-        // note: slow! jj has added a caching contains_fn to revsets, but this codepath is used in one-offs where
-        // nothing is cached. this should be checked at some point to ensure we aren't calling it unnecessarily
         let immutable_revs = self.evaluate_revset_expr(repo, intersection_revset)?;
         let first = immutable_revs.iter().next();
 
         Ok(first.is_some())
     }
 
+    /// checks if any commit in an iterator is immutable
+    /// can be slow! this codepath is for use in one-offs where nothing is cached
     pub fn check_immutable(&self, ids: impl IntoIterator<Item = CommitId>) -> Result<bool> {
         self.check_immutable_with_repo(self.operation.repo.as_ref(), ids)
+    }
+
+    /// checks if any commit in a revset is immutable
+    /// more efficient than check_immutable thanks to cached membership tests
+    pub fn check_immutable_revset(&self, revset: &dyn Revset) -> Result<bool> {
+        let immutable_revset = self.evaluate_immutable()?;
+        let contains = immutable_revset.containing_fn();
+        for id in revset.iter() {
+            if contains(&id?)? {
+                return Ok(true);
+            }
+        }
+        Ok(false)
     }
 
     /*********************************************************************

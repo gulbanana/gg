@@ -190,7 +190,7 @@ export default class BinaryMutator {
                         hunk: this.#from.hunk
                     });
                 } else {
-                    mutate<MoveChanges>("move_changes", { from_id: this.#from.header.id, to_id: this.#to.header.id.commit, paths: [this.#from.path] });
+                    mutate<MoveChanges>("move_changes", { from: { from: this.#from.header.id, to: this.#from.header.id }, to_id: this.#to.header.id.commit, paths: [this.#from.path] });
                 }
                 return;
             } else if (this.#to.type == "Repository") {

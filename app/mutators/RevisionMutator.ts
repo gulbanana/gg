@@ -129,10 +129,9 @@ export default class RevisionMutator {
     };
 
     onSquash = () => {
-        if (!this.#singleton || this.#singleton.is_immutable || this.#singleton.parent_ids.length != 1) return;
         mutate<MoveChanges>("move_changes", {
-            from_id: this.#singleton.id,
-            to_id: this.#singleton.parent_ids[0],
+            from: this.#set,
+            to_id: this.#revisions[this.#revisions.length - 1].parent_ids[0],
             paths: []
         });
     };

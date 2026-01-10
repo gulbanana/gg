@@ -136,8 +136,8 @@ pub struct BackoutRevisions {
 #[derive(Deserialize, Debug)]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
 pub struct MoveChanges {
-    pub from_id: RevId,
-    pub to_id: CommitId, // limitation: we don't know parent chids because they are more expensive to look up
+    pub from: RevSet,
+    pub to_id: CommitId, // limitation: we don't know parent change ids because they are more expensive to look up
     pub paths: Vec<TreePath>,
 }
 

@@ -3,7 +3,10 @@ mod queries;
 mod session;
 
 use anyhow::Result;
-use jj_lib::{backend::TreeValue, commit::Commit, repo_path::RepoPath};
+use jj_lib::{
+    backend::TreeValue, commit::Commit, repo::Repo as _, repo_path::RepoPath,
+    revset::RevsetIteratorExt,
+};
 use std::{
     fs::{self, File},
     path::PathBuf,
@@ -13,8 +16,8 @@ use tempfile::{TempDir, tempdir};
 use zip::ZipArchive;
 
 use crate::{
-    messages::{ChangeId, CommitId, RevId},
-    worker::{EventSink, WorkerSession, WorkspaceSession},
+    messages::{ChangeId, CommitId, RevId, RevSet, RevsResult},
+    worker::{EventSink, WorkerSession, WorkspaceSession, queries::query_revisions},
 };
 
 pub struct NoProgress;
@@ -87,6 +90,27 @@ fn get_rev(ws: &WorkspaceSession, rev_id: &RevId) -> Result<Commit> {
         Some(commit) => Ok(commit?),
         None => anyhow::bail!("Change {} not found", rev_id.change.hex),
     }
+}
+
+async fn query_by_chid(ws: &WorkspaceSession<'_>, change_hex: &str) -> Result<RevsResult> {
+    let revset = ws.evaluate_revset_str(change_hex)?;
+    let commits: Vec<_> = revset
+        .iter()
+        .commits(ws.repo().store())
+        .collect::<Result<Vec<_>, _>>()?;
+    let commit = commits
+        .first()
+        .ok_or_else(|| anyhow::anyhow!("not found"))?;
+    let id = ws.format_id(commit);
+    query_by_id(ws, id).await
+}
+
+/// Helper to get a single revision's display details (changes, conflicts, etc.)
+async fn query_by_id(
+    ws: &crate::worker::gui_util::WorkspaceSession<'_>,
+    id: RevId,
+) -> Result<RevsResult> {
+    query_revisions(ws, RevSet::singleton(id)).await
 }
 
 mod revs {
