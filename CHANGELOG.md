@@ -1,6 +1,6 @@
 # GG Changelog
 
-## Unreleased
+## [0.37.1](releases/tag/v0.37.1)
 
 ### Added
 - Repository -> Recent Items menu.
@@ -10,7 +10,7 @@
 - Revision menu commands were applying to *every* open window.
 - Tweaks to the "Changes" bar visuals.
 
-## [0.37.0](releases/tag/v0.37)
+## [0.37.0](releases/tag/v0.37.0)
 This release is based on Jujutsu 0.37.
 
 ### Added
