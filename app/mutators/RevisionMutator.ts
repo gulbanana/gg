@@ -68,9 +68,8 @@ export default class RevisionMutator {
     }
 
     onNewChild = () => {
-        if (!this.#singleton) return;
         mutate<CreateRevision>("create_revision", {
-            parent_ids: [this.#singleton?.id]
+            set: this.#set
         });
     };
 
@@ -90,7 +89,7 @@ export default class RevisionMutator {
 
         if (this.#singleton.is_immutable) {
             mutate<CreateRevision>("create_revision", {
-                parent_ids: [this.#singleton.id]
+                set: this.#set,
             });
         } else {
             mutate<CheckoutRevision>("checkout_revision", {

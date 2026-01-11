@@ -53,7 +53,7 @@ pub struct CheckoutRevision {
 #[derive(Deserialize, Debug)]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
 pub struct CreateRevision {
-    pub parent_ids: Vec<RevId>,
+    pub set: RevSet,
 }
 
 /// Creates a new revision between two changes and makes it the working copy

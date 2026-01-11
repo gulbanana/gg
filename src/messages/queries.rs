@@ -70,6 +70,16 @@ pub struct RevSet {
     pub to: RevId,
 }
 
+#[cfg(test)]
+impl RevSet {
+    pub fn singleton(id: RevId) -> Self {
+        Self {
+            from: id.clone(),
+            to: id,
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
 pub struct RevHeader {

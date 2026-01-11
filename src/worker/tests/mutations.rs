@@ -149,7 +149,7 @@ async fn immutability_of_bookmark() -> Result<()> {
         new_selection: Some(new_selection),
         ..
     } = CreateRevision {
-        parent_ids: vec![revs::working_copy()],
+        set: RevSet::singleton(revs::working_copy()),
     }
     .execute_unboxed(&mut ws)
     .await?
@@ -244,7 +244,7 @@ async fn create_revision_single_parent() -> Result<()> {
     assert!(parent_header.is_working_copy);
 
     let result = CreateRevision {
-        parent_ids: vec![revs::working_copy()],
+        set: RevSet::singleton(revs::working_copy()),
     }
     .execute_unboxed(&mut ws)
     .await?;
@@ -273,11 +273,12 @@ async fn create_revision_multi_parent() -> Result<()> {
     let mut session = WorkerSession::default();
     let mut ws = session.load_directory(repo.path())?;
 
-    let parent_header = queries::query_revision(&ws, &revs::working_copy())?.expect("exists");
-    assert!(parent_header.is_working_copy);
-
+    // conflict_bookmark is parent of resolve_conflict, forming a linear range of 2 commits
     let result = CreateRevision {
-        parent_ids: vec![revs::working_copy(), revs::conflict_bookmark()],
+        set: RevSet {
+            from: revs::conflict_bookmark(),
+            to: revs::resolve_conflict(),
+        },
     }
     .execute_unboxed(&mut ws)
     .await?;

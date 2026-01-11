@@ -182,20 +182,21 @@ impl Mutation for CreateRevision {
     async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
 
-        let parents_revset = ws.evaluate_revset_changes(
-            &self
-                .parent_ids
-                .into_iter()
-                .map(|id| id.change)
-                .collect_vec(),
-        )?;
+        // resolve singleton or arbitrary revset
+        let parent_commits = if self.set.from.change.hex == self.set.to.change.hex {
+            vec![ws.resolve_single_change(&self.set.from)?]
+        } else {
+            let revset_str = format!("{}::{}", self.set.from.change.hex, self.set.to.change.hex);
+            let revset = ws.evaluate_revset_str(&revset_str)?;
+            ws.resolve_multiple(revset)?
+        };
 
-        let parent_ids: Result<_, _> = parents_revset.iter().collect();
-        let parent_commits = ws.resolve_multiple(parents_revset)?;
+        // use as parents of new revision
+        let parent_ids: Vec<_> = parent_commits.iter().map(Commit::id).cloned().collect();
         let merged_tree = rewrite::merge_commit_trees(tx.repo(), &parent_commits).await?;
+        let new_commit = tx.repo_mut().new_commit(parent_ids, merged_tree).write()?;
 
-        let new_commit = tx.repo_mut().new_commit(parent_ids?, merged_tree).write()?;
-
+        // make it the working copy
         tx.repo_mut().edit(ws.name().to_owned(), &new_commit)?;
 
         match ws.finish_transaction(tx, "new empty commit")? {
