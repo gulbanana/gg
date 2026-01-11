@@ -53,7 +53,7 @@ struct WindowState {
     revision_menu: Menu<Wry>,
     tree_menu: Menu<Wry>,
     ref_menu: Menu<Wry>,
-    selection: Option<messages::RevHeader>,
+    selection: Option<messages::RevSet>,
     has_workspace: bool,
 }
 
@@ -68,7 +68,7 @@ impl AppState {
             .clone()
     }
 
-    fn get_selection(&self, window_label: &str) -> Option<messages::RevHeader> {
+    fn get_selection(&self, window_label: &str) -> Option<messages::RevSet> {
         self.windows
             .lock()
             .expect("state mutex poisoned")
@@ -105,6 +105,15 @@ fn label_for_path(path: Option<&PathBuf>) -> String {
     path.hash(&mut hasher);
     let hash = hasher.finish();
     format!("repo-{:08x}", hash as u32)
+}
+
+fn resolve_set(
+    session_tx: &Sender<SessionEvent>,
+    set: messages::RevSet,
+) -> Result<messages::RevsResult> {
+    let (tx, rx) = channel();
+    session_tx.send(SessionEvent::QueryRevisions { tx, set })?;
+    rx.recv()?
 }
 
 pub fn run_gui(options: super::RunOptions) -> Result<()> {
@@ -242,15 +251,26 @@ fn forward_accelerator(window: Window, state: State<AppState>, key: char, ctrl: 
             }
         }
         ('m', true, false) => {
-            if let Some(header) = state.get_selection(window.label())
-                && !header.is_immutable
-                && header.parent_ids.len() == 1
+            // new_parent only works for singleton selection with single parent
+            if let Some(set) = state.get_selection(window.label())
+                && set.from.commit.hex == set.to.commit.hex
             {
-                handler::nonfatal!(window.emit_to(
-                    EventTarget::window(window.label()),
-                    "gg://menu/revision",
-                    "new_parent"
-                ));
+                let session_tx = state.get_session(window.label());
+                let (tx, rx) = channel();
+                if session_tx
+                    .send(SessionEvent::QueryRevisions { tx, set })
+                    .is_ok()
+                    && let Ok(Ok(messages::RevsResult::Detail { headers, .. })) = rx.recv()
+                    && let Some(header) = headers.first()
+                    && !header.is_immutable
+                    && header.parent_ids.len() == 1
+                {
+                    handler::nonfatal!(window.emit_to(
+                        EventTarget::window(window.label()),
+                        "gg://menu/revision",
+                        "new_parent"
+                    ));
+                }
             }
         }
         _ => (),
@@ -392,16 +412,8 @@ fn query_revisions(
     app_state: State<AppState>,
     set: messages::RevSet,
 ) -> Result<messages::RevsResult, InvokeError> {
-    let session_tx: Sender<SessionEvent> = app_state.get_session(window.label());
-    let (call_tx, call_rx) = channel();
-
-    session_tx
-        .send(SessionEvent::QueryRevisions { tx: call_tx, set })
-        .map_err(InvokeError::from_error)?;
-    call_rx
-        .recv()
-        .map_err(InvokeError::from_error)?
-        .map_err(InvokeError::from_anyhow)
+    let session_tx = app_state.get_session(window.label());
+    resolve_set(&session_tx, set).map_err(InvokeError::from_anyhow)
 }
 
 #[tauri::command(async)]
@@ -710,14 +722,25 @@ pub fn try_create_window(app_handle: &AppHandle, workspace: Option<PathBuf>) -> 
     let handle = app_handle.clone();
     let label = window.label().to_owned();
     window.listen("gg://revision/select", move |event| {
-        let payload: Result<Option<messages::RevHeader>, serde_json::Error> =
+        let payload: Result<Option<messages::RevSet>, serde_json::Error> =
             serde_json::from_str(event.payload());
-        if let Ok(selection) = payload {
-            if let Some(state) = windows.lock().unwrap().get_mut(&label) {
-                state.selection = selection.clone();
-            }
+        if let Ok(set) = payload {
+            let session_tx = {
+                let mut guard = windows.lock().unwrap();
+                if let Some(state) = guard.get_mut(&label) {
+                    state.selection = set.clone();
+                    state.worker_channel.clone()
+                } else {
+                    return;
+                }
+            };
+            let headers: Option<Vec<messages::RevHeader>> =
+                set.and_then(|set| match resolve_set(&session_tx, set) {
+                    Ok(messages::RevsResult::Detail { headers, .. }) => Some(headers),
+                    _ => None,
+                });
             if let Some(menu) = handle.menu() {
-                handler::fatal!(menu::handle_selection(menu, selection));
+                handler::fatal!(menu::handle_selection(menu, headers.as_deref()));
             }
         }
     });
@@ -875,9 +898,15 @@ fn handle_window_event(window: &Window, event: &WindowEvent) -> Result<()> {
 
             let app_state = window.state::<AppState>();
 
+            let session_tx = app_state.get_session(window.label());
             let selection = app_state.get_selection(window.label());
+            let headers: Option<Vec<messages::RevHeader>> =
+                selection.and_then(|set| match resolve_set(&session_tx, set) {
+                    Ok(messages::RevsResult::Detail { headers, .. }) => Some(headers),
+                    _ => None,
+                });
             if let Some(menu) = window.app_handle().menu() {
-                menu::handle_selection(menu, selection)?;
+                menu::handle_selection(menu, headers.as_deref())?;
             }
 
             window.emit_to(EventTarget::labeled(window.label()), "gg://focus", ())?;

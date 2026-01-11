@@ -3,6 +3,7 @@
     import type { LogPage } from "./messages/LogPage.js";
     import type { LogRow } from "./messages/LogRow.js";
     import type { RevHeader } from "./messages/RevHeader";
+    import type { RevSet } from "./messages/RevSet";
     import { query } from "./ipc.js";
     import { repoStatusEvent, revisionSelectEvent } from "./stores.js";
     import RevisionMutator from "./mutators/RevisionMutator.js";
@@ -64,7 +65,9 @@
             return graphRows?.length ?? 0;
         },
         getSelection(): Selection {
-            if (!graphRows || selectionAnchorIdx === undefined) return { from: -1, to: -1 };
+            if (!graphRows || selectionAnchorIdx === undefined || !$revisionSelectEvent) {
+                return { from: -1, to: -1 };
+            }
 
             // translate from toplogical from::to to listwidget's anchor::extension
             const revSetFromIdx = graphRows.findIndex(
@@ -318,7 +321,7 @@
     <ListWidget
         slot="body"
         type="Revision"
-        descendant={$revisionSelectEvent?.from.commit.prefix}
+        descendant={$revisionSelectEvent?.to.commit.prefix}
         {list}
         bind:clientHeight={logHeight}
         bind:clientWidth={logWidth}

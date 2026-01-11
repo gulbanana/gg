@@ -10,6 +10,7 @@
         repoConfigEvent,
         repoStatusEvent,
         revisionSelectEvent,
+        selectionHeaders,
         currentInput,
         hasMenu,
         progressEvent,
@@ -158,25 +159,24 @@
     async function loadChange(set: RevSet) {
         let rev = await query<RevsResult>("query_revisions", { set }, (q) => (selection = q));
 
+        // if empty, fall back to working copy
         if (
             rev.type == "data" &&
             rev.value.type == "NotFound" &&
             (set.from.commit.hex !== $repoStatusEvent?.working_copy?.hex ||
                 set.to.commit.hex !== $repoStatusEvent?.working_copy?.hex)
         ) {
-            return loadChange({
-                from: {
-                    change: { type: "ChangeId", hex: "@", prefix: "@", rest: "" },
-                    commit: $repoStatusEvent!.working_copy,
-                },
-                to: {
-                    change: { type: "ChangeId", hex: "@", prefix: "@", rest: "" },
-                    commit: $repoStatusEvent!.working_copy,
-                },
-            });
+            const workingCopyId = {
+                change: { type: "ChangeId" as const, hex: "@", prefix: "@", rest: "" },
+                commit: $repoStatusEvent!.working_copy,
+            };
+            return loadChange({ from: workingCopyId, to: workingCopyId });
         }
 
         selection = rev;
+        if (rev.type == "data" && rev.value.type == "Detail") {
+            $selectionHeaders = rev.value.headers;
+        }
     }
 
     async function handleFocus() {
@@ -200,6 +200,8 @@
     function mutateRevision(event: string) {
         if ($currentContext?.type == "Revision") {
             new RevisionMutator([$currentContext.header]).handle(event);
+        } else if ($currentContext?.type == "Revisions") {
+            new RevisionMutator($currentContext.headers).handle(event);
         }
         $currentContext = null;
     }

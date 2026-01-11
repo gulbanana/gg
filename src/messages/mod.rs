@@ -165,6 +165,9 @@ pub enum Operand {
     Revision {
         header: RevHeader,
     },
+    Revisions {
+        headers: Vec<RevHeader>,
+    },
     Merge {
         header: RevHeader,
     },

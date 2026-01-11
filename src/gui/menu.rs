@@ -330,47 +330,71 @@ pub fn build_context(
     Ok((revision_menu, tree_menu, ref_menu))
 }
 
-// enables global menu items based on currently selected revision
-pub fn handle_selection(menu: Menu<Wry>, selection: Option<RevHeader>) -> Result<()> {
+/// Computed enablement state for revision menu items
+struct RevisionEnablement {
+    new_child: bool,
+    new_parent: bool,
+    edit: bool,
+    backout: bool,
+    duplicate: bool,
+    abandon: bool,
+    squash: bool,
+    restore: bool,
+    branch: bool,
+}
+
+fn compute_revision_enablement(headers: &[RevHeader]) -> RevisionEnablement {
+    let is_singleton = headers.len() == 1;
+    let any_immutable = headers.iter().any(|h| h.is_immutable);
+    let oldest = headers.last();
+    let oldest_has_single_parent = oldest.map(|h| h.parent_ids.len() == 1).unwrap_or(false);
+    let newest = headers.first();
+
+    RevisionEnablement {
+        new_child: true,
+        new_parent: !any_immutable && oldest_has_single_parent,
+        edit: is_singleton && !any_immutable && !newest.map(|h| h.is_working_copy).unwrap_or(false),
+        backout: true,
+        duplicate: true,
+        abandon: !any_immutable,
+        squash: !any_immutable && oldest_has_single_parent,
+        restore: is_singleton && !any_immutable && oldest_has_single_parent,
+        branch: is_singleton,
+    }
+}
+
+// enables global menu items based on currently selected revision(s)
+pub fn handle_selection(menu: Menu<Wry>, headers: Option<&[RevHeader]>) -> Result<()> {
     let revision_submenu = menu
         .get("revision")
         .ok_or(anyhow!("Revision menu not found"))?;
     let revision_submenu = revision_submenu.as_submenu_unchecked();
 
-    match selection {
-        None => {
+    match headers {
+        None | Some([]) => {
             revision_submenu.enable("menu_revision_new_child", false)?;
             revision_submenu.enable("menu_revision_new_parent", false)?;
             revision_submenu.enable("menu_revision_edit", false)?;
+            revision_submenu.enable("menu_revision_backout", false)?;
             revision_submenu.enable("menu_revision_duplicate", false)?;
             revision_submenu.enable("menu_revision_abandon", false)?;
             revision_submenu.enable("menu_revision_squash", false)?;
             revision_submenu.enable("menu_revision_restore", false)?;
+            revision_submenu.enable("menu_revision_branch", false)?;
         }
-        Some(rev) => {
-            revision_submenu.enable("menu_revision_new_child", true)?;
-            revision_submenu.enable(
-                "menu_revision_new_parent",
-                !rev.is_immutable && rev.parent_ids.len() == 1,
-            )?;
-            revision_submenu.enable(
-                "menu_revision_edit",
-                !rev.is_immutable && !rev.is_working_copy,
-            )?;
-            revision_submenu.enable("menu_revision_backout", true)?;
-            revision_submenu.enable("menu_revision_duplicate", true)?;
-            revision_submenu.enable("menu_revision_abandon", !rev.is_immutable)?;
-            revision_submenu.enable(
-                "menu_revision_squash",
-                !rev.is_immutable && rev.parent_ids.len() == 1,
-            )?;
-            revision_submenu.enable(
-                "menu_revision_restore",
-                !rev.is_immutable && rev.parent_ids.len() == 1,
-            )?;
-            revision_submenu.enable("menu_revision_branch", true)?;
+        Some(headers) => {
+            let state = compute_revision_enablement(headers);
+            revision_submenu.enable("menu_revision_new_child", state.new_child)?;
+            revision_submenu.enable("menu_revision_new_parent", state.new_parent)?;
+            revision_submenu.enable("menu_revision_edit", state.edit)?;
+            revision_submenu.enable("menu_revision_backout", state.backout)?;
+            revision_submenu.enable("menu_revision_duplicate", state.duplicate)?;
+            revision_submenu.enable("menu_revision_abandon", state.abandon)?;
+            revision_submenu.enable("menu_revision_squash", state.squash)?;
+            revision_submenu.enable("menu_revision_restore", state.restore)?;
+            revision_submenu.enable("menu_revision_branch", state.branch)?;
         }
-    };
+    }
 
     Ok(())
 }
@@ -389,27 +413,35 @@ pub fn handle_context(window: Window, ctx: Operand) -> Result<()> {
                 .expect("session not found")
                 .revision_menu;
 
-            context_menu.enable("revision_new_child", true)?;
-            context_menu.enable(
-                "revision_new_parent",
-                !header.is_immutable && header.parent_ids.len() == 1,
-            )?;
-            context_menu.enable(
-                "revision_edit",
-                !header.is_immutable && !header.is_working_copy,
-            )?;
-            context_menu.enable("revision_backout", true)?;
-            context_menu.enable("revision_duplicate", true)?;
-            context_menu.enable("revision_abandon", !header.is_immutable)?;
-            context_menu.enable(
-                "revision_squash",
-                !header.is_immutable && header.parent_ids.len() == 1,
-            )?;
-            context_menu.enable(
-                "revision_restore",
-                !header.is_immutable && header.parent_ids.len() == 1,
-            )?;
-            context_menu.enable("revision_branch", true)?;
+            let state = compute_revision_enablement(&[header]);
+            context_menu.enable("revision_new_child", state.new_child)?;
+            context_menu.enable("revision_new_parent", state.new_parent)?;
+            context_menu.enable("revision_edit", state.edit)?;
+            context_menu.enable("revision_backout", state.backout)?;
+            context_menu.enable("revision_duplicate", state.duplicate)?;
+            context_menu.enable("revision_abandon", state.abandon)?;
+            context_menu.enable("revision_squash", state.squash)?;
+            context_menu.enable("revision_restore", state.restore)?;
+            context_menu.enable("revision_branch", state.branch)?;
+
+            window.popup_menu(context_menu)?;
+        }
+        Operand::Revisions { headers } => {
+            let context_menu = &guard
+                .get(window.label())
+                .expect("session not found")
+                .revision_menu;
+
+            let state = compute_revision_enablement(&headers);
+            context_menu.enable("revision_new_child", state.new_child)?;
+            context_menu.enable("revision_new_parent", state.new_parent)?;
+            context_menu.enable("revision_edit", state.edit)?;
+            context_menu.enable("revision_backout", state.backout)?;
+            context_menu.enable("revision_duplicate", state.duplicate)?;
+            context_menu.enable("revision_abandon", state.abandon)?;
+            context_menu.enable("revision_squash", state.squash)?;
+            context_menu.enable("revision_restore", state.restore)?;
+            context_menu.enable("revision_branch", state.branch)?;
 
             window.popup_menu(context_menu)?;
         }

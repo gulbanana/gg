@@ -2,6 +2,7 @@ import type { MutationResult } from "./messages/MutationResult";
 import type { ProgressEvent } from "./messages/ProgressEvent";
 import type { RepoConfig } from "./messages/RepoConfig";
 import type { RepoStatus } from "./messages/RepoStatus";
+import type { RevHeader } from "./messages/RevHeader";
 import type { RevSet } from "./messages/RevSet";
 import type { Operand } from "./messages/Operand";
 import { writable } from "svelte/store";
@@ -13,6 +14,7 @@ import type { RevChange } from "./messages/RevChange";
 export const repoConfigEvent = await event<RepoConfig>("gg://repo/config", { type: "Initial" });
 export const repoStatusEvent = await event<RepoStatus | undefined>("gg://repo/status", undefined);
 export const revisionSelectEvent = await event<RevSet | undefined>("gg://revision/select", undefined);
+export const selectionHeaders = writable<RevHeader[]>([]);
 export const changeSelectEvent = await event<RevChange | undefined>("gg://change/select", undefined);
 export const progressEvent = await event<ProgressEvent | undefined>("gg://progress", undefined);
 

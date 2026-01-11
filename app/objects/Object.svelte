@@ -6,8 +6,9 @@ Core component for direct-manipulation objects. A drag&drop source.
 <script lang="ts">
     import type { Operand } from "../messages/Operand";
     import { trigger, isTauri } from "../ipc";
-    import { currentContext, currentSource, hasMenu } from "../stores";
+    import { currentContext, currentSource, selectionHeaders, hasMenu } from "../stores";
     import { createEventDispatcher } from "svelte";
+    import { get } from "svelte/store";
     import BinaryMutator from "../mutators/BinaryMutator";
 
     interface $$Slots {
@@ -44,10 +45,23 @@ Core component for direct-manipulation objects. A drag&drop source.
             event.preventDefault();
             event.stopPropagation();
 
-            currentContext.set(operand);
+            let contextOperand: Operand = operand;
+
+            // check if this revision is part of a multiselection and substitute it
+            if (operand.type == "Revision") {
+                const headers = get(selectionHeaders);
+                if (
+                    headers.length > 1 &&
+                    headers.some((h) => h.id.commit.hex === operand.header.id.commit.hex)
+                ) {
+                    contextOperand = { type: "Revisions", headers };
+                }
+            }
+
+            currentContext.set(contextOperand);
 
             if (isTauri()) {
-                trigger("forward_context_menu", { context: operand });
+                trigger("forward_context_menu", { context: contextOperand });
             } else {
                 const mouseEvent = event as MouseEvent;
                 hasMenu.set({ x: mouseEvent.clientX, y: mouseEvent.clientY });
@@ -81,13 +95,25 @@ Core component for direct-manipulation objects. A drag&drop source.
         dragging = false;
         dragHint = null;
     }
+
+    // check if this operand is part of the current context
+    function isInContext(ctx: Operand | null, op: Operand | null): boolean {
+        if (!ctx || !op) return false;
+        if (ctx === op) return true;
+        if (ctx.type === "Revisions" && op.type === "Revision") {
+            return ctx.headers.some((h) => h.id.commit.hex === op.header.id.commit.hex);
+        }
+        return false;
+    }
+
+    $: inContext = isInContext($currentContext, operand);
 </script>
 
 <button
     {id}
     class:selected
     class:conflict={conflicted}
-    class:context={dragging || (operand != null && $currentContext == operand)}
+    class:context={dragging || inContext}
     class:hint={dragHint}
     tabindex="-1"
     draggable={operand != null}
@@ -99,7 +125,7 @@ Core component for direct-manipulation objects. A drag&drop source.
     on:contextmenu={onMenu}
     on:dragstart={onDragStart}
     on:dragend={onDragEnd}>
-    <slot context={dragging || (operand != null && $currentContext == operand)} hint={dragHint} />
+    <slot context={dragging || inContext} hint={dragHint} />
 </button>
 
 <style>

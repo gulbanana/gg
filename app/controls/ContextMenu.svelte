@@ -3,6 +3,8 @@
     import type { Operand } from "../messages/Operand";
     import type { RevHeader } from "../messages/RevHeader";
     import type { StoreRef } from "../messages/StoreRef";
+    import { selectionHeaders } from "../stores";
+    import { get } from "svelte/store";
     import RevisionMutator from "../mutators/RevisionMutator";
     import ChangeMutator from "../mutators/ChangeMutator";
     import RefMutator from "../mutators/RefMutator";
@@ -13,8 +15,8 @@
     export let onClose: () => void;
 
     function onClick(action: string) {
-        if (operand.type === "Revision") {
-            new RevisionMutator([operand.header]).handle(action);
+        if (operand.type === "Revision" || operand.type === "Revisions") {
+            new RevisionMutator(get(selectionHeaders)).handle(action);
         } else if (operand.type === "Change") {
             new ChangeMutator(operand.header, operand.path, operand.hunk).handle(action);
         } else if (operand.type === "Ref") {
@@ -33,18 +35,23 @@
         }
     }
 
-    function isRevisionEnabled(header: RevHeader) {
-        const hasSingleParent = header.parent_ids.length === 1;
+    function isRevisionEnabled(headers: RevHeader[]) {
+        const isSingleton = headers.length === 1;
+        const anyImmutable = headers.some((h) => h.is_immutable);
+        const oldest = headers[headers.length - 1];
+        const newest = headers[0];
+        const oldestHasSingleParent = oldest?.parent_ids.length === 1;
+
         return {
             new_child: true,
-            new_parent: !header.is_immutable && hasSingleParent,
-            edit: !header.is_immutable && !header.is_working_copy,
+            new_parent: !anyImmutable && oldestHasSingleParent,
+            edit: isSingleton && !anyImmutable && !newest?.is_working_copy,
             backout: true,
             duplicate: true,
-            abandon: !header.is_immutable,
-            squash: !header.is_immutable && hasSingleParent,
-            restore: !header.is_immutable && hasSingleParent,
-            branch: true,
+            abandon: !anyImmutable,
+            squash: !anyImmutable && oldestHasSingleParent,
+            restore: isSingleton && !anyImmutable && oldestHasSingleParent,
+            branch: isSingleton,
         };
     }
 
@@ -75,7 +82,10 @@
         };
     }
 
-    $: revisionEnabled = operand.type === "Revision" ? isRevisionEnabled(operand.header) : null;
+    $: revisionEnabled =
+        operand.type === "Revision" || operand.type === "Revisions"
+            ? isRevisionEnabled($selectionHeaders)
+            : null;
     $: changeEnabled = operand.type === "Change" ? isChangeEnabled(operand.header) : null;
     $: refEnabled = operand.type === "Ref" ? isRefEnabled(operand.ref) : null;
 
@@ -105,7 +115,7 @@
     on:click|stopPropagation
     on:keydown={onKeyDown}
     bind:this={menuElement}>
-    {#if operand.type === "Revision" && revisionEnabled}
+    {#if (operand.type === "Revision" || operand.type === "Revisions") && revisionEnabled}
         <button disabled={!revisionEnabled.new_child} on:click={() => onClick("new_child")}>New child</button>
         <button disabled={!revisionEnabled.new_parent} on:click={() => onClick("new_parent")}
             >New inserted parent</button>
@@ -117,7 +127,8 @@
         <button disabled={!revisionEnabled.abandon} on:click={() => onClick("abandon")}>Abandon</button>
         <hr />
         <button disabled={!revisionEnabled.squash} on:click={() => onClick("squash")}>Squash into parent</button>
-        <button disabled={!revisionEnabled.restore} on:click={() => onClick("restore")}>Restore from parent</button>
+        <button disabled={!revisionEnabled.restore} on:click={() => onClick("restore")}
+            >Restore from parent</button>
         <hr />
         <button disabled={!revisionEnabled.branch} on:click={() => onClick("branch")}>Create bookmark...</button>
     {:else if operand.type === "Change" && changeEnabled}

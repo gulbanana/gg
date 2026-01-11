@@ -4,4 +4,4 @@ import type { RevHeader } from "./RevHeader";
 import type { StoreRef } from "./StoreRef";
 import type { TreePath } from "./TreePath";
 
-export type Operand = { "type": "Repository" } | { "type": "Revision", header: RevHeader, } | { "type": "Merge", header: RevHeader, } | { "type": "Parent", header: RevHeader, child: RevHeader, } | { "type": "Change", header: RevHeader, path: TreePath, hunk: ChangeHunk | null, } | { "type": "Ref", header: RevHeader, ref: StoreRef, };
+export type Operand = { "type": "Repository" } | { "type": "Revision", header: RevHeader, } | { "type": "Revisions", headers: Array<RevHeader>, } | { "type": "Merge", header: RevHeader, } | { "type": "Parent", header: RevHeader, child: RevHeader, } | { "type": "Change", header: RevHeader, path: TreePath, hunk: ChangeHunk | null, } | { "type": "Ref", header: RevHeader, ref: StoreRef, };
