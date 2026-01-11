@@ -6,7 +6,8 @@
 - Repository -> Recent Items menu.
 
 ### Fixed
-- Dropdowns in input dialogs not sending their value to the backend correctly.
+- Dropdowns in input dialogs weren't sending their value to the backend correctly.
+- Revision menu commands were applying to *every* open window.
 
 ## [0.37.0](releases/tag/v0.37)
 This release is based on Jujutsu 0.37.

@@ -516,6 +516,11 @@ pub fn handle_context(window: Window, ctx: Operand) -> Result<()> {
 pub fn handle_event(window: &Window, event: MenuEvent) -> Result<()> {
     log::debug!("handling event {event:?}");
 
+    // we use a shared menu due to cleanup issues
+    if !window.is_focused()? {
+        return Ok(());
+    }
+
     let target = EventTarget::window(window.label());
     match event.id.0.as_str() {
         "menu_repo_init" => repo_init(window),
