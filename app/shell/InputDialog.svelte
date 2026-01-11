@@ -57,6 +57,7 @@
                 case "select":
                     let selectInput = document.getElementById(`field-${field.label}`) as HTMLSelectElement;
                     responseFields[field.label] = selectInput.value;
+                    break;
                 case "check":
                     let checkInput = document.getElementById(`field-${field.label}`) as HTMLInputElement;
                     responseFields[field.label] = checkInput.checked ? "true" : "false";
