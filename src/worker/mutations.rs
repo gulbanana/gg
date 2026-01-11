@@ -2,26 +2,25 @@ use std::fmt::Display;
 use std::sync::Arc;
 
 use anyhow::{Context, Result, anyhow};
+use async_trait::async_trait;
 use indexmap::IndexMap;
 use itertools::Itertools;
-use jj_lib::backend::{CopyId, FileId, TreeValue};
-use jj_lib::conflicts::{
-    self, ConflictMarkerStyle, ConflictMaterializeOptions, MaterializedTreeValue,
-};
-use jj_lib::files::FileMergeHunkLevel;
-use jj_lib::git::{GitSettings, GitSubprocessOptions};
-use jj_lib::merge::{Merge, SameChange};
-use jj_lib::merged_tree::{MergedTree, MergedTreeBuilder};
-use jj_lib::ref_name::{RefNameBuf, RemoteName, RemoteNameBuf, RemoteRefSymbol};
-use jj_lib::tree_merge::MergeOptions;
 use jj_lib::{
-    backend::{BackendError, CommitId},
+    backend::{BackendError, CommitId, CopyId, FileId, TreeValue},
     commit::{Commit, conflict_label_for_commits},
-    git::{self, GitBranchPushTargets, REMOTE_NAME_FOR_LOCAL_GIT_REPO},
+    conflicts::{self, ConflictMarkerStyle, ConflictMaterializeOptions, MaterializedTreeValue},
+    files::FileMergeHunkLevel,
+    git::{
+        self, GitBranchPushTargets, GitSettings, GitSubprocessOptions,
+        REMOTE_NAME_FOR_LOCAL_GIT_REPO,
+    },
     matchers::{EverythingMatcher, FilesMatcher, Matcher},
+    merge::{Merge, SameChange},
+    merged_tree::{MergedTree, MergedTreeBuilder},
     object_id::ObjectId as ObjectIdTrait,
     op_store::{RefTarget, RemoteRef, RemoteRefState},
     op_walk,
+    ref_name::{RefNameBuf, RemoteName, RemoteNameBuf, RemoteRefSymbol},
     refs::{self, BookmarkPushAction, BookmarkPushUpdate, LocalAndRemoteRef},
     repo::Repo,
     repo_path::RepoPath,
@@ -30,6 +29,7 @@ use jj_lib::{
     settings::UserSettings,
     store::Store,
     str_util::{StringExpression, StringPattern},
+    tree_merge::MergeOptions,
 };
 use tokio::io::AsyncReadExt;
 
@@ -51,7 +51,7 @@ macro_rules! precondition {
     }
 }
 
-#[async_trait::async_trait(?Send)]
+#[async_trait(?Send)]
 impl Mutation for AbandonRevisions {
     async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
@@ -96,7 +96,7 @@ impl Mutation for AbandonRevisions {
     }
 }
 
-#[async_trait::async_trait(?Send)]
+#[async_trait(?Send)]
 impl Mutation for BackoutRevisions {
     async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         if self.ids.len() != 1 {
@@ -147,7 +147,7 @@ impl Mutation for BackoutRevisions {
     }
 }
 
-#[async_trait::async_trait(?Send)]
+#[async_trait(?Send)]
 impl Mutation for CheckoutRevision {
     async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
@@ -177,7 +177,7 @@ impl Mutation for CheckoutRevision {
     }
 }
 
-#[async_trait::async_trait(?Send)]
+#[async_trait(?Send)]
 impl Mutation for CreateRevision {
     async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
@@ -211,7 +211,7 @@ impl Mutation for CreateRevision {
     }
 }
 
-#[async_trait::async_trait(?Send)]
+#[async_trait(?Send)]
 impl Mutation for CreateRevisionBetween {
     async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
@@ -249,7 +249,7 @@ impl Mutation for CreateRevisionBetween {
     }
 }
 
-#[async_trait::async_trait(?Send)]
+#[async_trait(?Send)]
 impl Mutation for DescribeRevision {
     async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
@@ -286,7 +286,7 @@ impl Mutation for DescribeRevision {
     }
 }
 
-#[async_trait::async_trait(?Send)]
+#[async_trait(?Send)]
 impl Mutation for DuplicateRevisions {
     async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
@@ -343,7 +343,7 @@ impl Mutation for DuplicateRevisions {
     }
 }
 
-#[async_trait::async_trait(?Send)]
+#[async_trait(?Send)]
 impl Mutation for InsertRevision {
     async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
@@ -386,7 +386,7 @@ impl Mutation for InsertRevision {
     }
 }
 
-#[async_trait::async_trait(?Send)]
+#[async_trait(?Send)]
 impl Mutation for MoveRevision {
     async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
@@ -426,7 +426,7 @@ impl Mutation for MoveRevision {
     }
 }
 
-#[async_trait::async_trait(?Send)]
+#[async_trait(?Send)]
 impl Mutation for MoveSource {
     async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
@@ -456,7 +456,7 @@ impl Mutation for MoveSource {
     }
 }
 
-#[async_trait::async_trait(?Send)]
+#[async_trait(?Send)]
 impl Mutation for MoveChanges {
     async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
@@ -547,7 +547,7 @@ impl Mutation for MoveChanges {
     }
 }
 
-#[async_trait::async_trait(?Send)]
+#[async_trait(?Send)]
 impl Mutation for CopyChanges {
     async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
@@ -584,7 +584,7 @@ impl Mutation for CopyChanges {
     }
 }
 
-#[async_trait::async_trait(?Send)]
+#[async_trait(?Send)]
 impl Mutation for TrackBranch {
     async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         match self.r#ref {
@@ -639,7 +639,7 @@ impl Mutation for TrackBranch {
     }
 }
 
-#[async_trait::async_trait(?Send)]
+#[async_trait(?Send)]
 impl Mutation for UntrackBranch {
     async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
@@ -711,7 +711,7 @@ impl Mutation for UntrackBranch {
     }
 }
 
-#[async_trait::async_trait(?Send)]
+#[async_trait(?Send)]
 impl Mutation for RenameBranch {
     async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let old_name = self.r#ref.as_branch()?;
@@ -751,7 +751,7 @@ impl Mutation for RenameBranch {
     }
 }
 
-#[async_trait::async_trait(?Send)]
+#[async_trait(?Send)]
 impl Mutation for CreateRef {
     async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
@@ -826,7 +826,7 @@ impl Mutation for CreateRef {
     }
 }
 
-#[async_trait::async_trait(?Send)]
+#[async_trait(?Send)]
 impl Mutation for DeleteRef {
     async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         match self.r#ref {
@@ -902,7 +902,7 @@ impl Mutation for DeleteRef {
 }
 
 // does not currently enforce fast-forwards
-#[async_trait::async_trait(?Send)]
+#[async_trait(?Send)]
 impl Mutation for MoveRef {
     async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
@@ -973,7 +973,7 @@ impl Mutation for MoveRef {
     }
 }
 
-#[async_trait::async_trait(?Send)]
+#[async_trait(?Send)]
 impl Mutation for MoveHunk {
     async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let from = ws.resolve_single_change(&self.from_id)?;
@@ -1172,7 +1172,7 @@ impl Mutation for MoveHunk {
     }
 }
 
-#[async_trait::async_trait(?Send)]
+#[async_trait(?Send)]
 impl Mutation for CopyHunk {
     async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
@@ -1329,7 +1329,7 @@ impl Mutation for CopyHunk {
     }
 }
 
-#[async_trait::async_trait(?Send)]
+#[async_trait(?Send)]
 impl Mutation for GitPush {
     async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
@@ -1577,7 +1577,7 @@ impl Mutation for GitPush {
     }
 }
 
-#[async_trait::async_trait(?Send)]
+#[async_trait(?Send)]
 impl Mutation for GitFetch {
     async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
@@ -1652,7 +1652,7 @@ impl Mutation for GitFetch {
 }
 
 // this is another case where it would be nice if we could reuse jj-cli's error messages
-#[async_trait::async_trait(?Send)]
+#[async_trait(?Send)]
 impl Mutation for UndoOperation {
     async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let head_op = op_walk::resolve_op_with_repo(ws.repo(), "@")?; // XXX this should be behind an abstraction, maybe reused in snapshot
