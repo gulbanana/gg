@@ -277,6 +277,7 @@
     .move-commands {
         border-top: 1px solid var(--ctp-overlay0);
         height: 30px;
+        min-height: 30px;
         width: 100%;
         padding: 0 3px;
         display: grid;

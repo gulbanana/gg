@@ -8,6 +8,7 @@
 ### Fixed
 - Dropdowns in input dialogs weren't sending their value to the backend correctly.
 - Revision menu commands were applying to *every* open window.
+- Tweaks to the "Changes" bar visuals.
 
 ## [0.37.0](releases/tag/v0.37)
 This release is based on Jujutsu 0.37.
