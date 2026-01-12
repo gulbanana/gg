@@ -59,15 +59,6 @@ cargo gen  # Runs: cargo test -F ts-rs
 
 This exports TypeScript types to `app/messages/`. **Frontend will break without this step.**
 
-### Source Control
-This project uses **Jujutsu (jj)** for version control instead of Git. See [jujutsu-guide.md](jujutsu-guide.md) for detailed usage instructions.
-
-**Quick Reference:**
-- View history: `jj log --no-pager`
-- View diffs: `jj diff --no-pager --git --from "@-" --to "@"`
-- Show commit: `jj show --no-pager --git -r "@-"`
-- Commit changes: `jj commit -m "description"`
-
 ### Development Commands
 
 ```bash
