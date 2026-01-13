@@ -40,28 +40,31 @@ Core component for direct-manipulation objects. A drag&drop source.
         dispatch("dblclick", event);
     }
 
+    function getEffectiveOperand(): Operand | null {
+        if (operand?.type == "Revision") {
+            let headers = get(selectionHeaders);
+            if (
+                headers &&
+                headers.length > 1 &&
+                headers.some((h) => h.id.commit.hex === operand.header.id.commit.hex)
+            ) {
+                return { type: "Revisions", headers };
+            }
+        }
+
+        return operand;
+    }
+
     function onMenu(event: Event) {
         if (operand?.type == "Ref" || operand?.type == "Change" || operand?.type == "Revision") {
             event.preventDefault();
             event.stopPropagation();
 
-            let contextOperand: Operand = operand;
-
-            // check if this revision is part of a multiselection and substitute it
-            if (operand.type == "Revision") {
-                const headers = get(selectionHeaders);
-                if (
-                    headers.length > 1 &&
-                    headers.some((h) => h.id.commit.hex === operand.header.id.commit.hex)
-                ) {
-                    contextOperand = { type: "Revisions", headers };
-                }
-            }
-
-            currentContext.set(contextOperand);
+            let effectiveOperand = getEffectiveOperand();
+            currentContext.set(effectiveOperand);
 
             if (isTauri()) {
-                trigger("forward_context_menu", { context: contextOperand });
+                trigger("forward_context_menu", { context: effectiveOperand });
             } else {
                 const mouseEvent = event as MouseEvent;
                 hasMenu.set({ x: mouseEvent.clientX, y: mouseEvent.clientY });
@@ -73,13 +76,14 @@ Core component for direct-manipulation objects. A drag&drop source.
         currentContext.set(null);
         event.stopPropagation();
 
-        let canDrag = operand == null ? { type: "no", hint: "" } : BinaryMutator.canDrag(operand);
+        let effectiveOperand = getEffectiveOperand();
+        let canDrag = effectiveOperand == null ? { type: "no", hint: "" } : BinaryMutator.canDrag(effectiveOperand);
 
         if (canDrag.type == "no") {
             return;
         } else {
             event.dataTransfer?.setData("text/plain", ""); // if we need more than one drag to be active, this could store a key
-            $currentSource = operand; // it would've been nice to just put this in the drag data but chrome says That's Insecure
+            $currentSource = effectiveOperand; // it would've been nice to just put this in the drag data but chrome says That's Insecure
             dragging = true;
 
             if (canDrag.type == "maybe") {
@@ -106,14 +110,25 @@ Core component for direct-manipulation objects. A drag&drop source.
         return false;
     }
 
+    // check if this operand is part of the current drag source
+    function isInSource(src: Operand | null, op: Operand | null): boolean {
+        if (!src || !op) return false;
+        if (src === op) return true;
+        if (src.type === "Revisions" && op.type === "Revision") {
+            return src.headers.some((h) => h.id.commit.hex === op.header.id.commit.hex);
+        }
+        return false;
+    }
+
     $: inContext = isInContext($currentContext, operand);
+    $: inSource = isInSource($currentSource, operand);
 </script>
 
 <button
     {id}
     class:selected
     class:conflict={conflicted}
-    class:context={dragging || inContext}
+    class:context={dragging || inContext || inSource}
     class:hint={dragHint}
     tabindex="-1"
     draggable={operand != null}
@@ -125,7 +140,7 @@ Core component for direct-manipulation objects. A drag&drop source.
     on:contextmenu={onMenu}
     on:dragstart={onDragStart}
     on:dragend={onDragEnd}>
-    <slot context={dragging || inContext} hint={dragHint} />
+    <slot context={dragging || inContext || inSource} hint={dragHint} />
 </button>
 
 <style>

@@ -3,9 +3,9 @@ import type { Operand } from "../messages/Operand";
 import type { MoveChanges } from "../messages/MoveChanges";
 import type { MoveHunk } from "../messages/MoveHunk";
 import type { MoveRef } from "../messages/MoveRef";
-import type { InsertRevision } from "../messages/InsertRevision";
-import type { MoveRevision } from "../messages/MoveRevision";
-import type { MoveSource } from "../messages/MoveSource";
+import type { InsertRevisions } from "../messages/InsertRevisions";
+import type { MoveRevisions } from "../messages/MoveRevisions";
+import type { AdoptRevision } from "../messages/AdoptRevision";
 import type { ChangeId } from "../messages/ChangeId";
 import type { CommitId } from "../messages/CommitId";
 import RevisionMutator from "./RevisionMutator";
@@ -32,6 +32,9 @@ export default class BinaryMutator {
         if ((from.type == "Revision" || from.type == "Change") && from.header.is_immutable) {
             return { type: "maybe", hint: "(revision is immutable)" };
         }
+        if (from.type == "Revisions" && from.headers.some((h) => h.is_immutable)) {
+            return { type: "maybe", hint: from.headers.length == 1 ? "(revision is immutable)" : "(revisions are immutable)" };
+        }
 
         // removing a parent changes the child
         if (from.type == "Parent" && from.child.is_immutable) {
@@ -43,6 +46,8 @@ export default class BinaryMutator {
         // can change these listed things (XXX add modes?)
         if (from.type == "Revision") {
             return { type: "yes", hint: ["Rebasing revision ", from.header.id.change] };
+        } else if (from.type == "Revisions") {
+            return { type: "yes", hint: from.headers.length == 1 ? ["Rebasing revision ", from.headers[0].id.change] : [`Rebasing ${from.headers.length} revisions`] };
         } else if (from.type == "Parent") {
             return { type: "yes", hint: ["Removing parent from revision ", from.child.id.change] };
         } else if (from.type == "Change") {
@@ -60,7 +65,7 @@ export default class BinaryMutator {
 
     canDrop(): Eligibility {
         // generic prohibitions - don't drop undroppables, don't drop on yourself
-        if (BinaryMutator.canDrag(this.#from).type != "yes" && !(this.#from.type == "Revision" && this.#to.type == "Merge")) {
+        if (BinaryMutator.canDrag(this.#from).type != "yes" && !((this.#from.type == "Revision" || this.#from.type == "Revisions") && this.#to.type == "Merge")) {
             return { type: "no" };
         } else if (this.#from == this.#to) {
             return { type: "no" };
@@ -85,6 +90,51 @@ export default class BinaryMutator {
                 }
             } else if (this.#to.type == "Repository") {
                 return { type: "yes", hint: ["Abandoning commit ", this.#from.header.id.commit] };
+            }
+        }
+
+        if (this.#from.type == "Revisions") {
+            if (this.#to.type == "Revision") {
+                let toHeader = this.#to.header;
+                if (this.#from.headers.some(h => h.id.change.hex == toHeader.id.change.hex)) {
+                    return { type: "no" }; // target within selected range
+                } else {
+                    return {
+                        type: "yes", hint: this.#from.headers.length == 1
+                            ? ["Rebasing revision ", this.#from.headers[0].id.change, " onto ", this.#to.header.id.change]
+                            : [`Rebasing ${this.#from.headers.length} revisions onto `, this.#to.header.id.change]
+                    };
+                }
+            } else if (this.#to.type == "Parent") {
+                // check that neither before nor after are within the selected range
+                let beforeHeader = this.#to.child;
+                let afterHeader = this.#to.header;
+                if (this.#from.headers.some(h => h.id.change.hex == beforeHeader.id.change.hex || h.id.change.hex == afterHeader.id.change.hex)) {
+                    return { type: "no" }; // target within selected range
+                } else {
+                    return {
+                        type: "yes", hint: this.#from.headers.length == 1
+                            ? ["Inserting revision ", this.#from.headers[0].id.change, " before ", beforeHeader.id.change]
+                            : [`Inserting ${this.#from.headers.length} revisions before `, beforeHeader.id.change]
+                    };
+                }
+            } else if (this.#to.type == "Repository") {
+                return {
+                    type: "yes", hint: this.#from.headers.length == 1
+                        ? ["Abandoning commit ", this.#from.headers[0].id.commit]
+                        : [`Abandoning ${this.#from.headers.length} commits`]
+                };
+            } else if (this.#to.type == "Merge") {
+                let toHeader = this.#to.header;
+                if (this.#from.headers.some(h => h.id.change.hex == toHeader.id.change.hex)) {
+                    return { type: "no" }; // target within selected range
+                } else {
+                    return {
+                        type: "yes", hint: this.#from.headers.length == 1
+                            ? ["Adding parent ", this.#from.headers[0].id.change, " to revision ", toHeader.id.change]
+                            : [`Adding ${this.#from.headers.length} parents to revision `, toHeader.id.change]
+                    };
+                }
             }
         }
 
@@ -151,16 +201,23 @@ export default class BinaryMutator {
         if (this.#from.type == "Revision") {
             if (this.#to.type == "Revision") {
                 // rebase rev onto single target
-                mutate<MoveRevision>("move_revision", { id: this.#from.header.id, parent_ids: [this.#to.header.id] });
+                mutate<MoveRevisions>("move_revisions", {
+                    set: { from: this.#from.header.id, to: this.#from.header.id },
+                    parent_ids: [this.#to.header.id]
+                });
                 return;
             } else if (this.#to.type == "Parent") {
-                // rebase between targets 
-                mutate<InsertRevision>("insert_revision", { id: this.#from.header.id, after_id: this.#to.header.id, before_id: this.#to.child.id });
+                // insert between targets
+                mutate<InsertRevisions>("insert_revisions", {
+                    set: { from: this.#from.header.id, to: this.#from.header.id },
+                    after_id: this.#to.header.id,
+                    before_id: this.#to.child.id
+                });
                 return;
             } else if (this.#to.type == "Merge") {
                 // rebase subtree onto additional targets
                 let newParents = [...this.#to.header.parent_ids, this.#from.header.id.commit];
-                mutate<MoveSource>("move_source", { id: this.#to.header.id, parent_ids: newParents });
+                mutate<AdoptRevision>("adopt_revision", { id: this.#to.header.id, parent_ids: newParents });
                 return;
             } else if (this.#to.type == "Repository") {
                 // abandon source
@@ -169,12 +226,47 @@ export default class BinaryMutator {
             }
         }
 
+        if (this.#from.type == "Revisions") {
+            // headers are ordered newest-first, so [0] is newest and [length-1] is oldest
+            const newest = this.#from.headers[0];
+            const oldest = this.#from.headers[this.#from.headers.length - 1];
+
+            if (this.#to.type == "Revision") {
+                // rebase revset onto single target
+                mutate<MoveRevisions>("move_revisions", {
+                    set: { from: oldest.id, to: newest.id },
+                    parent_ids: [this.#to.header.id]
+                });
+                return;
+            } else if (this.#to.type == "Parent") {
+                // insert range between targets
+                mutate<InsertRevisions>("insert_revisions", {
+                    set: { from: oldest.id, to: newest.id },
+                    after_id: this.#to.header.id,
+                    before_id: this.#to.child.id
+                });
+                return;
+            } else if (this.#to.type == "Repository") {
+                new RevisionMutator(this.#from.headers).onAbandon();
+                return;
+            } else if (this.#to.type == "Merge") {
+                // add all selected revisions as additional parents
+                let newParents = [
+                    ...this.#to.header.parent_ids,
+                    ...this.#from.headers.map(h => h.id.commit)
+                ];
+                mutate<AdoptRevision>("adopt_revision", { id: this.#to.header.id, parent_ids: newParents });
+                return;
+            }
+            return;
+        }
+
         if (this.#from.type == "Parent") {
             if (this.#to.type == "Repository") {
                 // rebase subtree onto fewer targets 
                 let removeCommit = this.#from.header.id.commit;
                 let newParents = this.#from.child.parent_ids.filter(id => id.hex != removeCommit.hex);
-                mutate<MoveSource>("move_source", { id: this.#from.child.id, parent_ids: newParents });
+                mutate<AdoptRevision>("adopt_revision", { id: this.#from.child.id, parent_ids: newParents });
                 return;
             }
         }
