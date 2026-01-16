@@ -1,18 +1,29 @@
 {
   "permissions": {
     "allow": [
+      "mcp__ide__getDiagnostics",
+      "Bash(jj status:*)",
       "Bash(jj log:*)",
+      "Bash(jj show:*)",
       "Bash(jj diff:*)",
-      "Bash(npm run check:*)",
       "Bash(cargo check:*)",
       "Bash(cargo test:*)",
-      "Bash(jj status:*)",
-      "Bash(npm run build:*)",
-      "mcp__ide__getDiagnostics",
       "Bash(cargo gen:*)",
       "Bash(cargo build:*)",
+      "Bash(cargo update:*)",
       "Bash(cargo tree:*)",
-      "Bash(jj show:*)"
+      "Bash(cargo fmt:*)",
+      "Bash(cargo clippy:*)",
+      "Bash(npm run check:*)",
+      "Bash(npm run build:*)",
+      "Bash(unzip:*)",
+      "Bash(zip:*)",
+      "WebSearch",
+      "WebFetch(domain:www.anthropic.com)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Skill(jj-git-replacement)",
+      "Skill(update-jj)"
     ]
   },
   "outputStyle": "default"

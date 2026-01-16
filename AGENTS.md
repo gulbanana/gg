@@ -18,6 +18,8 @@ cargo run                      # Launch GUI (uses prebuilt assets)
 cargo run -- web               # Launch in web mode (opens browser)
 ```
 
+**Before committing:** Run `cargo clippy` and `cargo fmt` to ensure code quality and consistent formatting.
+
 ## Architecture
 
 Each window has a dedicated worker thread owning a `Session` (jj-lib is not thread-safe). The session progresses through states: `WorkerSession` → `WorkspaceSession` → `QuerySession`.
