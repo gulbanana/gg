@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::fmt::Display;
 use std::sync::Arc;
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Context, Error, Result, anyhow};
 use async_trait::async_trait;
 use indexmap::IndexMap;
 use itertools::Itertools;
@@ -43,8 +43,10 @@ use crate::messages::{
     UndoOperation, UntrackBookmark,
 };
 
+use jj_cli::{git_util::load_git_import_options, ui::Ui};
+
 use super::Mutation;
-use super::gui_util::{WorkspaceSession, get_git_remote_names, load_git_import_options};
+use super::gui_util::{WorkspaceSession, get_git_remote_names};
 
 macro_rules! precondition {
     ($($args:tt)*) => {
@@ -1871,7 +1873,9 @@ impl Mutation for GitFetch {
         let mut auth_ctx = AuthContext::new(self.input);
         let progress_sender = ws.sink();
         let git_settings = GitSettings::from_settings(&ws.data.workspace_settings)?;
-        let import_options = load_git_import_options(&git_settings, &ws.data.workspace_settings)?;
+        let remote_settings = ws.data.workspace_settings.remote_settings()?;
+        let import_options = load_git_import_options(&Ui::null(), &git_settings, &remote_settings)
+            .map_err(|e| Error::new(e.error))?;
 
         for (remote_name, pattern) in &remote_patterns {
             let bookmark_expr = pattern
