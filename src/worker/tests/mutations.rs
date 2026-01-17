@@ -3,7 +3,7 @@ use crate::{
     messages::{
         AbandonRevisions, BackoutRevisions, ChangeHunk, CheckoutRevision, CopyChanges, CopyHunk,
         CreateRevision, DescribeRevision, DuplicateRevisions, FileRange, HunkLocation,
-        InsertRevision, MoveChanges, MoveHunk, MoveRef, MoveSource, MultilineString,
+        InsertRevision, MoveChanges, MoveHunk, MoveRef, MoveRevisions, MoveSource, MultilineString,
         MutationResult, RevSet, RevsResult, StoreRef, TreePath,
     },
     worker::{
@@ -13,7 +13,7 @@ use crate::{
 };
 use anyhow::Result;
 use assert_matches::assert_matches;
-use jj_lib::{repo::Repo as _, str_util::StringMatcher};
+use jj_lib::{object_id::ObjectId as _, repo::Repo as _, str_util::StringMatcher};
 use std::fs;
 use tokio::io::AsyncReadExt;
 
@@ -806,6 +806,546 @@ async fn move_source() -> Result<()> {
 
     let page = queries::query_log(&ws, "@+", 2)?;
     assert_eq!(1, page.rows.len());
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn move_revisions_single() -> Result<()> {
+    let repo = mkrepo();
+
+    let mut session = WorkerSession::default();
+    let mut ws = session.load_directory(repo.path())?;
+
+    // initially, resolve_conflict is a child of conflict_bookmark
+    let before = get_rev(&ws, &revs::resolve_conflict())?;
+    let before_parents: Vec<_> = before.parent_ids().to_vec();
+    assert_eq!(before_parents.len(), 1);
+    assert_eq!(
+        before_parents[0].hex(),
+        revs::conflict_bookmark().commit.hex
+    );
+
+    MoveRevisions {
+        set: RevSet::singleton(revs::resolve_conflict()),
+        parent_ids: vec![revs::main_bookmark()],
+    }
+    .execute_unboxed(&mut ws)
+    .await?;
+
+    // verify it's now a child of main_bookmark
+    let after = get_rev(&ws, &revs::resolve_conflict())?;
+    let after_parents: Vec<_> = after.parent_ids().to_vec();
+    assert_eq!(after_parents.len(), 1);
+    assert_eq!(after_parents[0].hex(), revs::main_bookmark().commit.hex);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn move_revisions_range() -> Result<()> {
+    let repo = mkrepo();
+
+    let mut session = WorkerSession::default();
+    let mut ws = session.load_directory(repo.path())?;
+
+    // rebase conflict_bookmark::resolve_conflict onto the working copy
+    let result = MoveRevisions {
+        set: RevSet::sequence(revs::conflict_bookmark(), revs::resolve_conflict()),
+        parent_ids: vec![revs::working_copy()],
+    }
+    .execute_unboxed(&mut ws)
+    .await?;
+    assert_matches!(result, MutationResult::Updated { .. });
+
+    // verify conflict_bookmark is now a child of working_copy (the oldest in the range was rebased)
+    let after = get_rev(&ws, &revs::conflict_bookmark())?;
+    let after_parents: Vec<_> = after.parent_ids().to_vec();
+    assert_eq!(after_parents.len(), 1);
+    assert_eq!(after_parents[0].hex(), revs::working_copy().commit.hex);
+
+    // verify resolve_conflict is still a child of conflict_bookmark (internal structure preserved)
+    let resolve_after = get_rev(&ws, &revs::resolve_conflict())?;
+    let resolve_parents: Vec<_> = resolve_after.parent_ids().to_vec();
+    assert_eq!(resolve_parents.len(), 1);
+    assert_eq!(resolve_parents[0], after.id().clone());
+
+    Ok(())
+}
+
+/// Test moving a range disinherits external children of the newest commit.
+///
+/// Setup: hunk_child_single -> hunk_grandchild (the range to move)
+/// hunk_child_single is child of hunk_base
+/// Move hunk_child_single::hunk_grandchild to main_bookmark
+/// Verify: hunk_grandchild moves with the range (it's internal to the range)
+#[tokio::test]
+async fn move_revisions_range_internal_structure_preserved() -> Result<()> {
+    let repo = mkrepo();
+
+    let mut session = WorkerSession::default();
+    let mut ws = session.load_directory(repo.path())?;
+
+    // get original parent of hunk_child_single (should be hunk_base)
+    let child_before = get_rev(&ws, &revs::hunk_child_single())?;
+    let child_parents_before: Vec<_> = child_before.parent_ids().to_vec();
+    assert_eq!(child_parents_before.len(), 1);
+    assert_eq!(
+        child_parents_before[0].hex(),
+        revs::hunk_base().commit.hex,
+        "hunk_child_single should be child of hunk_base before move"
+    );
+
+    // move hunk_child_single::hunk_grandchild onto main_bookmark
+    let result = MoveRevisions {
+        set: RevSet::sequence(revs::hunk_child_single(), revs::hunk_grandchild()),
+        parent_ids: vec![revs::main_bookmark()],
+    }
+    .execute_unboxed(&mut ws)
+    .await?;
+    assert_matches!(result, MutationResult::Updated { .. });
+
+    // verify hunk_child_single is now a child of main_bookmark
+    let child_after = get_rev(&ws, &revs::hunk_child_single())?;
+    let child_parents_after: Vec<_> = child_after.parent_ids().to_vec();
+    assert_eq!(child_parents_after.len(), 1);
+    assert_eq!(
+        child_parents_after[0].hex(),
+        revs::main_bookmark().commit.hex,
+        "hunk_child_single should be child of main_bookmark after move"
+    );
+
+    // verify hunk_grandchild is still a child of hunk_child_single (internal structure preserved)
+    let grandchild_after = get_rev(&ws, &revs::hunk_grandchild())?;
+    let grandchild_parents: Vec<_> = grandchild_after.parent_ids().to_vec();
+    assert_eq!(grandchild_parents.len(), 1);
+    assert_eq!(
+        grandchild_parents[0],
+        child_after.id().clone(),
+        "hunk_grandchild should still be child of hunk_child_single"
+    );
+
+    Ok(())
+}
+
+/// Test that moving a range disinherits external children to the oldest commit's parent.
+///
+/// Setup: Create A -> B -> C -> D where we move B::C
+/// D is an external child of C (newest in range)
+/// After move, D should be orphaned to A (B's original parent), not to B
+#[tokio::test]
+async fn move_revisions_range_disinherits_to_oldest_parent() -> Result<()> {
+    let repo = mkrepo();
+
+    let mut session = WorkerSession::default();
+    let mut ws = session.load_directory(repo.path())?;
+
+    // Create a chain: working_copy -> A -> B -> C
+    // Then move A::B somewhere else, C should be orphaned to working_copy (A's parent)
+
+    // First, create commit A on top of working_copy
+    let result = CreateRevision {
+        set: RevSet::singleton(revs::working_copy()),
+    }
+    .execute_unboxed(&mut ws)
+    .await?;
+    let a_id = match result {
+        MutationResult::Updated {
+            new_selection: Some(sel),
+            ..
+        } => sel.id,
+        _ => panic!("expected new revision"),
+    };
+
+    fs::write(repo.path().join("chain_a.txt"), "commit A").unwrap();
+    DescribeRevision {
+        id: a_id.clone(),
+        new_description: "commit A".to_owned(),
+        reset_author: false,
+    }
+    .execute_unboxed(&mut ws)
+    .await?;
+    let a = get_rev(&ws, &a_id)?;
+    let a_id = ws.format_id(&a);
+
+    // Create commit B on top of A
+    let result = CreateRevision {
+        set: RevSet::singleton(a_id.clone()),
+    }
+    .execute_unboxed(&mut ws)
+    .await?;
+    let b_id = match result {
+        MutationResult::Updated {
+            new_selection: Some(sel),
+            ..
+        } => sel.id,
+        _ => panic!("expected new revision"),
+    };
+
+    fs::write(repo.path().join("chain_b.txt"), "commit B").unwrap();
+    DescribeRevision {
+        id: b_id.clone(),
+        new_description: "commit B".to_owned(),
+        reset_author: false,
+    }
+    .execute_unboxed(&mut ws)
+    .await?;
+    let b = get_rev(&ws, &b_id)?;
+    let b_id = ws.format_id(&b);
+
+    // Create commit C on top of B (this will be the external child after moving A::B)
+    let result = CreateRevision {
+        set: RevSet::singleton(b_id.clone()),
+    }
+    .execute_unboxed(&mut ws)
+    .await?;
+    let c_id = match result {
+        MutationResult::Updated {
+            new_selection: Some(sel),
+            ..
+        } => sel.id,
+        _ => panic!("expected new revision"),
+    };
+
+    fs::write(repo.path().join("chain_c.txt"), "commit C").unwrap();
+    DescribeRevision {
+        id: c_id.clone(),
+        new_description: "commit C".to_owned(),
+        reset_author: false,
+    }
+    .execute_unboxed(&mut ws)
+    .await?;
+    let c = get_rev(&ws, &c_id)?;
+    let c_id = ws.format_id(&c);
+
+    // verify C is child of B before the move
+    let c_parents_before: Vec<_> = c.parent_ids().to_vec();
+    assert_eq!(c_parents_before.len(), 1);
+
+    // Move A::B to main_bookmark
+    // C should be orphaned to working_copy (A's original parent), not to A
+    let result = MoveRevisions {
+        set: RevSet::sequence(a_id.clone(), b_id.clone()),
+        parent_ids: vec![revs::main_bookmark()],
+    }
+    .execute_unboxed(&mut ws)
+    .await?;
+    assert_matches!(result, MutationResult::Updated { .. });
+
+    // verify A is now child of main_bookmark
+    let a_after = get_rev(&ws, &a_id)?;
+    let a_parents_after: Vec<_> = a_after.parent_ids().to_vec();
+    assert_eq!(
+        a_parents_after[0].hex(),
+        revs::main_bookmark().commit.hex,
+        "A should be child of main_bookmark after move"
+    );
+
+    // verify B is still child of A (internal structure preserved)
+    let b_after = get_rev(&ws, &b_id)?;
+    let b_parents_after: Vec<_> = b_after.parent_ids().to_vec();
+    assert_eq!(
+        b_parents_after[0],
+        a_after.id().clone(),
+        "B should still be child of A"
+    );
+
+    // CRITICAL: verify C is now child of working_copy (A's original parent)
+    // NOT child of B (which would mean it moved with the range)
+    let c_after = get_rev(&ws, &c_id)?;
+    let c_parents_after: Vec<_> = c_after.parent_ids().to_vec();
+    assert_eq!(c_parents_after.len(), 1);
+    assert_eq!(
+        c_parents_after[0].hex(),
+        revs::working_copy().commit.hex,
+        "C should be orphaned to working_copy (A's original parent), not follow the moved range"
+    );
+
+    Ok(())
+}
+
+/// Test that moving a range disinherits external children of middle commits too.
+///
+/// Setup: Create A -> B -> C where B has a sibling child D
+///        A
+///        |
+///        B -- D
+///        |
+///        C
+/// Move A::C somewhere else. D should be orphaned to the parent of A.
+#[tokio::test]
+async fn move_revisions_range_disinherits_children_of_middle() -> Result<()> {
+    let repo = mkrepo();
+
+    let mut session = WorkerSession::default();
+    let mut ws = session.load_directory(repo.path())?;
+
+    // Create commit A on working_copy
+    let result = CreateRevision {
+        set: RevSet::singleton(revs::working_copy()),
+    }
+    .execute_unboxed(&mut ws)
+    .await?;
+    let a_id = match result {
+        MutationResult::Updated {
+            new_selection: Some(sel),
+            ..
+        } => sel.id,
+        _ => panic!("expected new revision"),
+    };
+    fs::write(repo.path().join("middle_a.txt"), "commit A").unwrap();
+    DescribeRevision {
+        id: a_id.clone(),
+        new_description: "commit A".to_owned(),
+        reset_author: false,
+    }
+    .execute_unboxed(&mut ws)
+    .await?;
+    let a = get_rev(&ws, &a_id)?;
+    let a_id = ws.format_id(&a);
+
+    // Create commit B on A
+    let result = CreateRevision {
+        set: RevSet::singleton(a_id.clone()),
+    }
+    .execute_unboxed(&mut ws)
+    .await?;
+    let b_id = match result {
+        MutationResult::Updated {
+            new_selection: Some(sel),
+            ..
+        } => sel.id,
+        _ => panic!("expected new revision"),
+    };
+    fs::write(repo.path().join("middle_b.txt"), "commit B").unwrap();
+    DescribeRevision {
+        id: b_id.clone(),
+        new_description: "commit B".to_owned(),
+        reset_author: false,
+    }
+    .execute_unboxed(&mut ws)
+    .await?;
+    let b = get_rev(&ws, &b_id)?;
+    let b_id = ws.format_id(&b);
+
+    // Create commit C on B (end of the range we'll move)
+    let result = CreateRevision {
+        set: RevSet::singleton(b_id.clone()),
+    }
+    .execute_unboxed(&mut ws)
+    .await?;
+    let c_id = match result {
+        MutationResult::Updated {
+            new_selection: Some(sel),
+            ..
+        } => sel.id,
+        _ => panic!("expected new revision"),
+    };
+    fs::write(repo.path().join("middle_c.txt"), "commit C").unwrap();
+    DescribeRevision {
+        id: c_id.clone(),
+        new_description: "commit C".to_owned(),
+        reset_author: false,
+    }
+    .execute_unboxed(&mut ws)
+    .await?;
+    let c = get_rev(&ws, &c_id)?;
+    let c_id = ws.format_id(&c);
+
+    // Create commit D as another child of B (sibling of C, external to range A::C)
+    // First checkout B to create D there
+    CheckoutRevision { id: b_id.clone() }
+        .execute_unboxed(&mut ws)
+        .await?;
+
+    let result = CreateRevision {
+        set: RevSet::singleton(b_id.clone()),
+    }
+    .execute_unboxed(&mut ws)
+    .await?;
+    let d_id = match result {
+        MutationResult::Updated {
+            new_selection: Some(sel),
+            ..
+        } => sel.id,
+        _ => panic!("expected new revision"),
+    };
+    fs::write(repo.path().join("middle_d.txt"), "commit D").unwrap();
+    DescribeRevision {
+        id: d_id.clone(),
+        new_description: "commit D (sibling of C, child of B)".to_owned(),
+        reset_author: false,
+    }
+    .execute_unboxed(&mut ws)
+    .await?;
+    let d = get_rev(&ws, &d_id)?;
+    let d_id = ws.format_id(&d);
+
+    // verify D is child of B before the move
+    let d_parents_before: Vec<_> = d.parent_ids().to_vec();
+    assert_eq!(d_parents_before.len(), 1);
+    assert_eq!(
+        d_parents_before[0],
+        b.id().clone(),
+        "D should be child of B before move"
+    );
+
+    // Move A::C to main_bookmark
+    // D is child of B (middle of range), should be orphaned to working_copy (A's original parent)
+    let result = MoveRevisions {
+        set: RevSet::sequence(a_id.clone(), c_id.clone()),
+        parent_ids: vec![revs::main_bookmark()],
+    }
+    .execute_unboxed(&mut ws)
+    .await?;
+    assert_matches!(result, MutationResult::Updated { .. });
+
+    // verify A moved to main_bookmark
+    let a_after = get_rev(&ws, &a_id)?;
+    let a_parents_after: Vec<_> = a_after.parent_ids().to_vec();
+    assert_eq!(
+        a_parents_after[0].hex(),
+        revs::main_bookmark().commit.hex,
+        "A should be child of main_bookmark"
+    );
+
+    // verify internal structure: B child of A, C child of B
+    let b_after = get_rev(&ws, &b_id)?;
+    assert_eq!(b_after.parent_ids()[0], a_after.id().clone());
+    let c_after = get_rev(&ws, &c_id)?;
+    assert_eq!(c_after.parent_ids()[0], b_after.id().clone());
+
+    // CRITICAL: D should be orphaned to working_copy, not follow B
+    let d_after = get_rev(&ws, &d_id)?;
+    let d_parents_after: Vec<_> = d_after.parent_ids().to_vec();
+    assert_eq!(d_parents_after.len(), 1);
+    assert_eq!(
+        d_parents_after[0].hex(),
+        revs::working_copy().commit.hex,
+        "D should be orphaned to working_copy (A's original parent), not follow the moved range"
+    );
+
+    Ok(())
+}
+
+/// Test that moving a range with multiple external children handles all of them.
+///
+/// Setup: A has children B and C. B has child D (end of range).
+///        Move A::D. C should be orphaned.
+#[tokio::test]
+async fn move_revisions_range_multiple_external_children() -> Result<()> {
+    let repo = mkrepo();
+
+    let mut session = WorkerSession::default();
+    let mut ws = session.load_directory(repo.path())?;
+
+    // Create commit A
+    let result = CreateRevision {
+        set: RevSet::singleton(revs::working_copy()),
+    }
+    .execute_unboxed(&mut ws)
+    .await?;
+    let a_id = match result {
+        MutationResult::Updated {
+            new_selection: Some(sel),
+            ..
+        } => sel.id,
+        _ => panic!("expected new revision"),
+    };
+    fs::write(repo.path().join("multi_a.txt"), "commit A").unwrap();
+    DescribeRevision {
+        id: a_id.clone(),
+        new_description: "commit A".to_owned(),
+        reset_author: false,
+    }
+    .execute_unboxed(&mut ws)
+    .await?;
+    let a = get_rev(&ws, &a_id)?;
+    let a_id = ws.format_id(&a);
+
+    // Create commit B on A (part of the range)
+    let result = CreateRevision {
+        set: RevSet::singleton(a_id.clone()),
+    }
+    .execute_unboxed(&mut ws)
+    .await?;
+    let b_id = match result {
+        MutationResult::Updated {
+            new_selection: Some(sel),
+            ..
+        } => sel.id,
+        _ => panic!("expected new revision"),
+    };
+    fs::write(repo.path().join("multi_b.txt"), "commit B").unwrap();
+    DescribeRevision {
+        id: b_id.clone(),
+        new_description: "commit B".to_owned(),
+        reset_author: false,
+    }
+    .execute_unboxed(&mut ws)
+    .await?;
+    let b = get_rev(&ws, &b_id)?;
+    let b_id = ws.format_id(&b);
+
+    // Create commit C on A (sibling of B, external to range)
+    CheckoutRevision { id: a_id.clone() }
+        .execute_unboxed(&mut ws)
+        .await?;
+
+    let result = CreateRevision {
+        set: RevSet::singleton(a_id.clone()),
+    }
+    .execute_unboxed(&mut ws)
+    .await?;
+    let c_id = match result {
+        MutationResult::Updated {
+            new_selection: Some(sel),
+            ..
+        } => sel.id,
+        _ => panic!("expected new revision"),
+    };
+    fs::write(repo.path().join("multi_c.txt"), "commit C").unwrap();
+    DescribeRevision {
+        id: c_id.clone(),
+        new_description: "commit C (sibling of B)".to_owned(),
+        reset_author: false,
+    }
+    .execute_unboxed(&mut ws)
+    .await?;
+    let c = get_rev(&ws, &c_id)?;
+    let c_id = ws.format_id(&c);
+
+    // verify C is child of A
+    assert_eq!(c.parent_ids()[0], a.id().clone());
+
+    // Move A::B to main_bookmark
+    // C is external child of A (oldest in range), should be orphaned to working_copy
+    let result = MoveRevisions {
+        set: RevSet::sequence(a_id.clone(), b_id.clone()),
+        parent_ids: vec![revs::main_bookmark()],
+    }
+    .execute_unboxed(&mut ws)
+    .await?;
+    assert_matches!(result, MutationResult::Updated { .. });
+
+    // verify A moved
+    let a_after = get_rev(&ws, &a_id)?;
+    assert_eq!(
+        a_after.parent_ids()[0].hex(),
+        revs::main_bookmark().commit.hex
+    );
+
+    // verify B still child of A
+    let b_after = get_rev(&ws, &b_id)?;
+    assert_eq!(b_after.parent_ids()[0], a_after.id().clone());
+
+    // CRITICAL: C should be orphaned to working_copy
+    let c_after = get_rev(&ws, &c_id)?;
+    assert_eq!(
+        c_after.parent_ids()[0].hex(),
+        revs::working_copy().commit.hex,
+        "C should be orphaned to working_copy (A's original parent)"
+    );
 
     Ok(())
 }

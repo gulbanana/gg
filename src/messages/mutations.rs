@@ -74,8 +74,8 @@ pub struct InsertRevision {
 
 #[derive(Deserialize, Debug)]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
-pub struct MoveRevision {
-    pub id: RevId,
+pub struct MoveRevisions {
+    pub set: RevSet,
     pub parent_ids: Vec<RevId>,
 }
 

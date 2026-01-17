@@ -27,7 +27,7 @@ use crate::messages::{
     self, AbandonRevisions, BackoutRevisions, CheckoutRevision, CloneRepository, CopyChanges,
     CopyHunk, CreateRef, CreateRevision, CreateRevisionBetween, DeleteRef, DescribeRevision,
     DuplicateRevisions, GitFetch, GitPush, InitRepository, InsertRevision, MoveChanges, MoveHunk,
-    MoveRef, MoveRevision, MoveSource, MutationResult, RenameBranch, TrackBranch, UndoOperation,
+    MoveRef, MoveRevisions, MoveSource, MutationResult, RenameBranch, TrackBranch, UndoOperation,
     UntrackBranch,
 };
 use crate::worker::{Mutation, Session, SessionEvent, WorkerSession};
@@ -165,7 +165,7 @@ pub fn run_gui(options: super::RunOptions) -> Result<()> {
             describe_revision,
             duplicate_revisions,
             insert_revision,
-            move_revision,
+            move_revisions,
             move_source,
             move_changes,
             copy_changes,
@@ -512,10 +512,10 @@ fn duplicate_revisions(
 }
 
 #[tauri::command(async)]
-fn move_revision(
+fn move_revisions(
     window: Window,
     app_state: State<AppState>,
-    mutation: MoveRevision,
+    mutation: MoveRevisions,
 ) -> Result<MutationResult, InvokeError> {
     try_mutate(window, app_state, mutation)
 }

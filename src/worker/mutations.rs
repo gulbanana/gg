@@ -37,7 +37,7 @@ use crate::git_util::AuthContext;
 use crate::messages::{
     AbandonRevisions, BackoutRevisions, CheckoutRevision, CopyChanges, CopyHunk, CreateRef,
     CreateRevision, CreateRevisionBetween, DeleteRef, DescribeRevision, DuplicateRevisions,
-    GitFetch, GitPush, GitRefspec, InsertRevision, MoveChanges, MoveHunk, MoveRef, MoveRevision,
+    GitFetch, GitPush, GitRefspec, InsertRevision, MoveChanges, MoveHunk, MoveRef, MoveRevisions,
     MoveSource, MutationResult, RenameBranch, StoreRef, TrackBranch, TreePath, UndoOperation,
     UntrackBranch,
 };
@@ -439,21 +439,40 @@ impl Mutation for InsertRevision {
 }
 
 #[async_trait(?Send)]
-impl Mutation for MoveRevision {
+impl Mutation for MoveRevisions {
     async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
 
-        let target = ws.resolve_single_change(&self.id)?;
-        let parents = ws.resolve_multiple_changes(self.parent_ids)?;
+        // resolve singleton or linear range (in reverse topological order)
+        let targets = if self.set.from.change.hex == self.set.to.change.hex {
+            let commit = ws.resolve_single_change(&self.set.from)?;
+            if ws.check_immutable([commit.id().clone()])? {
+                precondition!("Revision is immutable");
+            }
+            vec![commit]
+        } else {
+            let revset_str = format!("{}::{}", self.set.from.change.hex, self.set.to.change.hex);
+            let revset = ws.evaluate_revset_str(&revset_str)?;
+            let resolved = ws.resolve_multiple(&revset)?;
+            if ws.check_immutable_revset(&*revset)? {
+                precondition!("Some revisions are immutable");
+            }
+            resolved
+        };
 
-        if ws.check_immutable(vec![target.id().clone()])? {
-            precondition!("Revision {} is immutable", self.id.change.prefix);
+        if targets.is_empty() {
+            return Ok(MutationResult::Unchanged);
         }
 
-        // rebase the target's children
-        let rebased_children = ws.disinherit_children(&mut tx, &target).await?;
+        // detach external children of any commit in the range
+        let oldest = targets.last().expect("non-empty targets");
+        let orphan_to = oldest.parent_ids().to_vec();
+        let rebased_children = ws
+            .disinherit_external_children(&mut tx, &targets, orphan_to)
+            .await?;
 
-        // update parents, which may have been descendants of the target
+        // update parents, which may have been descendants of the targets
+        let parents = ws.resolve_multiple_changes(self.parent_ids)?;
         let parent_ids: Vec<_> = parents
             .iter()
             .map(|new_parent| {
@@ -463,12 +482,14 @@ impl Mutation for MoveRevision {
                     .clone()
             })
             .collect();
+        let transaction_description = if targets.len() == 1 {
+            format!("rebase commit {}", oldest.id().hex())
+        } else {
+            format!("rebase {} commits", targets.len())
+        };
+        rewrite::rebase_commit(tx.repo_mut(), oldest.clone(), parent_ids).await?;
 
-        // rebase the target itself
-        let rebased_id = target.id().hex();
-        rewrite::rebase_commit(tx.repo_mut(), target, parent_ids).await?;
-
-        match ws.finish_transaction(tx, format!("rebase commit {}", rebased_id))? {
+        match ws.finish_transaction(tx, transaction_description)? {
             Some(new_status) => Ok(MutationResult::Updated {
                 new_status,
                 new_selection: None,
