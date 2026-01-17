@@ -26,9 +26,11 @@ use jj_lib::workspace::{
 use jj_lib::{backend::CommitId, git};
 use serde::Serialize;
 
+use jj_cli::{git_util::load_git_import_options, ui::Ui};
+
 use crate::git_util::AuthContext;
 use crate::messages;
-use gui_util::{WorkspaceSession, load_git_import_options};
+use gui_util::WorkspaceSession;
 pub use session::{Session, SessionEvent};
 
 /// implemented by structured-change commands
@@ -198,7 +200,9 @@ impl WorkerSession {
         // fetch from origin
         let mut auth_ctx = AuthContext::new(None);
         let git_settings = GitSettings::from_settings(&settings)?;
-        let import_options = load_git_import_options(&git_settings, &settings)?;
+        let remote_settings = settings.remote_settings()?;
+        let import_options = load_git_import_options(&Ui::null(), &git_settings, &remote_settings)
+            .map_err(|e| Error::new(e.error))?;
 
         let git_head_id = auth_ctx.with_callbacks(Some(self.sink.clone()), |cb, env| {
             let mut subprocess_options = git_settings.to_subprocess_options();
