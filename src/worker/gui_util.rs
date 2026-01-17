@@ -883,78 +883,10 @@ impl WorkspaceSession<'_> {
     /* complicate the interface of trait Mutation                                                    */
     /*************************************************************************************************/
 
-    pub async fn disinherit_children(
-        &self,
-        tx: &mut Transaction,
-        target: &Commit,
-    ) -> Result<HashMap<CommitId, CommitId>> {
-        // find all children of target
-        let children_expr = RevsetExpression::commit(target.id().clone()).children();
-        let children: Vec<_> = children_expr
-            .evaluate(self.operation.repo.as_ref())?
-            .iter()
-            .commits(self.operation.repo.store())
-            .try_collect()?;
-
-        // rebase each child, and then auto-rebase their descendants
-        let mut rebased_commit_ids = HashMap::new();
-        for child_commit in children {
-            let new_child_parent_ids = child_commit
-                .parent_ids()
-                .iter()
-                .flat_map(|c| {
-                    if c == target.id() {
-                        target.parent_ids().to_vec()
-                    } else {
-                        vec![c.clone()]
-                    }
-                })
-                .collect_vec();
-
-            // some of the new parents may be ancestors of others
-            let new_child_parents_expression =
-                RevsetExpression::commits(new_child_parent_ids.clone()).minus(
-                    &RevsetExpression::commits(new_child_parent_ids.clone())
-                        .parents()
-                        .ancestors(),
-                );
-            let new_child_parents: Result<Vec<CommitId>, _> = new_child_parents_expression
-                .evaluate(tx.base_repo().as_ref())?
-                .iter()
-                .collect();
-
-            rebased_commit_ids.insert(
-                child_commit.id().clone(),
-                rewrite::rebase_commit(tx.repo_mut(), child_commit, new_child_parents?)
-                    .await?
-                    .id()
-                    .clone(),
-            );
-        }
-        {
-            let mut mapping = HashMap::new();
-            tx.repo_mut().rebase_descendants_with_options(
-                &RebaseOptions::default(),
-                |old_commit, rebased| {
-                    mapping.insert(
-                        old_commit.id().clone(),
-                        match rebased {
-                            RebasedCommit::Rewritten(new_commit) => new_commit.id().clone(),
-                            RebasedCommit::Abandoned { parent_id } => parent_id,
-                        },
-                    );
-                },
-            )?;
-            rebased_commit_ids.extend(mapping);
-        }
-
-        Ok(rebased_commit_ids)
-    }
-
     /// Disinherit external children of a range of commits.
     /// Finds all children of any commit in the range that are not themselves in the range,
     /// and rebases them to the specified orphan parents (typically the oldest commit's parents).
-    pub async fn disinherit_external_children(
+    pub async fn disinherit_children(
         &self,
         tx: &mut Transaction,
         range: &[Commit],
@@ -1022,22 +954,22 @@ impl WorkspaceSession<'_> {
                     .clone(),
             );
         }
-        {
-            let mut mapping = HashMap::new();
-            tx.repo_mut().rebase_descendants_with_options(
-                &RebaseOptions::default(),
-                |old_commit, rebased| {
-                    mapping.insert(
-                        old_commit.id().clone(),
-                        match rebased {
-                            RebasedCommit::Rewritten(new_commit) => new_commit.id().clone(),
-                            RebasedCommit::Abandoned { parent_id } => parent_id,
-                        },
-                    );
-                },
-            )?;
-            rebased_commit_ids.extend(mapping);
-        }
+
+        // rebase descendants of modified commits, tracking new ids
+        let mut mapping = HashMap::new();
+        tx.repo_mut().rebase_descendants_with_options(
+            &RebaseOptions::default(),
+            |old_commit, rebased| {
+                mapping.insert(
+                    old_commit.id().clone(),
+                    match rebased {
+                        RebasedCommit::Rewritten(new_commit) => new_commit.id().clone(),
+                        RebasedCommit::Abandoned { parent_id } => parent_id,
+                    },
+                );
+            },
+        )?;
+        rebased_commit_ids.extend(mapping);
 
         Ok(rebased_commit_ids)
     }

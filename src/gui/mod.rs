@@ -26,7 +26,7 @@ use crate::config::GGSettings;
 use crate::messages::{
     self, AbandonRevisions, BackoutRevisions, CheckoutRevision, CloneRepository, CopyChanges,
     CopyHunk, CreateRef, CreateRevision, CreateRevisionBetween, DeleteRef, DescribeRevision,
-    DuplicateRevisions, GitFetch, GitPush, InitRepository, InsertRevision, MoveChanges, MoveHunk,
+    DuplicateRevisions, GitFetch, GitPush, InitRepository, InsertRevisions, MoveChanges, MoveHunk,
     MoveRef, MoveRevisions, MoveSource, MutationResult, RenameBranch, TrackBranch, UndoOperation,
     UntrackBranch,
 };
@@ -164,7 +164,7 @@ pub fn run_gui(options: super::RunOptions) -> Result<()> {
             create_revision_between,
             describe_revision,
             duplicate_revisions,
-            insert_revision,
+            insert_revisions,
             move_revisions,
             move_source,
             move_changes,
@@ -485,10 +485,10 @@ fn create_revision_between(
 }
 
 #[tauri::command(async)]
-fn insert_revision(
+fn insert_revisions(
     window: Window,
     app_state: State<AppState>,
-    mutation: InsertRevision,
+    mutation: InsertRevisions,
 ) -> Result<MutationResult, InvokeError> {
     try_mutate(window, app_state, mutation)
 }

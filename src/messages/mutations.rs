@@ -66,8 +66,8 @@ pub struct CreateRevisionBetween {
 
 #[derive(Deserialize, Debug)]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
-pub struct InsertRevision {
-    pub id: RevId,
+pub struct InsertRevisions {
+    pub set: RevSet,
     pub after_id: RevId,
     pub before_id: RevId,
 }

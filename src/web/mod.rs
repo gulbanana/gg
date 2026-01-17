@@ -32,7 +32,7 @@ use crate::config::{GGSettings, read_config};
 use crate::messages::{
     AbandonRevisions, BackoutRevisions, CheckoutRevision, CopyChanges, CopyHunk, CreateRef,
     CreateRevision, CreateRevisionBetween, DeleteRef, DescribeRevision, DuplicateRevisions,
-    GitFetch, GitPush, InsertRevision, MoveChanges, MoveHunk, MoveRef, MoveRevisions, MoveSource,
+    GitFetch, GitPush, InsertRevisions, MoveChanges, MoveHunk, MoveRef, MoveRevisions, MoveSource,
     RenameBranch, TrackBranch, UndoOperation, UntrackBranch,
 };
 use crate::worker::{Mutation, Session, SessionEvent, WorkerSession};
@@ -242,7 +242,7 @@ async fn handle_mutate(
         "checkout_revision" => execute_mutation::<CheckoutRevision>(&state, body),
         "create_revision" => execute_mutation::<CreateRevision>(&state, body),
         "create_revision_between" => execute_mutation::<CreateRevisionBetween>(&state, body),
-        "insert_revision" => execute_mutation::<InsertRevision>(&state, body),
+        "insert_revisions" => execute_mutation::<InsertRevisions>(&state, body),
         "describe_revision" => execute_mutation::<DescribeRevision>(&state, body),
         "duplicate_revisions" => execute_mutation::<DuplicateRevisions>(&state, body),
         "move_revisions" => execute_mutation::<MoveRevisions>(&state, body),
