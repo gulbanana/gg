@@ -74,10 +74,10 @@ export default class RevisionMutator {
     };
 
     onNewParent = () => {
-        if (!this.#singleton) return;
+        const oldest = this.#revisions[this.#revisions.length - 1];
         mutate<CreateRevisionBetween>("create_revision_between", {
-            before_id: this.#singleton.id,
-            after_id: this.#singleton.parent_ids[0]
+            before_id: oldest.id,
+            after_id: oldest.parent_ids[0]
         });
     };
 
