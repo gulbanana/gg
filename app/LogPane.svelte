@@ -97,7 +97,7 @@
     };
 
     onMount(() => {
-        loadLog();
+        loadLog(true);
     });
 
     $: if (entered_query) choices = getChoices();
@@ -198,7 +198,7 @@
         return choices;
     }
 
-    async function loadLog(selectFirst: boolean = true) {
+    async function loadLog(selectFirst: boolean) {
         let page = await query<LogPage>(
             "query_log",
             {
@@ -224,6 +224,43 @@
                     break;
                 }
             }
+
+            // XXX perhaps we should retry this after each page
+            if (!selectFirst) {
+                syncSelectionWithGraph();
+            }
+        }
+    }
+
+    // policy: reselect by commit id if the original revisions are still around, update by change id if they aren't
+    function syncSelectionWithGraph() {
+        const selection = $revisionSelectEvent;
+        if (!selection || !graphRows || graphRows.length === 0) {
+            return;
+        }
+
+        let fromIdx = graphRows.findIndex((r) => r.revision.id.commit.hex === selection.from.commit.hex);
+        let toIdx = graphRows.findIndex((r) => r.revision.id.commit.hex === selection.to.commit.hex);
+
+        if (fromIdx === -1) {
+            fromIdx = graphRows.findIndex((r) => r.revision.id.change.hex === selection.from.change.hex);
+        }
+        if (toIdx === -1) {
+            toIdx = graphRows.findIndex((r) => r.revision.id.change.hex === selection.to.change.hex);
+        }
+
+        // reposition anchor, update ids if changed
+        if (fromIdx !== -1 && toIdx !== -1) {
+            selectionAnchorIdx = toIdx;
+
+            const newFrom = graphRows[fromIdx].revision.id;
+            const newTo = graphRows[toIdx].revision.id;
+            if (newFrom.commit.hex !== selection.from.commit.hex || newTo.commit.hex !== selection.to.commit.hex) {
+                $revisionSelectEvent = { from: newFrom, to: newTo };
+            }
+        } else {
+            // selection no longer valid (e.g., revision was abandoned), select first row
+            setSelection(0, 0);
         }
     }
 
