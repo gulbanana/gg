@@ -12,12 +12,13 @@ use jj_lib::{
     conflicts::{self, ConflictMarkerStyle, ConflictMaterializeOptions, MaterializedTreeValue},
     files::FileMergeHunkLevel,
     git::{
-        self, GitBranchPushTargets, GitSettings, GitSubprocessOptions,
+        self, GitBranchPushTargets, GitFetchRefExpression, GitSettings, GitSubprocessOptions,
         REMOTE_NAME_FOR_LOCAL_GIT_REPO,
     },
     matchers::{EverythingMatcher, FilesMatcher, Matcher},
     merge::{Merge, SameChange},
-    merged_tree::{MergedTree, MergedTreeBuilder},
+    merged_tree::MergedTree,
+    merged_tree_builder::MergedTreeBuilder,
     object_id::ObjectId as ObjectIdTrait,
     op_store::{RefTarget, RemoteRef, RemoteRefState},
     op_walk,
@@ -27,7 +28,6 @@ use jj_lib::{
     repo_path::RepoPath,
     revset::{self, RevsetIteratorExt},
     rewrite::{self, RebaseOptions, RebasedCommit},
-    settings::UserSettings,
     store::Store,
     str_util::{StringExpression, StringPattern},
     tree_merge::MergeOptions,
@@ -619,8 +619,16 @@ impl Mutation for MoveChanges {
         let matcher = build_matcher(&self.paths)?;
         let from_tree = from_newest.tree();
         let oldest_parents: Result<Vec<_>, _> = from_oldest.parents().collect();
-        let parent_tree = rewrite::merge_commit_trees(tx.repo(), &oldest_parents?).await?;
-        let split_tree = rewrite::restore_tree(&from_tree, &parent_tree, matcher.as_ref()).await?;
+        let oldest_parents = oldest_parents?;
+        let parent_tree = rewrite::merge_commit_trees(tx.repo(), &oldest_parents).await?;
+        let split_tree = rewrite::restore_tree(
+            &from_tree,
+            &parent_tree,
+            from_newest.conflict_label(),
+            conflict_label_for_commits(&oldest_parents),
+            matcher.as_ref(),
+        )
+        .await?;
 
         // all sources will be abandoned if all changes in the range were selected
         let abandon_all = split_tree.tree_ids() == from_tree.tree_ids();
@@ -629,10 +637,17 @@ impl Mutation for MoveChanges {
         for commit in &from_commits {
             let commit_tree = commit.tree();
             let commit_parents: Result<Vec<_>, _> = commit.parents().collect();
+            let commit_parents = commit_parents?;
             let commit_parent_tree =
-                rewrite::merge_commit_trees(tx.repo(), &commit_parents?).await?;
-            let commit_remainder =
-                rewrite::restore_tree(&commit_parent_tree, &commit_tree, matcher.as_ref()).await?;
+                rewrite::merge_commit_trees(tx.repo(), &commit_parents).await?;
+            let commit_remainder = rewrite::restore_tree(
+                &commit_parent_tree,
+                &commit_tree,
+                conflict_label_for_commits(&commit_parents),
+                commit.conflict_label(),
+                matcher.as_ref(),
+            )
+            .await?;
 
             if commit_remainder.tree_ids() == commit_tree.tree_ids() {
                 // commit didn't touch selected paths - leave unchanged
@@ -725,7 +740,8 @@ impl Mutation for CopyChanges {
     ) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
 
-        let from_tree = ws.resolve_commit_id(&self.from_id)?.tree();
+        let from = ws.resolve_commit_id(&self.from_id)?;
+        let from_tree = from.tree();
         let matcher = build_matcher(&self.paths)?;
 
         let (commits, is_immutable) = ws.resolve_change_set(&self.to_set, true)?;
@@ -741,11 +757,18 @@ impl Mutation for CopyChanges {
             return Ok(MutationResult::Unchanged);
         }
 
-        // process commits oldest-first (resolve_multiple returns newest-first)
+        // walk up the range, replacing the specified changes to eliminate each revision's contribution to the combined diff
         let mut any_changed = false;
         for commit in commits.iter().rev() {
             let to_tree = commit.tree();
-            let new_tree = rewrite::restore_tree(&from_tree, &to_tree, matcher.as_ref()).await?;
+            let new_tree = rewrite::restore_tree(
+                &from_tree,
+                &to_tree,
+                from.conflict_label(),
+                commit.conflict_label(),
+                matcher.as_ref(),
+            )
+            .await?;
 
             if new_tree.tree_ids() != to_tree.tree_ids() {
                 any_changed = true;
@@ -1705,13 +1728,9 @@ impl Mutation for GitPush {
                 reasons.push("it has no description");
             }
             if commit.author().name.is_empty()
-                || commit.author().name == UserSettings::USER_NAME_PLACEHOLDER
                 || commit.author().email.is_empty()
-                || commit.author().email == UserSettings::USER_EMAIL_PLACEHOLDER
                 || commit.committer().name.is_empty()
-                || commit.committer().name == UserSettings::USER_NAME_PLACEHOLDER
                 || commit.committer().email.is_empty()
-                || commit.committer().email == UserSettings::USER_EMAIL_PLACEHOLDER
             {
                 reasons.push("it has no author and/or committer set");
             }
@@ -1859,7 +1878,13 @@ impl Mutation for GitFetch {
                 .clone()
                 .map(StringExpression::exact)
                 .unwrap_or_else(StringExpression::all);
-            let refspecs = git::expand_fetch_refspecs(RemoteName::new(remote_name), bookmark_expr)?;
+            let refspecs = git::expand_fetch_refspecs(
+                RemoteName::new(remote_name),
+                GitFetchRefExpression {
+                    bookmark: bookmark_expr,
+                    tag: StringExpression::none(),
+                },
+            )?;
 
             let result = auth_ctx.with_callbacks(Some(progress_sender.clone()), |cb, env| {
                 let mut subprocess_options = git_settings.to_subprocess_options();

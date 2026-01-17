@@ -7,6 +7,7 @@ use std::time::Duration;
 
 use anyhow::{Result, anyhow};
 use jj_cli::config::{ConfigEnv, config_from_environment, default_config_layers};
+use jj_cli::ui::Ui;
 use jj_lib::{
     config::{ConfigGetError, ConfigLayer, ConfigNamePathBuf, ConfigSource, StackedConfig},
     revset::RevsetAliasesMap,
@@ -112,7 +113,9 @@ pub fn read_config(
     config_env.reload_user_config(&mut raw_config)?;
     if let Some(repo_path) = repo_path {
         config_env.reset_repo_path(repo_path);
-        config_env.reload_repo_config(&mut raw_config)?;
+        config_env
+            .reload_repo_config(&Ui::null(), &mut raw_config)
+            .map_err(|e| anyhow!("{e:?}"))?;
     }
 
     let config = config_env.resolve_config(&raw_config)?;
