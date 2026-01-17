@@ -605,7 +605,7 @@ impl Mutation for MoveChanges {
         let from_commits = if self.from.from.change.hex == self.from.to.change.hex {
             let commit = ws.resolve_single_change(&self.from.from)?;
             if ws.check_immutable([commit.id().clone()])? {
-                precondition!("Source revisions are immutable");
+                precondition!("Some source revisions are immutable");
             }
             vec![commit]
         } else {
@@ -613,7 +613,7 @@ impl Mutation for MoveChanges {
             let revset = ws.evaluate_revset_str(&revset_str)?;
             let commits = ws.resolve_multiple(&revset)?;
             if ws.check_immutable_revset(&*revset)? {
-                precondition!("Source revisions are immutable");
+                precondition!("Some source revisions are immutable");
             }
             commits
         };
@@ -1188,7 +1188,7 @@ impl Mutation for MoveHunk {
         let mut to = ws.resolve_single_commit(&self.to_id)?;
 
         if ws.check_immutable(vec![from.id().clone(), to.id().clone()])? {
-            precondition!("Revisions are immutable");
+            precondition!("Some revisions are immutable");
         }
 
         // Split-rebase-squash algorithm:
