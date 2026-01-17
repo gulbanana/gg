@@ -336,7 +336,14 @@ impl Mutation for DuplicateRevisions {
     async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
 
-        let clonees = ws.resolve_multiple_changes(self.ids)?; // in reverse topological order
+        // resolve singleton or arbitrary revset (in reverse topological order)
+        let clonees = if self.set.from.change.hex == self.set.to.change.hex {
+            vec![ws.resolve_single_change(&self.set.from)?]
+        } else {
+            let revset_str = format!("{}::{}", self.set.from.change.hex, self.set.to.change.hex);
+            let revset = ws.evaluate_revset_str(&revset_str)?;
+            ws.resolve_multiple(revset)?
+        };
         let num_clonees = clonees.len();
         let mut clones: IndexMap<Commit, Commit> = IndexMap::new();
 

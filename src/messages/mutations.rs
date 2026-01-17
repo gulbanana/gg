@@ -117,7 +117,7 @@ pub struct DescribeRevision {
 #[derive(Deserialize, Debug)]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
 pub struct DuplicateRevisions {
-    pub ids: Vec<RevId>,
+    pub set: RevSet,
 }
 
 #[derive(Deserialize, Debug)]

@@ -105,9 +105,8 @@ export default class RevisionMutator {
     };
 
     onDuplicate = () => {
-        if (!this.#singleton) return;
         mutate<DuplicateRevisions>("duplicate_revisions", {
-            ids: [this.#singleton.id],
+            set: this.#set,
         });
     };
 

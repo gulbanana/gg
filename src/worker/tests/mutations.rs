@@ -471,7 +471,7 @@ async fn duplicate_revisions() -> Result<()> {
     assert!(header.description.lines[0].is_empty());
 
     let result = DuplicateRevisions {
-        ids: vec![revs::main_bookmark()],
+        set: RevSet::singleton(revs::main_bookmark()),
     }
     .execute_unboxed(&mut ws)
     .await?;
@@ -479,6 +479,29 @@ async fn duplicate_revisions() -> Result<()> {
 
     let page = queries::query_log(&ws, "description(unsynced)", 3)?;
     assert_eq!(2, page.rows.len());
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn duplicate_revisions_range() -> Result<()> {
+    let repo = mkrepo();
+
+    let mut session = WorkerSession::default();
+    let mut ws = session.load_directory(repo.path())?;
+
+    let page = queries::query_log(&ws, "all()", 100)?;
+    let initial_count = page.rows.len();
+
+    let result = DuplicateRevisions {
+        set: RevSet::sequence(revs::conflict_bookmark(), revs::resolve_conflict()),
+    }
+    .execute_unboxed(&mut ws)
+    .await?;
+    assert_matches!(result, MutationResult::Updated { .. });
+
+    let page = queries::query_log(&ws, "all()", 100)?;
+    assert_eq!(initial_count + 2, page.rows.len());
 
     Ok(())
 }
