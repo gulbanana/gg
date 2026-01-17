@@ -2,7 +2,7 @@ Planned Features
 ----------------
 > The best laid schemes o' mice an' men / Gang aft a-gley.
 
-* Multiselection, viewing and operating on revsets or changesets.
+* Squash from and restore into multiselected changes.
 * Undo/redo stack, possibly with a menu of recent ops.
 * Some way to access the resolve (mergetool) workflow. Difftools too, although this is less useful.
 * More stuff in the log - timestamps, commit ids... this might have to be configurable. 
