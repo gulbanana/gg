@@ -24,11 +24,11 @@ use tauri_plugin_window_state::StateFlags;
 
 use crate::config::GGSettings;
 use crate::messages::{
-    self, AbandonRevisions, BackoutRevisions, CheckoutRevision, CloneRepository, CopyChanges,
-    CopyHunk, CreateRef, CreateRevision, CreateRevisionBetween, DeleteRef, DescribeRevision,
-    DuplicateRevisions, GitFetch, GitPush, InitRepository, InsertRevisions, MoveChanges, MoveHunk,
-    MoveRef, MoveRevisions, MoveSource, MutationResult, RenameBranch, TrackBranch, UndoOperation,
-    UntrackBranch,
+    self, AbandonRevisions, AdoptRevision, BackoutRevisions, CheckoutRevision, CloneRepository,
+    CopyChanges, CopyHunk, CreateRef, CreateRevision, CreateRevisionBetween, DeleteRef,
+    DescribeRevision, DuplicateRevisions, GitFetch, GitPush, InitRepository, InsertRevisions,
+    MoveChanges, MoveHunk, MoveRef, MoveRevisions, MutationResult, RenameBranch, TrackBranch,
+    UndoOperation, UntrackBranch,
 };
 use crate::worker::{Mutation, Session, SessionEvent, WorkerSession};
 use sink::TauriSink;
@@ -166,7 +166,7 @@ pub fn run_gui(options: super::RunOptions) -> Result<()> {
             duplicate_revisions,
             insert_revisions,
             move_revisions,
-            move_source,
+            adopt_revision,
             move_changes,
             copy_changes,
             move_hunk,
@@ -521,10 +521,10 @@ fn move_revisions(
 }
 
 #[tauri::command(async)]
-fn move_source(
+fn adopt_revision(
     window: Window,
     app_state: State<AppState>,
-    mutation: MoveSource,
+    mutation: AdoptRevision,
 ) -> Result<MutationResult, InvokeError> {
     try_mutate(window, app_state, mutation)
 }

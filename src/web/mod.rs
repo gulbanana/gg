@@ -30,10 +30,10 @@ use tokio::sync::{broadcast, oneshot};
 
 use crate::config::{GGSettings, read_config};
 use crate::messages::{
-    AbandonRevisions, BackoutRevisions, CheckoutRevision, CopyChanges, CopyHunk, CreateRef,
-    CreateRevision, CreateRevisionBetween, DeleteRef, DescribeRevision, DuplicateRevisions,
-    GitFetch, GitPush, InsertRevisions, MoveChanges, MoveHunk, MoveRef, MoveRevisions, MoveSource,
-    RenameBranch, TrackBranch, UndoOperation, UntrackBranch,
+    AbandonRevisions, AdoptRevision, BackoutRevisions, CheckoutRevision, CopyChanges, CopyHunk,
+    CreateRef, CreateRevision, CreateRevisionBetween, DeleteRef, DescribeRevision,
+    DuplicateRevisions, GitFetch, GitPush, InsertRevisions, MoveChanges, MoveHunk, MoveRef,
+    MoveRevisions, RenameBranch, TrackBranch, UndoOperation, UntrackBranch,
 };
 use crate::worker::{Mutation, Session, SessionEvent, WorkerSession};
 use sink::{SseEvent, SseSink};
@@ -246,7 +246,7 @@ async fn handle_mutate(
         "describe_revision" => execute_mutation::<DescribeRevision>(&state, body),
         "duplicate_revisions" => execute_mutation::<DuplicateRevisions>(&state, body),
         "move_revisions" => execute_mutation::<MoveRevisions>(&state, body),
-        "move_source" => execute_mutation::<MoveSource>(&state, body),
+        "adopt_revision" => execute_mutation::<AdoptRevision>(&state, body),
         "move_changes" => execute_mutation::<MoveChanges>(&state, body),
         "copy_changes" => execute_mutation::<CopyChanges>(&state, body),
         "move_hunk" => execute_mutation::<MoveHunk>(&state, body),

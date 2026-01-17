@@ -2,4 +2,4 @@
 import type { CommitId } from "./CommitId";
 import type { RevId } from "./RevId";
 
-export interface MoveSource { id: RevId, parent_ids: Array<CommitId>, }
+export interface AdoptRevision { id: RevId, parent_ids: Array<CommitId>, }

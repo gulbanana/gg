@@ -79,9 +79,10 @@ pub struct MoveRevisions {
     pub parent_ids: Vec<RevId>,
 }
 
+/// Sets a revision's parents (used to add/remove parents from merge commits)
 #[derive(Deserialize, Debug)]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
-pub struct MoveSource {
+pub struct AdoptRevision {
     pub id: RevId,
     pub parent_ids: Vec<CommitId>,
 }

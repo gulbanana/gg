@@ -36,11 +36,11 @@ use tokio::io::AsyncReadExt;
 
 use crate::git_util::AuthContext;
 use crate::messages::{
-    AbandonRevisions, BackoutRevisions, CheckoutRevision, CopyChanges, CopyHunk, CreateRef,
-    CreateRevision, CreateRevisionBetween, DeleteRef, DescribeRevision, DuplicateRevisions,
-    GitFetch, GitPush, GitRefspec, InsertRevisions, MoveChanges, MoveHunk, MoveRef, MoveRevisions,
-    MoveSource, MutationResult, RenameBranch, StoreRef, TrackBranch, TreePath, UndoOperation,
-    UntrackBranch,
+    AbandonRevisions, AdoptRevision, BackoutRevisions, CheckoutRevision, CopyChanges, CopyHunk,
+    CreateRef, CreateRevision, CreateRevisionBetween, DeleteRef, DescribeRevision,
+    DuplicateRevisions, GitFetch, GitPush, GitRefspec, InsertRevisions, MoveChanges, MoveHunk,
+    MoveRef, MoveRevisions, MutationResult, RenameBranch, StoreRef, TrackBranch, TreePath,
+    UndoOperation, UntrackBranch,
 };
 
 use super::Mutation;
@@ -550,16 +550,25 @@ impl Mutation for MoveRevisions {
 }
 
 #[async_trait(?Send)]
-impl Mutation for MoveSource {
+impl Mutation for AdoptRevision {
     async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
 
         let target = ws.resolve_single_change(&self.id)?;
-        let parent_ids = ws
+        let parent_ids: Vec<_> = ws
             .resolve_multiple_commits(&self.parent_ids)?
             .into_iter()
             .map(|commit| commit.id().clone())
             .collect();
+
+        // check for duplicate parents
+        let unique_count = parent_ids
+            .iter()
+            .collect::<std::collections::HashSet<_>>()
+            .len();
+        if unique_count != parent_ids.len() {
+            precondition!("Duplicate parent IDs");
+        }
 
         if ws.check_immutable(vec![target.id().clone()])? {
             precondition!("Revision {} is immutable", self.id.change.prefix);

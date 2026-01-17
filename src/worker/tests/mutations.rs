@@ -1,9 +1,9 @@
 use super::{get_rev, mkrepo, revs};
 use crate::{
     messages::{
-        AbandonRevisions, BackoutRevisions, ChangeHunk, CheckoutRevision, CopyChanges, CopyHunk,
-        CreateRevision, DescribeRevision, DuplicateRevisions, FileRange, HunkLocation,
-        InsertRevisions, MoveChanges, MoveHunk, MoveRef, MoveRevisions, MoveSource,
+        AbandonRevisions, AdoptRevision, BackoutRevisions, ChangeHunk, CheckoutRevision,
+        CopyChanges, CopyHunk, CreateRevision, DescribeRevision, DuplicateRevisions, FileRange,
+        HunkLocation, InsertRevisions, MoveChanges, MoveHunk, MoveRef, MoveRevisions,
         MultilineString, MutationResult, RevSet, RevsResult, StoreRef, TreePath,
     },
     worker::{
@@ -834,7 +834,7 @@ async fn move_changes_range_partial_multi_touch() -> Result<()> {
 }
 
 #[tokio::test]
-async fn move_source() -> Result<()> {
+async fn adopt_revision() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
@@ -843,7 +843,7 @@ async fn move_source() -> Result<()> {
     let page = queries::query_log(&ws, "@+", 1)?;
     assert_eq!(0, page.rows.len());
 
-    MoveSource {
+    AdoptRevision {
         id: revs::resolve_conflict(),
         parent_ids: vec![revs::working_copy().commit],
     }
