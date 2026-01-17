@@ -59,12 +59,12 @@ tauri-plugin-shell = "2.0.0"
 tauri-plugin-window-state = "2.0.0"
 tauri-plugin-log = "2.0.0"
 
-jj-lib = { version = "0.37", features = ["watchman"] }
-jj-cli = { version = "0.37" }
+jj-lib = { version = "0.38.0", features = ["watchman"] }
+jj-cli = "0.38.0"
 
 # deps shared with JJ, which we try to keep on the same version
 anyhow = "1.0.100"
-clap = { version = "4.5.54", features = [
+clap = { version = "4.5.57", features = [
     "derive",
     "deprecated",
     "wrap_help",
@@ -74,21 +74,21 @@ config = { version = "0.13.4", default-features = false, features = ["toml"] }
 dirs = "6"
 dunce = "1.0.5"
 itertools = "0.14"
-indexmap = "2.12"
-gix = { version = "0.77.0", default-features = false, features = [
+indexmap = "2.13"
+gix = { version = "0.78.0", default-features = false, features = [
     "index",
     "max-performance-safe",
     "blob-diff",
 ] }
 async-trait = "0.1.89"
 serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0.145"
-tokio = { version = "1.48.0", features = ["io-util"] }
-toml_edit = { version = "0.23.9", features = ["serde"] }
-thiserror = "2.0.17"
+serde_json = "1.0.149"
+tokio = { version = "1.49.0", features = ["io-util"] }
+toml_edit = { version = "0.24", features = ["serde"] }
+thiserror = "2.0.18"
 
 # deps used by JJ but with different features
-chrono = { version = "0.4.42", features = ["serde"] }
+chrono = { version = "0.4.43", features = ["serde"] }
 
 # extra deps not used by JJ
 log = "0.4"

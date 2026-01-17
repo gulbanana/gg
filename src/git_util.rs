@@ -24,7 +24,7 @@ use interprocess::local_socket::{
     GenericFilePath, ListenerOptions, Stream, ToFsName,
     traits::{Listener as _, Stream as _},
 };
-use jj_lib::git::{Progress, RemoteCallbacks};
+use jj_lib::git::{GitProgress, GitSidebandLineTerminator, GitSubprocessCallback};
 use uuid::Uuid;
 
 use crate::{
@@ -35,6 +35,68 @@ use crate::{
 pub struct AuthContext {
     input: Option<InputResponse>,
     prompts: Arc<Mutex<Vec<String>>>,
+}
+
+pub struct SinkSubprogressCallback(Option<Arc<dyn crate::worker::EventSink>>);
+
+impl GitSubprocessCallback for SinkSubprogressCallback {
+    fn needs_progress(&self) -> bool {
+        self.0.is_some()
+    }
+
+    fn progress(&mut self, progress: &GitProgress) -> io::Result<()> {
+        if let Some(sink) = &self.0 {
+            sink.send_typed(
+                "gg://progress",
+                &crate::messages::ProgressEvent::Progress {
+                    overall_percent: (progress.overall() * 100.0) as u32,
+                },
+            );
+        }
+        Ok(())
+    }
+
+    fn local_sideband(
+        &mut self,
+        message: &[u8],
+        _term: Option<GitSidebandLineTerminator>,
+    ) -> io::Result<()> {
+        if let Some(sink) = &self.0
+            && let Ok(text) = std::str::from_utf8(message)
+        {
+            let trimmed = text.trim();
+            if !trimmed.is_empty() {
+                sink.send_typed(
+                    "gg://progress",
+                    &crate::messages::ProgressEvent::Message {
+                        text: trimmed.to_string(),
+                    },
+                );
+            }
+        }
+        Ok(())
+    }
+
+    fn remote_sideband(
+        &mut self,
+        message: &[u8],
+        _term: Option<GitSidebandLineTerminator>,
+    ) -> io::Result<()> {
+        if let Some(sink) = &self.0
+            && let Ok(text) = std::str::from_utf8(message)
+        {
+            let trimmed = text.trim();
+            if !trimmed.is_empty() {
+                sink.send_typed(
+                    "gg://progress",
+                    &crate::messages::ProgressEvent::Message {
+                        text: format!("remote: {trimmed}"),
+                    },
+                );
+            }
+        }
+        Ok(())
+    }
 }
 
 impl AuthContext {
@@ -49,7 +111,7 @@ impl AuthContext {
     pub fn with_callbacks<T>(
         &mut self,
         sink: Option<Arc<dyn crate::worker::EventSink>>,
-        f: impl FnOnce(RemoteCallbacks, HashMap<OsString, OsString>) -> T,
+        f: impl FnOnce(&mut SinkSubprogressCallback, HashMap<OsString, OsString>) -> T,
     ) -> T {
         let stop_flag = Arc::new(AtomicBool::new(false));
 
@@ -107,45 +169,8 @@ impl AuthContext {
             HashMap::new()
         };
 
-        let mut callbacks = RemoteCallbacks::default();
-
-        // progress callbacks, delegating to a mode-specific event sink
-        let mut progress_cb;
-        let mut sideband_cb;
-        if let Some(sink1) = sink {
-            let sink2 = sink1.clone();
-
-            progress_cb = Some(move |progress: &Progress| {
-                sink2.send_typed(
-                    "gg://progress",
-                    &crate::messages::ProgressEvent::Progress {
-                        overall_percent: (progress.overall * 100.0) as u32,
-                        bytes_downloaded: progress.bytes_downloaded,
-                    },
-                );
-            });
-            callbacks.progress = progress_cb
-                .as_mut()
-                .map(|cb| cb as &mut dyn FnMut(&Progress));
-
-            sideband_cb = Some(move |message: &[u8]| {
-                if let Ok(text) = str::from_utf8(message) {
-                    let trimmed = text.trim();
-                    if !trimmed.is_empty() {
-                        sink1.send_typed(
-                            "gg://progress",
-                            &crate::messages::ProgressEvent::Message {
-                                text: trimmed.to_string(),
-                            },
-                        );
-                    }
-                }
-            });
-            callbacks.sideband_progress =
-                sideband_cb.as_mut().map(|cb| cb as &mut dyn FnMut(&[u8]));
-        }
-
-        let result = f(callbacks, environment);
+        let mut callback = SinkSubprogressCallback(sink);
+        let result = f(&mut callback, environment);
 
         // shut down the server
         stop_flag.store(true, Ordering::Relaxed);

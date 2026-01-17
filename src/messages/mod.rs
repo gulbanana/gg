@@ -221,11 +221,6 @@ impl From<&str> for InputField {
 #[serde(tag = "type")]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
 pub enum ProgressEvent {
-    Progress {
-        overall_percent: u32,
-        bytes_downloaded: Option<u64>,
-    },
-    Message {
-        text: String,
-    },
+    Progress { overall_percent: u32 },
+    Message { text: String },
 }

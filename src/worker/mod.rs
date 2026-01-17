@@ -15,7 +15,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::{Context, Error, Result, anyhow};
-use jj_lib::git::{GitFetch, GitSettings};
+use jj_lib::git::{GitFetch, GitFetchRefExpression, GitSettings};
 use jj_lib::ref_name::{RefNameBuf, RemoteName, RemoteNameBuf, RemoteRefSymbol};
 use jj_lib::repo::{Repo, StoreFactories};
 use jj_lib::settings::UserSettings;
@@ -206,7 +206,13 @@ impl WorkerSession {
 
             let mut tx = repo.start_transaction();
             let mut fetcher = GitFetch::new(tx.repo_mut(), subprocess_options, &import_options)?;
-            let refspecs = git::expand_fetch_refspecs(remote_name, StringExpression::all())?;
+            let refspecs = git::expand_fetch_refspecs(
+                remote_name,
+                GitFetchRefExpression {
+                    bookmark: StringExpression::all(),
+                    tag: StringExpression::none(),
+                },
+            )?;
 
             fetcher
                 .fetch(remote_name, refspecs, cb, None, None)

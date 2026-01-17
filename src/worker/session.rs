@@ -7,6 +7,7 @@ use std::{
 use anyhow::{Context, Result, anyhow};
 use futures_util::FutureExt;
 use jj_cli::config::ConfigEnv;
+use jj_cli::ui::Ui;
 use jj_lib::config::{ConfigNamePathBuf, ConfigSource};
 
 use super::{
@@ -331,28 +332,34 @@ impl Session for WorkspaceSession<'_> {
                 }
                 SessionEvent::WriteConfigArray { scope, key, values } => {
                     let name: ConfigNamePathBuf = key.iter().collect();
-                    let config_env = ConfigEnv::from_environment();
-                    let path = match scope {
-                        ConfigSource::User => config_env
-                            .user_config_paths()
-                            // TODO: If there are multiple config paths, is there
-                            // a more intelligent way to pick one?
-                            .next()
-                            .ok_or_else(|| anyhow!("No user config path found to edit"))
-                            .map(|p| p.to_path_buf()),
-                        ConfigSource::Repo => Ok(self.workspace.repo_path().join("config.toml")),
-                        _ => Err(anyhow!("Can't get path for config source {scope:?}")),
-                    }
-                    .and_then(|path| {
+                    let mut config_env = ConfigEnv::from_environment();
+                    let result: Result<()> = (|| {
+                        let path = match scope {
+                            ConfigSource::User => config_env
+                                .user_config_paths()
+                                // TODO: If there are multiple config paths, is there
+                                // a more intelligent way to pick one?
+                                .next()
+                                .map(|p| p.to_path_buf())
+                                .ok_or_else(|| anyhow!("No user config path found to edit")),
+                            ConfigSource::Repo => {
+                                config_env.reset_repo_path(self.workspace.repo_path());
+                                config_env
+                                    .repo_config_path(&Ui::null())
+                                    .map_err(|e| anyhow!("{e:?}"))?
+                                    .ok_or_else(|| anyhow!("No repo config path available"))
+                            }
+                            _ => Err(anyhow!("Can't get path for config source {scope:?}")),
+                        }?;
                         let toml_array: toml_edit::Value =
                             toml_edit::Value::Array(values.iter().collect());
                         let mut file = jj_lib::config::ConfigFile::load_or_empty(scope, &path)?;
                         file.set_value(&name, toml_array)?;
                         file.save()?;
                         Ok(())
-                    });
+                    })();
 
-                    if let Err(err) = path {
+                    if let Err(err) = result {
                         log::warn!("Failed to write config array: {err:#}");
                     }
 
