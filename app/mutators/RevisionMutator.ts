@@ -113,9 +113,9 @@ export default class RevisionMutator {
     };
 
     onAbandon = () => {
-        if (!this.#singleton || this.#singleton.is_immutable) return;
+        if (this.#revisions.some(r => r.is_immutable)) return;
         mutate<AbandonRevisions>("abandon_revisions", {
-            ids: [this.#singleton.id.commit],
+            set: this.#set,
         });
     };
 

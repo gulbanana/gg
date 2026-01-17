@@ -1,10 +1,10 @@
 use super::{get_rev, mkrepo, revs};
 use crate::{
     messages::{
-        AbandonRevisions, ChangeHunk, CheckoutRevision, CopyChanges, CopyHunk, CreateRevision,
-        DescribeRevision, DuplicateRevisions, FileRange, HunkLocation, InsertRevision, MoveChanges,
-        MoveHunk, MoveRef, MoveSource, MultilineString, MutationResult, RevSet, RevsResult,
-        StoreRef, TreePath,
+        AbandonRevisions, BackoutRevisions, ChangeHunk, CheckoutRevision, CopyChanges, CopyHunk,
+        CreateRevision, DescribeRevision, DuplicateRevisions, FileRange, HunkLocation,
+        InsertRevision, MoveChanges, MoveHunk, MoveRef, MoveSource, MultilineString,
+        MutationResult, RevSet, RevsResult, StoreRef, TreePath,
     },
     worker::{
         Mutation, WorkerSession, queries,
@@ -28,13 +28,52 @@ async fn abandon_revisions() -> Result<()> {
     assert_eq!(24, page.rows.len());
 
     AbandonRevisions {
-        ids: vec![revs::resolve_conflict().commit],
+        set: RevSet::singleton(revs::resolve_conflict()),
     }
     .execute_unboxed(&mut ws)
     .await?;
 
     let page = queries::query_log(&ws, "all()", 100)?;
     assert_eq!(23, page.rows.len());
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn abandon_revisions_range() -> Result<()> {
+    let repo = mkrepo();
+
+    let mut session = WorkerSession::default();
+    let mut ws = session.load_directory(repo.path())?;
+
+    let abandoned_set = RevSet::sequence(revs::conflict_bookmark(), revs::resolve_conflict());
+
+    let before_page = queries::query_log(&ws, "all()", 100)?;
+    let before_count = before_page.rows.len();
+
+    let before_result = queries::query_revisions(&ws, abandoned_set.clone()).await?;
+    assert_matches!(
+        before_result,
+        RevsResult::Detail { .. },
+        "Querying range before abandon should return Detail"
+    );
+
+    // abandon hides the revisions from both log paging and direct queries
+    AbandonRevisions {
+        set: abandoned_set.clone(),
+    }
+    .execute_unboxed(&mut ws)
+    .await?;
+
+    let after_page = queries::query_log(&ws, "all()", 100)?;
+    assert_eq!(before_count - 2, after_page.rows.len());
+
+    let after_result = queries::query_revisions(&ws, abandoned_set).await?;
+    assert_matches!(
+        after_result,
+        RevsResult::NotFound { .. },
+        "Querying abandoned range should return NotFound"
+    );
 
     Ok(())
 }

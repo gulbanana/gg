@@ -123,7 +123,7 @@ pub struct DuplicateRevisions {
 #[derive(Deserialize, Debug)]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
 pub struct AbandonRevisions {
-    pub ids: Vec<CommitId>,
+    pub set: RevSet,
 }
 
 /// Adds changes to the working copy which reverse the effect of the selected revisions

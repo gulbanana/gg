@@ -56,33 +56,39 @@ impl Mutation for AbandonRevisions {
     async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
 
-        let abandoned_ids = self
-            .ids
-            .into_iter()
-            .map(|id| CommitId::try_from_hex(&id.hex).expect("frontend-validated id"))
-            .collect_vec();
+        // resolve singleton or arbitrary revset
+        let commits = if self.set.from.change.hex == self.set.to.change.hex {
+            let commit = ws.resolve_single_change(&self.set.from)?;
+            if ws.check_immutable([commit.id().clone()])? {
+                precondition!("Revision is immutable");
+            }
+            vec![commit]
+        } else {
+            let revset_str = format!("{}::{}", self.set.from.change.hex, self.set.to.change.hex);
+            let revset = ws.evaluate_revset_str(&revset_str)?;
+            let resolved = ws.resolve_multiple(&revset)?;
+            if ws.check_immutable_revset(&*revset)? {
+                precondition!("Some revisions are immutable");
+            }
+            resolved
+        };
 
-        if ws.check_immutable(abandoned_ids.clone())? {
-            precondition!("Some revisions are immutable");
+        if commits.is_empty() {
+            return Ok(MutationResult::Unchanged);
         }
 
-        for id in &abandoned_ids {
-            let commit = tx
-                .repo()
-                .store()
-                .get_commit(id)
-                .context("Failed to lookup commit")?;
-            tx.repo_mut().record_abandoned_commit(&commit);
+        for commit in &commits {
+            tx.repo_mut().record_abandoned_commit(commit);
         }
         tx.repo_mut().rebase_descendants()?;
 
-        let transaction_description = if abandoned_ids.len() == 1 {
-            format!("abandon commit {}", abandoned_ids[0].hex())
+        let transaction_description = if commits.len() == 1 {
+            format!("abandon commit {}", commits[0].id().hex())
         } else {
             format!(
                 "abandon commit {} and {} more",
-                abandoned_ids[0].hex(),
-                abandoned_ids.len() - 1
+                commits[0].id().hex(),
+                commits.len() - 1
             )
         };
 
