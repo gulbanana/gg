@@ -59,8 +59,8 @@ export default class RevisionMutator {
             case "restore":
                 this.onRestore();
                 break;
-            case "branch":
-                this.onBranch();
+            case "bookmark":
+                this.onBookmark();
                 break;
             default:
                 console.log(`unimplemented mutation '${event}'`, this);
@@ -145,7 +145,7 @@ export default class RevisionMutator {
         });
     };
 
-    onBranch = async () => {
+    onBookmark = async () => {
         if (!this.#singleton) return;
         let response = await getInput("Create Bookmark", "", ["Bookmark Name"]);
         if (response) {

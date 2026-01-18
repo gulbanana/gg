@@ -146,7 +146,7 @@ pub fn build_main(app_handle: &AppHandle, recent_items: &[String]) -> tauri::Res
             &PredefinedMenuItem::separator(app_handle)?,
             &MenuItem::with_id(
                 app_handle,
-                "menu_revision_branch",
+                "menu_revision_bookmark",
                 "Create bookmark...",
                 true,
                 None::<&str>,
@@ -271,7 +271,7 @@ pub fn build_context(
             &PredefinedMenuItem::separator(app_handle)?,
             &MenuItem::with_id(
                 app_handle,
-                "revision_branch",
+                "revision_bookmark",
                 "Create bookmark...",
                 true,
                 None::<&str>,
@@ -302,28 +302,46 @@ pub fn build_context(
     let ref_menu = Menu::with_items(
         app_handle,
         &[
-            &MenuItem::with_id(app_handle, "branch_track", "Track", true, None::<&str>)?,
-            &MenuItem::with_id(app_handle, "branch_untrack", "Untrack", true, None::<&str>)?,
-            &PredefinedMenuItem::separator(app_handle)?,
-            &MenuItem::with_id(app_handle, "branch_push_all", "Push", true, None::<&str>)?,
+            &MenuItem::with_id(app_handle, "bookmark_track", "Track", true, None::<&str>)?,
             &MenuItem::with_id(
                 app_handle,
-                "branch_push_single",
+                "bookmark_untrack",
+                "Untrack",
+                true,
+                None::<&str>,
+            )?,
+            &PredefinedMenuItem::separator(app_handle)?,
+            &MenuItem::with_id(app_handle, "bookmark_push_all", "Push", true, None::<&str>)?,
+            &MenuItem::with_id(
+                app_handle,
+                "bookmark_push_single",
                 "Push to remote...",
                 true,
                 None::<&str>,
             )?,
-            &MenuItem::with_id(app_handle, "branch_fetch_all", "Fetch", true, None::<&str>)?,
             &MenuItem::with_id(
                 app_handle,
-                "branch_fetch_single",
+                "bookmark_fetch_all",
+                "Fetch",
+                true,
+                None::<&str>,
+            )?,
+            &MenuItem::with_id(
+                app_handle,
+                "bookmark_fetch_single",
                 "Fetch from remote...",
                 true,
                 None::<&str>,
             )?,
             &PredefinedMenuItem::separator(app_handle)?,
-            &MenuItem::with_id(app_handle, "branch_rename", "Rename...", true, None::<&str>)?,
-            &MenuItem::with_id(app_handle, "branch_delete", "Delete", true, None::<&str>)?,
+            &MenuItem::with_id(
+                app_handle,
+                "bookmark_rename",
+                "Rename...",
+                true,
+                None::<&str>,
+            )?,
+            &MenuItem::with_id(app_handle, "bookmark_delete", "Delete", true, None::<&str>)?,
         ],
     )?;
 
@@ -380,7 +398,7 @@ pub fn handle_selection(menu: Menu<Wry>, headers: Option<&[RevHeader]>) -> Resul
             revision_submenu.enable("menu_revision_abandon", false)?;
             revision_submenu.enable("menu_revision_squash", false)?;
             revision_submenu.enable("menu_revision_restore", false)?;
-            revision_submenu.enable("menu_revision_branch", false)?;
+            revision_submenu.enable("menu_revision_bookmark", false)?;
         }
         Some(headers) => {
             let state = compute_revision_enablement(headers);
@@ -392,7 +410,7 @@ pub fn handle_selection(menu: Menu<Wry>, headers: Option<&[RevHeader]>) -> Resul
             revision_submenu.enable("menu_revision_abandon", state.abandon)?;
             revision_submenu.enable("menu_revision_squash", state.squash)?;
             revision_submenu.enable("menu_revision_restore", state.restore)?;
-            revision_submenu.enable("menu_revision_branch", state.bookmark)?;
+            revision_submenu.enable("menu_revision_bookmark", state.bookmark)?;
         }
     }
 
@@ -422,7 +440,7 @@ pub fn handle_context(window: Window, ctx: Operand) -> Result<()> {
             context_menu.enable("revision_abandon", state.abandon)?;
             context_menu.enable("revision_squash", state.squash)?;
             context_menu.enable("revision_restore", state.restore)?;
-            context_menu.enable("revision_branch", state.bookmark)?;
+            context_menu.enable("revision_bookmark", state.bookmark)?;
 
             window.popup_menu(context_menu)?;
         }
@@ -441,7 +459,7 @@ pub fn handle_context(window: Window, ctx: Operand) -> Result<()> {
             context_menu.enable("revision_abandon", state.abandon)?;
             context_menu.enable("revision_squash", state.squash)?;
             context_menu.enable("revision_restore", state.restore)?;
-            context_menu.enable("revision_branch", state.bookmark)?;
+            context_menu.enable("revision_bookmark", state.bookmark)?;
 
             window.popup_menu(context_menu)?;
         }
@@ -476,7 +494,7 @@ pub fn handle_context(window: Window, ctx: Operand) -> Result<()> {
 
             // give remotes a local, or undelete them
             context_menu.enable(
-                "branch_track",
+                "bookmark_track",
                 matches!(
                     r#ref,
                     StoreRef::RemoteBookmark {
@@ -488,7 +506,7 @@ pub fn handle_context(window: Window, ctx: Operand) -> Result<()> {
 
             // remove a local's remotes, or a remote from its local
             context_menu.enable(
-                "branch_untrack",
+                "bookmark_untrack",
                 matches!(
                     r#ref,
                     StoreRef::LocalBookmark {
@@ -507,32 +525,32 @@ pub fn handle_context(window: Window, ctx: Operand) -> Result<()> {
             )?;
 
             // push a local to its remotes, or finish a CLI delete
-            context_menu.enable("branch_push_all",
+            context_menu.enable("bookmark_push_all",
                 matches!(r#ref, StoreRef::LocalBookmark { ref tracking_remotes, .. } if !tracking_remotes.is_empty()) ||
                 matches!(r#ref, StoreRef::RemoteBookmark { is_tracked: true, is_absent: true, .. }))?;
 
             // push a local to a selected remote, tracking first if necessary
-            context_menu.enable("branch_push_single",
+            context_menu.enable("bookmark_push_single",
                 matches!(r#ref, StoreRef::LocalBookmark { potential_remotes, .. } if potential_remotes > 0))?;
 
             // fetch a local's remotes, or just a remote (unless we're deleting it; that would be silly)
-            context_menu.enable("branch_fetch_all",
+            context_menu.enable("bookmark_fetch_all",
                 matches!(r#ref, StoreRef::LocalBookmark { ref tracking_remotes, .. } if !tracking_remotes.is_empty()) ||
                 matches!(r#ref, StoreRef::RemoteBookmark { is_tracked, is_absent, .. } if (!is_tracked || !is_absent)))?;
 
             // fetch a local, tracking first if necessary
-            context_menu.enable("branch_fetch_single",
+            context_menu.enable("bookmark_fetch_single",
                 matches!(r#ref, StoreRef::LocalBookmark { available_remotes, .. } if available_remotes > 0))?;
 
             // rename a local, which also untracks remotes
             context_menu.enable(
-                "branch_rename",
+                "bookmark_rename",
                 matches!(r#ref, StoreRef::LocalBookmark { .. }),
             )?;
 
             // remove a local, or make a remote absent
             context_menu.enable(
-                "branch_delete",
+                "bookmark_delete",
                 !matches!(
                     r#ref,
                     StoreRef::RemoteBookmark {
@@ -573,7 +591,7 @@ pub fn handle_event(window: &Window, event: MenuEvent) -> Result<()> {
         "menu_revision_abandon" => window.emit_to(target, "gg://menu/revision", "abandon")?,
         "menu_revision_squash" => window.emit_to(target, "gg://menu/revision", "squash")?,
         "menu_revision_restore" => window.emit_to(target, "gg://menu/revision", "restore")?,
-        "menu_revision_branch" => window.emit_to(target, "gg://menu/revision", "branch")?,
+        "menu_revision_bookmark" => window.emit_to(target, "gg://menu/revision", "bookmark")?,
         "revision_new_child" => window.emit_to(target, "gg://context/revision", "new_child")?,
         "revision_new_parent" => window.emit_to(target, "gg://context/revision", "new_parent")?,
         "revision_edit" => window.emit_to(target, "gg://context/revision", "edit")?,
@@ -582,17 +600,19 @@ pub fn handle_event(window: &Window, event: MenuEvent) -> Result<()> {
         "revision_abandon" => window.emit_to(target, "gg://context/revision", "abandon")?,
         "revision_squash" => window.emit_to(target, "gg://context/revision", "squash")?,
         "revision_restore" => window.emit_to(target, "gg://context/revision", "restore")?,
-        "revision_branch" => window.emit_to(target, "gg://context/revision", "branch")?,
+        "revision_bookmark" => window.emit_to(target, "gg://context/revision", "bookmark")?,
         "tree_squash" => window.emit_to(target, "gg://context/tree", "squash")?,
         "tree_restore" => window.emit_to(target, "gg://context/tree", "restore")?,
-        "branch_track" => window.emit_to(target, "gg://context/branch", "track")?,
-        "branch_untrack" => window.emit_to(target, "gg://context/branch", "untrack")?,
-        "branch_push_all" => window.emit_to(target, "gg://context/branch", "push-all")?,
-        "branch_push_single" => window.emit_to(target, "gg://context/branch", "push-single")?,
-        "branch_fetch_all" => window.emit_to(target, "gg://context/branch", "fetch-all")?,
-        "branch_fetch_single" => window.emit_to(target, "gg://context/branch", "fetch-single")?,
-        "branch_rename" => window.emit_to(target, "gg://context/branch", "rename")?,
-        "branch_delete" => window.emit_to(target, "gg://context/branch", "delete")?,
+        "bookmark_track" => window.emit_to(target, "gg://context/bookmark", "track")?,
+        "bookmark_untrack" => window.emit_to(target, "gg://context/bookmark", "untrack")?,
+        "bookmark_push_all" => window.emit_to(target, "gg://context/bookmark", "push-all")?,
+        "bookmark_push_single" => window.emit_to(target, "gg://context/bookmark", "push-single")?,
+        "bookmark_fetch_all" => window.emit_to(target, "gg://context/bookmark", "fetch-all")?,
+        "bookmark_fetch_single" => {
+            window.emit_to(target, "gg://context/bookmark", "fetch-single")?
+        }
+        "bookmark_rename" => window.emit_to(target, "gg://context/bookmark", "rename")?,
+        "bookmark_delete" => window.emit_to(target, "gg://context/bookmark", "delete")?,
         recent_id if recent_id.starts_with("recent:") => {
             let path = PathBuf::from(&recent_id["recent:".len()..]);
             let app_handle = window.app_handle().clone();

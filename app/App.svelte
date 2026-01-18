@@ -121,7 +121,7 @@
         // gui mode: mutations triggered by native context menu
         onEvent("gg://context/revision", mutateRevision);
         onEvent("gg://context/tree", mutateTree);
-        onEvent("gg://context/branch", mutateRef);
+        onEvent("gg://context/bookmark", mutateRef);
         onEvent("gg://menu/repo", mutateRepository);
         // gui mode: snapshot when window gains focus
         onEvent("gg://focus", handleFocus);
