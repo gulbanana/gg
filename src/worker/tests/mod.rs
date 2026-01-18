@@ -162,7 +162,7 @@ mod revs {
     }
 
     /// Merge commit that introduces conflict in conflict_chain.txt
-    /// Child of resolve_conflict via two branches (chain branch A and B)
+    /// Child of resolve_conflict via two bookmarks (chain bookmark A and B)
     pub fn chain_conflict() -> RevId {
         mkid("vwxxopnk", "f80d4defdcf8627e7e8dca52fefb250e2e05d133")
     }

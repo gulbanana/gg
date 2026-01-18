@@ -211,11 +211,11 @@ impl WorkerSession {
             // find HEAD if at all possible
             let workspace_name = workspace.workspace_name().to_owned();
             let mut checkout_commit_id = None;
-            if let Some(branch_name) = Self::find_default_branch(tx.repo()) {
-                let branch_ref = RefNameBuf::from(branch_name.as_str());
+            if let Some(bookmark_name) = Self::find_default_branch(tx.repo()) {
+                let bookmark_ref = RefNameBuf::from(bookmark_name.as_str());
                 let remote_ref = RemoteNameBuf::from("origin");
                 let symbol = RemoteRefSymbol {
-                    name: &branch_ref,
+                    name: &bookmark_ref,
                     remote: &remote_ref,
                 };
                 let remote_bookmark = tx.repo().view().get_remote_bookmark(symbol);
@@ -256,19 +256,19 @@ impl WorkerSession {
         use jj_lib::ref_name::{RefNameBuf, RemoteNameBuf, RemoteRefSymbol};
 
         // common default branch names
-        for branch_name in ["main", "master", "trunk", "develop"] {
-            let branch_ref = RefNameBuf::from(branch_name);
+        for bookmark_name in ["main", "master", "trunk", "develop"] {
+            let bookmark_ref = RefNameBuf::from(bookmark_name);
             let remote_ref = RemoteNameBuf::from("origin");
             let symbol = RemoteRefSymbol {
-                name: &branch_ref,
+                name: &bookmark_ref,
                 remote: &remote_ref,
             };
             if repo.view().get_remote_bookmark(symbol).is_present() {
-                return Some(branch_name.to_string());
+                return Some(bookmark_name.to_string());
             }
         }
 
-        // any branch at all
+        // any branch at all!
         for (symbol, _) in repo.view().all_remote_bookmarks() {
             if symbol.remote.as_str() == "origin" {
                 return Some(symbol.name.as_str().to_string());

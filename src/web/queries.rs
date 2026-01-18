@@ -102,7 +102,7 @@ async fn query_revisions(
 
 #[derive(Deserialize)]
 pub struct QueryRemotes {
-    tracking_branch: Option<String>,
+    tracking_bookmark: Option<String>,
 }
 
 async fn query_remotes(
@@ -112,7 +112,7 @@ async fn query_remotes(
     let (tx, rx) = channel();
     state.worker_tx.send(SessionEvent::QueryRemotes {
         tx,
-        tracking_branch: req.tracking_branch,
+        tracking_bookmark: req.tracking_bookmark,
     })?;
     let result = rx.recv()??;
     Ok(Json(result))

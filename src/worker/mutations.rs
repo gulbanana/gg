@@ -734,7 +734,10 @@ impl Mutation for TrackBookmark {
                 precondition!("{} is a tag and cannot be tracked", tag_name);
             }
             StoreRef::LocalBookmark { bookmark_name, .. } => {
-                precondition!("{} is a local bookmark and cannot be tracked", bookmark_name);
+                precondition!(
+                    "{} is a local bookmark and cannot be tracked",
+                    bookmark_name
+                );
             }
             StoreRef::RemoteBookmark {
                 bookmark_name,
@@ -1477,9 +1480,9 @@ impl Mutation for GitPush {
         let mut tx = ws.start_transaction().await?;
 
         // determine bookmarks to push, recording the old and new commits
-        let mut remote_branch_updates: Vec<(&str, Vec<(RefNameBuf, refs::BookmarkPushUpdate)>)> =
+        let mut remote_bookmark_updates: Vec<(&str, Vec<(RefNameBuf, refs::BookmarkPushUpdate)>)> =
             Vec::new();
-        let remote_branch_refs: Vec<_> = match &self.refspec {
+        let remote_bookmark_refs: Vec<_> = match &self.refspec {
             GitRefspec::AllBookmarks { remote_name } => {
                 let remote_name_ref = RemoteNameBuf::from(remote_name);
                 let mut bookmark_updates = Vec::new();
@@ -1491,10 +1494,12 @@ impl Mutation for GitPush {
                     match classify_bookmark_push(bookmark_name.as_str(), remote_name, targets) {
                         Err(message) => return Ok(MutationResult::PreconditionError { message }),
                         Ok(None) => (),
-                        Ok(Some(update)) => bookmark_updates.push((bookmark_name.to_owned(), update)),
+                        Ok(Some(update)) => {
+                            bookmark_updates.push((bookmark_name.to_owned(), update))
+                        }
                     }
                 }
-                remote_branch_updates.push((remote_name, bookmark_updates));
+                remote_bookmark_updates.push((remote_name, bookmark_updates));
 
                 ws.view()
                     .remote_bookmarks(&remote_name_ref)
@@ -1539,7 +1544,7 @@ impl Mutation for GitPush {
                         }
                         remote_bookmark_refs.push((RefNameBuf::from(bookmark_name), remote_ref));
                     }
-                    remote_branch_updates.push((remote_name.as_str(), bookmark_updates));
+                    remote_bookmark_updates.push((remote_name.as_str(), bookmark_updates));
                 }
 
                 remote_bookmark_refs
@@ -1569,7 +1574,7 @@ impl Mutation for GitPush {
                     Err(message) => return Ok(MutationResult::PreconditionError { message }),
                     Ok(None) => (),
                     Ok(Some(update)) => {
-                        remote_branch_updates
+                        remote_bookmark_updates
                             .push((remote_name, vec![(RefNameBuf::from(bookmark_name), update)]));
                     }
                 }
@@ -1583,15 +1588,15 @@ impl Mutation for GitPush {
 
         // check for conflicts
         let mut new_heads = vec![];
-        for (_, branch_updates) in &mut remote_branch_updates {
-            for (_, update) in branch_updates {
+        for (_, bookmark_updates) in &mut remote_bookmark_updates {
+            for (_, update) in bookmark_updates {
                 if let Some(new_target) = &update.new_target {
                     new_heads.push(new_target.clone());
                 }
             }
         }
 
-        let mut old_heads = remote_branch_refs
+        let mut old_heads = remote_bookmark_refs
             .into_iter()
             .flat_map(|(_, old_head)| old_head.target.added_ids())
             .cloned()
@@ -1633,7 +1638,7 @@ impl Mutation for GitPush {
         }
 
         // check if there are any actual updates to push
-        let has_updates = remote_branch_updates
+        let has_updates = remote_bookmark_updates
             .iter()
             .any(|(_, updates)| !updates.is_empty());
         if !has_updates {
@@ -1665,7 +1670,7 @@ impl Mutation for GitPush {
         let subprocess_options = GitSubprocessOptions::from_settings(&ws.data.workspace_settings)?;
 
         // push to each remote
-        for (remote_name, branch_updates) in remote_branch_updates.into_iter() {
+        for (remote_name, branch_updates) in remote_bookmark_updates.into_iter() {
             let targets = GitBranchPushTargets { branch_updates };
 
             let result = auth_ctx.with_callbacks(Some(event_sink.clone()), |cb, env| {
@@ -1690,7 +1695,7 @@ impl Mutation for GitPush {
             tx,
             match &self.refspec {
                 GitRefspec::AllBookmarks { remote_name } => {
-                    format!("push all tracked branches to git remote {}", remote_name)
+                    format!("push all tracked bookmarks to git remote {}", remote_name)
                 }
                 GitRefspec::AllRemotes { bookmark_ref } => {
                     format!(
@@ -1843,10 +1848,10 @@ fn combine_messages(sources: &[&Commit], destination: &Commit, abandon_source: b
     }
 }
 
-fn combine_bookmarks(branch_names: &[impl Display]) -> String {
-    match branch_names {
-        [branch_name] => format!("bookmark {}", branch_name),
-        branch_names => format!("bookmarks {}", branch_names.iter().join(", ")),
+fn combine_bookmarks(bookmark_names: &[impl Display]) -> String {
+    match bookmark_names {
+        [bookmark_name] => format!("bookmark {}", bookmark_name),
+        bookmark_names => format!("bookmarks {}", bookmark_names.iter().join(", ")),
     }
 }
 

@@ -411,7 +411,7 @@ pub async fn query_revisions(ws: &WorkspaceSession<'_>, set: RevSet) -> Result<R
 
 pub fn query_remotes(
     ws: &WorkspaceSession,
-    tracking_branch: Option<String>,
+    tracking_bookmark: Option<String>,
 ) -> Result<Vec<String>> {
     let git_repo = match ws.git_repo() {
         Some(git_repo) => git_repo,
@@ -420,14 +420,14 @@ pub fn query_remotes(
 
     let all_remotes = get_git_remote_names(&git_repo);
 
-    let matching_remotes = match tracking_branch {
-        Some(branch_name) => all_remotes
+    let matching_remotes = match tracking_bookmark {
+        Some(bookmark_name) => all_remotes
             .into_iter()
             .filter(|remote_name| {
                 let remote_name_ref = RemoteNameBuf::from(remote_name);
-                let branch_name_ref = RefNameBuf::from(branch_name.clone());
+                let bookmark_name_ref = RefNameBuf::from(bookmark_name.clone());
                 let remote_ref_symbol = RemoteRefSymbol {
-                    name: &branch_name_ref,
+                    name: &bookmark_name_ref,
                     remote: &remote_name_ref,
                 };
                 let remote_ref = ws.view().get_remote_bookmark(remote_ref_symbol);

@@ -604,7 +604,7 @@ impl WorkspaceSession<'_> {
         known_immutable: Option<bool>,
     ) -> Result<messages::RevHeader> {
         let index = self.ref_index();
-        let branches = index.get(commit.id()).to_vec();
+        let refs = index.get(commit.id()).to_vec();
 
         let is_immutable = known_immutable
             .map(Result::Ok)
@@ -617,7 +617,7 @@ impl WorkspaceSession<'_> {
             has_conflict: commit.has_conflict(),
             is_working_copy: *commit.id() == self.operation.wc_id,
             is_immutable,
-            refs: branches,
+            refs,
             parent_ids: commit
                 .parent_ids()
                 .iter()
@@ -1251,14 +1251,14 @@ fn build_ref_index(repo: &ReadonlyRepo) -> RefIndex {
 
     let mut index = RefIndex::default();
 
-    for (branch_name, branch_target) in repo.view().bookmarks() {
-        let local_target = branch_target.local_target;
-        let remote_refs = branch_target.remote_refs;
+    for (bookmark_name, bookmark_target) in repo.view().bookmarks() {
+        let local_target = bookmark_target.local_target;
+        let remote_refs = bookmark_target.remote_refs;
         if local_target.is_present() {
             index.insert(
                 local_target.added_ids(),
                 messages::StoreRef::LocalBookmark {
-                    bookmark_name: branch_name.as_str().to_owned(),
+                    bookmark_name: bookmark_name.as_str().to_owned(),
                     has_conflict: local_target.has_conflict(),
                     is_synced: remote_refs.iter().all(|&(remote_name, remote_ref)| {
                         remote_name == REMOTE_NAME_FOR_LOCAL_GIT_REPO
@@ -1288,7 +1288,7 @@ fn build_ref_index(repo: &ReadonlyRepo) -> RefIndex {
             index.insert(
                 remote_ref.target.added_ids(),
                 messages::StoreRef::RemoteBookmark {
-                    bookmark_name: branch_name.as_str().to_owned(),
+                    bookmark_name: bookmark_name.as_str().to_owned(),
                     remote_name: remote_name.as_str().to_owned(),
                     has_conflict: remote_ref.target.has_conflict(),
                     is_synced: remote_ref.target == *local_target,

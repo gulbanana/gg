@@ -53,7 +53,7 @@ pub enum SessionEvent {
     },
     QueryRemotes {
         tx: Sender<Result<Vec<String>>>,
-        tracking_branch: Option<String>,
+        tracking_bookmark: Option<String>,
     },
     QueryLog {
         tx: Sender<Result<messages::LogPage>>,
@@ -232,8 +232,8 @@ impl Session for WorkspaceSession<'_> {
                 }
                 SessionEvent::QueryRemotes {
                     tx,
-                    tracking_branch,
-                } => tx.send(queries::query_remotes(&self, tracking_branch))?,
+                    tracking_bookmark,
+                } => tx.send(queries::query_remotes(&self, tracking_bookmark))?,
                 SessionEvent::QueryLog {
                     tx,
                     query: revset_string,
@@ -372,8 +372,8 @@ impl Session for QuerySession<'_, '_> {
                 }
                 Ok(SessionEvent::QueryRemotes {
                     tx,
-                    tracking_branch,
-                }) => tx.send(queries::query_remotes(self.ws, tracking_branch))?,
+                    tracking_bookmark,
+                }) => tx.send(queries::query_remotes(self.ws, tracking_bookmark))?,
                 Ok(SessionEvent::QueryLogNextPage { tx }) => tx.send(self.get_page())?,
                 Ok(unhandled) => return Ok(QueryResult(unhandled, self.state)),
                 Err(err) => return Err(anyhow!(err)),

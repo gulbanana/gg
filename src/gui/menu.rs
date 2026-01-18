@@ -340,7 +340,7 @@ struct RevisionEnablement {
     abandon: bool,
     squash: bool,
     restore: bool,
-    branch: bool,
+    bookmark: bool,
 }
 
 fn compute_revision_enablement(headers: &[RevHeader]) -> RevisionEnablement {
@@ -359,7 +359,7 @@ fn compute_revision_enablement(headers: &[RevHeader]) -> RevisionEnablement {
         abandon: !any_immutable,
         squash: !any_immutable && oldest_has_single_parent,
         restore: is_singleton && !any_immutable && oldest_has_single_parent,
-        branch: is_singleton,
+        bookmark: is_singleton,
     }
 }
 
@@ -392,7 +392,7 @@ pub fn handle_selection(menu: Menu<Wry>, headers: Option<&[RevHeader]>) -> Resul
             revision_submenu.enable("menu_revision_abandon", state.abandon)?;
             revision_submenu.enable("menu_revision_squash", state.squash)?;
             revision_submenu.enable("menu_revision_restore", state.restore)?;
-            revision_submenu.enable("menu_revision_branch", state.branch)?;
+            revision_submenu.enable("menu_revision_branch", state.bookmark)?;
         }
     }
 
@@ -422,7 +422,7 @@ pub fn handle_context(window: Window, ctx: Operand) -> Result<()> {
             context_menu.enable("revision_abandon", state.abandon)?;
             context_menu.enable("revision_squash", state.squash)?;
             context_menu.enable("revision_restore", state.restore)?;
-            context_menu.enable("revision_branch", state.branch)?;
+            context_menu.enable("revision_branch", state.bookmark)?;
 
             window.popup_menu(context_menu)?;
         }
@@ -441,7 +441,7 @@ pub fn handle_context(window: Window, ctx: Operand) -> Result<()> {
             context_menu.enable("revision_abandon", state.abandon)?;
             context_menu.enable("revision_squash", state.squash)?;
             context_menu.enable("revision_restore", state.restore)?;
-            context_menu.enable("revision_branch", state.branch)?;
+            context_menu.enable("revision_branch", state.bookmark)?;
 
             window.popup_menu(context_menu)?;
         }

@@ -420,7 +420,7 @@ fn query_revisions(
 fn query_remotes(
     window: Window,
     app_state: State<AppState>,
-    tracking_branch: Option<String>,
+    tracking_bookmark: Option<String>,
 ) -> Result<Vec<String>, InvokeError> {
     let session_tx: Sender<SessionEvent> = app_state.get_session(window.label());
     let (call_tx, call_rx) = channel();
@@ -428,7 +428,7 @@ fn query_remotes(
     session_tx
         .send(SessionEvent::QueryRemotes {
             tx: call_tx,
-            tracking_branch,
+            tracking_bookmark,
         })
         .map_err(InvokeError::from_error)?;
     call_rx

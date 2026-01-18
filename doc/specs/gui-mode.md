@@ -168,7 +168,7 @@ The Revision menu is dynamically enabled/disabled based on `gg://revision/select
 Three context menus built in `menu::build_context()`:
 - **Revision menu**: New child, edit, duplicate, abandon, squash, etc.
 - **Tree menu**: Squash, restore operations on changes
-- **Ref menu**: Track, untrack, push, fetch, rename, delete branches
+- **Ref menu**: Track, untrack, push, fetch, rename, delete bookmarks
 
 Context menus are shown via `window.popup_menu()` after enabling appropriate items based on the operand.
 

@@ -126,7 +126,7 @@ export default class RefMutator {
                 break;
 
             case "LocalBookmark":
-                let allRemotes = await query<string[]>("query_remotes", { tracking_branch: null });
+                let allRemotes = await query<string[]>("query_remotes", { tracking_bookmark: null });
                 if (allRemotes.type == "error") {
                     console.log("error loading remotes: " + allRemotes.message);
                     return;
@@ -187,7 +187,7 @@ export default class RefMutator {
                 break;
 
             case "LocalBookmark":
-                let trackedRemotes = await query<string[]>("query_remotes", { tracking_branch: this.#ref.bookmark_name });
+                let trackedRemotes = await query<string[]>("query_remotes", { tracking_bookmark: this.#ref.bookmark_name });
                 if (trackedRemotes.type == "error") {
                     console.log("error loading remotes: " + trackedRemotes.message);
                     return;
