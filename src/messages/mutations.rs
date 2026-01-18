@@ -145,8 +145,8 @@ pub struct MoveChanges {
 #[derive(Deserialize, Debug)]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
 pub struct CopyChanges {
-    pub from_id: CommitId, // limitation: we don't know parent chids because they are more expensive to look up
-    pub to_id: RevId,
+    pub from_id: CommitId, // limitation: we don't know parent change ids because they are more expensive to look up
+    pub to_set: RevSet,
     pub paths: Vec<TreePath>,
 }
 

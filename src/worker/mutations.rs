@@ -730,33 +730,64 @@ impl Mutation for CopyChanges {
         let mut tx = ws.start_transaction().await?;
 
         let from_tree = ws.resolve_single_commit(&self.from_id)?.tree();
-        let to = ws.resolve_single_change(&self.to_id)?;
         let matcher = build_matcher(&self.paths)?;
 
-        if ws.check_immutable(vec![to.id().clone()])? {
-            precondition!("Revisions are immutable");
+        // resolve destination revset
+        let commits = if self.to_set.from.change.hex == self.to_set.to.change.hex {
+            let commit = ws.resolve_single_change(&self.to_set.from)?;
+            if ws.check_immutable(vec![commit.id().clone()])? {
+                precondition!("Destination revision is immutable");
+            }
+            vec![commit]
+        } else {
+            let revset_str = format!(
+                "{}::{}",
+                self.to_set.from.change.hex, self.to_set.to.change.hex
+            );
+            let revset = ws.evaluate_revset_str(&revset_str)?;
+            if ws.check_immutable_revset(&*revset)? {
+                precondition!("Some destination revisions are immutable");
+            }
+            ws.resolve_multiple(&revset)?
+        };
+
+        if commits.is_empty() {
+            return Ok(MutationResult::Unchanged);
         }
 
-        // construct a restore tree - the destination with some portions overwritten by the source
-        let to_tree = to.tree();
-        let new_to_tree = rewrite::restore_tree(&from_tree, &to_tree, matcher.as_ref()).await?;
-        if new_to_tree.tree_ids() == to_tree.tree_ids() {
-            Ok(MutationResult::Unchanged)
-        } else {
-            tx.repo_mut()
-                .rewrite_commit(&to)
-                .set_tree(new_to_tree)
-                .write()?;
+        // walk up the range, replacing the specified changes to eliminate each revision's contribution to the combined diff
+        let mut any_changed = false;
+        for commit in commits.iter().rev() {
+            let to_tree = commit.tree();
+            let new_tree = rewrite::restore_tree(&from_tree, &to_tree, matcher.as_ref()).await?;
 
-            tx.repo_mut().rebase_descendants()?;
-
-            match ws.finish_transaction(tx, format!("restore into commit {}", to.id().hex()))? {
-                Some(new_status) => Ok(MutationResult::Updated {
-                    new_status,
-                    new_selection: None,
-                }),
-                None => Ok(MutationResult::Unchanged),
+            if new_tree.tree_ids() != to_tree.tree_ids() {
+                any_changed = true;
+                tx.repo_mut()
+                    .rewrite_commit(commit)
+                    .set_tree(new_tree)
+                    .write()?;
             }
+        }
+
+        if !any_changed {
+            return Ok(MutationResult::Unchanged);
+        }
+
+        tx.repo_mut().rebase_descendants()?;
+
+        let description = if commits.len() == 1 {
+            format!("restore into commit {}", commits[0].id().hex())
+        } else {
+            format!("restore into {} commits", commits.len())
+        };
+
+        match ws.finish_transaction(tx, description)? {
+            Some(new_status) => Ok(MutationResult::Updated {
+                new_status,
+                new_selection: None,
+            }),
+            None => Ok(MutationResult::Unchanged),
         }
     }
 }

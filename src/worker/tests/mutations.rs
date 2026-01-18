@@ -210,7 +210,7 @@ async fn copy_changes() -> Result<()> {
 
     let result = CopyChanges {
         from_id: revs::resolve_conflict().commit,
-        to_id: revs::working_copy(),
+        to_set: RevSet::singleton(revs::working_copy()),
         paths: vec![TreePath {
             repo_path: "b.txt".to_owned(),
             relative_path: "".into(),
@@ -224,6 +224,67 @@ async fn copy_changes() -> Result<()> {
     let to_rev = query_by_id(&ws, revs::working_copy()).await?;
     assert_matches!(from_rev, RevsResult::Detail { changes, .. } if changes.len() == 1);
     assert_matches!(to_rev, RevsResult::Detail { changes, .. } if changes.len() == 1);
+
+    Ok(())
+}
+
+/// Test restoring changes into a range of revisions.
+/// This verifies that all commits in the range have the specified paths restored.
+#[tokio::test]
+async fn copy_changes_range() -> Result<()> {
+    let repo = mkrepo();
+
+    let mut session = WorkerSession::default();
+    let mut ws = session.load_directory(repo.path())?;
+
+    // hunk_child_single modifies line 2 of hunk_test.txt
+    // hunk_grandchild (child of hunk_child_single) modifies line 3 of hunk_test.txt
+    let child_rev = query_by_id(&ws, revs::hunk_child_single()).await?;
+    let grandchild_rev = query_by_id(&ws, revs::hunk_grandchild()).await?;
+    assert_matches!(&child_rev, RevsResult::Detail { changes, .. } if changes.iter().any(|c| c.path.repo_path == "hunk_test.txt"));
+    assert_matches!(&grandchild_rev, RevsResult::Detail { changes, .. } if changes.iter().any(|c| c.path.repo_path == "hunk_test.txt"));
+
+    // restore hunk_test.txt from hunk_base (parent of hunk_child_single) into the range
+    let result = CopyChanges {
+        from_id: revs::hunk_base().commit,
+        to_set: RevSet::sequence(revs::hunk_child_single(), revs::hunk_grandchild()),
+        paths: vec![TreePath {
+            repo_path: "hunk_test.txt".to_owned(),
+            relative_path: "".into(),
+        }],
+    }
+    .execute_unboxed(&mut ws)
+    .await?;
+    assert_matches!(result, MutationResult::Updated { .. });
+
+    // after restoring, neither commit should have changes to hunk_test.txt
+    // query by change id to get the rewritten commits
+    let new_child_rev = query_by_id(&ws, revs::hunk_child_single()).await?;
+    let new_grandchild_rev = query_by_id(&ws, revs::hunk_grandchild()).await?;
+    assert_matches!(&new_child_rev, RevsResult::Detail { changes, .. } if !changes.iter().any(|c| c.path.repo_path == "hunk_test.txt"));
+    assert_matches!(&new_grandchild_rev, RevsResult::Detail { changes, .. } if !changes.iter().any(|c| c.path.repo_path == "hunk_test.txt"));
+
+    Ok(())
+}
+
+/// Test that restoring into a range containing immutable commits fails.
+#[tokio::test]
+async fn copy_changes_range_immutable() -> Result<()> {
+    let repo = mkrepo();
+
+    let mut session = WorkerSession::default();
+    let mut ws = session.load_directory(repo.path())?;
+
+    // try to restore into a range of immutable commits
+    let result = CopyChanges {
+        from_id: revs::immutable_grandparent().commit,
+        to_set: RevSet::sequence(revs::immutable_parent(), revs::immutable_bookmark()),
+        paths: vec![],
+    }
+    .execute_unboxed(&mut ws)
+    .await?;
+
+    assert_matches!(result, MutationResult::PreconditionError { .. });
 
     Ok(())
 }

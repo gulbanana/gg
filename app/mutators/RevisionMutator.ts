@@ -135,10 +135,12 @@ export default class RevisionMutator {
     };
 
     onRestore = () => {
-        if (!this.#singleton || this.#singleton.is_immutable || this.#singleton.parent_ids.length != 1) return;
+        const oldest = this.#revisions[this.#revisions.length - 1];
+        if (this.#revisions.some(r => r.is_immutable)) return;
+        if (oldest.parent_ids.length != 1) return;
         mutate<CopyChanges>("copy_changes", {
-            from_id: this.#singleton.parent_ids[0],
-            to_id: this.#singleton.id,
+            from_id: oldest.parent_ids[0],
+            to_set: this.#set,
             paths: []
         });
     };

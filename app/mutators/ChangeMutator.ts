@@ -63,7 +63,7 @@ export default class ChangeMutator {
         } else {
             mutate<CopyChanges>("copy_changes", {
                 from_id: this.#revision.parent_ids[0],
-                to_id: this.#revision.id,
+                to_set: { from: this.#revision.id, to: this.#revision.id },
                 paths: [this.#path]
             });
         }

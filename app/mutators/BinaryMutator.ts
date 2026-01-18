@@ -205,7 +205,7 @@ export default class BinaryMutator {
                 } else {
                     mutate<CopyChanges>("copy_changes", {
                         from_id: this.#from.header.parent_ids[0],
-                        to_id: this.#from.header.id,
+                        to_set: { from: this.#from.header.id, to: this.#from.header.id },
                         paths: [this.#from.path]
                     });
                 }
