@@ -2421,7 +2421,7 @@ async fn copy_hunk_multiselection() -> anyhow::Result<()> {
     // Test multiselection: hunk_child_single::hunk_grandchild (2 commits)
     // Chain: hunk_base (line1-5) -> hunk_child_single (line2->modified2) -> hunk_grandchild (line3->grandchild3)
     // Combined diff from hunk_base to hunk_grandchild shows both changes.
-    // CopyHunk applies only to the newest commit (where the hunk was validated).
+    // CopyHunk modifies only the newest commit (where the combined diff ends).
     // Intermediate commits are unchanged.
 
     // Hunk for just line2 (avoid including line3 which differs between commits)

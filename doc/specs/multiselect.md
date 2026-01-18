@@ -167,9 +167,14 @@ When restoring a hunk from a combined diff:
 - The hunk shows content differences between `parent(oldest)` and `newest`
 - Restoring copies `parent(oldest)`'s content into the newest commit only
 - Intermediate commits remain unchanged
-- This matches the intuition: "undo this change that accumulated over the range"
 
 The hunk is validated against the newest commit (where the combined diff ends). The `to_set` parameter accepts a RevSet but only the newest commit is modified.
+
+### Known Limitation
+
+If a hunk was introduced in an earlier commit (e.g., commit 1) and the combined diff shows it unchanged through later commits (e.g., commits 2, 3), restoring that hunk will modify the **newest** commit rather than the commit that introduced it. This creates an "undo" relationship where the newest commit explicitly reverts content that an earlier commit added.
+
+Ideally, we would modify the commit that introduced the change and let rebase propagate the restoration. However, this causes merge conflicts during `rebase_descendants()` due to how jj handles tree modifications and descendant rebasing. The simpler approach of always modifying the newest commit avoids these conflicts at the cost of less intuitive commit history.
 
 ## Future Work
 

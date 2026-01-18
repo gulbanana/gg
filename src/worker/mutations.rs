@@ -1544,51 +1544,62 @@ impl Mutation for CopyHunk {
                 }
             }
 
-            // only modify the newest commit (commits[0] - resolve_change_set returns newest-first)
-            // the hunk was computed against the combined diff ending at the newest commit,
-            // so applying it only to the newest commit makes semantic sense.
-            // the validation above already checked the newest commit's content.
-            let newest_to_tree = &newest_tree;
+            // modify only the newest commit (validated above)
+            // the hunk was computed against the combined diff ending at the newest commit
+            //
+            // NOTE: ideally we would modify the oldest commit that introduced the change,
+            // but this causes rebase conflicts when descendants exist. For now, we always
+            // modify the newest commit, which may create an "undo" relationship if the
+            // change was introduced in an earlier commit. See multiselect.md for details.
 
-            // construct new content for newest commit
-            let mut new_to_lines = Vec::new();
-            new_to_lines.extend(
+            // construct restored content: newest file but with source content at hunk location
+            let mut restored_lines = Vec::new();
+            restored_lines.extend(
                 newest_lines[..to_start_0based]
                     .iter()
                     .map(|s| s.to_string()),
             );
-            new_to_lines.extend(source_region_lines.iter().cloned());
-            new_to_lines.extend(newest_lines[to_end_0based..].iter().map(|s| s.to_string()));
+            restored_lines.extend(source_region_lines.iter().cloned());
+            restored_lines.extend(newest_lines[to_end_0based..].iter().map(|s| s.to_string()));
 
             let ends_with_newline = newest_content.ends_with(b"\n");
-            let mut new_to_content = Vec::new();
-            let num_lines = new_to_lines.len();
-            for (i, line) in new_to_lines.iter().enumerate() {
-                new_to_content.extend_from_slice(line.as_bytes());
+            let mut restored_content = Vec::new();
+            let num_lines = restored_lines.len();
+            for (i, line) in restored_lines.iter().enumerate() {
+                restored_content.extend_from_slice(line.as_bytes());
                 if i < num_lines - 1 {
-                    new_to_content.push(b'\n');
+                    restored_content.push(b'\n');
                 }
             }
-            if ends_with_newline && !new_to_content.is_empty() && !new_to_content.ends_with(b"\n") {
-                new_to_content.push(b'\n');
+            if ends_with_newline
+                && !restored_content.is_empty()
+                && !restored_content.ends_with(b"\n")
+            {
+                restored_content.push(b'\n');
             }
 
-            if new_to_content == newest_content {
+            if restored_content == newest_content {
                 return Ok(MutationResult::Unchanged);
             }
 
-            // create new tree with preserved executable bit
-            let new_blob_id = store
-                .write_file(repo_path, &mut new_to_content.as_slice())
+            // create new tree with restored content
+            let restored_blob_id = store
+                .write_file(repo_path, &mut restored_content.as_slice())
                 .await?;
 
-            let to_executable = match newest_to_tree.path_value(repo_path)?.into_resolved() {
+            let newest_executable = match newest_tree.path_value(repo_path)?.into_resolved() {
                 Ok(Some(TreeValue::File { executable, .. })) => executable,
                 _ => false,
             };
 
-            let new_tree =
-                update_tree_entry(store, newest_to_tree, repo_path, new_blob_id, to_executable)?;
+            let new_tree = update_tree_entry(
+                store,
+                &newest_tree,
+                repo_path,
+                restored_blob_id,
+                newest_executable,
+            )?;
+
             vec![(newest.id().clone(), new_tree)]
         };
 
