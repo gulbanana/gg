@@ -5,7 +5,8 @@
 ### Added
 - Multiple selection: 
   * Select a range with shift-click or shift-arrowkeys.
-  * See a combined change/conflict view in the right pane - mostly read-only for now, but you can squash or merge the whole thing.
+  * See a combined change/conflict view in the right pane. 
+  * Squash/restore the combined diff, or files within it - not hunks, for now.
   * Drag-drop to rebase an entire range at once.
   * Right-click or use the Revision menu in GUI mode to exeute commands on the range.
 

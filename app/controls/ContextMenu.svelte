@@ -18,7 +18,7 @@
         if (operand.type === "Revision" || operand.type === "Revisions") {
             new RevisionMutator(get(selectionHeaders)).handle(action);
         } else if (operand.type === "Change") {
-            new ChangeMutator(operand.header, operand.path, operand.hunk).handle(action);
+            new ChangeMutator(operand.headers, operand.path, operand.hunk).handle(action);
         } else if (operand.type === "Ref") {
             new RefMutator(operand.ref).handle(action);
         }
@@ -36,30 +36,30 @@
     }
 
     function isRevisionEnabled(headers: RevHeader[]) {
-        const isSingleton = headers.length === 1;
+        const isSingleton = headers.length == 1;
         const anyImmutable = headers.some((h) => h.is_immutable);
-        const oldest = headers[headers.length - 1];
-        const newest = headers[0];
-        const oldestHasSingleParent = oldest?.parent_ids.length === 1;
+        const hasSingleParent = headers[headers.length - 1]?.parent_ids.length == 1;
 
         return {
             new_child: true,
-            new_parent: !anyImmutable && oldestHasSingleParent,
-            edit: isSingleton && !anyImmutable && !newest?.is_working_copy,
+            new_parent: !anyImmutable && hasSingleParent,
+            edit: isSingleton && !anyImmutable && !headers[0]?.is_working_copy,
             backout: true,
             duplicate: true,
             abandon: !anyImmutable,
-            squash: !anyImmutable && oldestHasSingleParent,
-            restore: isSingleton && !anyImmutable && oldestHasSingleParent,
+            squash: !anyImmutable && hasSingleParent,
+            restore: isSingleton && !anyImmutable && hasSingleParent,
             branch: isSingleton,
         };
     }
 
-    function isChangeEnabled(header: RevHeader) {
-        const hasSingleParent = header.parent_ids.length === 1;
+    function isChangeEnabled(headers: RevHeader[]) {
+        const anyImmutable = headers.some((h) => h.is_immutable);
+        const hasSingleParent = headers[headers.length - 1]?.parent_ids.length == 1;
+
         return {
-            squash: !header.is_immutable && hasSingleParent,
-            restore: !header.is_immutable && hasSingleParent,
+            squash: !anyImmutable && hasSingleParent,
+            restore: !anyImmutable && hasSingleParent,
         };
     }
 
@@ -83,10 +83,8 @@
     }
 
     $: revisionEnabled =
-        operand.type === "Revision" || operand.type === "Revisions"
-            ? isRevisionEnabled($selectionHeaders)
-            : null;
-    $: changeEnabled = operand.type === "Change" ? isChangeEnabled(operand.header) : null;
+        operand.type === "Revision" || operand.type === "Revisions" ? isRevisionEnabled($selectionHeaders) : null;
+    $: changeEnabled = operand.type === "Change" ? isChangeEnabled(operand.headers) : null;
     $: refEnabled = operand.type === "Ref" ? isRefEnabled(operand.ref) : null;
 
     // clamp to viewport
@@ -127,8 +125,7 @@
         <button disabled={!revisionEnabled.abandon} on:click={() => onClick("abandon")}>Abandon</button>
         <hr />
         <button disabled={!revisionEnabled.squash} on:click={() => onClick("squash")}>Squash into parent</button>
-        <button disabled={!revisionEnabled.restore} on:click={() => onClick("restore")}
-            >Restore from parent</button>
+        <button disabled={!revisionEnabled.restore} on:click={() => onClick("restore")}>Restore from parent</button>
         <hr />
         <button disabled={!revisionEnabled.branch} on:click={() => onClick("branch")}>Create bookmark...</button>
     {:else if operand.type === "Change" && changeEnabled}

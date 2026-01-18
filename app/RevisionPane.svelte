@@ -246,7 +246,7 @@
                         <!-- XXX implement, somehow, plural squash/restore -->
                         <ChangeObject
                             {change}
-                            header={singleton ? newest : null}
+                            headers={revs.headers}
                             selected={$changeSelectEvent?.path?.repo_path === change.path.repo_path} />
                         {#if $changeSelectEvent?.path?.repo_path === change.path.repo_path}
                             <div class="change" style="--lines: {minLines(change)}">

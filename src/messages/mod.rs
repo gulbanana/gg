@@ -176,7 +176,7 @@ pub enum Operand {
         child: RevHeader,
     },
     Change {
-        header: RevHeader,
+        headers: Vec<RevHeader>,
         path: TreePath,
         hunk: Option<ChangeHunk>,
     },

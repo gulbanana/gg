@@ -15,7 +15,7 @@
             ? null
             : {
                   type: "Change",
-                  header,
+                  headers: [header],
                   path,
                   hunk,
               };

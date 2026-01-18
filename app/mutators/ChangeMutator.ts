@@ -1,4 +1,5 @@
 import type { RevHeader } from "../messages/RevHeader";
+import type { RevSet } from "../messages/RevSet";
 import type { ChangeHunk } from "../messages/ChangeHunk";
 import type { CopyChanges } from "../messages/CopyChanges";
 import type { CopyHunk } from "../messages/CopyHunk";
@@ -8,14 +9,22 @@ import type { TreePath } from "../messages/TreePath";
 import { mutate } from "../ipc";
 
 export default class ChangeMutator {
-    #revision: RevHeader;
+    #revisions: RevHeader[];
     #path: TreePath;
     #hunk: ChangeHunk | null;
 
-    constructor(rev: RevHeader, path: TreePath, hunk: ChangeHunk | null = null) {
-        this.#revision = rev;
+    constructor(revs: RevHeader[], path: TreePath, hunk: ChangeHunk | null = null) {
+        this.#revisions = revs;
         this.#path = path;
         this.#hunk = hunk;
+    }
+
+    get #singleton() { return this.#revisions.length == 1 ? this.#revisions[0] : null }
+    get #set(): RevSet {
+        return {
+            from: this.#revisions[this.#revisions.length - 1].id,
+            to: this.#revisions[0].id,
+        };
     }
 
     handle(event: string | undefined) {
@@ -37,16 +46,20 @@ export default class ChangeMutator {
 
     onSquash = () => {
         if (this.#hunk) {
+            if (!this.#singleton) {
+                return;
+            }
             mutate<MoveHunk>("move_hunk", {
-                from_id: this.#revision.id,
-                to_id: this.#revision.parent_ids[0],
+                from_id: this.#singleton.id,
+                to_id: this.#singleton.parent_ids[0],
                 path: this.#path,
                 hunk: this.#hunk
             });
         } else {
+            let oldest = this.#revisions[this.#revisions.length - 1];
             mutate<MoveChanges>("move_changes", {
-                from: { from: this.#revision.id, to: this.#revision.id },
-                to_id: this.#revision.parent_ids[0],
+                from: this.#set,
+                to_id: oldest.parent_ids[0],
                 paths: [this.#path]
             });
         }
@@ -54,16 +67,20 @@ export default class ChangeMutator {
 
     onRestore = () => {
         if (this.#hunk) {
+            if (!this.#singleton) {
+                return;
+            }
             mutate<CopyHunk>("copy_hunk", {
-                from_id: this.#revision.parent_ids[0],
-                to_id: this.#revision.id,
+                from_id: this.#singleton.parent_ids[0],
+                to_id: this.#singleton.id,
                 path: this.#path,
                 hunk: this.#hunk
             });
         } else {
+            let oldest = this.#revisions[this.#revisions.length - 1];
             mutate<CopyChanges>("copy_changes", {
-                from_id: this.#revision.parent_ids[0],
-                to_set: { from: this.#revision.id, to: this.#revision.id },
+                from_id: oldest.parent_ids[0],
+                to_set: this.#set,
                 paths: [this.#path]
             });
         }

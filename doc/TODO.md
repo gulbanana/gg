@@ -2,10 +2,8 @@ Planned Features
 ----------------
 > The best laid schemes o' mice an' men / Gang aft a-gley.
 
-* Squash from and restore into multiselected changes.
 * Undo/redo stack, possibly with a menu of recent ops.
 * Some way to access the resolve (mergetool) workflow. Difftools too, although this is less useful.
-* More stuff in the log - timestamps, commit ids... this might have to be configurable. 
 * Structured op descriptions - extracted ids etc, maybe via tags. This would benefit from being in JJ core.
 * Window menu for common OS functions.
 * Better handling of the case where a git remote refuses push because you haven't fetched yet.
@@ -16,7 +14,6 @@ UI Expansion
 With some dynamic way to show extra panes, replace content, open new windows &c, more useful features would be possible:
 
 * View the repo at past ops.
-* View a revision at past evolutions (possibly this could be folded into the log).
 * Config UI, both for core stuff and gg's own settings.
 * Revision pinning for split/comparison workflows.
 * Better use of space in web mode.

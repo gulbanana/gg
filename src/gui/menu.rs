@@ -445,7 +445,7 @@ pub fn handle_context(window: Window, ctx: Operand) -> Result<()> {
 
             window.popup_menu(context_menu)?;
         }
-        Operand::Change { header, .. } => {
+        Operand::Change { headers, .. } => {
             let context_menu = &guard
                 .get(window.label())
                 .expect("session not found")
@@ -453,11 +453,17 @@ pub fn handle_context(window: Window, ctx: Operand) -> Result<()> {
 
             context_menu.enable(
                 "tree_squash",
-                !header.is_immutable && header.parent_ids.len() == 1,
+                !headers.iter().any(|header| header.is_immutable)
+                    && headers
+                        .last()
+                        .is_some_and(|header| header.parent_ids.len() == 1),
             )?;
             context_menu.enable(
                 "tree_restore",
-                !header.is_immutable && header.parent_ids.len() == 1,
+                !headers.iter().any(|header| header.is_immutable)
+                    && headers
+                        .last()
+                        .is_some_and(|header| header.parent_ids.len() == 1),
             )?;
 
             window.popup_menu(context_menu)?;

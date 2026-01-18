@@ -74,7 +74,7 @@ export default class RevisionMutator {
     };
 
     onNewParent = () => {
-        const oldest = this.#revisions[this.#revisions.length - 1];
+        let oldest = this.#revisions[this.#revisions.length - 1];
         mutate<CreateRevisionBetween>("create_revision_between", {
             before_id: oldest.id,
             after_id: oldest.parent_ids[0]
@@ -135,7 +135,7 @@ export default class RevisionMutator {
     };
 
     onRestore = () => {
-        const oldest = this.#revisions[this.#revisions.length - 1];
+        let oldest = this.#revisions[this.#revisions.length - 1];
         if (this.#revisions.some(r => r.is_immutable)) return;
         if (oldest.parent_ids.length != 1) return;
         mutate<CopyChanges>("copy_changes", {

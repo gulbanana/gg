@@ -132,6 +132,10 @@ Lowercase, minimal. Don't describe *what* code does. Explain *why* when non-obvi
 // Read recent workspaces for initial menu build
 ```
 
+## TypeScript Style
+
+Use `let` instead of `const` for variable declarations.
+
 ## Key Files Reference
 
 - `DESIGN.md` - Core metaphors, branch state machine
