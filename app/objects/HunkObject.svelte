@@ -6,16 +6,16 @@
     import Object from "./Object.svelte";
     import Zone from "./Zone.svelte";
 
-    export let header: RevHeader | null;
+    export let headers: RevHeader[] | null;
     export let path: TreePath;
     export let hunk: ChangeHunk;
 
     let operand: Operand | null =
-        header == null
+        headers == null
             ? null
             : {
                   type: "Change",
-                  headers: [header],
+                  headers,
                   path,
                   hunk,
               };
