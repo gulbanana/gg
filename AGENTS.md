@@ -103,8 +103,8 @@ The log pane uses virtualization. Key by slot index, not content:
 
 Use `$:` for derived values from props (critical in virtualized lists):
 ```svelte
-$: label = ref.branch_name;  // CORRECT: reactive
-let label = ref.branch_name; // WRONG: computed once at mount
+$: label = ref.bookmark_name;  // CORRECT: reactive
+let label = ref.bookmark_name; // WRONG: computed once at mount
 ```
 
 ### Error Handling (GUI Mode)
@@ -138,7 +138,7 @@ Use `let` instead of `const` for variable declarations.
 
 ## Key Files Reference
 
-- `DESIGN.md` - Core metaphors, branch state machine
+- `DESIGN.md` - Core metaphors, bookmark state machine
 - `app/mutators/BinaryMutator.ts` - All drag-drop policies
 - `app/ipc.ts` - IPC abstraction with runtime detection
 - `src/worker/mutations.rs` - All mutation implementations
