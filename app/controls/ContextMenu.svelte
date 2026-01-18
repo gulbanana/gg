@@ -49,7 +49,7 @@
             abandon: !anyImmutable,
             squash: !anyImmutable && hasSingleParent,
             restore: isSingleton && !anyImmutable && hasSingleParent,
-            branch: isSingleton,
+            bookmark: isSingleton,
         };
     }
 
@@ -127,7 +127,7 @@
         <button disabled={!revisionEnabled.squash} on:click={() => onClick("squash")}>Squash into parent</button>
         <button disabled={!revisionEnabled.restore} on:click={() => onClick("restore")}>Restore from parent</button>
         <hr />
-        <button disabled={!revisionEnabled.branch} on:click={() => onClick("branch")}>Create bookmark...</button>
+        <button disabled={!revisionEnabled.bookmark} on:click={() => onClick("bookmark")}>Create bookmark...</button>
     {:else if operand.type === "Change" && changeEnabled}
         <button disabled={!changeEnabled.squash} on:click={() => onClick("squash")}>Squash into parent</button>
         <button disabled={!changeEnabled.restore} on:click={() => onClick("restore")}>Restore from parent</button>
