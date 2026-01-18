@@ -27,8 +27,8 @@ use crate::messages::{
     self, AbandonRevisions, AdoptRevision, BackoutRevisions, CheckoutRevision, CloneRepository,
     CopyChanges, CopyHunk, CreateRef, CreateRevision, CreateRevisionBetween, DeleteRef,
     DescribeRevision, DuplicateRevisions, GitFetch, GitPush, InitRepository, InsertRevisions,
-    MoveChanges, MoveHunk, MoveRef, MoveRevisions, MutationResult, RenameBranch, TrackBranch,
-    UndoOperation, UntrackBranch,
+    MoveChanges, MoveHunk, MoveRef, MoveRevisions, MutationResult, RenameBookmark, TrackBookmark,
+    UndoOperation, UntrackBookmark,
 };
 use crate::worker::{Mutation, Session, SessionEvent, WorkerSession};
 use sink::TauriSink;
@@ -180,9 +180,9 @@ pub fn run_gui(options: super::RunOptions) -> Result<()> {
             copy_changes,
             move_hunk,
             copy_hunk,
-            track_branch,
-            untrack_branch,
-            rename_branch,
+            track_bookmark,
+            untrack_bookmark,
+            rename_bookmark,
             create_ref,
             delete_ref,
             move_ref,
@@ -578,28 +578,28 @@ fn copy_hunk(
 }
 
 #[tauri::command(async)]
-fn track_branch(
+fn track_bookmark(
     window: Window,
     app_state: State<AppState>,
-    mutation: TrackBranch,
+    mutation: TrackBookmark,
 ) -> Result<MutationResult, InvokeError> {
     try_mutate(window, app_state, mutation)
 }
 
 #[tauri::command(async)]
-fn untrack_branch(
+fn untrack_bookmark(
     window: Window,
     app_state: State<AppState>,
-    mutation: UntrackBranch,
+    mutation: UntrackBookmark,
 ) -> Result<MutationResult, InvokeError> {
     try_mutate(window, app_state, mutation)
 }
 
 #[tauri::command(async)]
-fn rename_branch(
+fn rename_bookmark(
     window: Window,
     app_state: State<AppState>,
-    mutation: RenameBranch,
+    mutation: RenameBookmark,
 ) -> Result<MutationResult, InvokeError> {
     try_mutate(window, app_state, mutation)
 }

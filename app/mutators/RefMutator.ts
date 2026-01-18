@@ -1,7 +1,7 @@
 import type { StoreRef } from "../messages/StoreRef";
-import type { TrackBranch } from "../messages/TrackBranch";
-import type { UntrackBranch } from "../messages/UntrackBranch";
-import type { RenameBranch } from "../messages/RenameBranch";
+import type { TrackBookmark } from "../messages/TrackBookmark";
+import type { UntrackBookmark } from "../messages/UntrackBookmark";
+import type { RenameBookmark } from "../messages/RenameBookmark";
 import type { GitPush } from "../messages/GitPush";
 import type { GitFetch } from "../messages/GitFetch";
 import type { DeleteRef } from "../messages/DeleteRef";
@@ -58,13 +58,13 @@ export default class RefMutator {
     }
 
     onTrack = () => {
-        mutate<TrackBranch>("track_branch", {
+        mutate<TrackBookmark>("track_bookmark", {
             ref: this.#ref
         });
     };
 
     onUntrack = () => {
-        mutate<UntrackBranch>("untrack_branch", {
+        mutate<UntrackBookmark>("untrack_bookmark", {
             ref: this.#ref
         });
     };
@@ -73,7 +73,7 @@ export default class RefMutator {
         let response = await getInput("Rename Bookmark", "", ["Bookmark Name"]);
         if (response) {
             let new_name = response["Bookmark Name"];
-            mutate<RenameBranch>("rename_branch", {
+            mutate<RenameBookmark>("rename_bookmark", {
                 ref: this.#ref,
                 new_name
             })
@@ -97,20 +97,20 @@ export default class RefMutator {
                     refspec: {
                         type: "RemoteBookmark",
                         remote_name: this.#ref.remote_name,
-                        branch_ref: this.#ref
+                        bookmark_ref: this.#ref
                     },
                     input: null
-                }, { operation: `Pushing ${this.#ref.branch_name} to ${this.#ref.remote_name}...` });
+                }, { operation: `Pushing ${this.#ref.bookmark_name} to ${this.#ref.remote_name}...` });
                 break;
 
             case "LocalBookmark":
                 mutate<GitPush>("git_push", {
                     refspec: {
                         type: "AllRemotes",
-                        branch_ref: this.#ref
+                        bookmark_ref: this.#ref
                     },
                     input: null
-                }, { operation: `Pushing ${this.#ref.branch_name}...` });
+                }, { operation: `Pushing ${this.#ref.bookmark_name}...` });
                 break;
         }
     };
@@ -139,10 +139,10 @@ export default class RefMutator {
                         refspec: {
                             type: "RemoteBookmark",
                             remote_name,
-                            branch_ref: this.#ref
+                            bookmark_ref: this.#ref
                         },
                         input: null
-                    }, { operation: `Pushing ${this.#ref.branch_name} to ${remote_name}...` })
+                    }, { operation: `Pushing ${this.#ref.bookmark_name} to ${remote_name}...` })
                 }
                 break;
         }
@@ -158,20 +158,20 @@ export default class RefMutator {
                 mutate<GitFetch>("git_fetch", {
                     refspec: {
                         type: "AllRemotes",
-                        branch_ref: this.#ref
+                        bookmark_ref: this.#ref
                     },
                     input: null
-                }, { operation: `Fetching ${this.#ref.branch_name} from ${this.#ref.branch_name}...` });
+                }, { operation: `Fetching ${this.#ref.bookmark_name} from ${this.#ref.bookmark_name}...` });
                 break;
 
             case "LocalBookmark":
                 mutate<GitFetch>("git_fetch", {
                     refspec: {
                         type: "AllRemotes",
-                        branch_ref: this.#ref
+                        bookmark_ref: this.#ref
                     },
                     input: null
-                }, { operation: `Fetching ${this.#ref.branch_name}...` });
+                }, { operation: `Fetching ${this.#ref.bookmark_name}...` });
                 break;
         }
     };
@@ -187,7 +187,7 @@ export default class RefMutator {
                 break;
 
             case "LocalBookmark":
-                let trackedRemotes = await query<string[]>("query_remotes", { tracking_branch: this.#ref.branch_name });
+                let trackedRemotes = await query<string[]>("query_remotes", { tracking_branch: this.#ref.bookmark_name });
                 if (trackedRemotes.type == "error") {
                     console.log("error loading remotes: " + trackedRemotes.message);
                     return;
@@ -200,10 +200,10 @@ export default class RefMutator {
                         refspec: {
                             type: "RemoteBookmark",
                             remote_name,
-                            branch_ref: this.#ref
+                            bookmark_ref: this.#ref
                         },
                         input: null
-                    }, { operation: `Fetching ${this.#ref.branch_name} from ${remote_name}...` })
+                    }, { operation: `Fetching ${this.#ref.bookmark_name} from ${remote_name}...` })
                 }
                 break;
         }

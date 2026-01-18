@@ -513,7 +513,7 @@ impl WorkspaceSession<'_> {
             latest_query,
             status: self.format_status(),
             theme_override: self.data.workspace_settings.ui_theme_override(),
-            mark_unpushed_branches: self.data.workspace_settings.ui_mark_unpushed_bookmarks(),
+            mark_unpushed_bookmarks: self.data.workspace_settings.ui_mark_unpushed_bookmarks(),
             track_recent_workspaces: self.data.workspace_settings.ui_track_recent_workspaces(),
         })
     }
@@ -1258,7 +1258,7 @@ fn build_ref_index(repo: &ReadonlyRepo) -> RefIndex {
             index.insert(
                 local_target.added_ids(),
                 messages::StoreRef::LocalBookmark {
-                    branch_name: branch_name.as_str().to_owned(),
+                    bookmark_name: branch_name.as_str().to_owned(),
                     has_conflict: local_target.has_conflict(),
                     is_synced: remote_refs.iter().all(|&(remote_name, remote_ref)| {
                         remote_name == REMOTE_NAME_FOR_LOCAL_GIT_REPO
@@ -1288,7 +1288,7 @@ fn build_ref_index(repo: &ReadonlyRepo) -> RefIndex {
             index.insert(
                 remote_ref.target.added_ids(),
                 messages::StoreRef::RemoteBookmark {
-                    branch_name: branch_name.as_str().to_owned(),
+                    bookmark_name: branch_name.as_str().to_owned(),
                     remote_name: remote_name.as_str().to_owned(),
                     has_conflict: remote_ref.target.has_conflict(),
                     is_synced: remote_ref.target == *local_target,

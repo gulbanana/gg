@@ -5,7 +5,7 @@
 </script>
 
 <span class="ref">
-    {ref.branch_name}{#if ref.type == "RemoteBookmark"}@{ref.remote_name}{/if}
+    {ref.bookmark_name}{#if ref.type == "RemoteBookmark"}@{ref.remote_name}{/if}
 </span>
 
 <style>

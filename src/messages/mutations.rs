@@ -152,19 +152,19 @@ pub struct CopyChanges {
 
 #[derive(Deserialize, Debug)]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
-pub struct TrackBranch {
+pub struct TrackBookmark {
     pub r#ref: StoreRef,
 }
 
 #[derive(Deserialize, Debug)]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
-pub struct UntrackBranch {
+pub struct UntrackBookmark {
     pub r#ref: StoreRef,
 }
 
 #[derive(Deserialize, Debug)]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
-pub struct RenameBranch {
+pub struct RenameBookmark {
     pub r#ref: StoreRef,
     pub new_name: String,
 }

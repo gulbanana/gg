@@ -33,7 +33,7 @@ use crate::messages::{
     AbandonRevisions, AdoptRevision, BackoutRevisions, CheckoutRevision, CopyChanges, CopyHunk,
     CreateRef, CreateRevision, CreateRevisionBetween, DeleteRef, DescribeRevision,
     DuplicateRevisions, GitFetch, GitPush, InsertRevisions, MoveChanges, MoveHunk, MoveRef,
-    MoveRevisions, RenameBranch, TrackBranch, UndoOperation, UntrackBranch,
+    MoveRevisions, RenameBookmark, TrackBookmark, UndoOperation, UntrackBookmark,
 };
 use crate::worker::{Mutation, Session, SessionEvent, WorkerSession};
 use sink::{SseEvent, SseSink};
@@ -251,9 +251,9 @@ async fn handle_mutate(
         "copy_changes" => execute_mutation::<CopyChanges>(&state, body),
         "move_hunk" => execute_mutation::<MoveHunk>(&state, body),
         "copy_hunk" => execute_mutation::<CopyHunk>(&state, body),
-        "track_branch" => execute_mutation::<TrackBranch>(&state, body),
-        "untrack_branch" => execute_mutation::<UntrackBranch>(&state, body),
-        "rename_branch" => execute_mutation::<RenameBranch>(&state, body),
+        "track_bookmark" => execute_mutation::<TrackBookmark>(&state, body),
+        "untrack_bookmark" => execute_mutation::<UntrackBookmark>(&state, body),
+        "rename_bookmark" => execute_mutation::<RenameBookmark>(&state, body),
         "create_ref" => execute_mutation::<CreateRef>(&state, body),
         "delete_ref" => execute_mutation::<DeleteRef>(&state, body),
         "move_ref" => execute_mutation::<MoveRef>(&state, body),

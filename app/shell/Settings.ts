@@ -1,3 +1,3 @@
 export default interface Settings {
-    markUnpushedBranches: boolean
+    markUnpushedBookmarks: boolean
 }

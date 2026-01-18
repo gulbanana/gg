@@ -112,7 +112,7 @@
     });
 
     let settings: Settings = {
-        markUnpushedBranches: true,
+        markUnpushedBookmarks: true,
     };
     setContext<Settings>("settings", settings);
 
@@ -151,7 +151,7 @@
 
         $revisionSelectEvent = undefined;
         if (config.type == "Workspace") {
-            settings.markUnpushedBranches = config.mark_unpushed_branches;
+            settings.markUnpushedBookmarks = config.mark_unpushed_bookmarks;
             $repoStatusEvent = config.status;
         }
     }

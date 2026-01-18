@@ -16,14 +16,14 @@
 
     $: operand = { type: "Ref", header, ref } as Operand;
 
-    $: label = ref.type === "LocalBookmark" ? ref.branch_name : `${ref.branch_name}@${ref.remote_name}`;
+    $: label = ref.type === "LocalBookmark" ? ref.bookmark_name : `${ref.bookmark_name}@${ref.remote_name}`;
 
     $: state = (
         ref.type === "LocalBookmark" ? (ref.is_synced ? "change" : "add") : ref.is_tracked ? "remove" : "change"
     ) as "add" | "change" | "remove";
 
     $: disconnected =
-        settings.markUnpushedBranches &&
+        settings.markUnpushedBookmarks &&
         (ref.type === "LocalBookmark"
             ? ref.available_remotes == 0 && ref.potential_remotes > 0
             : ref.is_tracked && ref.is_absent);

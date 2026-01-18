@@ -67,7 +67,7 @@ pub enum RepoConfig {
         latest_query: String,
         status: RepoStatus,
         theme_override: Option<String>,
-        mark_unpushed_branches: bool,
+        mark_unpushed_bookmarks: bool,
         track_recent_workspaces: bool,
     },
     #[allow(dead_code)] // used by frontend
@@ -103,7 +103,7 @@ pub enum RepoEvent {
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
 pub enum StoreRef {
     LocalBookmark {
-        branch_name: String,
+        bookmark_name: String,
         has_conflict: bool,
         /// Synchronized with all tracking remotes
         is_synced: bool,
@@ -113,7 +113,7 @@ pub enum StoreRef {
         potential_remotes: usize,
     },
     RemoteBookmark {
-        branch_name: String,
+        bookmark_name: String,
         remote_name: String,
         has_conflict: bool,
         /// Tracking remote ref is synchronized with local ref
@@ -129,16 +129,16 @@ pub enum StoreRef {
 }
 
 impl StoreRef {
-    pub fn as_branch(&self) -> Result<&str> {
+    pub fn as_bookmark(&self) -> Result<&str> {
         match self {
-            StoreRef::LocalBookmark { branch_name, .. } => Ok(branch_name),
-            StoreRef::RemoteBookmark { branch_name, .. } => Ok(branch_name),
+            StoreRef::LocalBookmark { bookmark_name, .. } => Ok(bookmark_name),
+            StoreRef::RemoteBookmark { bookmark_name, .. } => Ok(bookmark_name),
             _ => Err(anyhow!("not a local bookmark")),
         }
     }
 }
 
-/// Specifies which branches/remotes to push or fetch
+/// Specifies which bookmarks/remotes to push or fetch
 #[derive(Deserialize, Debug)]
 #[serde(tag = "type")]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
@@ -147,11 +147,11 @@ pub enum GitRefspec {
         remote_name: String,
     },
     AllRemotes {
-        branch_ref: StoreRef,
+        bookmark_ref: StoreRef,
     },
     RemoteBookmark {
         remote_name: String,
-        branch_ref: StoreRef,
+        bookmark_ref: StoreRef,
     },
 }
 

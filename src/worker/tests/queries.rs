@@ -93,7 +93,7 @@ fn revision() -> Result<()> {
 
     assert_matches!(
         header.refs.as_slice(),
-        [StoreRef::LocalBookmark { branch_name, .. }] if branch_name == "main"
+        [StoreRef::LocalBookmark { bookmark_name, .. }] if bookmark_name == "main"
     );
 
     Ok(())

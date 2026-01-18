@@ -151,7 +151,7 @@ export default class RevisionMutator {
         if (response) {
             let ref: StoreRef = {
                 type: "LocalBookmark",
-                branch_name: response["Bookmark Name"],
+                bookmark_name: response["Bookmark Name"],
                 has_conflict: false,
                 is_synced: false,
                 potential_remotes: 0,

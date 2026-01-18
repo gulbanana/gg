@@ -314,9 +314,9 @@ async fn immutability_of_bookmark() -> Result<()> {
             matches!(
                 r,
                 StoreRef::LocalBookmark {
-                    branch_name,
+                    bookmark_name,
                     ..
-                    } if branch_name == "immutable_bookmark"
+                    } if bookmark_name == "immutable_bookmark"
             )
         })
         .unwrap();
@@ -371,9 +371,9 @@ async fn immutable_workspace_head() -> Result<()> {
             matches!(
                 r,
                 StoreRef::LocalBookmark {
-                    branch_name,
+                    bookmark_name,
                     ..
-                    } if branch_name == "immutable_bookmark"
+                    } if bookmark_name == "immutable_bookmark"
             )
         })
         .unwrap();

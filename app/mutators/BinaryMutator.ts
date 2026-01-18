@@ -187,7 +187,7 @@ export default class BinaryMutator {
 
             // remote -> local: track
             else if (this.#to.type == "Ref" && this.#to.ref.type == "LocalBookmark" &&
-                this.#from.ref.type == "RemoteBookmark" && this.#from.ref.branch_name == this.#to.ref.branch_name) {
+                this.#from.ref.type == "RemoteBookmark" && this.#from.ref.bookmark_name == this.#to.ref.bookmark_name) {
                 if (this.#from.ref.is_tracked) {
                     return { type: "maybe", hint: "(already tracked)" };
                 } else {
