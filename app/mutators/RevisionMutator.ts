@@ -44,8 +44,8 @@ export default class RevisionMutator {
             case "edit":
                 this.onEdit();
                 break;
-            case "backout":
-                this.onBackout();
+            case "revert":
+                this.onRevert();
                 break;
             case "duplicate":
                 this.onDuplicate();
@@ -98,7 +98,7 @@ export default class RevisionMutator {
         }
     };
 
-    onBackout = () => {
+    onRevert = () => {
         mutate<BackoutRevisions>("backout_revisions", {
             set: this.#set,
         });

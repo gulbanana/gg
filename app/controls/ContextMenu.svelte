@@ -44,7 +44,7 @@
             new_child: true,
             new_parent: !anyImmutable && hasSingleParent,
             edit: isSingleton && !anyImmutable && !headers[0]?.is_working_copy,
-            backout: true,
+            revert: true,
             duplicate: true,
             abandon: !anyImmutable,
             squash: !anyImmutable && hasSingleParent,
@@ -119,8 +119,8 @@
             >New inserted parent</button>
         <hr />
         <button disabled={!revisionEnabled.edit} on:click={() => onClick("edit")}>Edit as working copy</button>
-        <button disabled={!revisionEnabled.backout} on:click={() => onClick("backout")}
-            >Backout into working copy</button>
+        <button disabled={!revisionEnabled.revert} on:click={() => onClick("revert")}
+            >Revert into working copy</button>
         <button disabled={!revisionEnabled.duplicate} on:click={() => onClick("duplicate")}>Duplicate</button>
         <button disabled={!revisionEnabled.abandon} on:click={() => onClick("abandon")}>Abandon</button>
         <hr />

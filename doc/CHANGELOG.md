@@ -12,6 +12,9 @@
 - Divergent/hidden revision display, using the change-id offsets introduced in JJ 0.37.
 - GG can also *target* divergent revisions or revsets, so you can now use it to abandon or rescue divergent revisions.
 
+### Changed
+- "Backout" is now "Revert", following the change in JJ 0.35.
+
 ## [0.37.1](releases/tag/v0.37.1)
 
 ### Added

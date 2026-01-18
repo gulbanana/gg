@@ -110,7 +110,7 @@ pub fn build_main(app_handle: &AppHandle, recent_items: &[String]) -> tauri::Res
             &MenuItem::with_id(
                 app_handle,
                 "menu_revision_backout",
-                "Backout into working copy",
+                "Revert into working copy",
                 true,
                 None::<&str>,
             )?,
@@ -235,7 +235,7 @@ pub fn build_context(
             &MenuItem::with_id(
                 app_handle,
                 "revision_backout",
-                "Backout into working copy",
+                "Revert into working copy",
                 true,
                 None::<&str>,
             )?,
