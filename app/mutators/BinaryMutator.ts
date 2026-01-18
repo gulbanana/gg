@@ -46,7 +46,10 @@ export default class BinaryMutator {
         if (from.type == "Revision") {
             return { type: "yes", hint: ["Rebasing revision ", from.header.id.change] };
         } else if (from.type == "Revisions") {
-            return { type: "yes", hint: from.headers.length == 1 ? ["Rebasing revision ", from.headers[0].id.change] : [`Rebasing ${from.headers.length} revisions`] };
+            return {
+                type: "yes", hint: from.headers.length == 1 ? ["Rebasing revision ", from.headers[0].id.change] :
+                    ["Rebasing revisions ", from.headers[from.headers.length - 1].id.change, "::", from.headers[0].id.change]
+            };
         } else if (from.type == "Parent") {
             return { type: "yes", hint: ["Removing parent from revision ", from.child.id.change] };
         } else if (from.type == "Change") {
@@ -54,13 +57,13 @@ export default class BinaryMutator {
                 return {
                     type: "yes", hint: from.headers.length == 1 ?
                         [`Squashing hunk ${from.hunk.location.from_file.start}:${from.hunk.location.from_file.start + from.hunk.location.from_file.len}@${from.path.relative_path} from revision `, from.headers[0].id.change] :
-                        [`Squashing hunk ${from.hunk.location.from_file.start}:${from.hunk.location.from_file.start + from.hunk.location.from_file.len}@${from.path.relative_path} from ${from.headers.length} revisions`]
+                        [`Squashing hunk ${from.hunk.location.from_file.start}:${from.hunk.location.from_file.start + from.hunk.location.from_file.len}@${from.path.relative_path} from revisions `, from.headers[from.headers.length - 1].id.change, "::", from.headers[0].id.change]
                 };
             } else {
                 return {
                     type: "yes", hint: from.headers.length == 1 ?
                         [`Squashing file ${from.path.relative_path} from revision `, from.headers[0].id.change] :
-                        [`Squashing file ${from.path.relative_path} from ${from.headers.length} revisions`]
+                        [`Squashing file ${from.path.relative_path} from revisions `, from.headers[from.headers.length - 1].id.change, "::", from.headers[0].id.change]
                 };
             }
         } else if (from.type == "Ref" && from.ref.type != "Tag") {
@@ -109,7 +112,7 @@ export default class BinaryMutator {
                     return {
                         type: "yes", hint: this.#from.headers.length == 1
                             ? ["Rebasing revision ", this.#from.headers[0].id.change, " onto ", this.#to.header.id.change]
-                            : [`Rebasing ${this.#from.headers.length} revisions onto `, this.#to.header.id.change]
+                            : ["Rebasing revisions ", this.#from.headers[this.#from.headers.length - 1].id.change, "::", this.#from.headers[0].id.change, " onto ", this.#to.header.id.change]
                     };
                 }
             } else if (this.#to.type == "Parent") {
@@ -122,14 +125,14 @@ export default class BinaryMutator {
                     return {
                         type: "yes", hint: this.#from.headers.length == 1
                             ? ["Inserting revision ", this.#from.headers[0].id.change, " before ", beforeHeader.id.change]
-                            : [`Inserting ${this.#from.headers.length} revisions before `, beforeHeader.id.change]
+                            : ["Inserting revisions ", this.#from.headers[this.#from.headers.length - 1].id.change, "::", this.#from.headers[0].id.change, " before ", beforeHeader.id.change]
                     };
                 }
             } else if (this.#to.type == "Repository") {
                 return {
                     type: "yes", hint: this.#from.headers.length == 1
                         ? ["Abandoning commit ", this.#from.headers[0].id.commit]
-                        : [`Abandoning ${this.#from.headers.length} commits`]
+                        : ["Abandoning commits ", this.#from.headers[this.#from.headers.length - 1].id.commit, "::", this.#from.headers[0].id.commit]
                 };
             } else if (this.#to.type == "Merge") {
                 let toHeader = this.#to.header;
@@ -139,7 +142,7 @@ export default class BinaryMutator {
                     return {
                         type: "yes", hint: this.#from.headers.length == 1
                             ? ["Adding parent ", this.#from.headers[0].id.change, " to revision ", toHeader.id.change]
-                            : [`Adding ${this.#from.headers.length} parents to revision `, toHeader.id.change]
+                            : ["Adding parents ", this.#from.headers[this.#from.headers.length - 1].id.change, "::", this.#from.headers[0].id.change, " to revision ", toHeader.id.change]
                     };
                 }
             }
