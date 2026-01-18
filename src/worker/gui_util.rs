@@ -245,6 +245,7 @@ impl WorkspaceSession<'_> {
         let mut diagnostics = RevsetDiagnostics::new(); // XXX pass this down, then include it in the Result
         let expr =
             revset_util::parse_immutable_heads_expression(&mut diagnostics, &self.parse_context())?;
+        let expr = expr.ancestors();
         let revset = self.evaluate_revset_expr(self.operation.repo.as_ref(), expr)?;
         Ok(revset)
     }
@@ -280,10 +281,17 @@ impl WorkspaceSession<'_> {
         }
     }
 
-    // policy: some commands try to operate on a change in order to preserve visual identity, but
-    // can fall back to operating on the commit described by the change at the time of the gesture
+    fn format_id_str(id: &RevId) -> String {
+        match id.change.offset {
+            Some(offset) => format!("{}/{}", id.change.hex, offset),
+            _ => id.change.hex.clone(),
+        }
+    }
+
+    // policy: queries operate on a precise change using offsets, with explicit not-found results
     pub fn resolve_optional_id(&self, id: &RevId) -> Result<Option<Commit>, RevsetError> {
-        let change_revset = match self.evaluate_revset_str(&id.change.hex) {
+        let id_str = Self::format_id_str(id);
+        let change_revset = match self.evaluate_revset_str(&id_str) {
             Ok(revset) => revset,
             Err(RevsetError::Resolution(RevsetResolutionError::NoSuchRevision { .. })) => {
                 return Ok(None);
@@ -311,6 +319,29 @@ impl WorkspaceSession<'_> {
                     None => Ok(None),
                 }
             }
+        }
+    }
+
+    // policy: queries operate on a precise change using offsets, with explicit not-found results
+    pub fn resolve_optional_revset(
+        &self,
+        from: &RevId,
+        to: &RevId,
+    ) -> Result<Option<Vec<Commit>>, RevsetError> {
+        let revset_str = format!("{}::{}", Self::format_id_str(from), Self::format_id_str(to));
+        let revset = match self.evaluate_revset_str(&revset_str) {
+            Ok(revset) => revset,
+            Err(RevsetError::Resolution(RevsetResolutionError::NoSuchRevision { .. })) => {
+                return Ok(None);
+            }
+            Err(err) => return Err(err),
+        };
+
+        let commits = self.resolve_multiple(revset)?;
+        if commits.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(commits))
         }
     }
 
@@ -484,26 +515,57 @@ impl WorkspaceSession<'_> {
         messages::CommitId { hex, prefix, rest }
     }
 
-    pub fn format_change_id(&self, id: &ChangeId) -> messages::ChangeId {
+    pub fn format_change_id(
+        &self,
+        commit_id: &CommitId,
+        change_id: &ChangeId,
+    ) -> messages::ChangeId {
         let prefix_len = self
             .prefix_index()
-            .shortest_change_prefix_len(self.operation.repo.as_ref(), id)
-            .unwrap_or_else(|_| id.reverse_hex().len());
+            .shortest_change_prefix_len(self.operation.repo.as_ref(), change_id)
+            .unwrap_or_else(|_| change_id.reverse_hex().len());
 
-        let hex = &id.reverse_hex();
-        let mut prefix = hex.clone();
-        let rest = prefix.split_off(prefix_len);
+        let hex = change_id.reverse_hex();
+        let prefix = hex[..prefix_len].to_string();
+        let rest = hex[prefix_len..].to_string();
+
+        let offset = self
+            .repo()
+            .resolve_change_id(change_id)
+            .ok()
+            .flatten()
+            .and_then(|targets| {
+                let is_hidden = !targets.has_visible(commit_id);
+                let is_divergent = targets.is_divergent();
+
+                if is_hidden || is_divergent {
+                    targets.find_offset(commit_id)
+                } else {
+                    None
+                }
+            });
+
+        let is_divergent = self
+            .repo()
+            .resolve_change_id(change_id)
+            .ok()
+            .flatten()
+            .map(|targets| targets.is_divergent())
+            .unwrap_or(false);
+
         messages::ChangeId {
-            hex: hex.clone(),
+            hex,
             prefix,
             rest,
+            offset,
+            is_divergent,
         }
     }
 
     pub fn format_id(&self, commit: &Commit) -> RevId {
         RevId {
             commit: self.format_commit_id(commit.id()),
-            change: self.format_change_id(commit.change_id()),
+            change: self.format_change_id(commit.id(), commit.change_id()),
         }
     }
 

@@ -69,6 +69,8 @@ fn mkid(xid: &str, cid: &str) -> RevId {
             hex: xid.to_owned(),
             prefix: xid.to_owned(),
             rest: "".to_owned(),
+            offset: None,
+            is_divergent: false,
         },
         commit: CommitId {
             hex: cid.to_owned(),
@@ -80,7 +82,7 @@ fn mkid(xid: &str, cid: &str) -> RevId {
 
 /// Resolve a commit by change ID, even if it was rewritten and has a new commit ID.
 /// Use this to verify commit state after mutations that rewrite commits.
-fn get_rev(ws: &WorkspaceSession, rev_id: &RevId) -> Result<Commit> {
+fn get_by_chid(ws: &WorkspaceSession, rev_id: &RevId) -> Result<Commit> {
     use jj_lib::repo::Repo;
     use jj_lib::revset::RevsetIteratorExt;
 

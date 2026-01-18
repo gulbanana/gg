@@ -1,4 +1,4 @@
-use super::{get_rev, mkrepo, revs};
+use super::{get_by_chid, mkrepo, revs};
 use crate::{
     messages::{
         AbandonRevisions, AdoptRevision, BackoutRevisions, ChangeHunk, CheckoutRevision,
@@ -617,13 +617,13 @@ async fn insert_revisions_range() -> Result<()> {
     assert_eq!(4, page.rows.len());
 
     // verify structure: conflict_bookmark is now child of main
-    let conflict_after = get_rev(&ws, &revs::conflict_bookmark())?;
+    let conflict_after = get_by_chid(&ws, &revs::conflict_bookmark())?;
     let conflict_parents: Vec<_> = conflict_after.parent_ids().to_vec();
     assert_eq!(conflict_parents.len(), 1);
     assert_eq!(conflict_parents[0].hex(), revs::main_bookmark().commit.hex);
 
     // verify resolve_conflict is still child of conflict_bookmark (internal structure preserved)
-    let resolve_after = get_rev(&ws, &revs::resolve_conflict())?;
+    let resolve_after = get_by_chid(&ws, &revs::resolve_conflict())?;
     let resolve_parents: Vec<_> = resolve_after.parent_ids().to_vec();
     assert_eq!(resolve_parents.len(), 1);
     assert_eq!(resolve_parents[0], conflict_after.id().clone());
@@ -740,7 +740,7 @@ async fn move_changes_range_partial() -> Result<()> {
     .execute_unboxed(&mut ws)
     .await?;
 
-    let b = get_rev(&ws, &b_id)?;
+    let b = get_by_chid(&ws, &b_id)?;
     let b_id = ws.format_id(&b);
 
     // commit C: sibling of A, move destination
@@ -831,7 +831,7 @@ async fn move_changes_range_partial_multi_touch() -> Result<()> {
     .execute_unboxed(&mut ws)
     .await?;
 
-    let b = get_rev(&ws, &b_id)?;
+    let b = get_by_chid(&ws, &b_id)?;
     let b_id = ws.format_id(&b);
 
     // A should have 1 change (z.txt)
@@ -885,7 +885,7 @@ async fn move_changes_range_partial_multi_touch() -> Result<()> {
     let c_rev = query_by_chid(&ws, &c_id.change.hex).await?;
     assert_matches!(c_rev, RevsResult::Detail { changes, .. } if changes.len() == 1);
 
-    let c = get_rev(&ws, &c_id)?;
+    let c = get_by_chid(&ws, &c_id)?;
     let tree = c.tree();
     let path = jj_lib::repo_path::RepoPath::from_internal_string("z.txt")?;
     let value = tree.path_value(&path)?;
@@ -925,7 +925,7 @@ async fn move_revisions_single() -> Result<()> {
     let mut ws = session.load_directory(repo.path())?;
 
     // initially, resolve_conflict is a child of conflict_bookmark
-    let before = get_rev(&ws, &revs::resolve_conflict())?;
+    let before = get_by_chid(&ws, &revs::resolve_conflict())?;
     let before_parents: Vec<_> = before.parent_ids().to_vec();
     assert_eq!(before_parents.len(), 1);
     assert_eq!(
@@ -941,7 +941,7 @@ async fn move_revisions_single() -> Result<()> {
     .await?;
 
     // verify it's now a child of main_bookmark
-    let after = get_rev(&ws, &revs::resolve_conflict())?;
+    let after = get_by_chid(&ws, &revs::resolve_conflict())?;
     let after_parents: Vec<_> = after.parent_ids().to_vec();
     assert_eq!(after_parents.len(), 1);
     assert_eq!(after_parents[0].hex(), revs::main_bookmark().commit.hex);
@@ -966,13 +966,13 @@ async fn move_revisions_range() -> Result<()> {
     assert_matches!(result, MutationResult::Updated { .. });
 
     // verify conflict_bookmark is now a child of working_copy (the oldest in the range was rebased)
-    let after = get_rev(&ws, &revs::conflict_bookmark())?;
+    let after = get_by_chid(&ws, &revs::conflict_bookmark())?;
     let after_parents: Vec<_> = after.parent_ids().to_vec();
     assert_eq!(after_parents.len(), 1);
     assert_eq!(after_parents[0].hex(), revs::working_copy().commit.hex);
 
     // verify resolve_conflict is still a child of conflict_bookmark (internal structure preserved)
-    let resolve_after = get_rev(&ws, &revs::resolve_conflict())?;
+    let resolve_after = get_by_chid(&ws, &revs::resolve_conflict())?;
     let resolve_parents: Vec<_> = resolve_after.parent_ids().to_vec();
     assert_eq!(resolve_parents.len(), 1);
     assert_eq!(resolve_parents[0], after.id().clone());
@@ -994,7 +994,7 @@ async fn move_revisions_range_internal_structure_preserved() -> Result<()> {
     let mut ws = session.load_directory(repo.path())?;
 
     // get original parent of hunk_child_single (should be hunk_base)
-    let child_before = get_rev(&ws, &revs::hunk_child_single())?;
+    let child_before = get_by_chid(&ws, &revs::hunk_child_single())?;
     let child_parents_before: Vec<_> = child_before.parent_ids().to_vec();
     assert_eq!(child_parents_before.len(), 1);
     assert_eq!(
@@ -1013,7 +1013,7 @@ async fn move_revisions_range_internal_structure_preserved() -> Result<()> {
     assert_matches!(result, MutationResult::Updated { .. });
 
     // verify hunk_child_single is now a child of main_bookmark
-    let child_after = get_rev(&ws, &revs::hunk_child_single())?;
+    let child_after = get_by_chid(&ws, &revs::hunk_child_single())?;
     let child_parents_after: Vec<_> = child_after.parent_ids().to_vec();
     assert_eq!(child_parents_after.len(), 1);
     assert_eq!(
@@ -1023,7 +1023,7 @@ async fn move_revisions_range_internal_structure_preserved() -> Result<()> {
     );
 
     // verify hunk_grandchild is still a child of hunk_child_single (internal structure preserved)
-    let grandchild_after = get_rev(&ws, &revs::hunk_grandchild())?;
+    let grandchild_after = get_by_chid(&ws, &revs::hunk_grandchild())?;
     let grandchild_parents: Vec<_> = grandchild_after.parent_ids().to_vec();
     assert_eq!(grandchild_parents.len(), 1);
     assert_eq!(
@@ -1072,7 +1072,7 @@ async fn move_revisions_range_disinherits_to_oldest_parent() -> Result<()> {
     }
     .execute_unboxed(&mut ws)
     .await?;
-    let a = get_rev(&ws, &a_id)?;
+    let a = get_by_chid(&ws, &a_id)?;
     let a_id = ws.format_id(&a);
 
     // Create commit B on top of A
@@ -1097,7 +1097,7 @@ async fn move_revisions_range_disinherits_to_oldest_parent() -> Result<()> {
     }
     .execute_unboxed(&mut ws)
     .await?;
-    let b = get_rev(&ws, &b_id)?;
+    let b = get_by_chid(&ws, &b_id)?;
     let b_id = ws.format_id(&b);
 
     // Create commit C on top of B (this will be the external child after moving A::B)
@@ -1122,7 +1122,7 @@ async fn move_revisions_range_disinherits_to_oldest_parent() -> Result<()> {
     }
     .execute_unboxed(&mut ws)
     .await?;
-    let c = get_rev(&ws, &c_id)?;
+    let c = get_by_chid(&ws, &c_id)?;
     let c_id = ws.format_id(&c);
 
     // verify C is child of B before the move
@@ -1140,7 +1140,7 @@ async fn move_revisions_range_disinherits_to_oldest_parent() -> Result<()> {
     assert_matches!(result, MutationResult::Updated { .. });
 
     // verify A is now child of main_bookmark
-    let a_after = get_rev(&ws, &a_id)?;
+    let a_after = get_by_chid(&ws, &a_id)?;
     let a_parents_after: Vec<_> = a_after.parent_ids().to_vec();
     assert_eq!(
         a_parents_after[0].hex(),
@@ -1149,7 +1149,7 @@ async fn move_revisions_range_disinherits_to_oldest_parent() -> Result<()> {
     );
 
     // verify B is still child of A (internal structure preserved)
-    let b_after = get_rev(&ws, &b_id)?;
+    let b_after = get_by_chid(&ws, &b_id)?;
     let b_parents_after: Vec<_> = b_after.parent_ids().to_vec();
     assert_eq!(
         b_parents_after[0],
@@ -1159,7 +1159,7 @@ async fn move_revisions_range_disinherits_to_oldest_parent() -> Result<()> {
 
     // CRITICAL: verify C is now child of working_copy (A's original parent)
     // NOT child of B (which would mean it moved with the range)
-    let c_after = get_rev(&ws, &c_id)?;
+    let c_after = get_by_chid(&ws, &c_id)?;
     let c_parents_after: Vec<_> = c_after.parent_ids().to_vec();
     assert_eq!(c_parents_after.len(), 1);
     assert_eq!(
@@ -1208,7 +1208,7 @@ async fn move_revisions_range_disinherits_children_of_middle() -> Result<()> {
     }
     .execute_unboxed(&mut ws)
     .await?;
-    let a = get_rev(&ws, &a_id)?;
+    let a = get_by_chid(&ws, &a_id)?;
     let a_id = ws.format_id(&a);
 
     // Create commit B on A
@@ -1232,7 +1232,7 @@ async fn move_revisions_range_disinherits_children_of_middle() -> Result<()> {
     }
     .execute_unboxed(&mut ws)
     .await?;
-    let b = get_rev(&ws, &b_id)?;
+    let b = get_by_chid(&ws, &b_id)?;
     let b_id = ws.format_id(&b);
 
     // Create commit C on B (end of the range we'll move)
@@ -1256,7 +1256,7 @@ async fn move_revisions_range_disinherits_children_of_middle() -> Result<()> {
     }
     .execute_unboxed(&mut ws)
     .await?;
-    let c = get_rev(&ws, &c_id)?;
+    let c = get_by_chid(&ws, &c_id)?;
     let c_id = ws.format_id(&c);
 
     // Create commit D as another child of B (sibling of C, external to range A::C)
@@ -1285,7 +1285,7 @@ async fn move_revisions_range_disinherits_children_of_middle() -> Result<()> {
     }
     .execute_unboxed(&mut ws)
     .await?;
-    let d = get_rev(&ws, &d_id)?;
+    let d = get_by_chid(&ws, &d_id)?;
     let d_id = ws.format_id(&d);
 
     // verify D is child of B before the move
@@ -1308,7 +1308,7 @@ async fn move_revisions_range_disinherits_children_of_middle() -> Result<()> {
     assert_matches!(result, MutationResult::Updated { .. });
 
     // verify A moved to main_bookmark
-    let a_after = get_rev(&ws, &a_id)?;
+    let a_after = get_by_chid(&ws, &a_id)?;
     let a_parents_after: Vec<_> = a_after.parent_ids().to_vec();
     assert_eq!(
         a_parents_after[0].hex(),
@@ -1317,13 +1317,13 @@ async fn move_revisions_range_disinherits_children_of_middle() -> Result<()> {
     );
 
     // verify internal structure: B child of A, C child of B
-    let b_after = get_rev(&ws, &b_id)?;
+    let b_after = get_by_chid(&ws, &b_id)?;
     assert_eq!(b_after.parent_ids()[0], a_after.id().clone());
-    let c_after = get_rev(&ws, &c_id)?;
+    let c_after = get_by_chid(&ws, &c_id)?;
     assert_eq!(c_after.parent_ids()[0], b_after.id().clone());
 
     // CRITICAL: D should be orphaned to working_copy, not follow B
-    let d_after = get_rev(&ws, &d_id)?;
+    let d_after = get_by_chid(&ws, &d_id)?;
     let d_parents_after: Vec<_> = d_after.parent_ids().to_vec();
     assert_eq!(d_parents_after.len(), 1);
     assert_eq!(
@@ -1367,7 +1367,7 @@ async fn move_revisions_range_multiple_external_children() -> Result<()> {
     }
     .execute_unboxed(&mut ws)
     .await?;
-    let a = get_rev(&ws, &a_id)?;
+    let a = get_by_chid(&ws, &a_id)?;
     let a_id = ws.format_id(&a);
 
     // Create commit B on A (part of the range)
@@ -1391,7 +1391,7 @@ async fn move_revisions_range_multiple_external_children() -> Result<()> {
     }
     .execute_unboxed(&mut ws)
     .await?;
-    let b = get_rev(&ws, &b_id)?;
+    let b = get_by_chid(&ws, &b_id)?;
     let b_id = ws.format_id(&b);
 
     // Create commit C on A (sibling of B, external to range)
@@ -1419,7 +1419,7 @@ async fn move_revisions_range_multiple_external_children() -> Result<()> {
     }
     .execute_unboxed(&mut ws)
     .await?;
-    let c = get_rev(&ws, &c_id)?;
+    let c = get_by_chid(&ws, &c_id)?;
     let c_id = ws.format_id(&c);
 
     // verify C is child of A
@@ -1436,18 +1436,18 @@ async fn move_revisions_range_multiple_external_children() -> Result<()> {
     assert_matches!(result, MutationResult::Updated { .. });
 
     // verify A moved
-    let a_after = get_rev(&ws, &a_id)?;
+    let a_after = get_by_chid(&ws, &a_id)?;
     assert_eq!(
         a_after.parent_ids()[0].hex(),
         revs::main_bookmark().commit.hex
     );
 
     // verify B still child of A
-    let b_after = get_rev(&ws, &b_id)?;
+    let b_after = get_by_chid(&ws, &b_id)?;
     assert_eq!(b_after.parent_ids()[0], a_after.id().clone());
 
     // CRITICAL: C should be orphaned to working_copy
-    let c_after = get_rev(&ws, &c_id)?;
+    let c_after = get_by_chid(&ws, &c_id)?;
     assert_eq!(
         c_after.parent_ids()[0].hex(),
         revs::working_copy().commit.hex,
@@ -1497,7 +1497,7 @@ async fn move_hunk_descendant_partial() -> anyhow::Result<()> {
     assert_matches!(result, MutationResult::Updated { .. });
 
     // Verify source still has the line 4 change but not line 2
-    let source_commit = get_rev(&ws, &revs::hunk_child_multi())?;
+    let source_commit = get_by_chid(&ws, &revs::hunk_child_multi())?;
     let source_tree = source_commit.tree();
     let repo_path = jj_lib::repo_path::RepoPath::from_internal_string("hunk_test.txt")?;
 
@@ -1517,7 +1517,7 @@ async fn move_hunk_descendant_partial() -> anyhow::Result<()> {
     }
 
     // Verify target (hunk_base) has the line 2 change applied
-    let target_commit = get_rev(&ws, &revs::hunk_base())?;
+    let target_commit = get_by_chid(&ws, &revs::hunk_base())?;
     let target_tree = target_commit.tree();
 
     match target_tree.path_value(&repo_path)?.into_resolved() {
@@ -1660,7 +1660,7 @@ async fn move_hunk_descendant_abandons_source() -> anyhow::Result<()> {
     assert!(source_header.is_none(), "Source should be abandoned");
 
     // Target (hunk_base) should have the change
-    let target_commit = get_rev(&ws, &revs::hunk_base())?;
+    let target_commit = get_by_chid(&ws, &revs::hunk_base())?;
     let target_tree = target_commit.tree();
     let repo_path = jj_lib::repo_path::RepoPath::from_internal_string("hunk_test.txt")?;
 
@@ -1729,7 +1729,7 @@ async fn move_hunk_unrelated() -> anyhow::Result<()> {
     }
 
     // Verify target has the hunk applied (with the new lines still there)
-    let sibling_commit = get_rev(&ws, &revs::hunk_sibling())?;
+    let sibling_commit = get_by_chid(&ws, &revs::hunk_sibling())?;
     let sibling_tree = sibling_commit.tree();
     let repo_path = jj_lib::repo_path::RepoPath::from_internal_string("hunk_test.txt")?;
 
@@ -1829,7 +1829,7 @@ async fn move_hunk_ancestor_to_descendant() -> anyhow::Result<()> {
     let repo_path = jj_lib::repo_path::RepoPath::from_internal_string("hunk_test.txt")?;
 
     // Verify initial state
-    let child_before = get_rev(&ws, &revs::hunk_child_single())?;
+    let child_before = get_by_chid(&ws, &revs::hunk_child_single())?;
     let child_tree_before = child_before.tree();
     match child_tree_before.path_value(&repo_path)?.into_resolved() {
         Ok(Some(jj_lib::backend::TreeValue::File { id, .. })) => {
@@ -1845,7 +1845,7 @@ async fn move_hunk_ancestor_to_descendant() -> anyhow::Result<()> {
         _ => panic!("Expected hunk_test.txt in hunk_child_single"),
     }
 
-    let grandchild_before = get_rev(&ws, &revs::hunk_grandchild())?;
+    let grandchild_before = get_by_chid(&ws, &revs::hunk_grandchild())?;
     let grandchild_tree_before = grandchild_before.tree();
     match grandchild_tree_before
         .path_value(&repo_path)?
@@ -1902,7 +1902,7 @@ async fn move_hunk_ancestor_to_descendant() -> anyhow::Result<()> {
     );
 
     // Verify destination (hunk_grandchild) - should have the hunk applied correctly
-    let dest_after = get_rev(&ws, &revs::hunk_grandchild())?;
+    let dest_after = get_by_chid(&ws, &revs::hunk_grandchild())?;
     let dest_tree = dest_after.tree();
 
     let path_value = dest_tree.path_value(&repo_path)?;
@@ -1932,7 +1932,7 @@ async fn move_hunk_ancestor_to_descendant() -> anyhow::Result<()> {
         "Grandchild should have one parent"
     );
     let parent = grandchild_parents[0].as_ref().unwrap();
-    let base = get_rev(&ws, &revs::hunk_base())?;
+    let base = get_by_chid(&ws, &revs::hunk_base())?;
     assert_eq!(
         parent.id(),
         base.id(),
@@ -1986,7 +1986,7 @@ async fn move_hunk_between_siblings() -> anyhow::Result<()> {
     assert_matches!(result, MutationResult::Updated { .. });
 
     // Verify source has the hunk removed (only changed4 remains)
-    let source_commit = get_rev(&ws, &revs::hunk_child_multi())?;
+    let source_commit = get_by_chid(&ws, &revs::hunk_child_multi())?;
     let source_tree = source_commit.tree();
     let repo_path = jj_lib::repo_path::RepoPath::from_internal_string("hunk_test.txt")?;
 
@@ -2005,7 +2005,7 @@ async fn move_hunk_between_siblings() -> anyhow::Result<()> {
     }
 
     // Verify target has both the new lines AND the moved hunk
-    let target_commit = get_rev(&ws, &revs::hunk_sibling())?;
+    let target_commit = get_by_chid(&ws, &revs::hunk_sibling())?;
     let target_tree = target_commit.tree();
 
     match target_tree.path_value(&repo_path)?.into_resolved() {
@@ -2035,7 +2035,7 @@ async fn move_hunk_does_not_affect_other_files() -> anyhow::Result<()> {
     let mut ws = session.load_directory(repo.path())?;
 
     // Get the original content of a.txt in hunk_child_multi before the move
-    let child_before = get_rev(&ws, &revs::hunk_child_multi())?;
+    let child_before = get_by_chid(&ws, &revs::hunk_child_multi())?;
     let child_tree_before = child_before.tree();
     let a_txt_path = jj_lib::repo_path::RepoPath::from_internal_string("a.txt")?;
 
@@ -2051,7 +2051,7 @@ async fn move_hunk_does_not_affect_other_files() -> anyhow::Result<()> {
     };
 
     // Also check hunk_base's a.txt content
-    let parent_before = get_rev(&ws, &revs::hunk_base())?;
+    let parent_before = get_by_chid(&ws, &revs::hunk_base())?;
     let parent_tree_before = parent_before.tree();
 
     let parent_a_txt_before = match parent_tree_before.path_value(&a_txt_path)?.into_resolved() {
@@ -2095,7 +2095,7 @@ async fn move_hunk_does_not_affect_other_files() -> anyhow::Result<()> {
     assert_matches!(result, MutationResult::Updated { .. });
 
     // Verify a.txt in child is unchanged
-    let child_after = get_rev(&ws, &revs::hunk_child_multi())?;
+    let child_after = get_by_chid(&ws, &revs::hunk_child_multi())?;
     let child_tree_after = child_after.tree();
 
     let a_txt_content_after = match child_tree_after.path_value(&a_txt_path)?.into_resolved() {
@@ -2115,7 +2115,7 @@ async fn move_hunk_does_not_affect_other_files() -> anyhow::Result<()> {
     );
 
     // Verify a.txt in parent is unchanged
-    let parent_after = get_rev(&ws, &revs::hunk_base())?;
+    let parent_after = get_by_chid(&ws, &revs::hunk_base())?;
     let parent_tree_after = parent_after.tree();
 
     let parent_a_txt_after = match parent_tree_after.path_value(&a_txt_path)?.into_resolved() {
@@ -2176,7 +2176,7 @@ async fn copy_hunk_from_parent() -> anyhow::Result<()> {
     assert_matches!(result, MutationResult::Updated { .. });
 
     // Verify: child should now have parent's content (restoration)
-    let child_commit = get_rev(&ws, &revs::hunk_child_single())?;
+    let child_commit = get_by_chid(&ws, &revs::hunk_child_single())?;
     let child_tree = child_commit.tree();
     let repo_path = jj_lib::repo_path::RepoPath::from_internal_string("hunk_test.txt")?;
 
@@ -2370,7 +2370,7 @@ async fn copy_hunk_multiple_hunks() -> anyhow::Result<()> {
     assert_matches!(result, MutationResult::Updated { .. });
 
     // Verify: line 2 still modified (changed2), line 4 restored (line4)
-    let child_commit = get_rev(&ws, &revs::hunk_child_multi())?;
+    let child_commit = get_by_chid(&ws, &revs::hunk_child_multi())?;
     let child_tree = child_commit.tree();
     let repo_path = jj_lib::repo_path::RepoPath::from_internal_string("hunk_test.txt")?;
 
@@ -2430,7 +2430,7 @@ async fn move_hunk_second_of_two_hunks() -> anyhow::Result<()> {
     assert_matches!(result, MutationResult::Updated { .. });
 
     // Verify source still has the first hunk (changed2), but not the second
-    let source_commit = get_rev(&ws, &revs::hunk_child_multi())?;
+    let source_commit = get_by_chid(&ws, &revs::hunk_child_multi())?;
     let source_tree = source_commit.tree();
     let repo_path = jj_lib::repo_path::RepoPath::from_internal_string("hunk_test.txt")?;
 
@@ -2449,7 +2449,7 @@ async fn move_hunk_second_of_two_hunks() -> anyhow::Result<()> {
     }
 
     // Verify target has the second hunk added
-    let target_commit = get_rev(&ws, &revs::hunk_sibling())?;
+    let target_commit = get_by_chid(&ws, &revs::hunk_sibling())?;
     let target_tree = target_commit.tree();
 
     match target_tree.path_value(&repo_path)?.into_resolved() {

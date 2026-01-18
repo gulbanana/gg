@@ -1692,7 +1692,7 @@ impl Mutation for GitPush {
             if !reasons.is_empty() {
                 precondition!(
                     "Won't push revision {} since {}",
-                    ws.format_change_id(commit.change_id()).prefix,
+                    ws.format_change_id(commit.id(), commit.change_id()).prefix,
                     reasons.join(" and ")
                 );
             }

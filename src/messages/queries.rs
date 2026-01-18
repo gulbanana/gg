@@ -39,6 +39,8 @@ pub struct ChangeId {
     pub hex: String,
     pub prefix: String,
     pub rest: String,
+    pub offset: Option<usize>,
+    pub is_divergent: bool,
 }
 
 impl Id for ChangeId {

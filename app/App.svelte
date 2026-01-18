@@ -167,7 +167,14 @@
                 set.to.commit.hex !== $repoStatusEvent?.working_copy?.hex)
         ) {
             const workingCopyId = {
-                change: { type: "ChangeId" as const, hex: "@", prefix: "@", rest: "" },
+                change: {
+                    type: "ChangeId" as const,
+                    hex: "@",
+                    prefix: "@",
+                    rest: "",
+                    offset: null,
+                    is_divergent: false,
+                },
                 commit: $repoStatusEvent!.working_copy,
             };
             return loadChange({ from: workingCopyId, to: workingCopyId });

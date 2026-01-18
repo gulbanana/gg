@@ -5,6 +5,7 @@
     import type { RevHeader } from "./messages/RevHeader";
     import type { RevSet } from "./messages/RevSet";
     import { query } from "./ipc.js";
+    import { sameChange } from "./ids.js";
     import { repoStatusEvent, revisionSelectEvent } from "./stores.js";
     import RevisionMutator from "./mutators/RevisionMutator.js";
     import Pane from "./shell/Pane.svelte";
@@ -246,10 +247,10 @@
         let toIdx = graphRows.findIndex((r) => r.revision.id.commit.hex === selection.to.commit.hex);
 
         if (fromIdx === -1) {
-            fromIdx = graphRows.findIndex((r) => r.revision.id.change.hex === selection.from.change.hex);
+            fromIdx = graphRows.findIndex((r) => sameChange(r.revision.id.change, selection.from.change));
         }
         if (toIdx === -1) {
-            toIdx = graphRows.findIndex((r) => r.revision.id.change.hex === selection.to.change.hex);
+            toIdx = graphRows.findIndex((r) => sameChange(r.revision.id.change, selection.to.change));
         }
 
         // reposition anchor, update ids if changed

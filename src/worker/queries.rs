@@ -32,12 +32,10 @@ use jj_lib::{
     ref_name::{RefNameBuf, RemoteNameBuf, RemoteRefSymbol},
     repo::Repo,
     repo_path::RepoPath,
-    revset::{Revset, RevsetEvaluationError, RevsetResolutionError},
+    revset::{Revset, RevsetEvaluationError},
     rewrite,
     tree_merge::MergeOptions,
 };
-
-use super::gui_util::RevsetError;
 
 use crate::messages::{
     ChangeHunk, ChangeKind, FileRange, HunkLocation, LogCoordinates, LogLine, LogPage, LogRow,
@@ -319,18 +317,9 @@ pub async fn query_revisions(ws: &WorkspaceSession<'_>, set: RevSet) -> Result<R
             None => return Ok(RevsResult::NotFound { set }),
         }
     } else {
-        let revset_str = format!("{}::{}", set.from.change.hex, set.to.change.hex);
-        let revset = match ws.evaluate_revset_str(&revset_str) {
-            Ok(revset) => revset,
-            Err(RevsetError::Resolution(RevsetResolutionError::NoSuchRevision { .. })) => {
-                return Ok(RevsResult::NotFound { set });
-            }
-            Err(err) => return Err(err.into()),
-        };
-
-        match ws.resolve_multiple(revset)? {
-            commits if commits.is_empty() => return Ok(RevsResult::NotFound { set }),
-            commits => commits,
+        match ws.resolve_optional_revset(&set.from, &set.to)? {
+            Some(commits) => commits,
+            None => return Ok(RevsResult::NotFound { set }),
         }
     };
 
