@@ -212,7 +212,7 @@
                     {#each revs.parents as parent}
                         <div class="parent">
                             <span>Parent:</span>
-                            <RevisionObject header={parent} child={oldest} selected={false} noBranches />
+                            <RevisionObject header={parent} child={oldest} selected={false} noBookmarks />
                         </div>
                     {/each}
                 </div>

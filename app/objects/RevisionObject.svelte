@@ -3,7 +3,7 @@
     import type { Operand } from "../messages/Operand";
     import { currentTarget, revisionSelectEvent } from "../stores.js";
     import IdSpan from "../controls/IdSpan.svelte";
-    import BranchObject from "./BranchObject.svelte";
+    import BookmarkObject from "./BookmarkObject.svelte";
     import Object from "./Object.svelte";
     import Zone from "./Zone.svelte";
     import RevisionMutator from "../mutators/RevisionMutator";
@@ -13,7 +13,7 @@
     export let header: RevHeader;
     export let child: RevHeader | null = null;
     export let selected: boolean; // same as the imported event, but parent may want to force a value
-    export let noBranches: boolean = false;
+    export let noBookmarks: boolean = false;
     export let onClick: ((header: RevHeader) => void) | undefined = undefined;
     export let onShiftClick: ((header: RevHeader) => void) | undefined = undefined;
 
@@ -71,9 +71,9 @@
             <span class="refs">
                 {#each header.refs as ref}
                     {#if ref.type != "Tag"}
-                        {#if !noBranches && (ref.type == "LocalBookmark" || !ref.is_synced || !ref.is_tracked)}
+                        {#if !noBookmarks && (ref.type == "LocalBookmark" || !ref.is_synced || !ref.is_tracked)}
                             <div>
-                                <BranchObject {header} {ref} />
+                                <BookmarkObject {header} {ref} />
                             </div>
                         {/if}
                     {:else}
@@ -102,7 +102,7 @@
                         {#if ref.type != "Tag"}
                             {#if ref.type == "LocalBookmark" || !ref.is_synced || !ref.is_tracked}
                                 <div>
-                                    <BranchObject {header} {ref} />
+                                    <BookmarkObject {header} {ref} />
                                 </div>
                             {/if}
                         {:else}
