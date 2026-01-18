@@ -1,6 +1,6 @@
 # GG Changelog
 
-## Unreleased
+## [0.37.2](releases/tag/v0.37.2)
 
 ### Added
 - Multiple selection: 
