@@ -10,7 +10,7 @@
     import type { RichHint } from "../mutators/BinaryMutator";
     import BinaryMutator from "../mutators/BinaryMutator";
     import { currentSource, currentTarget, hasModal, repoConfigEvent, repoStatusEvent } from "../stores";
-    import BranchSpan from "../controls/BranchSpan.svelte";
+    import BookmarkSpan from "../controls/BookmarkSpan.svelte";
 
     export let target: boolean;
 
@@ -105,7 +105,7 @@
                 {#if typeof run == "string"}
                     <span>{run}{i == dropHint.length - 1 ? "." : ""}</span>
                 {:else if run.type == "LocalBookmark" || run.type == "RemoteBookmark"}
-                    <span><BranchSpan ref={run} /></span>
+                    <span><BookmarkSpan ref={run} /></span>
                 {:else}
                     <span><IdSpan id={run} />{i == dropHint.length - 1 ? "." : ""}</span>
                 {/if}
