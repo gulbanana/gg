@@ -106,8 +106,8 @@ pub struct MoveHunk {
 #[derive(Deserialize, Debug)]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
 pub struct CopyHunk {
-    pub from_id: CommitId, // limitation: we don't know parent chids because they are more expensive to look up
-    pub to_id: RevId,
+    pub from_id: CommitId, // limitation: we don't know parent change ids because they are more expensive to look up
+    pub to_set: RevSet,
     pub path: TreePath,
     pub hunk: ChangeHunk,
 }

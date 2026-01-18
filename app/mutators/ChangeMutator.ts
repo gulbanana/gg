@@ -70,18 +70,15 @@ export default class ChangeMutator {
     };
 
     onRestore = () => {
+        let oldest = this.#revisions[this.#revisions.length - 1];
         if (this.#hunk) {
-            if (!this.#singleton) {
-                return;
-            }
             mutate<CopyHunk>("copy_hunk", {
-                from_id: this.#singleton.parent_ids[0],
-                to_id: this.#singleton.id,
+                from_id: oldest.parent_ids[0],
+                to_set: this.#set,
                 path: this.#path,
                 hunk: this.#hunk
             }, { ignoreImmutable: this.#ignoreImmutable });
         } else {
-            let oldest = this.#revisions[this.#revisions.length - 1];
             mutate<CopyChanges>("copy_changes", {
                 from_id: oldest.parent_ids[0],
                 to_set: this.#set,
