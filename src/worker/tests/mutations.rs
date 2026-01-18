@@ -13,7 +13,7 @@ use crate::{
 };
 use anyhow::Result;
 use assert_matches::assert_matches;
-use jj_lib::str_util::StringMatcher;
+use jj_lib::{repo::Repo as _, str_util::StringMatcher};
 use std::fs;
 use tokio::io::AsyncReadExt;
 
@@ -74,6 +74,94 @@ async fn abandon_revisions_range() -> Result<()> {
         RevsResult::NotFound { .. },
         "Querying abandoned range should return NotFound"
     );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn backout_revisions() -> Result<()> {
+    let repo = mkrepo();
+    let mut session = WorkerSession::default();
+    let mut ws = session.load_directory(repo.path())?;
+
+    // update to small_child, which contains small.txt with "line1\nchanged\n"
+    CheckoutRevision {
+        id: revs::small_child(),
+    }
+    .execute_unboxed(&mut ws)
+    .await?;
+
+    // revert small_child, which changed line2 from "line2" to "changed"
+    let result = BackoutRevisions {
+        set: RevSet::singleton(revs::small_child()),
+    }
+    .execute_unboxed(&mut ws)
+    .await?;
+    assert_matches!(result, MutationResult::Updated { .. });
+
+    // verify small.txt is no longer "changed"
+    let wc = ws.get_commit(ws.wc_id())?;
+    let tree = wc.tree();
+    let repo_path = jj_lib::repo_path::RepoPath::from_internal_string("small.txt")?;
+
+    match tree.path_value(&repo_path)?.into_resolved() {
+        Ok(Some(jj_lib::backend::TreeValue::File { id, .. })) => {
+            let mut reader = ws.repo().store().read_file(&repo_path, &id).await?;
+            let mut content = Vec::new();
+            reader.read_to_end(&mut content).await?;
+            let content_str = String::from_utf8_lossy(&content);
+            assert_eq!(
+                content_str, "line1\nline2\n",
+                "backout should revert line2 from 'changed' back to 'line2'"
+            );
+        }
+        _ => panic!("expected small.txt to be a resolved file"),
+    }
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn backout_revisions_range() -> Result<()> {
+    use jj_lib::repo::Repo;
+
+    let repo = mkrepo();
+    let mut session = WorkerSession::default();
+    let mut ws = session.load_directory(repo.path())?;
+
+    // update to hunk_grandchild
+    CheckoutRevision {
+        id: revs::hunk_grandchild(),
+    }
+    .execute_unboxed(&mut ws)
+    .await?;
+
+    // revert hunk_child_single::hunk_grandchild, which reverses both line2 -> modified2 and line3 -> grandchild3
+    let result = BackoutRevisions {
+        set: RevSet::sequence(revs::hunk_child_single(), revs::hunk_grandchild()),
+    }
+    .execute_unboxed(&mut ws)
+    .await?;
+    assert_matches!(result, MutationResult::Updated { .. });
+
+    // verify hunk_test.txt content: should be back to hunk_base state
+    let wc = ws.get_commit(ws.wc_id())?;
+    let tree = wc.tree();
+    let repo_path = jj_lib::repo_path::RepoPath::from_internal_string("hunk_test.txt")?;
+
+    match tree.path_value(&repo_path)?.into_resolved() {
+        Ok(Some(jj_lib::backend::TreeValue::File { id, .. })) => {
+            let mut reader = ws.repo().store().read_file(&repo_path, &id).await?;
+            let mut content = Vec::new();
+            reader.read_to_end(&mut content).await?;
+            let content_str = String::from_utf8_lossy(&content);
+            assert_eq!(
+                content_str, "line1\nline2\nline3\nline4\nline5\n",
+                "backout of range should return to hunk_base content"
+            );
+        }
+        _ => panic!("expected hunk_test.txt to be a resolved file"),
+    }
 
     Ok(())
 }

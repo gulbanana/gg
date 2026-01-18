@@ -99,9 +99,8 @@ export default class RevisionMutator {
     };
 
     onBackout = () => {
-        if (!this.#singleton) return;
         mutate<BackoutRevisions>("backout_revisions", {
-            ids: [this.#singleton.id],
+            set: this.#set,
         });
     };
 

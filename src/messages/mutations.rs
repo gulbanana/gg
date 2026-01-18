@@ -130,7 +130,7 @@ pub struct AbandonRevisions {
 #[derive(Deserialize, Debug)]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
 pub struct BackoutRevisions {
-    pub ids: Vec<RevId>,
+    pub set: RevSet,
 }
 
 #[derive(Deserialize, Debug)]

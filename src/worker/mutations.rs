@@ -105,45 +105,83 @@ impl Mutation for AbandonRevisions {
 #[async_trait(?Send)]
 impl Mutation for BackoutRevisions {
     async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
-        if self.ids.len() != 1 {
-            precondition!("Not implemented for >1 rev");
-        }
-
         let mut tx = ws.start_transaction().await?;
 
-        let working_copy = ws.get_commit(ws.wc_id())?;
-        let reverted = ws.resolve_multiple_changes(self.ids)?;
-        let reverted_parents: Result<Vec<_>, BackendError> = reverted[0].parents().collect();
+        // resolve singleton or arbitrary revset
+        let commits = if self.set.from.change.hex == self.set.to.change.hex {
+            vec![ws.resolve_single_change(&self.set.from)?]
+        } else {
+            let revset_str = format!("{}::{}", self.set.from.change.hex, self.set.to.change.hex);
+            let revset = ws.evaluate_revset_str(&revset_str)?;
+            ws.resolve_multiple(&revset)?
+        };
 
-        let reverted_parents = reverted_parents?;
-        let old_base_tree = rewrite::merge_commit_trees(tx.repo(), &reverted_parents).await?;
-        let new_base_tree = working_copy.tree();
-        let old_tree = reverted[0].tree();
-        let new_tree = MergedTree::merge(Merge::from_vec(vec![
+        if commits.is_empty() {
+            return Ok(MutationResult::Unchanged);
+        }
+
+        // parent_tree: the base of all changes
+        let oldest = commits.last().ok_or_else(|| anyhow!("empty revset"))?;
+        let oldest_parents: Result<Vec<_>, BackendError> = oldest.parents().collect();
+        let oldest_parents = oldest_parents?;
+        let parent_tree = rewrite::merge_commit_trees(tx.repo(), &oldest_parents).await?;
+
+        // reverted_tree: parent_tree + the changes we're backing out
+        let newest = commits.first().ok_or_else(|| anyhow!("empty revset"))?;
+        let reverted_tree = newest.tree();
+
+        // wc_tree: contents of the working copy before we add to it
+        let working_copy = ws.get_commit(ws.wc_id())?;
+        let wc_tree = working_copy.tree();
+
+        // prepare conflict labels
+        let (reverted_label, parent_label) = if commits.len() == 1 {
             (
-                new_base_tree,
-                format!("{} (backout destination)", working_copy.conflict_label()),
-            ),
-            (
-                old_tree,
-                format!("{} (backed out revision)", reverted[0].conflict_label()),
-            ),
-            (
-                old_base_tree,
+                format!("{} (backed out revision)", newest.conflict_label()),
                 format!(
                     "{} (parents of backed out revision)",
-                    conflict_label_for_commits(&reverted_parents)
+                    conflict_label_for_commits(&oldest_parents)
                 ),
-            ),
+            )
+        } else {
+            (
+                format!(
+                    "{}..{} (backed out revisions)",
+                    oldest.conflict_label(),
+                    newest.conflict_label()
+                ),
+                format!(
+                    "{} (parents of backed out revisions)",
+                    conflict_label_for_commits(&oldest_parents)
+                ),
+            )
+        };
+        let wc_label = format!("{} (backout destination)", working_copy.conflict_label());
+
+        // three-way merge: wc + (reverted - parent)
+        let new_wc_tree = MergedTree::merge(Merge::from_vec(vec![
+            (wc_tree, wc_label),
+            (reverted_tree, reverted_label),
+            (parent_tree, parent_label),
         ]))
         .await?;
 
         tx.repo_mut()
             .rewrite_commit(&working_copy)
-            .set_tree(new_tree)
+            .set_tree(new_wc_tree)
             .write()?;
 
-        match ws.finish_transaction(tx, format!("back out commit {}", reverted[0].id().hex()))? {
+        let transaction_description = if commits.len() == 1 {
+            format!("back out commit {}", newest.id().hex())
+        } else {
+            format!(
+                "back out commit {} and {} more",
+                newest.id().hex(),
+                commits.len() - 1
+            )
+        };
+
+        match ws.finish_transaction(tx, transaction_description)? {
             Some(new_status) => Ok(MutationResult::Updated {
                 new_status,
                 new_selection: None,
