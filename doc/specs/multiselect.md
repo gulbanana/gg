@@ -154,15 +154,31 @@ The current `RevisionPane.svelte` design for multi-revision selection is relativ
 - Abandon, Duplicate, Backout actions (enabled via context menu)
 - Context menu and drag-drop targets for files
 
+Some features work with multiselection:
+- CopyHunk (restore hunk) - applies to the newest commit only
+
 Some features are disabled pending design:
-- Edit/Describe/Restore actions (probably doesn't make sense)
-- Context menu and drag-drop targets for hunks (non-trivial implementation!)
+- Edit/Describe actions (ambiguous for ranges)
+- MoveHunk (squash hunk) - requires removing content from multiple commits
+
+## CopyHunk (Restore) Semantics
+
+When restoring a hunk from a combined diff:
+- The hunk shows content differences between `parent(oldest)` and `newest`
+- Restoring copies `parent(oldest)`'s content into the newest commit only
+- Intermediate commits remain unchanged
+- This matches the intuition: "undo this change that accumulated over the range"
+
+The hunk is validated against the newest commit (where the combined diff ends). The `to_set` parameter accepts a RevSet but only the newest commit is modified.
 
 ## Future Work
 
-### Hunk Change Operations (file and hunk)
+### MoveHunk (Squash Hunk)
 
-It should be possible to implement multiselect versions of MoveChanges and MoveHunk - but not easy. They'll need to modify subsets of the trees of multiple revisions, corresponding to an operation on the *combined* diff.
+MoveHunk with multiselection would require removing the hunk's contribution from each commit in the range, which is non-trivial because:
+- The hunk was computed against the combined diff
+- Intermediate commits may have different content at those line numbers
+- Line number tracking across commits is complex
 
 ### Disjoint (Non-Contiguous) Selection
 
