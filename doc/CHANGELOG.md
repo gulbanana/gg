@@ -9,7 +9,8 @@
   * Squash/restore the combined diff, or files within it - not hunks, for now.
   * Drag-drop to rebase an entire range at once.
   * Right-click or use the Revision menu in GUI mode to exeute commands on the range.
-- Divergent/hidden revision display and targeting, using the change-id offsets introduced in JJ 0.37.
+- Divergent/hidden revision display, using the change-id offsets introduced in JJ 0.37.
+- GG can also *target* divergent revisions or revsets, so you can now use it to abandon or rescue divergent revisions.
 
 ## [0.37.1](releases/tag/v0.37.1)
 

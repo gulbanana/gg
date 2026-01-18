@@ -1,4 +1,5 @@
 import { mutate } from "../ipc";
+import { sameChange } from "../ids";
 import type { Operand } from "../messages/Operand";
 import type { MoveChanges } from "../messages/MoveChanges";
 import type { MoveHunk } from "../messages/MoveHunk";
@@ -93,7 +94,7 @@ export default class BinaryMutator {
                     return { type: "yes", hint: ["Inserting revision ", this.#from.header.id.change, " before ", this.#to.child.id.change] };
                 }
             } else if (this.#to.type == "Merge") {
-                if (this.#to.header.id.change.hex == this.#from.header.id.change.hex) {
+                if (sameChange(this.#to.header.id.change, this.#from.header.id.change)) {
                     return { type: "no" };
                 } else {
                     return { type: "yes", hint: ["Adding parent to revision ", this.#to.header.id.change] };
@@ -106,7 +107,7 @@ export default class BinaryMutator {
         if (this.#from.type == "Revisions") {
             if (this.#to.type == "Revision") {
                 let toHeader = this.#to.header;
-                if (this.#from.headers.some(h => h.id.change.hex == toHeader.id.change.hex)) {
+                if (this.#from.headers.some(h => sameChange(h.id.change, toHeader.id.change))) {
                     return { type: "no" }; // target within selected range
                 } else {
                     return {
@@ -119,7 +120,7 @@ export default class BinaryMutator {
                 // check that neither before nor after are within the selected range
                 let beforeHeader = this.#to.child;
                 let afterHeader = this.#to.header;
-                if (this.#from.headers.some(h => h.id.change.hex == beforeHeader.id.change.hex || h.id.change.hex == afterHeader.id.change.hex)) {
+                if (this.#from.headers.some(h => sameChange(h.id.change, beforeHeader.id.change) || sameChange(h.id.change, afterHeader.id.change))) {
                     return { type: "no" }; // target within selected range
                 } else {
                     return {
@@ -136,7 +137,7 @@ export default class BinaryMutator {
                 };
             } else if (this.#to.type == "Merge") {
                 let toHeader = this.#to.header;
-                if (this.#from.headers.some(h => h.id.change.hex == toHeader.id.change.hex)) {
+                if (this.#from.headers.some(h => sameChange(h.id.change, toHeader.id.change))) {
                     return { type: "no" }; // target within selected range
                 } else {
                     return {
@@ -157,7 +158,7 @@ export default class BinaryMutator {
         if (this.#from.type == "Change") {
             if (this.#to.type == "Revision") {
                 let toHeader = this.#to.header;
-                if (this.#from.headers.some((header) => header.id.change.hex == toHeader.id.change.hex)) {
+                if (this.#from.headers.some((header) => sameChange(header.id.change, toHeader.id.change))) {
                     return { type: "no" };
                 } else if (toHeader.is_immutable) {
                     return { type: "maybe", hint: "(revision is immutable)" };
@@ -177,7 +178,7 @@ export default class BinaryMutator {
         if (this.#from.type == "Ref" && this.#from.ref.type != "Tag") {
             // local -> rev: set
             if (this.#to.type == "Revision" && this.#from.ref.type == "LocalBookmark") {
-                if (this.#to.header.id.change.hex == this.#from.header.id.change.hex) {
+                if (sameChange(this.#to.header.id.change, this.#from.header.id.change)) {
                     return { type: "no" };
                 } else {
                     return { type: "yes", hint: ["Moving bookmark ", this.#from.ref, " to ", this.#to.header.id.change] };

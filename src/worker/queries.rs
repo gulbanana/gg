@@ -317,7 +317,7 @@ pub async fn query_revisions(ws: &WorkspaceSession<'_>, set: RevSet) -> Result<R
             None => return Ok(RevsResult::NotFound { set }),
         }
     } else {
-        match ws.resolve_optional_revset(&set.from, &set.to)? {
+        match ws.resolve_optional_set(&set)? {
             Some(commits) => commits,
             None => return Ok(RevsResult::NotFound { set }),
         }

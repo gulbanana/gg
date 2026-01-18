@@ -55,7 +55,7 @@ use super::WorkerSession;
 
 use crate::{
     config::{GGSettings, read_config},
-    messages::{self, RevId},
+    messages::{self, RevId, RevSet},
 };
 
 /// jj-dependent state, available when a workspace is open
@@ -323,12 +323,12 @@ impl WorkspaceSession<'_> {
     }
 
     // policy: queries operate on a precise change using offsets, with explicit not-found results
-    pub fn resolve_optional_revset(
-        &self,
-        from: &RevId,
-        to: &RevId,
-    ) -> Result<Option<Vec<Commit>>, RevsetError> {
-        let revset_str = format!("{}::{}", Self::format_id_str(from), Self::format_id_str(to));
+    pub fn resolve_optional_set(&self, set: &RevSet) -> Result<Option<Vec<Commit>>, RevsetError> {
+        let revset_str = format!(
+            "{}::{}",
+            Self::format_id_str(&set.from),
+            Self::format_id_str(&set.to)
+        );
         let revset = match self.evaluate_revset_str(&revset_str) {
             Ok(revset) => revset,
             Err(RevsetError::Resolution(RevsetResolutionError::NoSuchRevision { .. })) => {
@@ -345,10 +345,12 @@ impl WorkspaceSession<'_> {
         }
     }
 
-    // policy: most commands prefer to operate on a change and will fail if the change has been evolved; however,
-    // if it's become divergent, they will fall back to the known commit so that divergences can be resolved
-    pub fn resolve_single_change(&self, id: &RevId) -> Result<Commit, RevsetError> {
-        let revset = self.evaluate_revset_str(&id.change.hex)?;
+    // policy: most commands prefer to operate on a change and will fail if the change has been evolved
+    // however, if it had a known offset they'll use that, and if it's *become* divergent,
+    // they will fall back to the known commit so that divergences can be resolved
+    pub fn resolve_change_id(&self, id: &RevId) -> Result<Commit, RevsetError> {
+        let id_str = Self::format_id_str(id);
+        let revset = self.evaluate_revset_str(&id_str)?;
         let mut iter = revset
             .as_ref()
             .iter()
@@ -357,7 +359,7 @@ impl WorkspaceSession<'_> {
         let optional_change = match (iter.next(), iter.next()) {
             (Some(commit), None) => Some(commit?),
             (None, _) => None,
-            (Some(_), Some(_)) => Some(self.resolve_single_commit(&id.commit)?),
+            (Some(_), Some(_)) => Some(self.resolve_commit_id(&id.commit)?),
         };
 
         match optional_change {
@@ -380,8 +382,35 @@ impl WorkspaceSession<'_> {
         }
     }
 
+    // policy: commands operating on a revset assume it uses precise targeting, including offsets if divergent
+    pub fn resolve_change_set(
+        &self,
+        set: &RevSet,
+        check_immutable: bool,
+    ) -> Result<(Vec<Commit>, bool), RevsetError> {
+        if set.from.change.hex == set.to.change.hex
+            && set.from.change.offset == set.to.change.offset
+        {
+            let commit = self.resolve_change_id(&set.from)?;
+            let is_immutable =
+                check_immutable && self.check_immutable([commit.id().clone()]).unwrap_or(false);
+            Ok((vec![commit], is_immutable))
+        } else {
+            let revset_str = format!(
+                "{}::{}",
+                Self::format_id_str(&set.from),
+                Self::format_id_str(&set.to)
+            );
+            let revset = self.evaluate_revset_str(&revset_str)?;
+            let is_immutable =
+                check_immutable && self.check_immutable_revset(&*revset).unwrap_or(false);
+            let commits = self.resolve_multiple(revset)?;
+            Ok((commits, is_immutable))
+        }
+    }
+
     // not-really-policy: sometimes we only have a commit, not a change. this is a compromise and will ideally be eliminated
-    pub fn resolve_single_commit(&self, id: &messages::CommitId) -> Result<Commit, RevsetError> {
+    pub fn resolve_commit_id(&self, id: &messages::CommitId) -> Result<Commit, RevsetError> {
         let expr = RevsetExpression::commit(
             CommitId::try_from_hex(&id.hex).expect("frontend-validated id"),
         );

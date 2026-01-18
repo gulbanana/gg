@@ -57,22 +57,14 @@ impl Mutation for AbandonRevisions {
     async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
 
-        // resolve singleton or arbitrary revset
-        let commits = if self.set.from.change.hex == self.set.to.change.hex {
-            let commit = ws.resolve_single_change(&self.set.from)?;
-            if ws.check_immutable([commit.id().clone()])? {
+        let (commits, is_immutable) = ws.resolve_change_set(&self.set, true)?;
+        if is_immutable {
+            if commits.len() == 1 {
                 precondition!("Revision is immutable");
-            }
-            vec![commit]
-        } else {
-            let revset_str = format!("{}::{}", self.set.from.change.hex, self.set.to.change.hex);
-            let revset = ws.evaluate_revset_str(&revset_str)?;
-            let resolved = ws.resolve_multiple(&revset)?;
-            if ws.check_immutable_revset(&*revset)? {
+            } else {
                 precondition!("Some revisions are immutable");
             }
-            resolved
-        };
+        }
 
         if commits.is_empty() {
             return Ok(MutationResult::Unchanged);
@@ -108,14 +100,7 @@ impl Mutation for BackoutRevisions {
     async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
 
-        // resolve singleton or arbitrary revset
-        let commits = if self.set.from.change.hex == self.set.to.change.hex {
-            vec![ws.resolve_single_change(&self.set.from)?]
-        } else {
-            let revset_str = format!("{}::{}", self.set.from.change.hex, self.set.to.change.hex);
-            let revset = ws.evaluate_revset_str(&revset_str)?;
-            ws.resolve_multiple(&revset)?
-        };
+        let (commits, _) = ws.resolve_change_set(&self.set, false)?;
 
         if commits.is_empty() {
             return Ok(MutationResult::Unchanged);
@@ -197,7 +182,7 @@ impl Mutation for CheckoutRevision {
     async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
 
-        let edited = ws.resolve_single_change(&self.id)?;
+        let edited = ws.resolve_change_id(&self.id)?;
 
         if ws.check_immutable(vec![edited.id().clone()])? {
             precondition!("Revision is immutable");
@@ -227,14 +212,7 @@ impl Mutation for CreateRevision {
     async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
 
-        // resolve singleton or arbitrary revset
-        let parent_commits = if self.set.from.change.hex == self.set.to.change.hex {
-            vec![ws.resolve_single_change(&self.set.from)?]
-        } else {
-            let revset_str = format!("{}::{}", self.set.from.change.hex, self.set.to.change.hex);
-            let revset = ws.evaluate_revset_str(&revset_str)?;
-            ws.resolve_multiple(revset)?
-        };
+        let (parent_commits, _) = ws.resolve_change_set(&self.set, false)?;
 
         // use as parents of new revision
         let parent_ids: Vec<_> = parent_commits.iter().map(Commit::id).cloned().collect();
@@ -263,7 +241,7 @@ impl Mutation for CreateRevisionBetween {
         let mut tx = ws.start_transaction().await?;
 
         let parent_id = ws
-            .resolve_single_commit(&self.after_id)
+            .resolve_commit_id(&self.after_id)
             .context("resolve after_id")?;
         let parent_ids = vec![parent_id.id().clone()];
         let parent_commits = vec![parent_id];
@@ -272,7 +250,7 @@ impl Mutation for CreateRevisionBetween {
         let new_commit = tx.repo_mut().new_commit(parent_ids, merged_tree).write()?;
 
         let before_commit = ws
-            .resolve_single_change(&self.before_id)
+            .resolve_change_id(&self.before_id)
             .context("resolve before_id")?;
         if ws.check_immutable(vec![before_commit.id().clone()])? {
             precondition!("'Before' revision is immutable");
@@ -300,7 +278,7 @@ impl Mutation for DescribeRevision {
     async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
 
-        let described = ws.resolve_single_change(&self.id)?;
+        let described = ws.resolve_change_id(&self.id)?;
 
         if ws.check_immutable(vec![described.id().clone()])? {
             precondition!("Revision {} is immutable", self.id.change.prefix);
@@ -337,14 +315,7 @@ impl Mutation for DuplicateRevisions {
     async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
 
-        // resolve singleton or arbitrary revset (in reverse topological order)
-        let clonees = if self.set.from.change.hex == self.set.to.change.hex {
-            vec![ws.resolve_single_change(&self.set.from)?]
-        } else {
-            let revset_str = format!("{}::{}", self.set.from.change.hex, self.set.to.change.hex);
-            let revset = ws.evaluate_revset_str(&revset_str)?;
-            ws.resolve_multiple(revset)?
-        };
+        let (clonees, _) = ws.resolve_change_set(&self.set, false)?;
         let num_clonees = clonees.len();
         let mut clones: IndexMap<Commit, Commit> = IndexMap::new();
 
@@ -401,32 +372,24 @@ impl Mutation for InsertRevisions {
     async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
 
-        // resolve singleton or linear range (in reverse topological order: newest first)
-        let targets = if self.set.from.change.hex == self.set.to.change.hex {
-            let commit = ws.resolve_single_change(&self.set.from)?;
-            if ws.check_immutable([commit.id().clone()])? {
+        let (targets, is_immutable) = ws.resolve_change_set(&self.set, true)?;
+        if is_immutable {
+            if targets.len() == 1 {
                 precondition!("Revision is immutable");
-            }
-            vec![commit]
-        } else {
-            let revset_str = format!("{}::{}", self.set.from.change.hex, self.set.to.change.hex);
-            let revset = ws.evaluate_revset_str(&revset_str)?;
-            let resolved = ws.resolve_multiple(&revset)?;
-            if ws.check_immutable_revset(&*revset)? {
+            } else {
                 precondition!("Some revisions are immutable");
             }
-            resolved
-        };
+        }
 
         if targets.is_empty() {
             return Ok(MutationResult::Unchanged);
         }
 
         let before = ws
-            .resolve_single_change(&self.before_id)
+            .resolve_change_id(&self.before_id)
             .context("resolve before_id")?;
         let after = ws
-            .resolve_single_change(&self.after_id)
+            .resolve_change_id(&self.after_id)
             .context("resolve after_id")?;
 
         if ws.check_immutable([before.id().clone()])? {
@@ -495,22 +458,14 @@ impl Mutation for MoveRevisions {
     async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
 
-        // resolve singleton or linear range (in reverse topological order)
-        let targets = if self.set.from.change.hex == self.set.to.change.hex {
-            let commit = ws.resolve_single_change(&self.set.from)?;
-            if ws.check_immutable([commit.id().clone()])? {
+        let (targets, is_immutable) = ws.resolve_change_set(&self.set, true)?;
+        if is_immutable {
+            if targets.len() == 1 {
                 precondition!("Revision is immutable");
-            }
-            vec![commit]
-        } else {
-            let revset_str = format!("{}::{}", self.set.from.change.hex, self.set.to.change.hex);
-            let revset = ws.evaluate_revset_str(&revset_str)?;
-            let resolved = ws.resolve_multiple(&revset)?;
-            if ws.check_immutable_revset(&*revset)? {
+            } else {
                 precondition!("Some revisions are immutable");
             }
-            resolved
-        };
+        }
 
         if targets.is_empty() {
             return Ok(MutationResult::Unchanged);
@@ -554,7 +509,7 @@ impl Mutation for AdoptRevision {
     async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
 
-        let target = ws.resolve_single_change(&self.id)?;
+        let target = ws.resolve_change_id(&self.id)?;
         let parent_ids: Vec<_> = ws
             .resolve_multiple_commits(&self.parent_ids)?
             .into_iter()
@@ -601,22 +556,11 @@ impl Mutation for MoveChanges {
 
         let mut to = ws.get_commit(&to_id)?;
 
-        // resolve & check source, which is assumed to be a singleton or a linear range
-        let from_commits = if self.from.from.change.hex == self.from.to.change.hex {
-            let commit = ws.resolve_single_change(&self.from.from)?;
-            if ws.check_immutable([commit.id().clone()])? {
-                precondition!("Some source revisions are immutable");
-            }
-            vec![commit]
-        } else {
-            let revset_str = format!("{}::{}", self.from.from.change.hex, self.from.to.change.hex);
-            let revset = ws.evaluate_revset_str(&revset_str)?;
-            let commits = ws.resolve_multiple(&revset)?;
-            if ws.check_immutable_revset(&*revset)? {
-                precondition!("Some source revisions are immutable");
-            }
-            commits
-        };
+        // resolve & check source
+        let (from_commits, is_immutable) = ws.resolve_change_set(&self.from, true)?;
+        if is_immutable {
+            precondition!("Some source revisions are immutable");
+        }
 
         let from_newest = from_commits
             .first()
@@ -729,33 +673,23 @@ impl Mutation for CopyChanges {
     async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
 
-        let from_tree = ws.resolve_single_commit(&self.from_id)?.tree();
+        let from_tree = ws.resolve_commit_id(&self.from_id)?.tree();
         let matcher = build_matcher(&self.paths)?;
 
-        // resolve destination revset
-        let commits = if self.to_set.from.change.hex == self.to_set.to.change.hex {
-            let commit = ws.resolve_single_change(&self.to_set.from)?;
-            if ws.check_immutable(vec![commit.id().clone()])? {
+        let (commits, is_immutable) = ws.resolve_change_set(&self.to_set, true)?;
+        if is_immutable {
+            if commits.len() == 1 {
                 precondition!("Destination revision is immutable");
-            }
-            vec![commit]
-        } else {
-            let revset_str = format!(
-                "{}::{}",
-                self.to_set.from.change.hex, self.to_set.to.change.hex
-            );
-            let revset = ws.evaluate_revset_str(&revset_str)?;
-            if ws.check_immutable_revset(&*revset)? {
+            } else {
                 precondition!("Some destination revisions are immutable");
             }
-            ws.resolve_multiple(&revset)?
-        };
+        }
 
         if commits.is_empty() {
             return Ok(MutationResult::Unchanged);
         }
 
-        // walk up the range, replacing the specified changes to eliminate each revision's contribution to the combined diff
+        // process commits oldest-first (resolve_multiple returns newest-first)
         let mut any_changed = false;
         for commit in commits.iter().rev() {
             let to_tree = commit.tree();
@@ -964,7 +898,7 @@ impl Mutation for CreateRef {
     async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
 
-        let commit = ws.resolve_single_change(&self.id)?;
+        let commit = ws.resolve_change_id(&self.id)?;
 
         match self.r#ref {
             StoreRef::RemoteBookmark {
@@ -1115,7 +1049,7 @@ impl Mutation for MoveRef {
     async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
 
-        let commit = ws.resolve_single_change(&self.to_id)?;
+        let commit = ws.resolve_change_id(&self.to_id)?;
 
         match self.r#ref {
             StoreRef::RemoteBookmark {
@@ -1184,8 +1118,8 @@ impl Mutation for MoveRef {
 #[async_trait(?Send)]
 impl Mutation for MoveHunk {
     async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
-        let from = ws.resolve_single_change(&self.from_id)?;
-        let mut to = ws.resolve_single_commit(&self.to_id)?;
+        let from = ws.resolve_change_id(&self.from_id)?;
+        let mut to = ws.resolve_commit_id(&self.to_id)?;
 
         if ws.check_immutable(vec![from.id().clone(), to.id().clone()])? {
             precondition!("Some revisions are immutable");
@@ -1385,8 +1319,8 @@ impl Mutation for CopyHunk {
     async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
 
-        let from = ws.resolve_single_commit(&self.from_id)?;
-        let to = ws.resolve_single_change(&self.to_id)?;
+        let from = ws.resolve_commit_id(&self.from_id)?;
+        let to = ws.resolve_change_id(&self.to_id)?;
         let repo_path = RepoPath::from_internal_string(&self.path.repo_path)?;
 
         if ws.check_immutable(vec![to.id().clone()])? {
