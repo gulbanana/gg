@@ -336,18 +336,15 @@ export default class BinaryMutator {
                 return;
             } else if (this.#to.type == "Repository") {
                 // restore path or subpath from source parent to source
+                let fromOldest = this.#from.headers[this.#from.headers.length - 1];
                 if (this.#from.hunk) {
-                    if (!fromSingleton) {
-                        return;
-                    }
                     mutate<CopyHunk>("copy_hunk", {
-                        from_id: fromSingleton.parent_ids[0],
-                        to_id: fromSingleton.id,
+                        from_id: fromOldest.parent_ids[0],
+                        to_set: fromSet,
                         path: this.#from.path,
                         hunk: this.#from.hunk
                     }, options);
                 } else {
-                    let fromOldest = this.#from.headers[this.#from.headers.length - 1];
                     mutate<CopyChanges>("copy_changes", {
                         from_id: fromOldest.parent_ids[0],
                         to_set: fromSet,
