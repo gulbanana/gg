@@ -1434,148 +1434,197 @@ impl Mutation for CopyHunk {
         let mut tx = ws.start_transaction().await?;
 
         let from = ws.resolve_commit_id(&self.from_id)?;
-        let to = ws.resolve_change_id(&self.to_id)?;
         let repo_path = RepoPath::from_internal_string(&self.path.repo_path)?;
 
-        if ws.check_immutable(vec![to.id().clone()])? && !options.ignore_immutable {
-            precondition!("Revision is immutable");
-        }
-
-        let store = tx.repo().store();
-        let to_tree = to.tree();
-
-        // vheck for conflicts in destination
-        let to_path_value = to_tree.path_value(repo_path)?;
-        if to_path_value.into_resolved().is_err() {
-            precondition!("Cannot restore hunk: destination file has conflicts");
-        }
-
-        // read destination content
-        let to_content = read_file_content(store, &to_tree, repo_path).await?;
-        let to_text = String::from_utf8_lossy(&to_content);
-        let to_lines: Vec<&str> = to_text.lines().collect();
-
-        // validate destination bounds
-        let to_start_0based = self.hunk.location.to_file.start.saturating_sub(1);
-        let to_end_0based = to_start_0based + self.hunk.location.to_file.len;
-        if to_end_0based > to_lines.len() {
-            precondition!(
-                "Hunk location out of bounds: file has {} lines, hunk requires lines {}-{}",
-                to_lines.len(),
-                self.hunk.location.to_file.start,
-                to_end_0based
-            );
-        }
-
-        // validate destination content
-        let expected_to_lines: Vec<&str> = self
-            .hunk
-            .lines
-            .lines
-            .iter()
-            .filter(|line| line.starts_with(' ') || line.starts_with('+'))
-            .map(|line| line[1..].trim_end())
-            .collect();
-        let actual_to_lines: Vec<&str> = to_lines[to_start_0based..to_end_0based]
-            .iter()
-            .map(|line| line.trim_end())
-            .collect();
-
-        if expected_to_lines.len() != actual_to_lines.len() {
-            return Err(anyhow!(
-                "Hunk validation failed: expected {} lines, found {} lines at destination",
-                expected_to_lines.len(),
-                actual_to_lines.len()
-            ));
-        }
-
-        for (i, (expected, actual)) in expected_to_lines
-            .iter()
-            .zip(actual_to_lines.iter())
-            .enumerate()
-        {
-            if expected != actual {
-                return Err(anyhow!(
-                    "Hunk validation failed at line {}: expected '{}', found '{}'",
-                    to_start_0based + i + 1,
-                    expected,
-                    actual
-                ));
+// resolve destination revset
+        let (commits, is_immutable) = ws.resolve_change_set(&self.to_set, true)?;
+        if is_immutable && !options.ignore_immutable {
+            if commits.len() == 1 {
+                precondition!("Destination revision is immutable");
+            } else {
+                precondition!("Some destination revisions are immutable");
             }
         }
 
-        // read source content
-        let from_tree = from.tree();
-        let from_content = read_file_content(store, &from_tree, repo_path).await?;
-        let from_text = String::from_utf8_lossy(&from_content);
-        let from_lines: Vec<&str> = from_text.lines().collect();
-
-        // validate source bounds
-        let from_start_0based = self.hunk.location.from_file.start.saturating_sub(1);
-        let from_end_0based = from_start_0based + self.hunk.location.from_file.len;
-        if from_end_0based > from_lines.len() {
-            precondition!(
-                "Source hunk location out of bounds: file has {} lines, hunk requires lines {}-{}",
-                from_lines.len(),
-                self.hunk.location.from_file.start,
-                from_end_0based
-            );
-        }
-
-        // extract source region
-        let source_region_lines = &from_lines[from_start_0based..from_end_0based];
-
-        // construct destination content and check whether anything changed
-        let mut new_to_lines = Vec::new();
-        new_to_lines.extend(to_lines[..to_start_0based].iter().map(|s| s.to_string()));
-        new_to_lines.extend(source_region_lines.iter().map(|s| s.to_string()));
-        new_to_lines.extend(to_lines[to_end_0based..].iter().map(|s| s.to_string()));
-
-        let ends_with_newline = to_content.ends_with(b"\n");
-        let mut new_to_content = Vec::new();
-        let num_lines = new_to_lines.len();
-        for (i, line) in new_to_lines.iter().enumerate() {
-            new_to_content.extend_from_slice(line.as_bytes());
-            if i < num_lines - 1 {
-                new_to_content.push(b'\n');
-            }
-        }
-        if ends_with_newline && !new_to_content.is_empty() && !new_to_content.ends_with(b"\n") {
-            new_to_content.push(b'\n');
-        }
-
-        if new_to_content == to_content {
+        if commits.is_empty() {
             return Ok(MutationResult::Unchanged);
         }
 
-        // create new destination tree with preserved executable bit
-        let new_to_blob_id = store
-            .write_file(repo_path, &mut new_to_content.as_slice())
-            .await?;
+        let to_start_0based = self.hunk.location.to_file.start.saturating_sub(1);
+        let to_end_0based = to_start_0based + self.hunk.location.to_file.len;
 
-        let to_executable = match to_tree.path_value(repo_path)?.into_resolved() {
-            Ok(Some(TreeValue::File { executable, .. })) => executable,
-            _ => false,
+        // phase 1: read all content and compute new trees
+        // (store is borrowed from tx during this phase)
+        let new_trees: Vec<(jj_lib::backend::CommitId, MergedTree)> = {
+            let store = tx.repo().store();
+
+            // read source content once
+            let from_tree = from.tree();
+            let from_content = read_file_content(store, &from_tree, repo_path).await?;
+            let from_text = String::from_utf8_lossy(&from_content);
+            let from_lines: Vec<&str> = from_text.lines().collect();
+
+            // validate source bounds
+            let from_start_0based = self.hunk.location.from_file.start.saturating_sub(1);
+            let from_end_0based = from_start_0based + self.hunk.location.from_file.len;
+            if from_end_0based > from_lines.len() {
+                precondition!(
+                    "Source hunk location out of bounds: file has {} lines, hunk requires lines {}-{}",
+                    from_lines.len(),
+                    self.hunk.location.from_file.start,
+                    from_end_0based
+                );
+            }
+
+            // extract source region to copy into each destination
+            let source_region_lines: Vec<String> = from_lines[from_start_0based..from_end_0based]
+                .iter()
+                .map(|s| s.to_string())
+                .collect();
+
+            // validate content against newest commit (commits are newest-first)
+            // the hunk was computed against the combined diff ending at the newest commit
+            let newest = &commits[0];
+            let newest_tree = newest.tree();
+
+            // check for conflicts in newest destination
+            let newest_path_value = newest_tree.path_value(repo_path)?;
+            if newest_path_value.into_resolved().is_err() {
+                precondition!("Cannot restore hunk: destination file has conflicts");
+            }
+
+            let newest_content = read_file_content(store, &newest_tree, repo_path).await?;
+            let newest_text = String::from_utf8_lossy(&newest_content);
+            let newest_lines: Vec<&str> = newest_text.lines().collect();
+
+            // validate bounds on newest
+            if to_end_0based > newest_lines.len() {
+                precondition!(
+                    "Hunk location out of bounds: file has {} lines, hunk requires lines {}-{}",
+                    newest_lines.len(),
+                    self.hunk.location.to_file.start,
+                    to_end_0based
+                );
+            }
+
+            // validate content on newest commit
+            let expected_to_lines: Vec<&str> = self
+                .hunk
+                .lines
+                .lines
+                .iter()
+                .filter(|line| line.starts_with(' ') || line.starts_with('+'))
+                .map(|line| line[1..].trim_end())
+                .collect();
+            let actual_to_lines: Vec<&str> = newest_lines[to_start_0based..to_end_0based]
+                .iter()
+                .map(|line| line.trim_end())
+                .collect();
+
+            if expected_to_lines.len() != actual_to_lines.len() {
+                return Err(anyhow!(
+                    "Hunk validation failed: expected {} lines, found {} lines at destination",
+                    expected_to_lines.len(),
+                    actual_to_lines.len()
+                ));
+            }
+
+            for (i, (expected, actual)) in expected_to_lines
+                .iter()
+                .zip(actual_to_lines.iter())
+                .enumerate()
+            {
+                if expected != actual {
+                    return Err(anyhow!(
+                        "Hunk validation failed at line {}: expected '{}', found '{}'",
+                        to_start_0based + i + 1,
+                        expected,
+                        actual
+                    ));
+                }
+            }
+
+            // only modify the newest commit (commits[0] - resolve_change_set returns newest-first)
+            // the hunk was computed against the combined diff ending at the newest commit,
+            // so applying it only to the newest commit makes semantic sense.
+            // the validation above already checked the newest commit's content.
+            let newest_to_tree = &newest_tree;
+
+            // construct new content for newest commit
+            let mut new_to_lines = Vec::new();
+            new_to_lines.extend(
+                newest_lines[..to_start_0based]
+                    .iter()
+                    .map(|s| s.to_string()),
+            );
+            new_to_lines.extend(source_region_lines.iter().cloned());
+            new_to_lines.extend(newest_lines[to_end_0based..].iter().map(|s| s.to_string()));
+
+            let ends_with_newline = newest_content.ends_with(b"\n");
+            let mut new_to_content = Vec::new();
+            let num_lines = new_to_lines.len();
+            for (i, line) in new_to_lines.iter().enumerate() {
+                new_to_content.extend_from_slice(line.as_bytes());
+                if i < num_lines - 1 {
+                    new_to_content.push(b'\n');
+                }
+            }
+            if ends_with_newline && !new_to_content.is_empty() && !new_to_content.ends_with(b"\n") {
+                new_to_content.push(b'\n');
+            }
+
+            if new_to_content == newest_content {
+                return Ok(MutationResult::Unchanged);
+            }
+
+            // create new tree with preserved executable bit
+            let new_blob_id = store
+                .write_file(repo_path, &mut new_to_content.as_slice())
+                .await?;
+
+            let to_executable = match newest_to_tree.path_value(repo_path)?.into_resolved() {
+                Ok(Some(TreeValue::File { executable, .. })) => executable,
+                _ => false,
+            };
+
+            let new_tree =
+                update_tree_entry(store, newest_to_tree, repo_path, new_blob_id, to_executable)?;
+            vec![(newest.id().clone(), new_tree)]
         };
 
-        let new_to_tree =
-            update_tree_entry(store, &to_tree, repo_path, new_to_blob_id, to_executable)?;
+        // phase 2: write new commits
+        // (store borrow is dropped, now we can use tx.repo_mut())
+        if new_trees.is_empty() {
+            return Ok(MutationResult::Unchanged);
+        }
 
-        // rewrite destination
-        tx.repo_mut()
-            .rewrite_commit(&to)
-            .set_tree(new_to_tree)
-            .write()?;
+        for (commit_id, new_tree) in &new_trees {
+            let commit = tx.repo().store().get_commit(commit_id)?;
+            tx.repo_mut()
+                .rewrite_commit(&commit)
+                .set_tree(new_tree.clone())
+                .write()?;
+        }
 
         tx.repo_mut().rebase_descendants()?;
 
-        match ws.finish_transaction(
-            tx,
+        let description = if commits.len() == 1 {
             format!(
                 "restore hunk in {} from {} into {}",
-                self.path.repo_path, self.from_id.hex, self.to_id.commit.hex
-            ),
-        )? {
+                self.path.repo_path,
+                self.from_id.hex,
+                commits[0].id().hex()
+            )
+        } else {
+            format!(
+                "restore hunk in {} from {} into {} commits",
+                self.path.repo_path,
+                self.from_id.hex,
+                commits.len()
+            )
+        };
+
+        match ws.finish_transaction(tx, description)? {
             Some(new_status) => Ok(MutationResult::Updated {
                 new_status,
                 new_selection: None,

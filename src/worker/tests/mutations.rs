@@ -2162,9 +2162,13 @@ async fn copy_hunk_from_parent() -> anyhow::Result<()> {
     };
 
     // This should restore "line2" back (undo the "modified2" change)
+    let to = revs::hunk_child_single();
     let mutation = CopyHunk {
         from_id: revs::hunk_base().commit,
-        to_id: revs::hunk_child_single(),
+        to_set: RevSet {
+            from: to.clone(),
+            to,
+        },
         path: TreePath {
             repo_path: "hunk_test.txt".to_owned(),
             relative_path: "".into(),
@@ -2220,7 +2224,10 @@ async fn copy_hunk_to_conflict() -> anyhow::Result<()> {
 
     let mutation = CopyHunk {
         from_id: parent_commit.commit.clone(),
-        to_id: conflict_commit.clone(),
+        to_set: RevSet {
+            from: conflict_commit.clone(),
+            to: conflict_commit.clone(),
+        },
         path: TreePath {
             repo_path: "b.txt".to_owned(), // This file has conflicts
             relative_path: "".into(),
@@ -2265,9 +2272,13 @@ async fn copy_hunk_out_of_bounds() -> anyhow::Result<()> {
     };
 
     // Try to copy a hunk with out-of-bounds location using the small file commits
+    let to = revs::small_child();
     let mutation = CopyHunk {
         from_id: revs::small_parent().commit,
-        to_id: revs::small_child(),
+        to_set: RevSet {
+            from: to.clone(),
+            to,
+        },
         path: TreePath {
             repo_path: "small.txt".to_owned(),
             relative_path: "".into(),
@@ -2314,9 +2325,13 @@ async fn copy_hunk_unchanged() -> anyhow::Result<()> {
     };
 
     // Copy a hunk between hunk_base and hunk_sibling where that part is identical
+    let to = revs::hunk_sibling();
     let mutation = CopyHunk {
         from_id: revs::hunk_base().commit,
-        to_id: revs::hunk_sibling(),
+        to_set: RevSet {
+            from: to.clone(),
+            to,
+        },
         path: TreePath {
             repo_path: "hunk_test.txt".to_owned(),
             relative_path: "".into(),
@@ -2356,9 +2371,13 @@ async fn copy_hunk_multiple_hunks() -> anyhow::Result<()> {
     };
 
     // Restore only the second hunk (line 4) from hunk_base
+    let to = revs::hunk_child_multi();
     let mutation = CopyHunk {
         from_id: revs::hunk_base().commit,
-        to_id: revs::hunk_child_multi(),
+        to_set: RevSet {
+            from: to.clone(),
+            to,
+        },
         path: TreePath {
             repo_path: "hunk_test.txt".to_owned(),
             relative_path: "".into(),
@@ -2383,6 +2402,90 @@ async fn copy_hunk_multiple_hunks() -> anyhow::Result<()> {
             assert_eq!(
                 content_str, "line1\nchanged2\nline3\nline4\nline5\n",
                 "Line 2 should remain modified (changed2), line 4 should be restored"
+            );
+        }
+        _ => panic!("Expected hunk_test.txt to be a file"),
+    }
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn copy_hunk_multiselection() -> anyhow::Result<()> {
+    use jj_lib::repo::Repo;
+
+    let repo = mkrepo();
+    let mut session = WorkerSession::default();
+    let mut ws = session.load_directory(repo.path())?;
+
+    // Test multiselection: hunk_child_single::hunk_grandchild (2 commits)
+    // Chain: hunk_base (line1-5) -> hunk_child_single (line2->modified2) -> hunk_grandchild (line3->grandchild3)
+    // Combined diff from hunk_base to hunk_grandchild shows both changes.
+    // CopyHunk applies only to the newest commit (where the hunk was validated).
+    // Intermediate commits are unchanged.
+
+    // Hunk for just line2 (avoid including line3 which differs between commits)
+    let hunk = ChangeHunk {
+        location: HunkLocation {
+            from_file: FileRange { start: 2, len: 1 },
+            to_file: FileRange { start: 2, len: 1 },
+        },
+        lines: MultilineString {
+            lines: vec!["-line2".to_owned(), "+modified2".to_owned()],
+        },
+    };
+
+    // Copy from hunk_base (parent of the range) into the range
+    // Only the newest commit (hunk_grandchild) will be modified
+    let mutation = CopyHunk {
+        from_id: revs::hunk_base().commit,
+        to_set: RevSet {
+            from: revs::hunk_child_single(),
+            to: revs::hunk_grandchild(),
+        },
+        path: TreePath {
+            repo_path: "hunk_test.txt".to_owned(),
+            relative_path: "".into(),
+        },
+        hunk,
+    };
+
+    let result = mutation.execute_unboxed(&mut ws).await?;
+    assert_matches!(result, MutationResult::Updated { .. });
+
+    let repo_path = jj_lib::repo_path::RepoPath::from_internal_string("hunk_test.txt")?;
+
+    // Verify: hunk_child_single is unchanged (still has modified2)
+    let child_commit = get_by_chid(&ws, &revs::hunk_child_single())?;
+    let child_tree = child_commit.tree();
+
+    match child_tree.path_value(&repo_path)?.into_resolved() {
+        Ok(Some(jj_lib::backend::TreeValue::File { id, .. })) => {
+            let mut reader = ws.repo().store().read_file(&repo_path, &id).await?;
+            let mut content = Vec::new();
+            reader.read_to_end(&mut content).await?;
+            let content_str = String::from_utf8_lossy(&content);
+            assert_eq!(
+                content_str, "line1\nmodified2\nline3\nline4\nline5\n",
+                "hunk_child_single should be unchanged"
+            );
+        }
+        _ => panic!("Expected hunk_test.txt to be a file"),
+    }
+
+    // Verify: hunk_grandchild has line2 restored (but still has grandchild3)
+    let grandchild_commit = get_by_chid(&ws, &revs::hunk_grandchild())?;
+    let grandchild_tree = grandchild_commit.tree();
+
+    match grandchild_tree.path_value(&repo_path)?.into_resolved() {
+        Ok(Some(jj_lib::backend::TreeValue::File { id, .. })) => {
+            let mut reader = ws.repo().store().read_file(&repo_path, &id).await?;
+            let mut content = Vec::new();
+            reader.read_to_end(&mut content).await?;
+            let content_str = String::from_utf8_lossy(&content);
+            assert_eq!(
+                content_str, "line1\nline2\ngrandchild3\nline4\nline5\n",
+                "hunk_grandchild should have line2 restored but keep grandchild3"
             );
         }
         _ => panic!("Expected hunk_test.txt to be a file"),
