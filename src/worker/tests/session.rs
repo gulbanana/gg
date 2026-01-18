@@ -773,9 +773,14 @@ async fn clone_workspace_dest_empty_ok() -> Result<()> {
     Ok(())
 }
 
+#[cfg(windows)]
+const EOL: &'static str = "\r\n";
+#[cfg(not(windows))]
+const EOL: &'static str = "\n";
+
 #[tokio::test]
 async fn clone_workspace_checks_out_file_content() -> Result<()> {
-    use std::process::Command;
+    use std::process::{Command, Stdio};
 
     let source_dir = tempfile::tempdir()?;
     let dest_dir = tempfile::tempdir()?;
@@ -797,8 +802,10 @@ async fn clone_workspace_checks_out_file_content() -> Result<()> {
     }
 
     // Create a file with content in the source repo
-    let test_content = "Hello from test repository!\nLine 2\n";
-    std::fs::write(source_dir.path().join("test_file.txt"), test_content)?;
+    let mut test_content = String::from("Hello from test repository!");
+    test_content += EOL;
+    test_content += "Line 2\r\n";
+    std::fs::write(source_dir.path().join("test_file.txt"), &test_content)?;
 
     // Use git commands to add and commit the file
     let add_status = Command::new("git")
@@ -819,6 +826,7 @@ async fn clone_workspace_checks_out_file_content() -> Result<()> {
             "Add test file",
         ])
         .current_dir(source_dir.path())
+        .stdout(Stdio::null())
         .status()
         .context("Failed to run git commit")?;
     assert!(commit_status.success(), "git commit should succeed");
@@ -842,19 +850,14 @@ async fn clone_workspace_checks_out_file_content() -> Result<()> {
     assert_eq!(result, dunce::canonicalize(dest_dir.path())?);
 
     // Verify the file content was checked out
-    let cloned_file = dest_dir.path().join("test_file.txt");
+    let opened_file = dest_dir.path().join("test_file.txt");
     assert!(
-        cloned_file.exists(),
+        opened_file.exists(),
         "test_file.txt should exist in cloned repo"
     );
 
-    let cloned_content = std::fs::read_to_string(&cloned_file)?;
-    // Normalize line endings for cross-platform comparison
-    let normalized_content = cloned_content.replace("\r\n", "\n");
-    assert_eq!(
-        normalized_content, test_content,
-        "File content should match"
-    );
+    let opened_content = std::fs::read_to_string(&opened_file)?;
+    assert_eq!(opened_content, test_content, "File content should match");
 
     Ok(())
 }
