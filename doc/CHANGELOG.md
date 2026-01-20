@@ -1,5 +1,10 @@
 # GG Changelog
 
+## Unreleased
+
+### Fixed
+- In web mode, right-clicking on revisions enabled context menu commands based on the *selected* revision rather than the one you'd clicked.
+
 ## [0.37.2](releases/tag/v0.37.2)
 
 ### Added
