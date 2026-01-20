@@ -89,7 +89,7 @@ impl Mutation for AbandonRevisions {
             )
         };
 
-        match ws.finish_transaction(tx, transaction_description)? {
+        match ws.finish_mutation(tx, transaction_description, options.ignore_immutable)? {
             Some(new_status) => Ok(MutationResult::Updated {
                 new_status,
                 new_selection: None,
@@ -104,7 +104,7 @@ impl Mutation for BackoutRevisions {
     async fn execute(
         self: Box<Self>,
         ws: &mut WorkspaceSession,
-        _options: &crate::messages::MutationOptions,
+        options: &crate::messages::MutationOptions,
     ) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
 
@@ -175,7 +175,7 @@ impl Mutation for BackoutRevisions {
             )
         };
 
-        match ws.finish_transaction(tx, transaction_description)? {
+        match ws.finish_mutation(tx, transaction_description, options.ignore_immutable)? {
             Some(new_status) => Ok(MutationResult::Updated {
                 new_status,
                 new_selection: None,
@@ -228,7 +228,7 @@ impl Mutation for CreateRevision {
     async fn execute(
         self: Box<Self>,
         ws: &mut WorkspaceSession,
-        _options: &crate::messages::MutationOptions,
+        options: &crate::messages::MutationOptions,
     ) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
 
@@ -242,7 +242,7 @@ impl Mutation for CreateRevision {
         // make it the working copy
         tx.repo_mut().edit(ws.name().to_owned(), &new_commit)?;
 
-        match ws.finish_transaction(tx, "new empty commit")? {
+        match ws.finish_mutation(tx, "new empty commit".to_string(), options.ignore_immutable)? {
             Some(new_status) => {
                 let new_selection = Some(ws.format_header(&new_commit, Some(false))?);
                 Ok(MutationResult::Updated {
@@ -284,7 +284,7 @@ impl Mutation for CreateRevisionBetween {
 
         tx.repo_mut().edit(ws.name().to_owned(), &new_commit)?;
 
-        match ws.finish_transaction(tx, "new empty commit")? {
+        match ws.finish_mutation(tx, "new empty commit".to_string(), options.ignore_immutable)? {
             Some(new_status) => {
                 let new_selection = Some(ws.format_header(&new_commit, Some(false))?);
                 Ok(MutationResult::Updated {
@@ -328,7 +328,11 @@ impl Mutation for DescribeRevision {
 
         commit_builder.write()?;
 
-        match ws.finish_transaction(tx, format!("describe commit {}", described.id().hex()))? {
+        match ws.finish_mutation(
+            tx,
+            format!("describe commit {}", described.id().hex()),
+            options.ignore_immutable,
+        )? {
             Some(new_status) => Ok(MutationResult::Updated {
                 new_status,
                 new_selection: None,
@@ -343,7 +347,7 @@ impl Mutation for DuplicateRevisions {
     async fn execute(
         self: Box<Self>,
         ws: &mut WorkspaceSession,
-        _options: &crate::messages::MutationOptions,
+        options: &crate::messages::MutationOptions,
     ) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
 
@@ -375,7 +379,11 @@ impl Mutation for DuplicateRevisions {
             clones.insert(clonee, clone);
         }
 
-        match ws.finish_transaction(tx, format!("duplicating {} commit(s)", num_clonees))? {
+        match ws.finish_mutation(
+            tx,
+            format!("duplicating {} commit(s)", num_clonees),
+            options.ignore_immutable,
+        )? {
             Some(new_status) => {
                 if num_clonees == 1 {
                     let new_commit = clones
@@ -479,7 +487,7 @@ impl Mutation for InsertRevisions {
         // rebase graph suffix onto the end of the inserted range
         rewrite::rebase_commit(tx.repo_mut(), before, vec![new_newest_id]).await?;
 
-        match ws.finish_transaction(tx, transaction_description)? {
+        match ws.finish_mutation(tx, transaction_description, options.ignore_immutable)? {
             Some(new_status) => Ok(MutationResult::Updated {
                 new_status,
                 new_selection: None,
@@ -534,7 +542,7 @@ impl Mutation for MoveRevisions {
         };
         rewrite::rebase_commit(tx.repo_mut(), oldest.clone(), parent_ids).await?;
 
-        match ws.finish_transaction(tx, transaction_description)? {
+        match ws.finish_mutation(tx, transaction_description, options.ignore_immutable)? {
             Some(new_status) => Ok(MutationResult::Updated {
                 new_status,
                 new_selection: None,
@@ -577,7 +585,11 @@ impl Mutation for AdoptRevision {
         let rebased_id = target.id().hex();
         rewrite::rebase_commit(tx.repo_mut(), target, parent_ids).await?;
 
-        match ws.finish_transaction(tx, format!("rebase commit {}", rebased_id))? {
+        match ws.finish_mutation(
+            tx,
+            format!("rebase commit {}", rebased_id),
+            options.ignore_immutable,
+        )? {
             Some(new_status) => Ok(MutationResult::Updated {
                 new_status,
                 new_selection: None,
@@ -698,7 +710,7 @@ impl Mutation for MoveChanges {
             .set_description(description)
             .write()?;
 
-        match ws.finish_transaction(
+        match ws.finish_mutation(
             tx,
             format!(
                 "move changes from {}::{} to {}",
@@ -706,6 +718,7 @@ impl Mutation for MoveChanges {
                 from_newest.id().hex(),
                 to.id().hex()
             ),
+            options.ignore_immutable,
         )? {
             Some(new_status) => Ok(MutationResult::Updated {
                 new_status,
@@ -768,7 +781,7 @@ impl Mutation for CopyChanges {
             format!("restore into {} commits", commits.len())
         };
 
-        match ws.finish_transaction(tx, description)? {
+        match ws.finish_mutation(tx, description, options.ignore_immutable)? {
             Some(new_status) => Ok(MutationResult::Updated {
                 new_status,
                 new_selection: None,
@@ -783,7 +796,7 @@ impl Mutation for TrackBookmark {
     async fn execute(
         self: Box<Self>,
         ws: &mut WorkspaceSession,
-        _options: &crate::messages::MutationOptions,
+        options: &crate::messages::MutationOptions,
     ) -> Result<MutationResult> {
         match self.r#ref {
             StoreRef::Tag { tag_name } => {
@@ -821,13 +834,14 @@ impl Mutation for TrackBookmark {
 
                 tx.repo_mut().track_remote_bookmark(remote_ref_symbol)?;
 
-                match ws.finish_transaction(
+                match ws.finish_mutation(
                     tx,
                     format!(
                         "track remote bookmark {:?}@{:?}",
                         bookmark_name_ref.as_str(),
                         remote_name_ref.as_str()
                     ),
+                    options.ignore_immutable,
                 )? {
                     Some(new_status) => Ok(MutationResult::Updated {
                         new_status,
@@ -845,7 +859,7 @@ impl Mutation for UntrackBookmark {
     async fn execute(
         self: Box<Self>,
         ws: &mut WorkspaceSession,
-        _options: &crate::messages::MutationOptions,
+        options: &crate::messages::MutationOptions,
     ) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
 
@@ -903,9 +917,10 @@ impl Mutation for UntrackBookmark {
             }
         }
 
-        match ws.finish_transaction(
+        match ws.finish_mutation(
             tx,
             format!("untrack remote {}", combine_bookmarks(&untracked)),
+            options.ignore_immutable,
         )? {
             Some(new_status) => Ok(MutationResult::Updated {
                 new_status,
@@ -921,7 +936,7 @@ impl Mutation for RenameBookmark {
     async fn execute(
         self: Box<Self>,
         ws: &mut WorkspaceSession,
-        _options: &crate::messages::MutationOptions,
+        options: &crate::messages::MutationOptions,
     ) -> Result<MutationResult> {
         let old_name = self.r#ref.as_bookmark()?;
         let old_name_ref = RefNameBuf::from(old_name);
@@ -943,13 +958,14 @@ impl Mutation for RenameBookmark {
         tx.repo_mut()
             .set_local_bookmark_target(&old_name_ref, RefTarget::absent());
 
-        match ws.finish_transaction(
+        match ws.finish_mutation(
             tx,
             format!(
                 "rename {} to {}",
                 old_name_ref.as_str(),
                 new_name_ref.as_str()
             ),
+            options.ignore_immutable,
         )? {
             Some(new_status) => Ok(MutationResult::Updated {
                 new_status,
@@ -965,7 +981,7 @@ impl Mutation for CreateRef {
     async fn execute(
         self: Box<Self>,
         ws: &mut WorkspaceSession,
-        _options: &crate::messages::MutationOptions,
+        options: &crate::messages::MutationOptions,
     ) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
 
@@ -995,13 +1011,14 @@ impl Mutation for CreateRef {
                     RefTarget::normal(commit.id().clone()),
                 );
 
-                match ws.finish_transaction(
+                match ws.finish_mutation(
                     tx,
                     format!(
                         "create {} pointing to commit {}",
                         bookmark_name_ref.as_str(),
                         ws.format_commit_id(commit.id()).hex
                     ),
+                    options.ignore_immutable,
                 )? {
                     Some(new_status) => Ok(MutationResult::Updated {
                         new_status,
@@ -1020,13 +1037,14 @@ impl Mutation for CreateRef {
                 tx.repo_mut()
                     .set_local_tag_target(&tag_name_ref, RefTarget::normal(commit.id().clone()));
 
-                match ws.finish_transaction(
+                match ws.finish_mutation(
                     tx,
                     format!(
                         "create {} pointing to commit {}",
                         tag_name_ref.as_str(),
                         ws.format_commit_id(commit.id()).hex
                     ),
+                    options.ignore_immutable,
                 )? {
                     Some(new_status) => Ok(MutationResult::Updated {
                         new_status,
@@ -1044,7 +1062,7 @@ impl Mutation for DeleteRef {
     async fn execute(
         self: Box<Self>,
         ws: &mut WorkspaceSession,
-        _options: &crate::messages::MutationOptions,
+        options: &crate::messages::MutationOptions,
     ) -> Result<MutationResult> {
         match self.r#ref {
             StoreRef::RemoteBookmark {
@@ -1069,13 +1087,14 @@ impl Mutation for DeleteRef {
                 tx.repo_mut()
                     .set_remote_bookmark(remote_ref_symbol, remote_ref);
 
-                match ws.finish_transaction(
+                match ws.finish_mutation(
                     tx,
                     format!(
                         "forget {}@{}",
                         bookmark_name_ref.as_str(),
                         remote_name_ref.as_str()
                     ),
+                    options.ignore_immutable,
                 )? {
                     Some(new_status) => Ok(MutationResult::Updated {
                         new_status,
@@ -1091,7 +1110,11 @@ impl Mutation for DeleteRef {
                 tx.repo_mut()
                     .set_local_bookmark_target(&bookmark_name_ref, RefTarget::absent());
 
-                match ws.finish_transaction(tx, format!("forget {}", bookmark_name_ref.as_str()))? {
+                match ws.finish_mutation(
+                    tx,
+                    format!("forget {}", bookmark_name_ref.as_str()),
+                    options.ignore_immutable,
+                )? {
                     Some(new_status) => Ok(MutationResult::Updated {
                         new_status,
                         new_selection: None,
@@ -1106,7 +1129,11 @@ impl Mutation for DeleteRef {
                 tx.repo_mut()
                     .set_local_tag_target(&tag_name_ref, RefTarget::absent());
 
-                match ws.finish_transaction(tx, format!("forget tag {}", tag_name_ref.as_str()))? {
+                match ws.finish_mutation(
+                    tx,
+                    format!("forget tag {}", tag_name_ref.as_str()),
+                    options.ignore_immutable,
+                )? {
                     Some(new_status) => Ok(MutationResult::Updated {
                         new_status,
                         new_selection: None,
@@ -1124,7 +1151,7 @@ impl Mutation for MoveRef {
     async fn execute(
         self: Box<Self>,
         ws: &mut WorkspaceSession,
-        _options: &crate::messages::MutationOptions,
+        options: &crate::messages::MutationOptions,
     ) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
 
@@ -1150,13 +1177,14 @@ impl Mutation for MoveRef {
                     RefTarget::normal(commit.id().clone()),
                 );
 
-                match ws.finish_transaction(
+                match ws.finish_mutation(
                     tx,
                     format!(
                         "point {:?} to commit {}",
                         &bookmark_name_ref,
                         commit.id().hex()
                     ),
+                    options.ignore_immutable,
                 )? {
                     Some(new_status) => Ok(MutationResult::Updated {
                         new_status,
@@ -1175,13 +1203,14 @@ impl Mutation for MoveRef {
                 tx.repo_mut()
                     .set_local_tag_target(&tag_name_ref, RefTarget::normal(commit.id().clone()));
 
-                match ws.finish_transaction(
+                match ws.finish_mutation(
                     tx,
                     format!(
                         "point {:?} to commit {}",
                         tag_name_ref.as_str(),
                         commit.id().hex()
                     ),
+                    options.ignore_immutable,
                 )? {
                     Some(new_status) => Ok(MutationResult::Updated {
                         new_status,
@@ -1381,7 +1410,7 @@ impl Mutation for MoveHunk {
             tx.repo_mut().rebase_descendants()?;
         }
 
-        match ws.finish_transaction(
+        match ws.finish_mutation(
             tx,
             format!(
                 "move hunk in {} from {} to {}",
@@ -1389,6 +1418,7 @@ impl Mutation for MoveHunk {
                 from.id().hex(),
                 to.id().hex()
             ),
+            options.ignore_immutable,
         )? {
             Some(new_status) => Ok(MutationResult::Updated {
                 new_status,
@@ -1544,12 +1574,13 @@ impl Mutation for CopyHunk {
 
         tx.repo_mut().rebase_descendants()?;
 
-        match ws.finish_transaction(
+        match ws.finish_mutation(
             tx,
             format!(
                 "restore hunk in {} from {} into {}",
                 self.path.repo_path, self.from_id.hex, self.to_id.commit.hex
             ),
+            options.ignore_immutable,
         )? {
             Some(new_status) => Ok(MutationResult::Updated {
                 new_status,
@@ -1565,7 +1596,7 @@ impl Mutation for GitPush {
     async fn execute(
         self: Box<Self>,
         ws: &mut WorkspaceSession,
-        _options: &crate::messages::MutationOptions,
+        options: &crate::messages::MutationOptions,
     ) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
 
@@ -1781,7 +1812,7 @@ impl Mutation for GitPush {
             }
         }
 
-        match ws.finish_transaction(
+        match ws.finish_mutation(
             tx,
             match &self.refspec {
                 GitRefspec::AllBookmarks { remote_name } => {
@@ -1804,6 +1835,7 @@ impl Mutation for GitPush {
                     )
                 }
             },
+            options.ignore_immutable,
         )? {
             Some(new_status) => Ok(MutationResult::Updated {
                 new_status,
@@ -1819,7 +1851,7 @@ impl Mutation for GitFetch {
     async fn execute(
         self: Box<Self>,
         ws: &mut WorkspaceSession,
-        _options: &crate::messages::MutationOptions,
+        options: &crate::messages::MutationOptions,
     ) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
 
@@ -1882,7 +1914,11 @@ impl Mutation for GitFetch {
             }
         }
 
-        match ws.finish_transaction(tx, "fetch from git remote(s)".to_string())? {
+        match ws.finish_mutation(
+            tx,
+            "fetch from git remote(s)".to_string(),
+            options.ignore_immutable,
+        )? {
             Some(new_status) => Ok(MutationResult::Updated {
                 new_status,
                 new_selection: None,
@@ -1898,7 +1934,7 @@ impl Mutation for UndoOperation {
     async fn execute(
         self: Box<Self>,
         ws: &mut WorkspaceSession,
-        _options: &crate::messages::MutationOptions,
+        options: &crate::messages::MutationOptions,
     ) -> Result<MutationResult> {
         let head_op = op_walk::resolve_op_with_repo(ws.repo(), "@")?; // XXX this should be behind an abstraction, maybe reused in snapshot
         let mut parent_ops = head_op.parents();
@@ -1919,7 +1955,11 @@ impl Mutation for UndoOperation {
         let restored_view = tx.repo().view().store_view().clone();
         tx.repo_mut().set_view(restored_view);
 
-        match ws.finish_transaction(tx, format!("undo operation {}", head_op.id().hex()))? {
+        match ws.finish_mutation(
+            tx,
+            format!("undo operation {}", head_op.id().hex()),
+            options.ignore_immutable,
+        )? {
             Some(new_status) => {
                 let working_copy = ws.get_commit(ws.wc_id())?;
                 let new_selection = Some(ws.format_header(&working_copy, None)?);
