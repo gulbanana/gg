@@ -3,8 +3,6 @@
     import type { Operand } from "../messages/Operand";
     import type { RevHeader } from "../messages/RevHeader";
     import type { StoreRef } from "../messages/StoreRef";
-    import { selectionHeaders } from "../stores";
-    import { get } from "svelte/store";
     import RevisionMutator from "../mutators/RevisionMutator";
     import ChangeMutator from "../mutators/ChangeMutator";
     import RefMutator from "../mutators/RefMutator";
@@ -14,9 +12,18 @@
     export let y: number;
     export let onClose: () => void;
 
+    function getRevisionHeaders(): RevHeader[] {
+        if (operand.type === "Revision") {
+            return [operand.header];
+        } else if (operand.type === "Revisions") {
+            return operand.headers;
+        }
+        return [];
+    }
+
     function onClick(action: string) {
         if (operand.type === "Revision" || operand.type === "Revisions") {
-            new RevisionMutator(get(selectionHeaders)).handle(action);
+            new RevisionMutator(getRevisionHeaders()).handle(action);
         } else if (operand.type === "Change") {
             new ChangeMutator(operand.headers, operand.path, operand.hunk).handle(action);
         } else if (operand.type === "Ref") {
@@ -83,7 +90,7 @@
     }
 
     $: revisionEnabled =
-        operand.type === "Revision" || operand.type === "Revisions" ? isRevisionEnabled($selectionHeaders) : null;
+        operand.type === "Revision" || operand.type === "Revisions" ? isRevisionEnabled(getRevisionHeaders()) : null;
     $: changeEnabled = operand.type === "Change" ? isChangeEnabled(operand.headers) : null;
     $: refEnabled = operand.type === "Ref" ? isRefEnabled(operand.ref) : null;
 
