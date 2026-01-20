@@ -15,9 +15,11 @@ import type { StoreRef } from "../messages/StoreRef";
 
 export default class RevisionMutator {
     #revisions: RevHeader[];
+    #ignoreImmutable: boolean;
 
-    constructor(revisions: RevHeader[]) {
+    constructor(revisions: RevHeader[], ignoreImmutable: boolean) {
         this.#revisions = revisions;
+        this.#ignoreImmutable = ignoreImmutable;
     }
 
     get #singleton() { return this.#revisions.length == 1 ? this.#revisions[0] : null }
@@ -70,7 +72,7 @@ export default class RevisionMutator {
     onNewChild = () => {
         mutate<CreateRevision>("create_revision", {
             set: this.#set
-        });
+        }, { ignoreImmutable: this.#ignoreImmutable });
     };
 
     onNewParent = () => {
@@ -78,7 +80,7 @@ export default class RevisionMutator {
         mutate<CreateRevisionBetween>("create_revision_between", {
             before_id: oldest.id,
             after_id: oldest.parent_ids[0]
-        });
+        }, { ignoreImmutable: this.#ignoreImmutable });
     };
 
     onEdit = () => {
@@ -87,34 +89,33 @@ export default class RevisionMutator {
             return;
         }
 
-        if (this.#singleton.is_immutable) {
+        if (this.#singleton.is_immutable && !this.#ignoreImmutable) {
             mutate<CreateRevision>("create_revision", {
                 set: this.#set,
-            });
+            }, { ignoreImmutable: this.#ignoreImmutable });
         } else {
             mutate<CheckoutRevision>("checkout_revision", {
                 id: this.#singleton.id,
-            });
+            }, { ignoreImmutable: this.#ignoreImmutable });
         }
     };
 
     onRevert = () => {
         mutate<BackoutRevisions>("backout_revisions", {
             set: this.#set,
-        });
+        }, { ignoreImmutable: this.#ignoreImmutable });
     };
 
     onDuplicate = () => {
         mutate<DuplicateRevisions>("duplicate_revisions", {
             set: this.#set,
-        });
+        }, { ignoreImmutable: this.#ignoreImmutable });
     };
 
     onAbandon = () => {
-        if (this.#revisions.some(r => r.is_immutable)) return;
         mutate<AbandonRevisions>("abandon_revisions", {
             set: this.#set,
-        });
+        }, { ignoreImmutable: this.#ignoreImmutable });
     };
 
     onDescribe = (new_description: string, reset_author: boolean) => {
@@ -123,7 +124,7 @@ export default class RevisionMutator {
             id: this.#singleton.id,
             new_description,
             reset_author,
-        });
+        }, { ignoreImmutable: this.#ignoreImmutable });
     };
 
     onSquash = () => {
@@ -131,18 +132,17 @@ export default class RevisionMutator {
             from: this.#set,
             to_id: this.#revisions[this.#revisions.length - 1].parent_ids[0],
             paths: []
-        });
+        }, { ignoreImmutable: this.#ignoreImmutable });
     };
 
     onRestore = () => {
         let oldest = this.#revisions[this.#revisions.length - 1];
-        if (this.#revisions.some(r => r.is_immutable)) return;
         if (oldest.parent_ids.length != 1) return;
         mutate<CopyChanges>("copy_changes", {
             from_id: oldest.parent_ids[0],
             to_set: this.#set,
             paths: []
-        });
+        }, { ignoreImmutable: this.#ignoreImmutable });
     };
 
     onBookmark = async () => {
@@ -158,7 +158,7 @@ export default class RevisionMutator {
                 available_remotes: 0,
                 tracking_remotes: []
             };
-            mutate<CreateRef>("create_ref", { ref, id: this.#singleton.id })
+            mutate<CreateRef>("create_ref", { ref, id: this.#singleton.id }, { ignoreImmutable: this.#ignoreImmutable })
         }
     }
 }

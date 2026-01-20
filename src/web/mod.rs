@@ -33,7 +33,7 @@ use crate::messages::{
     AbandonRevisions, AdoptRevision, BackoutRevisions, CheckoutRevision, CopyChanges, CopyHunk,
     CreateRef, CreateRevision, CreateRevisionBetween, DeleteRef, DescribeRevision,
     DuplicateRevisions, GitFetch, GitPush, InsertRevisions, MoveChanges, MoveHunk, MoveRef,
-    MoveRevisions, RenameBookmark, TrackBookmark, UndoOperation, UntrackBookmark,
+    MoveRevisions, MutationOptions, RenameBookmark, TrackBookmark, UndoOperation, UntrackBookmark,
 };
 use crate::worker::{Mutation, Session, SessionEvent, WorkerSession};
 use sink::{SseEvent, SseSink};
@@ -260,10 +260,17 @@ async fn handle_mutate(
         "git_push" => execute_mutation::<GitPush>(&state, body),
         "git_fetch" => execute_mutation::<GitFetch>(&state, body),
         "undo_operation" => {
+            #[derive(Deserialize, Default)]
+            struct UndoRequest {
+                #[serde(default)]
+                options: MutationOptions,
+            }
+            let wrapper: UndoRequest = serde_json::from_value(body).unwrap_or_default();
             let (tx, rx) = channel();
             state.worker_tx.send(SessionEvent::ExecuteMutation {
                 tx,
                 mutation: Box::new(UndoOperation),
+                options: wrapper.options,
             })?;
             let result = rx.recv()?;
             Ok(Json(serde_json::to_value(result)?))
@@ -283,6 +290,8 @@ where
     #[derive(Deserialize)]
     struct MutationRequest<U> {
         mutation: U,
+        #[serde(default)]
+        options: MutationOptions,
     }
 
     let wrapper: MutationRequest<T> = serde_json::from_value(body)?;
@@ -290,6 +299,7 @@ where
     state.worker_tx.send(SessionEvent::ExecuteMutation {
         tx,
         mutation: Box::new(wrapper.mutation),
+        options: wrapper.options,
     })?;
     let result = rx.recv()?;
     Ok(Json(serde_json::to_value(result)?))

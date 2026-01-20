@@ -9,7 +9,7 @@
     import type { UndoOperation } from "../messages/UndoOperation";
     import type { RichHint } from "../mutators/BinaryMutator";
     import BinaryMutator from "../mutators/BinaryMutator";
-    import { currentSource, currentTarget, hasModal, repoConfigEvent, repoStatusEvent } from "../stores";
+    import { altKeyPressed, currentSource, currentTarget, hasModal, repoConfigEvent, repoStatusEvent } from "../stores";
     import BookmarkSpan from "../controls/BookmarkSpan.svelte";
 
     export let target: boolean;
@@ -22,8 +22,9 @@
     function setDropHint(source: Operand | null, target: Operand | null) {
         maybe = false;
         if (source) {
+            let mutator = new BinaryMutator(source, target, $altKeyPressed);
             if (target) {
-                let canDrop = new BinaryMutator(source, target).canDrop();
+                let canDrop = mutator.canDrop();
                 if (canDrop.type == "yes") {
                     dropHint = canDrop.hint;
                     return;
@@ -34,7 +35,7 @@
                 }
             }
 
-            let canDrag = BinaryMutator.canDrag(source);
+            let canDrag = mutator.canDrag();
             if (canDrag.type == "yes") {
                 dropHint = canDrag.hint;
                 return;

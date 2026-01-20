@@ -7,11 +7,15 @@ import type { GitFetch } from "../messages/GitFetch";
 import type { DeleteRef } from "../messages/DeleteRef";
 import { getInput, mutate, query } from "../ipc";
 
+export type MutationOptions = { ignoreImmutable?: boolean };
+
 export default class RefMutator {
     #ref: StoreRef;
+    #ignoreImmutable: boolean;
 
-    constructor(name: StoreRef) {
+    constructor(name: StoreRef, ignoreImmutable: boolean) {
         this.#ref = name;
+        this.#ignoreImmutable = ignoreImmutable;
     }
 
     handle(event: string | undefined) {
@@ -57,36 +61,36 @@ export default class RefMutator {
         }
     }
 
-    onTrack = () => {
+    onTrack = (options?: MutationOptions) => {
         mutate<TrackBookmark>("track_bookmark", {
             ref: this.#ref
-        });
+        }, options);
     };
 
-    onUntrack = () => {
+    onUntrack = (options?: MutationOptions) => {
         mutate<UntrackBookmark>("untrack_bookmark", {
             ref: this.#ref
-        });
+        }, options);
     };
 
-    onRename = async () => {
+    onRename = async (options?: MutationOptions) => {
         let response = await getInput("Rename Bookmark", "", ["Bookmark Name"]);
         if (response) {
             let new_name = response["Bookmark Name"];
             mutate<RenameBookmark>("rename_bookmark", {
                 ref: this.#ref,
                 new_name
-            })
+            }, options)
         }
     };
 
-    onDelete = () => {
+    onDelete = (options?: MutationOptions) => {
         mutate<DeleteRef>("delete_ref", {
             ref: this.#ref
-        });
+        }, options);
     };
 
-    onPushAll = () => {
+    onPushAll = (options?: MutationOptions) => {
         switch (this.#ref.type) {
             case "Tag":
                 console.log("error: Can't push tag");
@@ -100,7 +104,7 @@ export default class RefMutator {
                         bookmark_ref: this.#ref
                     },
                     input: null
-                }, { operation: `Pushing ${this.#ref.bookmark_name} to ${this.#ref.remote_name}...` });
+                }, { ...options, operation: `Pushing ${this.#ref.bookmark_name} to ${this.#ref.remote_name}...` });
                 break;
 
             case "LocalBookmark":
@@ -110,12 +114,12 @@ export default class RefMutator {
                         bookmark_ref: this.#ref
                     },
                     input: null
-                }, { operation: `Pushing ${this.#ref.bookmark_name}...` });
+                }, { ...options, operation: `Pushing ${this.#ref.bookmark_name}...` });
                 break;
         }
     };
 
-    onPushSingle = async () => {
+    onPushSingle = async (options?: MutationOptions) => {
         switch (this.#ref.type) {
             case "Tag":
                 console.log("error: Can't push tag to a specific remote");
@@ -142,13 +146,13 @@ export default class RefMutator {
                             bookmark_ref: this.#ref
                         },
                         input: null
-                    }, { operation: `Pushing ${this.#ref.bookmark_name} to ${remote_name}...` })
+                    }, { ...options, operation: `Pushing ${this.#ref.bookmark_name} to ${remote_name}...` })
                 }
                 break;
         }
     };
 
-    onFetchAll = () => {
+    onFetchAll = (options?: MutationOptions) => {
         switch (this.#ref.type) {
             case "Tag":
                 console.log("error: Can't fetch tag");
@@ -161,7 +165,7 @@ export default class RefMutator {
                         bookmark_ref: this.#ref
                     },
                     input: null
-                }, { operation: `Fetching ${this.#ref.bookmark_name} from ${this.#ref.bookmark_name}...` });
+                }, { ...options, operation: `Fetching ${this.#ref.bookmark_name} from ${this.#ref.bookmark_name}...` });
                 break;
 
             case "LocalBookmark":
@@ -171,12 +175,12 @@ export default class RefMutator {
                         bookmark_ref: this.#ref
                     },
                     input: null
-                }, { operation: `Fetching ${this.#ref.bookmark_name}...` });
+                }, { ...options, operation: `Fetching ${this.#ref.bookmark_name}...` });
                 break;
         }
     };
 
-    onFetchSingle = async () => {
+    onFetchSingle = async (options?: MutationOptions) => {
         switch (this.#ref.type) {
             case "Tag":
                 console.log("error: Can't fetch tag from a specific remote");
@@ -203,7 +207,7 @@ export default class RefMutator {
                             bookmark_ref: this.#ref
                         },
                         input: null
-                    }, { operation: `Fetching ${this.#ref.bookmark_name} from ${remote_name}...` })
+                    }, { ...options, operation: `Fetching ${this.#ref.bookmark_name} from ${remote_name}...` })
                 }
                 break;
         }

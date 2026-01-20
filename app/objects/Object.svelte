@@ -6,7 +6,7 @@ Core component for direct-manipulation objects. A drag&drop source.
 <script lang="ts">
     import type { Operand } from "../messages/Operand";
     import { trigger, isTauri } from "../ipc";
-    import { currentContext, currentSource, selectionHeaders, hasMenu } from "../stores";
+    import { currentContext, currentSource, selectionHeaders, hasMenu, altKeyPressed } from "../stores";
     import { createEventDispatcher } from "svelte";
     import { get } from "svelte/store";
     import BinaryMutator from "../mutators/BinaryMutator";
@@ -64,7 +64,7 @@ Core component for direct-manipulation objects. A drag&drop source.
             currentContext.set(effectiveOperand);
 
             if (isTauri()) {
-                trigger("forward_context_menu", { context: effectiveOperand });
+                trigger("forward_context_menu", { context: effectiveOperand, alt: (event as MouseEvent).altKey });
             } else {
                 const mouseEvent = event as MouseEvent;
                 hasMenu.set({ x: mouseEvent.clientX, y: mouseEvent.clientY });
@@ -77,7 +77,11 @@ Core component for direct-manipulation objects. A drag&drop source.
         event.stopPropagation();
 
         let effectiveOperand = getEffectiveOperand();
-        let canDrag = effectiveOperand == null ? { type: "no", hint: "" } : BinaryMutator.canDrag(effectiveOperand);
+        altKeyPressed.set(event.altKey);
+        let canDrag =
+            effectiveOperand == null
+                ? { type: "no", hint: "" }
+                : new BinaryMutator(effectiveOperand, null, $altKeyPressed).canDrag();
 
         if (canDrag.type == "no") {
             return;

@@ -41,6 +41,7 @@ pub trait Mutation: Debug {
     async fn execute(
         self: Box<Self>,
         ws: &mut WorkspaceSession,
+        options: &messages::MutationOptions,
     ) -> Result<messages::MutationResult>;
 
     #[cfg(test)]
@@ -48,7 +49,9 @@ pub trait Mutation: Debug {
     where
         Self: Sized,
     {
-        Box::new(self).execute(ws).await
+        Box::new(self)
+            .execute(ws, &messages::MutationOptions::default())
+            .await
     }
 }
 

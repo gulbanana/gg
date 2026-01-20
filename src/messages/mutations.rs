@@ -1,5 +1,13 @@
 use super::*;
 
+/// Options that apply to all mutations
+#[derive(Deserialize, Debug, Default)]
+#[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
+pub struct MutationOptions {
+    #[serde(default)]
+    pub ignore_immutable: bool,
+}
+
 /// Common result type for mutating commands
 #[derive(Serialize, Clone, Debug)]
 #[serde(tag = "type")]

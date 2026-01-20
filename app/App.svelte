@@ -15,6 +15,7 @@
         hasMenu,
         progressEvent,
         lastFocus,
+        altKeyPressed,
     } from "./stores.js";
     import ContextMenu from "./controls/ContextMenu.svelte";
     import RefMutator from "./mutators/RefMutator";
@@ -57,6 +58,41 @@
             }
         });
     }
+
+    // alt/option key tracking - set on pressed, unset on released or lost focus
+    document.addEventListener("keydown", (event) => {
+        if (event.key === "Alt" && !$altKeyPressed) {
+            altKeyPressed.set(true);
+            if (isTauri()) {
+                trigger("set_modifier_state", { alt: true });
+            }
+        }
+    });
+    document.addEventListener("keyup", (event) => {
+        if (event.key === "Alt" && $altKeyPressed) {
+            altKeyPressed.set(false);
+            if (isTauri()) {
+                trigger("set_modifier_state", { alt: false });
+            }
+        }
+    });
+    window.addEventListener("blur", () => {
+        if ($altKeyPressed) {
+            altKeyPressed.set(false);
+            if (isTauri()) {
+                trigger("set_modifier_state", { alt: false });
+            }
+        }
+    });
+    // document.addEventListener("keydown", (event) => {
+    //     if (event.key === "Alt") {
+    //         let toggle = !$altKeyPressed;
+    //         altKeyPressed.set(toggle);
+    //         if (isTauri()) {
+    //             trigger("set_modifier_state", { alt: toggle });
+    //         }
+    //     }
+    // });
 
     document.body.addEventListener("click", () => currentContext.set(null), true);
 
@@ -206,23 +242,28 @@
 
     function mutateRevision(event: string) {
         if ($currentContext?.type == "Revision") {
-            new RevisionMutator([$currentContext.header]).handle(event);
+            new RevisionMutator([$currentContext.header], $altKeyPressed).handle(event);
         } else if ($currentContext?.type == "Revisions") {
-            new RevisionMutator($currentContext.headers).handle(event);
+            new RevisionMutator($currentContext.headers, $altKeyPressed).handle(event);
         }
         $currentContext = null;
     }
 
     function mutateTree(event: string) {
         if ($currentContext?.type == "Change") {
-            new ChangeMutator($currentContext.headers, $currentContext.path, $currentContext.hunk).handle(event);
+            new ChangeMutator(
+                $currentContext.headers,
+                $currentContext.path,
+                $currentContext.hunk,
+                $altKeyPressed,
+            ).handle(event);
         }
         $currentContext = null;
     }
 
     function mutateRef(event: string) {
         if ($currentContext?.type == "Ref") {
-            new RefMutator($currentContext.ref).handle(event);
+            new RefMutator($currentContext.ref, $altKeyPressed).handle(event);
         }
         $currentContext = null;
     }

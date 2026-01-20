@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Added
+- Holding the Option/Alt key acts like `jj --ignore immutable`, affording you infinite power.
+
 ### Fixed
 - In web mode, right-clicking on revisions enabled context menu commands based on the *selected* revision rather than the one you'd clicked.
 
