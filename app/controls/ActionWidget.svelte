@@ -15,7 +15,7 @@
     on:click={isDisabled ? undefined : onClick}
     on:dragenter={dragOverWidget}
     on:dragover={dragOverWidget}
-    title={isDisabled || safe ? "" : tip}>
+    title={isDisabled ? "" : tip}>
     <slot />
 </button>
 
