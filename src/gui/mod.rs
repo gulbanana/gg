@@ -36,13 +36,15 @@ use sink::TauriSink;
 struct AppState {
     windows: Arc<Mutex<HashMap<String, WindowState>>>,
     settings: UserSettings,
+    initial_ignore_immutable: bool,
 }
 
 impl AppState {
-    fn new(settings: UserSettings) -> Self {
+    fn new(settings: UserSettings, initial_ignore_immutable: bool) -> Self {
         Self {
             windows: Arc::new(Mutex::new(HashMap::new())),
             settings,
+            initial_ignore_immutable,
         }
     }
 }
@@ -159,6 +161,7 @@ pub fn run_gui(options: super::RunOptions) -> Result<()> {
             forward_context_menu,
             forward_clone_url,
             set_modifier_state,
+            get_ignore_immutable,
             init_repository,
             clone_repository,
             query_workspace,
@@ -193,7 +196,7 @@ pub fn run_gui(options: super::RunOptions) -> Result<()> {
             undo_operation,
         ])
         .menu(move |handle| menu::build_main(handle, &recent_workspaces))
-        .manage(AppState::new(options.settings))
+        .manage(AppState::new(options.settings, options.ignore_immutable))
         .setup(move |app| {
             // after tauri initialises NSApplication, set the dock icon if we're running as CLI
             #[cfg(all(target_os = "macos", not(feature = "app")))]
@@ -282,11 +285,17 @@ fn forward_accelerator(window: Window, state: State<AppState>, key: char, ctrl: 
 #[tauri::command]
 fn forward_context_menu(
     window: Window,
+    app_state: State<AppState>,
     context: messages::Operand,
-    alt: Option<bool>,
 ) -> Result<(), InvokeError> {
-    menu::handle_context(window, context, alt.unwrap_or(false))
-        .map_err(InvokeError::from_anyhow)?;
+    let ignore_immutable = {
+        let guard = app_state.windows.lock().expect("state mutex poisoned");
+        guard
+            .get(window.label())
+            .map(|s| s.ignore_immutable)
+            .unwrap_or(false)
+    };
+    menu::handle_context(window, context, ignore_immutable).map_err(InvokeError::from_anyhow)?;
     Ok(())
 }
 
@@ -321,6 +330,17 @@ fn set_modifier_state(
             .map_err(InvokeError::from_anyhow)?;
     }
     Ok(())
+}
+
+#[tauri::command]
+fn get_ignore_immutable(window: Window, app_state: State<AppState>) -> bool {
+    app_state
+        .windows
+        .lock()
+        .expect("state mutex poisoned")
+        .get(window.label())
+        .map(|s| s.ignore_immutable)
+        .unwrap_or(false)
 }
 
 #[tauri::command(async)]
@@ -757,6 +777,7 @@ pub fn try_create_window(app_handle: &AppHandle, workspace: Option<PathBuf>) -> 
     // setup command dependencies
     let (revision_menu, tree_menu, ref_menu) = menu::build_context(app_handle)?;
 
+    let initial_ignore_immutable = app_state.initial_ignore_immutable;
     let windows = app_state.windows.clone();
     windows.lock().unwrap().insert(
         window.label().to_owned(),
@@ -768,7 +789,7 @@ pub fn try_create_window(app_handle: &AppHandle, workspace: Option<PathBuf>) -> 
             ref_menu,
             selection: None,
             has_workspace: false,
-            ignore_immutable: false,
+            ignore_immutable: initial_ignore_immutable,
         },
     );
 

@@ -17,6 +17,7 @@ async fn integration_test() -> Result<()> {
             workspace: None,
             debug: false,
             is_child: false,
+            ignore_immutable: false,
         },
         Duration::from_secs(600),
     )?;

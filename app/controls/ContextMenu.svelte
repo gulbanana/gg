@@ -3,7 +3,7 @@
     import type { Operand } from "../messages/Operand";
     import type { RevHeader } from "../messages/RevHeader";
     import type { StoreRef } from "../messages/StoreRef";
-    import { altKeyPressed } from "../stores";
+    import { ignoreToggled, selectionHeaders } from "../stores";
     import RevisionMutator from "../mutators/RevisionMutator";
     import ChangeMutator from "../mutators/ChangeMutator";
     import RefMutator from "../mutators/RefMutator";
@@ -23,7 +23,7 @@
     }
 
     function onClick(action: string, event: MouseEvent) {
-        let ignoreImmutable = event.altKey || $altKeyPressed;
+        let ignoreImmutable = $ignoreToggled;
         if (operand.type === "Revision" || operand.type === "Revisions") {
             new RevisionMutator(getRevisionHeaders(), ignoreImmutable).handle(action);
         } else if (operand.type === "Change") {
@@ -92,10 +92,10 @@
     }
 
     $: revisionEnabled =
-        operand.type === "Revision" || operand.type === "Revisions" ? isRevisionEnabled($selectionHeaders) : null;
-            ? isRevisionEnabled($selectionHeaders, $altKeyPressed)
+        operand.type === "Revision" || operand.type === "Revisions"
+            ? isRevisionEnabled($selectionHeaders, $ignoreToggled)
             : null;
-    $: changeEnabled = operand.type === "Change" ? isChangeEnabled(operand.headers, $altKeyPressed) : null;
+    $: changeEnabled = operand.type === "Change" ? isChangeEnabled(operand.headers, $ignoreToggled) : null;
     $: refEnabled = operand.type === "Ref" ? isRefEnabled(operand.ref) : null;
 
     // clamp to viewport

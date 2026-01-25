@@ -76,6 +76,10 @@ struct Args {
     #[arg(short, long, global = true)]
     debug: bool,
 
+    /// Start with immutability checks disabled.
+    #[arg(long, global = true)]
+    ignore_immutable: bool,
+
     #[cfg(not(feature = "app"))]
     #[arg(
         long,
@@ -127,6 +131,7 @@ pub struct RunOptions {
     pub workspace: Option<PathBuf>,
     pub debug: bool,
     pub is_child: bool,
+    pub ignore_immutable: bool,
 }
 
 fn main() -> Result<()> {
@@ -219,6 +224,7 @@ fn run_app(args: Args) -> Result<()> {
         workspace: args.workspace(),
         debug: args.debug,
         is_child,
+        ignore_immutable: args.ignore_immutable,
     };
 
     match mode {

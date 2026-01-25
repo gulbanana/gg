@@ -9,7 +9,9 @@
     import type { UndoOperation } from "../messages/UndoOperation";
     import type { RichHint } from "../mutators/BinaryMutator";
     import BinaryMutator from "../mutators/BinaryMutator";
-    import { altKeyPressed, currentSource, currentTarget, hasModal, repoConfigEvent, repoStatusEvent } from "../stores";
+    import { ignoreToggled, currentSource, currentTarget, hasModal, repoConfigEvent, repoStatusEvent } from "../stores";
+    import { isTauri, trigger } from "../ipc";
+    import ToggleWidget from "../controls/ToggleWidget.svelte";
     import BookmarkSpan from "../controls/BookmarkSpan.svelte";
 
     export let target: boolean;
@@ -18,11 +20,12 @@
     let maybe = false;
 
     $: setDropHint($currentSource, $currentTarget);
+    $: if (isTauri()) trigger("set_modifier_state", { alt: $ignoreToggled });
 
     function setDropHint(source: Operand | null, target: Operand | null) {
         maybe = false;
         if (source) {
-            let mutator = new BinaryMutator(source, target, $altKeyPressed);
+            let mutator = new BinaryMutator(source, target, $ignoreToggled);
             if (target) {
                 let canDrop = mutator.canDrop();
                 if (canDrop.type == "yes") {
@@ -69,6 +72,12 @@
 {#if !dropHint}
     <div id="status-bar" class="repo-bar" inert={$hasModal}>
         <div class="substatus">
+            <ToggleWidget
+                tip="Ignore immutability"
+                bind:checked={$ignoreToggled}
+                safe
+                on="shield-off"
+                off="shield" />
             <span id="status-workspace">
                 {$repoConfigEvent?.type == "Workspace" ? $repoConfigEvent.absolute_path : "No workspace"}
             </span>

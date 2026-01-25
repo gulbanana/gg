@@ -25,7 +25,8 @@
       "WebFetch(domain:docs.rs)",
       "Skill(jj-git-replacement)",
       "Skill(update-jj)",
-      "Skill(cargo-dedupe)"
+      "Skill(cargo-dedupe)",
+      "Bash(npm run format:*)"
     ]
   },
   "outputStyle": "default"

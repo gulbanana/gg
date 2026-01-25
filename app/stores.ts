@@ -29,7 +29,7 @@ export const lastFocus = writable<number>(Date.now());
 
 export const selectionHeaders = writable<RevHeader[]>([]);
 
-export const altKeyPressed = writable<boolean>(false);
+export const ignoreToggled = writable<boolean>(false);
 
 export function dragOverWidget(event: DragEvent) {
     event.stopPropagation();

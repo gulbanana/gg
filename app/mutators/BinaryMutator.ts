@@ -14,8 +14,6 @@ import RefMutator from "./RefMutator";
 import type { StoreRef } from "../messages/StoreRef";
 import type { CopyHunk } from "../messages/CopyHunk";
 import type { CopyChanges } from "../messages/CopyChanges";
-import { getAltKeyName } from "../platform";
-
 export type RichHint = (string | ChangeId | CommitId | Extract<StoreRef, { type: "LocalBookmark" } | { type: "RemoteBookmark" }>)[];
 export type Eligibility = { type: "yes", hint: RichHint } | { type: "maybe", hint: string } | { type: "no" };
 
@@ -36,7 +34,7 @@ export default class BinaryMutator {
             if (this.#ignoreImmutable) {
                 return { type: "yes", hint: ["Rebasing immutable revision ", this.#from.header.id.change] };
             } else {
-                return { type: "maybe", hint: `(immutable - hold ${getAltKeyName()} to override)` };
+                return { type: "maybe", hint: "(immutable - toggle shield to override)" };
             }
         }
         if ((this.#from.type == "Revisions" || this.#from.type == "Change") && this.#from.headers.some((h) => h.is_immutable)) {
@@ -50,7 +48,7 @@ export default class BinaryMutator {
                     };
             }
             else {
-                return { type: "maybe", hint: `(immutable- hold ${getAltKeyName()} to override)` };
+                return { type: "maybe", hint: "(immutable - toggle shield to override)" };
             }
         }
 
@@ -59,7 +57,7 @@ export default class BinaryMutator {
             if (this.#ignoreImmutable) {
                 return { type: "yes", hint: ["Removing parent from immutable revision ", this.#from.child.id.change] };
             } else {
-                return { type: "maybe", hint: `(immutable - hold ${getAltKeyName()} to override)` };
+                return { type: "maybe", hint: "(immutable - toggle shield to override)" };
             }
         } else if (this.#from.type == "Parent" && this.#from.child.parent_ids.length == 1) {
             return { type: "maybe", hint: "(child has only one parent)" };
@@ -113,7 +111,7 @@ export default class BinaryMutator {
                 if (this.#to.child == this.#from.header) {
                     return { type: "no" };
                 } else if (this.#to.child.is_immutable && !this.#ignoreImmutable) {
-                    return { type: "maybe", hint: `(immutable - hold ${getAltKeyName()} to override)` };
+                    return { type: "maybe", hint: "(immutable - toggle shield to override)" };
                 } else {
                     return { type: "yes", hint: ["Inserting revision ", this.#from.header.id.change, " before ", this.#to.child.id.change] };
                 }
@@ -185,7 +183,7 @@ export default class BinaryMutator {
                 if (this.#from.headers.some((header) => sameChange(header.id.change, toHeader.id.change))) {
                     return { type: "no" };
                 } else if (toHeader.is_immutable && !this.#ignoreImmutable) {
-                    return { type: "maybe", hint: `(immutable - hold ${getAltKeyName()} to override)` };
+                    return { type: "maybe", hint: "(immutable - toggle shield to override)" };
                 } else {
                     return { type: "yes", hint: [`Squashing changes from ${this.#from.path.relative_path} into `, toHeader.id.change] };
                 }

@@ -6,7 +6,7 @@ A drop target for direct-manipulation objects.
 <script lang="ts">
     import type { Operand } from "../messages/Operand";
     import BinaryMutator from "../mutators/BinaryMutator";
-    import { currentSource, currentTarget, altKeyPressed } from "../stores";
+    import { currentSource, currentTarget, ignoreToggled } from "../stores";
 
     interface $$Slots {
         default: { target: boolean; hint: string | null };
@@ -29,13 +29,10 @@ A drop target for direct-manipulation objects.
     function onDragOver(event: DragEvent) {
         event.stopPropagation();
 
-        // update alt key state during drag
-        altKeyPressed.set(event.altKey);
-
         let canDrop =
             operand == null
                 ? { type: "no", hint: "" }
-                : new BinaryMutator($currentSource!, operand, $altKeyPressed).canDrop();
+                : new BinaryMutator($currentSource!, operand, $ignoreToggled).canDrop();
         if (canDrop.type == "yes") {
             event.preventDefault();
             if (!match($currentTarget)) {
@@ -60,7 +57,7 @@ A drop target for direct-manipulation objects.
         event.stopPropagation();
 
         if (operand) {
-            let mutator = new BinaryMutator($currentSource!, operand, $altKeyPressed);
+            let mutator = new BinaryMutator($currentSource!, operand, $ignoreToggled);
             if (mutator.canDrop().type == "yes") {
                 mutator.doDrop();
             }

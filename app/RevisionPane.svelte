@@ -1,6 +1,6 @@
 <script lang="ts">
     import type { RevsResult } from "./messages/RevsResult";
-    import { altKeyPressed as altKeyPressed, changeSelectEvent, dragOverWidget } from "./stores";
+    import { ignoreToggled, changeSelectEvent, dragOverWidget } from "./stores";
     import ChangeObject from "./objects/ChangeObject.svelte";
     import HunkObject from "./objects/HunkObject.svelte";
     import RevisionObject from "./objects/RevisionObject.svelte";
@@ -27,10 +27,10 @@
     $: singleton = revs.set.from.commit.hex == revs.set.to.commit.hex;
     $: newest = revs.headers[0];
     $: oldest = revs.headers[revs.headers.length - 1];
-    $: newestImmutable = newest.is_immutable && !$altKeyPressed;
-    $: oldestImmutable = oldest.is_immutable && !$altKeyPressed;
+    $: newestImmutable = newest.is_immutable && !$ignoreToggled;
+    $: oldestImmutable = oldest.is_immutable && !$ignoreToggled;
 
-    $: mutator = new RevisionMutator(revs.headers, $altKeyPressed);
+    $: mutator = new RevisionMutator(revs.headers, $ignoreToggled);
 
     // debounce for change detection
     let lastSelectionKey = `${revs.set.from.commit.hex}::${revs.set.to.commit.hex}`;
