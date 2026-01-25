@@ -33,7 +33,7 @@ use crate::messages::{
     AbandonRevisions, AdoptRevision, BackoutRevisions, CheckoutRevision, CopyChanges, CopyHunk,
     CreateRef, CreateRevision, CreateRevisionBetween, DeleteRef, DescribeRevision,
     DuplicateRevisions, GitFetch, GitPush, InsertRevisions, MoveChanges, MoveHunk, MoveRef,
-    MoveRevisions, RenameBookmark, TrackBookmark, UndoOperation, UntrackBookmark,
+    MoveRevisions, MutationOptions, RenameBookmark, TrackBookmark, UndoOperation, UntrackBookmark,
 };
 use crate::worker::{Mutation, Session, SessionEvent, WorkerSession};
 use sink::{SseEvent, SseSink};
@@ -127,7 +127,12 @@ fn create_app(
     thread::spawn(move || {
         tauri::async_runtime::block_on(async {
             log::debug!("start worker");
-            let session = WorkerSession::new(options.workspace, options.settings, progress_sender);
+            let session = WorkerSession::new(
+                progress_sender,
+                options.workspace,
+                options.settings,
+                options.ignore_immutable,
+            );
             if let Err(err) = session.handle_events(&worker_rx).await {
                 log::error!("worker: {err:#}");
             }
@@ -264,6 +269,9 @@ async fn handle_mutate(
             state.worker_tx.send(SessionEvent::ExecuteMutation {
                 tx,
                 mutation: Box::new(UndoOperation),
+                options: MutationOptions {
+                    ignore_immutable: false,
+                },
             })?;
             let result = rx.recv()?;
             Ok(Json(serde_json::to_value(result)?))
@@ -283,6 +291,7 @@ where
     #[derive(Deserialize)]
     struct MutationRequest<U> {
         mutation: U,
+        options: MutationOptions,
     }
 
     let wrapper: MutationRequest<T> = serde_json::from_value(body)?;
@@ -290,6 +299,7 @@ where
     state.worker_tx.send(SessionEvent::ExecuteMutation {
         tx,
         mutation: Box::new(wrapper.mutation),
+        options: wrapper.options,
     })?;
     let result = rx.recv()?;
     Ok(Json(serde_json::to_value(result)?))

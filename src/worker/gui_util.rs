@@ -515,6 +515,7 @@ impl WorkspaceSession<'_> {
             theme_override: self.data.workspace_settings.ui_theme_override(),
             mark_unpushed_bookmarks: self.data.workspace_settings.ui_mark_unpushed_bookmarks(),
             track_recent_workspaces: self.data.workspace_settings.ui_track_recent_workspaces(),
+            ignore_immutable: self.session.ignore_immutable,
         })
     }
 
@@ -689,10 +690,27 @@ impl WorkspaceSession<'_> {
         Ok(self.operation.repo.start_transaction())
     }
 
+    /// Finish a transaction, protecting against the working copy landing on an immutable commit.
+    /// Most mutations should use this. Use `finish_mutation` only for explicit "edit" actions
+    /// where the user has deliberately chosen to edit an immutable commit.
     pub fn finish_transaction(
+        &mut self,
+        tx: Transaction,
+        description: impl Into<String>,
+    ) -> Result<Option<messages::RepoStatus>> {
+        self.finish_transaction_for_edit(tx, description, false)
+    }
+
+    /// Finish a transaction with control over immutability checking.
+    /// If `ignore_immutable` is false, and rebase_descendants() causes the working copy to land
+    /// on an immutable commit, a new commit is created on top to prevent accidental modification.
+    /// Pass `ignore_immutable: true` only for explicit "edit" gestures (double-click, Enter, Edit
+    /// button) where the user has deliberately chosen to edit an immutable commit.
+    pub fn finish_transaction_for_edit(
         &mut self,
         mut tx: Transaction,
         description: impl Into<String>,
+        ignore_immutable: bool,
     ) -> Result<Option<messages::RepoStatus>> {
         if !tx.repo().has_changes() {
             return Ok(None);
@@ -700,7 +718,9 @@ impl WorkspaceSession<'_> {
 
         tx.repo_mut().rebase_descendants()?;
         for (name, wc_commit_id) in &tx.repo().view().wc_commit_ids().clone() {
-            if self.check_immutable_with_repo(tx.repo(), [wc_commit_id.clone()])? {
+            if !ignore_immutable
+                && self.check_immutable_with_repo(tx.repo(), [wc_commit_id.clone()])?
+            {
                 let wc_commit = tx.repo().store().get_commit(wc_commit_id)?;
                 tx.repo_mut().check_out(name.clone(), &wc_commit)?;
                 log::debug!(

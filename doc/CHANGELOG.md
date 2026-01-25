@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Added
+- There's a toggle in the bottom left of the screen marked with a 🛡; turning it on acts like `jj --ignore immutable`, affording you infinite power.
+- The command-line argument `--ignore-immutable` will turn on the new toggle at startup. 
+
+### Changed
+- Temporary behavioural toggles are now represented with a sticky button instead of a checkbox. 
+
 ### Fixed
 - In web mode, right-clicking on revisions enabled context menu commands based on the *selected* revision rather than the one you'd clicked.
 

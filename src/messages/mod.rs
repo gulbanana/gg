@@ -69,6 +69,7 @@ pub enum RepoConfig {
         theme_override: Option<String>,
         mark_unpushed_bookmarks: bool,
         track_recent_workspaces: bool,
+        ignore_immutable: bool,
     },
     #[allow(dead_code)] // used by frontend
     TimeoutError,

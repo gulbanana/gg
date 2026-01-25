@@ -361,9 +361,12 @@ struct RevisionEnablement {
     bookmark: bool,
 }
 
-fn compute_revision_enablement(headers: &[RevHeader]) -> RevisionEnablement {
+fn compute_revision_enablement(
+    headers: &[RevHeader],
+    ignore_immutable: bool,
+) -> RevisionEnablement {
     let is_singleton = headers.len() == 1;
-    let any_immutable = headers.iter().any(|h| h.is_immutable);
+    let any_immutable = !ignore_immutable && headers.iter().any(|h| h.is_immutable);
     let oldest = headers.last();
     let oldest_has_single_parent = oldest.map(|h| h.parent_ids.len() == 1).unwrap_or(false);
     let newest = headers.first();
@@ -382,7 +385,11 @@ fn compute_revision_enablement(headers: &[RevHeader]) -> RevisionEnablement {
 }
 
 // enables global menu items based on currently selected revision(s)
-pub fn handle_selection(menu: Menu<Wry>, headers: Option<&[RevHeader]>) -> Result<()> {
+pub fn handle_selection(
+    menu: Menu<Wry>,
+    headers: Option<&[RevHeader]>,
+    ignore_immutable: bool,
+) -> Result<()> {
     let revision_submenu = menu
         .get("revision")
         .ok_or(anyhow!("Revision menu not found"))?;
@@ -401,7 +408,7 @@ pub fn handle_selection(menu: Menu<Wry>, headers: Option<&[RevHeader]>) -> Resul
             revision_submenu.enable("menu_revision_bookmark", false)?;
         }
         Some(headers) => {
-            let state = compute_revision_enablement(headers);
+            let state = compute_revision_enablement(headers, ignore_immutable);
             revision_submenu.enable("menu_revision_new_child", state.new_child)?;
             revision_submenu.enable("menu_revision_new_parent", state.new_parent)?;
             revision_submenu.enable("menu_revision_edit", state.edit)?;
@@ -418,7 +425,7 @@ pub fn handle_selection(menu: Menu<Wry>, headers: Option<&[RevHeader]>) -> Resul
 }
 
 // enables context menu items for a revision and shows the menu
-pub fn handle_context(window: Window, ctx: Operand) -> Result<()> {
+pub fn handle_context(window: Window, ctx: Operand, ignore_immutable: bool) -> Result<()> {
     log::debug!("handling context {ctx:?}");
 
     let state = window.state::<AppState>();
@@ -431,7 +438,7 @@ pub fn handle_context(window: Window, ctx: Operand) -> Result<()> {
                 .expect("session not found")
                 .revision_menu;
 
-            let state = compute_revision_enablement(&[header]);
+            let state = compute_revision_enablement(&[header], ignore_immutable);
             context_menu.enable("revision_new_child", state.new_child)?;
             context_menu.enable("revision_new_parent", state.new_parent)?;
             context_menu.enable("revision_edit", state.edit)?;
@@ -450,7 +457,7 @@ pub fn handle_context(window: Window, ctx: Operand) -> Result<()> {
                 .expect("session not found")
                 .revision_menu;
 
-            let state = compute_revision_enablement(&headers);
+            let state = compute_revision_enablement(&headers, ignore_immutable);
             context_menu.enable("revision_new_child", state.new_child)?;
             context_menu.enable("revision_new_parent", state.new_parent)?;
             context_menu.enable("revision_edit", state.edit)?;
@@ -469,16 +476,18 @@ pub fn handle_context(window: Window, ctx: Operand) -> Result<()> {
                 .expect("session not found")
                 .tree_menu;
 
+            let any_immutable =
+                !ignore_immutable && headers.iter().any(|header| header.is_immutable);
             context_menu.enable(
                 "tree_squash",
-                !headers.iter().any(|header| header.is_immutable)
+                !any_immutable
                     && headers
                         .last()
                         .is_some_and(|header| header.parent_ids.len() == 1),
             )?;
             context_menu.enable(
                 "tree_restore",
-                !headers.iter().any(|header| header.is_immutable)
+                !any_immutable
                     && headers
                         .last()
                         .is_some_and(|header| header.parent_ids.len() == 1),

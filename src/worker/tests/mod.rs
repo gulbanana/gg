@@ -34,6 +34,7 @@ impl Default for WorkerSession {
             working_directory: None,
             user_settings: crate::config::tests::settings_with_gg_defaults(),
             sink: Arc::new(NoProgress),
+            ignore_immutable: false,
         }
     }
 }

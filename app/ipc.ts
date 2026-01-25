@@ -53,7 +53,7 @@ export function trigger(command: string, request?: InvokeArgs, onError?: () => v
 /**
  * call an IPC which, if successful, modifies the repo
  */
-export async function mutate<T>(command: string, mutation: T, options?: { operation?: string }): Promise<boolean> {
+export async function mutate<T>(command: string, mutation: T, options?: { operation?: string; ignoreImmutable?: boolean }): Promise<boolean> {
     if (options?.operation) {
         progressEvent.set({ type: "Message", text: options.operation });
     } else {
@@ -62,7 +62,10 @@ export async function mutate<T>(command: string, mutation: T, options?: { operat
 
     try {
         // set a wait state then the data state, unless the data comes in hella fast
-        let fetchPromise = call<MutationResult>("mutate", command, { mutation });
+        let fetchPromise = call<MutationResult>("mutate", command, {
+            mutation,
+            options: { ignore_immutable: options?.ignoreImmutable ?? false }
+        });
         let result = await Promise.race([fetchPromise.then(r => Promise.resolve<Query<MutationResult>>({ type: "data", value: r })), delay<MutationResult>()]);
         currentMutation.set(result);
         let value = await fetchPromise;
@@ -87,7 +90,10 @@ export async function mutate<T>(command: string, mutation: T, options?: { operat
 
             // retry with input response
             const enhancedMutation = { ...mutation, input: { fields } };
-            fetchPromise = call<MutationResult>("mutate", command, { mutation: enhancedMutation });
+            fetchPromise = call<MutationResult>("mutate", command, {
+                mutation: enhancedMutation,
+                options: { ignore_immutable: options?.ignoreImmutable ?? false }
+            });
             result = await Promise.race([fetchPromise.then(r => Promise.resolve<Query<MutationResult>>({ type: "data", value: r })), delay<MutationResult>()]);
             currentMutation.set(result);
             value = await fetchPromise;

@@ -1,7 +1,7 @@
 <script lang="ts">
     import type { RevHeader } from "../messages/RevHeader";
     import type { Operand } from "../messages/Operand";
-    import { currentTarget, revisionSelectEvent } from "../stores.js";
+    import { ignoreToggled, currentTarget, revisionSelectEvent } from "../stores.js";
     import IdSpan from "../controls/IdSpan.svelte";
     import BookmarkObject from "./BookmarkObject.svelte";
     import Object from "./Object.svelte";
@@ -39,7 +39,7 @@
     }
 
     function onEdit() {
-        new RevisionMutator([header]).onEdit();
+        new RevisionMutator([header], $ignoreToggled).onEdit();
     }
 </script>
 

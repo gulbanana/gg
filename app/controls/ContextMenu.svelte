@@ -3,6 +3,7 @@
     import type { Operand } from "../messages/Operand";
     import type { RevHeader } from "../messages/RevHeader";
     import type { StoreRef } from "../messages/StoreRef";
+    import { ignoreToggled, selectionHeaders } from "../stores";
     import RevisionMutator from "../mutators/RevisionMutator";
     import ChangeMutator from "../mutators/ChangeMutator";
     import RefMutator from "../mutators/RefMutator";
@@ -22,12 +23,13 @@
     }
 
     function onClick(action: string) {
+        let ignoreImmutable = $ignoreToggled;
         if (operand.type === "Revision" || operand.type === "Revisions") {
-            new RevisionMutator(getRevisionHeaders()).handle(action);
+            new RevisionMutator(getRevisionHeaders(), ignoreImmutable).handle(action);
         } else if (operand.type === "Change") {
-            new ChangeMutator(operand.headers, operand.path, operand.hunk).handle(action);
+            new ChangeMutator(operand.headers, operand.path, operand.hunk, ignoreImmutable).handle(action);
         } else if (operand.type === "Ref") {
-            new RefMutator(operand.ref).handle(action);
+            new RefMutator(operand.ref, ignoreImmutable).handle(action);
         }
         onClose();
     }
@@ -42,9 +44,9 @@
         }
     }
 
-    function isRevisionEnabled(headers: RevHeader[]) {
+    function isRevisionEnabled(headers: RevHeader[], ignoreImmutable: boolean = false) {
         const isSingleton = headers.length == 1;
-        const anyImmutable = headers.some((h) => h.is_immutable);
+        const anyImmutable = !ignoreImmutable && headers.some((h) => h.is_immutable);
         const hasSingleParent = headers[headers.length - 1]?.parent_ids.length == 1;
 
         return {
@@ -60,8 +62,8 @@
         };
     }
 
-    function isChangeEnabled(headers: RevHeader[]) {
-        const anyImmutable = headers.some((h) => h.is_immutable);
+    function isChangeEnabled(headers: RevHeader[], ignoreImmutable: boolean = false) {
+        const anyImmutable = !ignoreImmutable && headers.some((h) => h.is_immutable);
         const hasSingleParent = headers[headers.length - 1]?.parent_ids.length == 1;
 
         return {
@@ -90,8 +92,10 @@
     }
 
     $: revisionEnabled =
-        operand.type === "Revision" || operand.type === "Revisions" ? isRevisionEnabled(getRevisionHeaders()) : null;
-    $: changeEnabled = operand.type === "Change" ? isChangeEnabled(operand.headers) : null;
+        operand.type === "Revision" || operand.type === "Revisions"
+            ? isRevisionEnabled($selectionHeaders, $ignoreToggled)
+            : null;
+    $: changeEnabled = operand.type === "Change" ? isChangeEnabled(operand.headers, $ignoreToggled) : null;
     $: refEnabled = operand.type === "Ref" ? isRefEnabled(operand.ref) : null;
 
     // clamp to viewport
@@ -126,8 +130,7 @@
             >New inserted parent</button>
         <hr />
         <button disabled={!revisionEnabled.edit} on:click={() => onClick("edit")}>Edit as working copy</button>
-        <button disabled={!revisionEnabled.revert} on:click={() => onClick("revert")}
-            >Revert into working copy</button>
+        <button disabled={!revisionEnabled.revert} on:click={() => onClick("revert")}>Revert into working copy</button>
         <button disabled={!revisionEnabled.duplicate} on:click={() => onClick("duplicate")}>Duplicate</button>
         <button disabled={!revisionEnabled.abandon} on:click={() => onClick("abandon")}>Abandon</button>
         <hr />

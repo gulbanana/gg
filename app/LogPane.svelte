@@ -6,7 +6,7 @@
     import type { RevSet } from "./messages/RevSet";
     import { query } from "./ipc.js";
     import { sameChange } from "./ids.js";
-    import { repoStatusEvent, revisionSelectEvent } from "./stores.js";
+    import { ignoreToggled, repoStatusEvent, revisionSelectEvent } from "./stores.js";
     import RevisionMutator from "./mutators/RevisionMutator.js";
     import Pane from "./shell/Pane.svelte";
     import RevisionObject from "./objects/RevisionObject.svelte";
@@ -95,7 +95,7 @@
         },
         editRow(row: number) {
             if (row != -1) {
-                new RevisionMutator([graphRows![row].revision]).onEdit();
+                new RevisionMutator([graphRows![row].revision], $ignoreToggled).onEdit();
             }
         },
     };

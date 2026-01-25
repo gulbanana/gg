@@ -15,6 +15,7 @@
         hasMenu,
         progressEvent,
         lastFocus,
+        ignoreToggled,
     } from "./stores.js";
     import ContextMenu from "./controls/ContextMenu.svelte";
     import RefMutator from "./mutators/RefMutator";
@@ -152,6 +153,7 @@
         $revisionSelectEvent = undefined;
         if (config.type == "Workspace") {
             settings.markUnpushedBookmarks = config.mark_unpushed_bookmarks;
+            ignoreToggled.set(config.ignore_immutable);
             $repoStatusEvent = config.status;
         }
     }
@@ -206,23 +208,28 @@
 
     function mutateRevision(event: string) {
         if ($currentContext?.type == "Revision") {
-            new RevisionMutator([$currentContext.header]).handle(event);
+            new RevisionMutator([$currentContext.header], $ignoreToggled).handle(event);
         } else if ($currentContext?.type == "Revisions") {
-            new RevisionMutator($currentContext.headers).handle(event);
+            new RevisionMutator($currentContext.headers, $ignoreToggled).handle(event);
         }
         $currentContext = null;
     }
 
     function mutateTree(event: string) {
         if ($currentContext?.type == "Change") {
-            new ChangeMutator($currentContext.headers, $currentContext.path, $currentContext.hunk).handle(event);
+            new ChangeMutator(
+                $currentContext.headers,
+                $currentContext.path,
+                $currentContext.hunk,
+                $ignoreToggled,
+            ).handle(event);
         }
         $currentContext = null;
     }
 
     function mutateRef(event: string) {
         if ($currentContext?.type == "Ref") {
-            new RefMutator($currentContext.ref).handle(event);
+            new RefMutator($currentContext.ref, $ignoreToggled).handle(event);
         }
         $currentContext = null;
     }

@@ -1,6 +1,6 @@
 <script lang="ts">
     import type { RevsResult } from "./messages/RevsResult";
-    import { changeSelectEvent, dragOverWidget } from "./stores";
+    import { ignoreToggled, changeSelectEvent, dragOverWidget } from "./stores";
     import ChangeObject from "./objects/ChangeObject.svelte";
     import HunkObject from "./objects/HunkObject.svelte";
     import RevisionObject from "./objects/RevisionObject.svelte";
@@ -24,11 +24,13 @@
     const CONTEXT = 3;
 
     // headers are in descendant-first order
+    $: singleton = revs.set.from.commit.hex == revs.set.to.commit.hex;
     $: newest = revs.headers[0];
     $: oldest = revs.headers[revs.headers.length - 1];
-    $: singleton = revs.set.from.commit.hex == revs.set.to.commit.hex;
+    $: newestImmutable = newest.is_immutable && !$ignoreToggled;
+    $: oldestImmutable = oldest.is_immutable && !$ignoreToggled;
 
-    $: mutator = new RevisionMutator(revs.headers);
+    $: mutator = new RevisionMutator(revs.headers, $ignoreToggled);
 
     // debounce for change detection
     let lastSelectionKey = `${revs.set.from.commit.hex}::${revs.set.to.commit.hex}`;
@@ -145,7 +147,7 @@
                 <ActionWidget
                     tip="make working copy"
                     onClick={mutator.onEdit}
-                    disabled={newest.is_immutable || newest.is_working_copy}>
+                    disabled={newestImmutable || newest.is_working_copy}>
                     <Icon name="edit-2" /> Edit
                 </ActionWidget>
             {/if}
@@ -164,7 +166,7 @@
             <textarea
                 class="description"
                 spellcheck="false"
-                disabled={newest.is_immutable}
+                disabled={newestImmutable}
                 bind:value={editableDescription}
                 on:dragenter={dragOverWidget}
                 on:dragover={dragOverWidget}
@@ -192,7 +194,7 @@
                 <ActionWidget
                     tip="set commit message"
                     onClick={() => mutator.onDescribe(editableDescription, resetAuthor)}
-                    disabled={newest.is_immutable || !descriptionChanged}>
+                    disabled={newestImmutable || !descriptionChanged}>
                     <Icon name="file-text" /> Describe
                 </ActionWidget>
             {:else}
@@ -232,7 +234,7 @@
                 <ActionWidget
                     tip="move all changes to parent"
                     onClick={mutator.onSquash}
-                    disabled={oldest.is_immutable || oldest.parent_ids.length != 1}>
+                    disabled={oldestImmutable || oldest.parent_ids.length != 1}>
                     <Icon name="upload" /> Squash
                 </ActionWidget>
 
@@ -240,7 +242,7 @@
                     <ActionWidget
                         tip="copy all changes from parent"
                         onClick={mutator.onRestore}
-                        disabled={newest.is_immutable || newest.parent_ids.length != 1}>
+                        disabled={newestImmutable || newest.parent_ids.length != 1}>
                         <Icon name="download" /> Restore
                     </ActionWidget>
                 {/if}

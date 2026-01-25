@@ -68,6 +68,7 @@ pub enum SessionEvent {
     ExecuteMutation {
         tx: Sender<messages::MutationResult>,
         mutation: Box<dyn Mutation + Send + Sync>,
+        options: messages::MutationOptions,
     },
     ReadConfigArray {
         tx: Sender<Result<Vec<String>>>,
@@ -271,9 +272,13 @@ impl Session for WorkspaceSession<'_> {
                         tx.send(None)?;
                     }
                 }
-                SessionEvent::ExecuteMutation { tx, mutation } => {
+                SessionEvent::ExecuteMutation {
+                    tx,
+                    mutation,
+                    options,
+                } => {
                     let mut error_message = mutation.as_ref().describe();
-                    match AssertUnwindSafe(mutation.execute(&mut self))
+                    match AssertUnwindSafe(mutation.execute(&mut self, &options))
                         .catch_unwind()
                         .await
                     {

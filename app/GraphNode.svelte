@@ -9,7 +9,11 @@
 </script>
 
 {#if header.is_immutable}
-    <circle class:context cx="9" cy="15" r="6" />
+    {#if header.is_working_copy}
+        <circle class="wc" class:context cx="9" cy="15" r="6" />
+    {:else}
+        <circle class:context cx="9" cy="15" r="6" />
+    {/if}
 {:else}
     <circle class:context cx="9" cy="15" r="6" class="mutable" />
     {#if header.is_working_copy}

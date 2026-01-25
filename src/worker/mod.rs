@@ -41,6 +41,7 @@ pub trait Mutation: Debug {
     async fn execute(
         self: Box<Self>,
         ws: &mut WorkspaceSession,
+        options: &messages::MutationOptions,
     ) -> Result<messages::MutationResult>;
 
     #[cfg(test)]
@@ -48,7 +49,9 @@ pub trait Mutation: Debug {
     where
         Self: Sized,
     {
-        Box::new(self).execute(ws).await
+        Box::new(self)
+            .execute(ws, &messages::MutationOptions::default())
+            .await
     }
 }
 
@@ -72,22 +75,25 @@ pub struct WorkerSession {
     pub force_log_page_size: Option<usize>,
     pub latest_query: Option<String>,
     pub working_directory: Option<PathBuf>,
-    pub user_settings: UserSettings,
     pub sink: Arc<dyn EventSink>,
+    pub user_settings: UserSettings,
+    pub ignore_immutable: bool,
 }
 
 impl WorkerSession {
     pub fn new(
-        workspace: Option<PathBuf>,
-        user_settings: UserSettings,
         sink: Arc<dyn EventSink>,
+        working_directory: Option<PathBuf>,
+        user_settings: UserSettings,
+        ignore_immutable: bool,
     ) -> Self {
         WorkerSession {
             force_log_page_size: None,
             latest_query: None,
-            working_directory: workspace,
-            user_settings,
             sink,
+            working_directory,
+            user_settings,
+            ignore_immutable,
         }
     }
 

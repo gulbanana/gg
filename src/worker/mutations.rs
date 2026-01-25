@@ -54,11 +54,15 @@ macro_rules! precondition {
 
 #[async_trait(?Send)]
 impl Mutation for AbandonRevisions {
-    async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
+    async fn execute(
+        self: Box<Self>,
+        ws: &mut WorkspaceSession,
+        options: &crate::messages::MutationOptions,
+    ) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
 
         let (commits, is_immutable) = ws.resolve_change_set(&self.set, true)?;
-        if is_immutable {
+        if is_immutable && !options.ignore_immutable {
             if commits.len() == 1 {
                 precondition!("Revision is immutable");
             } else {
@@ -97,7 +101,11 @@ impl Mutation for AbandonRevisions {
 
 #[async_trait(?Send)]
 impl Mutation for BackoutRevisions {
-    async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
+    async fn execute(
+        self: Box<Self>,
+        ws: &mut WorkspaceSession,
+        _options: &crate::messages::MutationOptions,
+    ) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
 
         let (commits, _) = ws.resolve_change_set(&self.set, false)?;
@@ -179,12 +187,16 @@ impl Mutation for BackoutRevisions {
 
 #[async_trait(?Send)]
 impl Mutation for CheckoutRevision {
-    async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
+    async fn execute(
+        self: Box<Self>,
+        ws: &mut WorkspaceSession,
+        options: &crate::messages::MutationOptions,
+    ) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
 
         let edited = ws.resolve_change_id(&self.id)?;
 
-        if ws.check_immutable(vec![edited.id().clone()])? {
+        if ws.check_immutable(vec![edited.id().clone()])? && !options.ignore_immutable {
             precondition!("Revision is immutable");
         }
 
@@ -194,7 +206,11 @@ impl Mutation for CheckoutRevision {
 
         tx.repo_mut().edit(ws.name().to_owned(), &edited)?;
 
-        match ws.finish_transaction(tx, format!("edit commit {}", edited.id().hex()))? {
+        match ws.finish_transaction_for_edit(
+            tx,
+            format!("edit commit {}", edited.id().hex()),
+            options.ignore_immutable,
+        )? {
             Some(new_status) => {
                 let new_selection = Some(ws.format_header(&edited, Some(false))?);
                 Ok(MutationResult::Updated {
@@ -209,7 +225,11 @@ impl Mutation for CheckoutRevision {
 
 #[async_trait(?Send)]
 impl Mutation for CreateRevision {
-    async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
+    async fn execute(
+        self: Box<Self>,
+        ws: &mut WorkspaceSession,
+        _options: &crate::messages::MutationOptions,
+    ) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
 
         let (parent_commits, _) = ws.resolve_change_set(&self.set, false)?;
@@ -237,7 +257,11 @@ impl Mutation for CreateRevision {
 
 #[async_trait(?Send)]
 impl Mutation for CreateRevisionBetween {
-    async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
+    async fn execute(
+        self: Box<Self>,
+        ws: &mut WorkspaceSession,
+        options: &crate::messages::MutationOptions,
+    ) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
 
         let parent_id = ws
@@ -252,7 +276,7 @@ impl Mutation for CreateRevisionBetween {
         let before_commit = ws
             .resolve_change_id(&self.before_id)
             .context("resolve before_id")?;
-        if ws.check_immutable(vec![before_commit.id().clone()])? {
+        if ws.check_immutable(vec![before_commit.id().clone()])? && !options.ignore_immutable {
             precondition!("'Before' revision is immutable");
         }
 
@@ -275,12 +299,16 @@ impl Mutation for CreateRevisionBetween {
 
 #[async_trait(?Send)]
 impl Mutation for DescribeRevision {
-    async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
+    async fn execute(
+        self: Box<Self>,
+        ws: &mut WorkspaceSession,
+        options: &crate::messages::MutationOptions,
+    ) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
 
         let described = ws.resolve_change_id(&self.id)?;
 
-        if ws.check_immutable(vec![described.id().clone()])? {
+        if ws.check_immutable(vec![described.id().clone()])? && !options.ignore_immutable {
             precondition!("Revision {} is immutable", self.id.change.prefix);
         }
 
@@ -312,7 +340,11 @@ impl Mutation for DescribeRevision {
 
 #[async_trait(?Send)]
 impl Mutation for DuplicateRevisions {
-    async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
+    async fn execute(
+        self: Box<Self>,
+        ws: &mut WorkspaceSession,
+        _options: &crate::messages::MutationOptions,
+    ) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
 
         let (clonees, _) = ws.resolve_change_set(&self.set, false)?;
@@ -369,11 +401,15 @@ impl Mutation for DuplicateRevisions {
 
 #[async_trait(?Send)]
 impl Mutation for InsertRevisions {
-    async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
+    async fn execute(
+        self: Box<Self>,
+        ws: &mut WorkspaceSession,
+        options: &crate::messages::MutationOptions,
+    ) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
 
         let (targets, is_immutable) = ws.resolve_change_set(&self.set, true)?;
-        if is_immutable {
+        if is_immutable && !options.ignore_immutable {
             if targets.len() == 1 {
                 precondition!("Revision is immutable");
             } else {
@@ -392,7 +428,7 @@ impl Mutation for InsertRevisions {
             .resolve_change_id(&self.after_id)
             .context("resolve after_id")?;
 
-        if ws.check_immutable([before.id().clone()])? {
+        if ws.check_immutable([before.id().clone()])? && !options.ignore_immutable {
             precondition!("Before revision is immutable");
         }
 
@@ -455,11 +491,15 @@ impl Mutation for InsertRevisions {
 
 #[async_trait(?Send)]
 impl Mutation for MoveRevisions {
-    async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
+    async fn execute(
+        self: Box<Self>,
+        ws: &mut WorkspaceSession,
+        options: &crate::messages::MutationOptions,
+    ) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
 
         let (targets, is_immutable) = ws.resolve_change_set(&self.set, true)?;
-        if is_immutable {
+        if is_immutable && !options.ignore_immutable {
             if targets.len() == 1 {
                 precondition!("Revision is immutable");
             } else {
@@ -506,7 +546,11 @@ impl Mutation for MoveRevisions {
 
 #[async_trait(?Send)]
 impl Mutation for AdoptRevision {
-    async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
+    async fn execute(
+        self: Box<Self>,
+        ws: &mut WorkspaceSession,
+        options: &crate::messages::MutationOptions,
+    ) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
 
         let target = ws.resolve_change_id(&self.id)?;
@@ -525,7 +569,7 @@ impl Mutation for AdoptRevision {
             precondition!("Duplicate parent IDs");
         }
 
-        if ws.check_immutable(vec![target.id().clone()])? {
+        if ws.check_immutable(vec![target.id().clone()])? && !options.ignore_immutable {
             precondition!("Revision {} is immutable", self.id.change.prefix);
         }
 
@@ -545,12 +589,16 @@ impl Mutation for AdoptRevision {
 
 #[async_trait(?Send)]
 impl Mutation for MoveChanges {
-    async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
+    async fn execute(
+        self: Box<Self>,
+        ws: &mut WorkspaceSession,
+        options: &crate::messages::MutationOptions,
+    ) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
 
         // resolve & check destination
         let to_id = CommitId::try_from_hex(&self.to_id.hex).expect("frontend-validated id");
-        if ws.check_immutable([to_id.clone()])? {
+        if ws.check_immutable([to_id.clone()])? && !options.ignore_immutable {
             precondition!("Destination revision is immutable");
         }
 
@@ -558,7 +606,7 @@ impl Mutation for MoveChanges {
 
         // resolve & check source
         let (from_commits, is_immutable) = ws.resolve_change_set(&self.from, true)?;
-        if is_immutable {
+        if is_immutable && !options.ignore_immutable {
             precondition!("Some source revisions are immutable");
         }
 
@@ -670,14 +718,18 @@ impl Mutation for MoveChanges {
 
 #[async_trait(?Send)]
 impl Mutation for CopyChanges {
-    async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
+    async fn execute(
+        self: Box<Self>,
+        ws: &mut WorkspaceSession,
+        options: &crate::messages::MutationOptions,
+    ) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
 
         let from_tree = ws.resolve_commit_id(&self.from_id)?.tree();
         let matcher = build_matcher(&self.paths)?;
 
         let (commits, is_immutable) = ws.resolve_change_set(&self.to_set, true)?;
-        if is_immutable {
+        if is_immutable && !options.ignore_immutable {
             if commits.len() == 1 {
                 precondition!("Destination revision is immutable");
             } else {
@@ -728,7 +780,11 @@ impl Mutation for CopyChanges {
 
 #[async_trait(?Send)]
 impl Mutation for TrackBookmark {
-    async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
+    async fn execute(
+        self: Box<Self>,
+        ws: &mut WorkspaceSession,
+        _options: &crate::messages::MutationOptions,
+    ) -> Result<MutationResult> {
         match self.r#ref {
             StoreRef::Tag { tag_name } => {
                 precondition!("{} is a tag and cannot be tracked", tag_name);
@@ -786,7 +842,11 @@ impl Mutation for TrackBookmark {
 
 #[async_trait(?Send)]
 impl Mutation for UntrackBookmark {
-    async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
+    async fn execute(
+        self: Box<Self>,
+        ws: &mut WorkspaceSession,
+        _options: &crate::messages::MutationOptions,
+    ) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
 
         let mut untracked = Vec::new();
@@ -858,7 +918,11 @@ impl Mutation for UntrackBookmark {
 
 #[async_trait(?Send)]
 impl Mutation for RenameBookmark {
-    async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
+    async fn execute(
+        self: Box<Self>,
+        ws: &mut WorkspaceSession,
+        _options: &crate::messages::MutationOptions,
+    ) -> Result<MutationResult> {
         let old_name = self.r#ref.as_bookmark()?;
         let old_name_ref = RefNameBuf::from(old_name);
 
@@ -898,7 +962,11 @@ impl Mutation for RenameBookmark {
 
 #[async_trait(?Send)]
 impl Mutation for CreateRef {
-    async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
+    async fn execute(
+        self: Box<Self>,
+        ws: &mut WorkspaceSession,
+        _options: &crate::messages::MutationOptions,
+    ) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
 
         let commit = ws.resolve_change_id(&self.id)?;
@@ -973,7 +1041,11 @@ impl Mutation for CreateRef {
 
 #[async_trait(?Send)]
 impl Mutation for DeleteRef {
-    async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
+    async fn execute(
+        self: Box<Self>,
+        ws: &mut WorkspaceSession,
+        _options: &crate::messages::MutationOptions,
+    ) -> Result<MutationResult> {
         match self.r#ref {
             StoreRef::RemoteBookmark {
                 bookmark_name,
@@ -1049,7 +1121,11 @@ impl Mutation for DeleteRef {
 // does not currently enforce fast-forwards
 #[async_trait(?Send)]
 impl Mutation for MoveRef {
-    async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
+    async fn execute(
+        self: Box<Self>,
+        ws: &mut WorkspaceSession,
+        _options: &crate::messages::MutationOptions,
+    ) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
 
         let commit = ws.resolve_change_id(&self.to_id)?;
@@ -1120,11 +1196,17 @@ impl Mutation for MoveRef {
 
 #[async_trait(?Send)]
 impl Mutation for MoveHunk {
-    async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
+    async fn execute(
+        self: Box<Self>,
+        ws: &mut WorkspaceSession,
+        options: &crate::messages::MutationOptions,
+    ) -> Result<MutationResult> {
         let from = ws.resolve_change_id(&self.from_id)?;
         let mut to = ws.resolve_commit_id(&self.to_id)?;
 
-        if ws.check_immutable(vec![from.id().clone(), to.id().clone()])? {
+        if ws.check_immutable(vec![from.id().clone(), to.id().clone()])?
+            && !options.ignore_immutable
+        {
             precondition!("Some revisions are immutable");
         }
 
@@ -1319,14 +1401,18 @@ impl Mutation for MoveHunk {
 
 #[async_trait(?Send)]
 impl Mutation for CopyHunk {
-    async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
+    async fn execute(
+        self: Box<Self>,
+        ws: &mut WorkspaceSession,
+        options: &crate::messages::MutationOptions,
+    ) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
 
         let from = ws.resolve_commit_id(&self.from_id)?;
         let to = ws.resolve_change_id(&self.to_id)?;
         let repo_path = RepoPath::from_internal_string(&self.path.repo_path)?;
 
-        if ws.check_immutable(vec![to.id().clone()])? {
+        if ws.check_immutable(vec![to.id().clone()])? && !options.ignore_immutable {
             precondition!("Revision is immutable");
         }
 
@@ -1476,7 +1562,11 @@ impl Mutation for CopyHunk {
 
 #[async_trait(?Send)]
 impl Mutation for GitPush {
-    async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
+    async fn execute(
+        self: Box<Self>,
+        ws: &mut WorkspaceSession,
+        _options: &crate::messages::MutationOptions,
+    ) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
 
         // determine bookmarks to push, recording the old and new commits
@@ -1726,7 +1816,11 @@ impl Mutation for GitPush {
 
 #[async_trait(?Send)]
 impl Mutation for GitFetch {
-    async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
+    async fn execute(
+        self: Box<Self>,
+        ws: &mut WorkspaceSession,
+        _options: &crate::messages::MutationOptions,
+    ) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
 
         let git_repo = match ws.git_repo() {
@@ -1801,7 +1895,11 @@ impl Mutation for GitFetch {
 // this is another case where it would be nice if we could reuse jj-cli's error messages
 #[async_trait(?Send)]
 impl Mutation for UndoOperation {
-    async fn execute(self: Box<Self>, ws: &mut WorkspaceSession) -> Result<MutationResult> {
+    async fn execute(
+        self: Box<Self>,
+        ws: &mut WorkspaceSession,
+        _options: &crate::messages::MutationOptions,
+    ) -> Result<MutationResult> {
         let head_op = op_walk::resolve_op_with_repo(ws.repo(), "@")?; // XXX this should be behind an abstraction, maybe reused in snapshot
         let mut parent_ops = head_op.parents();
 

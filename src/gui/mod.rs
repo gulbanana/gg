@@ -27,8 +27,8 @@ use crate::messages::{
     self, AbandonRevisions, AdoptRevision, BackoutRevisions, CheckoutRevision, CloneRepository,
     CopyChanges, CopyHunk, CreateRef, CreateRevision, CreateRevisionBetween, DeleteRef,
     DescribeRevision, DuplicateRevisions, GitFetch, GitPush, InitRepository, InsertRevisions,
-    MoveChanges, MoveHunk, MoveRef, MoveRevisions, MutationResult, RenameBookmark, TrackBookmark,
-    UndoOperation, UntrackBookmark,
+    MoveChanges, MoveHunk, MoveRef, MoveRevisions, MutationOptions, MutationResult, RenameBookmark,
+    TrackBookmark, UndoOperation, UntrackBookmark,
 };
 use crate::worker::{Mutation, Session, SessionEvent, WorkerSession};
 use sink::TauriSink;
@@ -36,13 +36,15 @@ use sink::TauriSink;
 struct AppState {
     windows: Arc<Mutex<HashMap<String, WindowState>>>,
     settings: UserSettings,
+    initial_ignore_immutable: bool,
 }
 
 impl AppState {
-    fn new(settings: UserSettings) -> Self {
+    fn new(settings: UserSettings, initial_ignore_immutable: bool) -> Self {
         Self {
             windows: Arc::new(Mutex::new(HashMap::new())),
             settings,
+            initial_ignore_immutable,
         }
     }
 }
@@ -55,6 +57,7 @@ struct WindowState {
     ref_menu: Menu<Wry>,
     selection: Option<messages::RevSet>,
     has_workspace: bool,
+    ignore_immutable: bool,
 }
 
 impl AppState {
@@ -157,6 +160,7 @@ pub fn run_gui(options: super::RunOptions) -> Result<()> {
             forward_accelerator,
             forward_context_menu,
             forward_clone_url,
+            set_modifier_state,
             init_repository,
             clone_repository,
             query_workspace,
@@ -191,7 +195,7 @@ pub fn run_gui(options: super::RunOptions) -> Result<()> {
             undo_operation,
         ])
         .menu(move |handle| menu::build_main(handle, &recent_workspaces))
-        .manage(AppState::new(options.settings))
+        .manage(AppState::new(options.settings, options.ignore_immutable))
         .setup(move |app| {
             // after tauri initialises NSApplication, set the dock icon if we're running as CLI
             #[cfg(all(target_os = "macos", not(feature = "app")))]
@@ -278,8 +282,52 @@ fn forward_accelerator(window: Window, state: State<AppState>, key: char, ctrl: 
 }
 
 #[tauri::command]
-fn forward_context_menu(window: Window, context: messages::Operand) -> Result<(), InvokeError> {
-    menu::handle_context(window, context).map_err(InvokeError::from_anyhow)?;
+fn forward_context_menu(
+    window: Window,
+    app_state: State<AppState>,
+    context: messages::Operand,
+) -> Result<(), InvokeError> {
+    let ignore_immutable = {
+        let guard = app_state.windows.lock().expect("state mutex poisoned");
+        guard
+            .get(window.label())
+            .map(|s| s.ignore_immutable)
+            .unwrap_or(false)
+    };
+    menu::handle_context(window, context, ignore_immutable).map_err(InvokeError::from_anyhow)?;
+    Ok(())
+}
+
+#[tauri::command]
+fn set_modifier_state(
+    window: Window,
+    app_state: State<AppState>,
+    alt: bool,
+) -> Result<(), InvokeError> {
+    let (session_tx, selection, ignore_immutable) = {
+        let mut guard = app_state.windows.lock().expect("state mutex poisoned");
+        let ws = guard
+            .get_mut(window.label())
+            .ok_or_else(|| InvokeError::from_anyhow(anyhow::anyhow!("window not found")))?;
+        ws.ignore_immutable = alt;
+        (
+            ws.worker_channel.clone(),
+            ws.selection.clone(),
+            ws.ignore_immutable,
+        )
+    };
+
+    // re-resolve selection and update menu enablement
+    let headers: Option<Vec<messages::RevHeader>> =
+        selection.and_then(|set| match resolve_set(&session_tx, set) {
+            Ok(messages::RevsResult::Detail { headers, .. }) => Some(headers),
+            _ => None,
+        });
+
+    if let Some(menu) = window.app_handle().menu() {
+        menu::handle_selection(menu, headers.as_deref(), ignore_immutable)
+            .map_err(InvokeError::from_anyhow)?;
+    }
     Ok(())
 }
 
@@ -456,8 +504,9 @@ fn abandon_revisions(
     window: Window,
     app_state: State<AppState>,
     mutation: AbandonRevisions,
+    options: MutationOptions,
 ) -> Result<MutationResult, InvokeError> {
-    try_mutate(window, app_state, mutation)
+    try_mutate(window, app_state, mutation, options)
 }
 
 #[tauri::command(async)]
@@ -465,8 +514,9 @@ fn backout_revisions(
     window: Window,
     app_state: State<AppState>,
     mutation: BackoutRevisions,
+    options: MutationOptions,
 ) -> Result<MutationResult, InvokeError> {
-    try_mutate(window, app_state, mutation)
+    try_mutate(window, app_state, mutation, options)
 }
 
 #[tauri::command(async)]
@@ -474,8 +524,9 @@ fn checkout_revision(
     window: Window,
     app_state: State<AppState>,
     mutation: CheckoutRevision,
+    options: MutationOptions,
 ) -> Result<MutationResult, InvokeError> {
-    try_mutate(window, app_state, mutation)
+    try_mutate(window, app_state, mutation, options)
 }
 
 #[tauri::command(async)]
@@ -483,8 +534,9 @@ fn create_revision(
     window: Window,
     app_state: State<AppState>,
     mutation: CreateRevision,
+    options: MutationOptions,
 ) -> Result<MutationResult, InvokeError> {
-    try_mutate(window, app_state, mutation)
+    try_mutate(window, app_state, mutation, options)
 }
 
 #[tauri::command(async)]
@@ -492,8 +544,9 @@ fn create_revision_between(
     window: Window,
     app_state: State<AppState>,
     mutation: CreateRevisionBetween,
+    options: MutationOptions,
 ) -> Result<MutationResult, InvokeError> {
-    try_mutate(window, app_state, mutation)
+    try_mutate(window, app_state, mutation, options)
 }
 
 #[tauri::command(async)]
@@ -501,8 +554,9 @@ fn insert_revisions(
     window: Window,
     app_state: State<AppState>,
     mutation: InsertRevisions,
+    options: MutationOptions,
 ) -> Result<MutationResult, InvokeError> {
-    try_mutate(window, app_state, mutation)
+    try_mutate(window, app_state, mutation, options)
 }
 
 #[tauri::command(async)]
@@ -510,8 +564,9 @@ fn describe_revision(
     window: Window,
     app_state: State<AppState>,
     mutation: DescribeRevision,
+    options: MutationOptions,
 ) -> Result<MutationResult, InvokeError> {
-    try_mutate(window, app_state, mutation)
+    try_mutate(window, app_state, mutation, options)
 }
 
 #[tauri::command(async)]
@@ -519,8 +574,9 @@ fn duplicate_revisions(
     window: Window,
     app_state: State<AppState>,
     mutation: DuplicateRevisions,
+    options: MutationOptions,
 ) -> Result<MutationResult, InvokeError> {
-    try_mutate(window, app_state, mutation)
+    try_mutate(window, app_state, mutation, options)
 }
 
 #[tauri::command(async)]
@@ -528,8 +584,9 @@ fn move_revisions(
     window: Window,
     app_state: State<AppState>,
     mutation: MoveRevisions,
+    options: MutationOptions,
 ) -> Result<MutationResult, InvokeError> {
-    try_mutate(window, app_state, mutation)
+    try_mutate(window, app_state, mutation, options)
 }
 
 #[tauri::command(async)]
@@ -537,8 +594,9 @@ fn adopt_revision(
     window: Window,
     app_state: State<AppState>,
     mutation: AdoptRevision,
+    options: MutationOptions,
 ) -> Result<MutationResult, InvokeError> {
-    try_mutate(window, app_state, mutation)
+    try_mutate(window, app_state, mutation, options)
 }
 
 #[tauri::command(async)]
@@ -546,8 +604,9 @@ fn move_changes(
     window: Window,
     app_state: State<AppState>,
     mutation: MoveChanges,
+    options: MutationOptions,
 ) -> Result<MutationResult, InvokeError> {
-    try_mutate(window, app_state, mutation)
+    try_mutate(window, app_state, mutation, options)
 }
 
 #[tauri::command(async)]
@@ -555,8 +614,9 @@ fn copy_changes(
     window: Window,
     app_state: State<AppState>,
     mutation: CopyChanges,
+    options: MutationOptions,
 ) -> Result<MutationResult, InvokeError> {
-    try_mutate(window, app_state, mutation)
+    try_mutate(window, app_state, mutation, options)
 }
 
 #[tauri::command(async)]
@@ -564,8 +624,9 @@ fn move_hunk(
     window: Window,
     app_state: State<AppState>,
     mutation: MoveHunk,
+    options: MutationOptions,
 ) -> Result<MutationResult, InvokeError> {
-    try_mutate(window, app_state, mutation)
+    try_mutate(window, app_state, mutation, options)
 }
 
 #[tauri::command(async)]
@@ -573,8 +634,9 @@ fn copy_hunk(
     window: Window,
     app_state: State<AppState>,
     mutation: CopyHunk,
+    options: MutationOptions,
 ) -> Result<MutationResult, InvokeError> {
-    try_mutate(window, app_state, mutation)
+    try_mutate(window, app_state, mutation, options)
 }
 
 #[tauri::command(async)]
@@ -582,8 +644,9 @@ fn track_bookmark(
     window: Window,
     app_state: State<AppState>,
     mutation: TrackBookmark,
+    options: MutationOptions,
 ) -> Result<MutationResult, InvokeError> {
-    try_mutate(window, app_state, mutation)
+    try_mutate(window, app_state, mutation, options)
 }
 
 #[tauri::command(async)]
@@ -591,8 +654,9 @@ fn untrack_bookmark(
     window: Window,
     app_state: State<AppState>,
     mutation: UntrackBookmark,
+    options: MutationOptions,
 ) -> Result<MutationResult, InvokeError> {
-    try_mutate(window, app_state, mutation)
+    try_mutate(window, app_state, mutation, options)
 }
 
 #[tauri::command(async)]
@@ -600,8 +664,9 @@ fn rename_bookmark(
     window: Window,
     app_state: State<AppState>,
     mutation: RenameBookmark,
+    options: MutationOptions,
 ) -> Result<MutationResult, InvokeError> {
-    try_mutate(window, app_state, mutation)
+    try_mutate(window, app_state, mutation, options)
 }
 
 #[tauri::command(async)]
@@ -609,8 +674,9 @@ fn create_ref(
     window: Window,
     app_state: State<AppState>,
     mutation: CreateRef,
+    options: MutationOptions,
 ) -> Result<MutationResult, InvokeError> {
-    try_mutate(window, app_state, mutation)
+    try_mutate(window, app_state, mutation, options)
 }
 
 #[tauri::command(async)]
@@ -618,8 +684,9 @@ fn delete_ref(
     window: Window,
     app_state: State<AppState>,
     mutation: DeleteRef,
+    options: MutationOptions,
 ) -> Result<MutationResult, InvokeError> {
-    try_mutate(window, app_state, mutation)
+    try_mutate(window, app_state, mutation, options)
 }
 
 #[tauri::command(async)]
@@ -627,8 +694,9 @@ fn move_ref(
     window: Window,
     app_state: State<AppState>,
     mutation: MoveRef,
+    options: MutationOptions,
 ) -> Result<MutationResult, InvokeError> {
-    try_mutate(window, app_state, mutation)
+    try_mutate(window, app_state, mutation, options)
 }
 
 #[tauri::command(async)]
@@ -636,8 +704,9 @@ fn git_push(
     window: Window,
     app_state: State<AppState>,
     mutation: GitPush,
+    options: MutationOptions,
 ) -> Result<MutationResult, InvokeError> {
-    try_mutate(window, app_state, mutation)
+    try_mutate(window, app_state, mutation, options)
 }
 
 #[tauri::command(async)]
@@ -645,16 +714,18 @@ fn git_fetch(
     window: Window,
     app_state: State<AppState>,
     mutation: GitFetch,
+    options: MutationOptions,
 ) -> Result<MutationResult, InvokeError> {
-    try_mutate(window, app_state, mutation)
+    try_mutate(window, app_state, mutation, options)
 }
 
 #[tauri::command(async)]
 fn undo_operation(
     window: Window,
     app_state: State<AppState>,
+    options: MutationOptions,
 ) -> Result<MutationResult, InvokeError> {
-    try_mutate(window, app_state, UndoOperation)
+    try_mutate(window, app_state, UndoOperation, options)
 }
 
 pub fn try_create_window(app_handle: &AppHandle, workspace: Option<PathBuf>) -> Result<()> {
@@ -686,14 +757,20 @@ pub fn try_create_window(app_handle: &AppHandle, workspace: Option<PathBuf>) -> 
     // create a worker for the specified path
     let (sender, receiver) = channel();
 
+    let initial_ignore_immutable = app_state.initial_ignore_immutable;
     let handle = window.as_ref().window();
     let window_worker = thread::spawn(move || {
-        async_runtime::block_on(worker_thread(handle, receiver, workspace, settings))
+        async_runtime::block_on(worker_thread(
+            handle,
+            receiver,
+            workspace,
+            settings,
+            initial_ignore_immutable,
+        ))
     });
 
     // setup command dependencies
     let (revision_menu, tree_menu, ref_menu) = menu::build_context(app_handle)?;
-
     let windows = app_state.windows.clone();
     windows.lock().unwrap().insert(
         window.label().to_owned(),
@@ -705,6 +782,7 @@ pub fn try_create_window(app_handle: &AppHandle, workspace: Option<PathBuf>) -> 
             ref_menu,
             selection: None,
             has_workspace: false,
+            ignore_immutable: initial_ignore_immutable,
         },
     );
 
@@ -725,11 +803,11 @@ pub fn try_create_window(app_handle: &AppHandle, workspace: Option<PathBuf>) -> 
         let payload: Result<Option<messages::RevSet>, serde_json::Error> =
             serde_json::from_str(event.payload());
         if let Ok(set) = payload {
-            let session_tx = {
+            let (session_tx, ignore_immutable) = {
                 let mut guard = windows.lock().unwrap();
                 if let Some(state) = guard.get_mut(&label) {
                     state.selection = set.clone();
-                    state.worker_channel.clone()
+                    (state.worker_channel.clone(), state.ignore_immutable)
                 } else {
                     return;
                 }
@@ -740,7 +818,11 @@ pub fn try_create_window(app_handle: &AppHandle, workspace: Option<PathBuf>) -> 
                     _ => None,
                 });
             if let Some(menu) = handle.menu() {
-                handler::fatal!(menu::handle_selection(menu, headers.as_deref()));
+                handler::fatal!(menu::handle_selection(
+                    menu,
+                    headers.as_deref(),
+                    ignore_immutable
+                ));
             }
         }
     });
@@ -753,15 +835,21 @@ async fn worker_thread(
     rx: std::sync::mpsc::Receiver<SessionEvent>,
     workspace: Option<PathBuf>,
     settings: UserSettings,
+    ignore_immutable: bool,
 ) {
     log::info!("Worker started.");
 
     let progress = TauriSink::new(window.clone());
 
-    while let Err(err) = WorkerSession::new(workspace.clone(), settings.clone(), progress.clone())
-        .handle_events(&rx)
-        .await
-        .context("worker")
+    while let Err(err) = WorkerSession::new(
+        progress.clone(),
+        workspace.clone(),
+        settings.clone(),
+        ignore_immutable,
+    )
+    .handle_events(&rx)
+    .await
+    .context("worker")
     {
         log::debug!("restart worker: {err:#}");
 
@@ -870,6 +958,7 @@ fn try_mutate<T: Mutation + Send + Sync + 'static>(
     window: Window,
     app_state: State<AppState>,
     mutation: T,
+    options: MutationOptions,
 ) -> Result<MutationResult, InvokeError> {
     let session_tx: Sender<SessionEvent> = app_state.get_session(window.label());
     let (call_tx, call_rx) = channel();
@@ -878,6 +967,7 @@ fn try_mutate<T: Mutation + Send + Sync + 'static>(
         .send(SessionEvent::ExecuteMutation {
             tx: call_tx,
             mutation: Box::new(mutation),
+            options,
         })
         .map_err(InvokeError::from_error)?;
     call_rx.recv().map_err(InvokeError::from_error)
@@ -898,15 +988,25 @@ fn handle_window_event(window: &Window, event: &WindowEvent) -> Result<()> {
 
             let app_state = window.state::<AppState>();
 
-            let session_tx = app_state.get_session(window.label());
-            let selection = app_state.get_selection(window.label());
+            let (session_tx, selection, ignore_immutable) = {
+                let guard = app_state.windows.lock().expect("state mutex poisoned");
+                if let Some(state) = guard.get(window.label()) {
+                    (
+                        state.worker_channel.clone(),
+                        state.selection.clone(),
+                        state.ignore_immutable,
+                    )
+                } else {
+                    return Ok(());
+                }
+            };
             let headers: Option<Vec<messages::RevHeader>> =
                 selection.and_then(|set| match resolve_set(&session_tx, set) {
                     Ok(messages::RevsResult::Detail { headers, .. }) => Some(headers),
                     _ => None,
                 });
             if let Some(menu) = window.app_handle().menu() {
-                menu::handle_selection(menu, headers.as_deref())?;
+                menu::handle_selection(menu, headers.as_deref(), ignore_immutable)?;
             }
 
             window.emit_to(EventTarget::labeled(window.label()), "gg://focus", ())?;
