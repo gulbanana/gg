@@ -28,3 +28,6 @@ dist-ssr
 
 # Tauri
 /gen/schemas
+
+# Playwright
+/e2e/results

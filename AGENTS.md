@@ -8,7 +8,10 @@ GG is a GUI for Jujutsu (jj) version control. It's a Tauri desktop app with Svel
 npm install && npm run build   # Initial frontend build (required first time)
 cargo tauri dev                # Debug build with auto-reload
 cargo tauri dev -- -- --debug  # Pass --debug flag to app (yes, 2x --)
-cargo test                     # Run Rust tests
+cargo check                    # Check whether backend compiles
+cargo test                     # Run backend tests
+npm run check                  # Check whether frontend compiles
+npm run test                   # Run frontend tests
 cargo gen                      # CRITICAL: Regenerate TypeScript types after modifying Rust structs
 cargo run                      # Launch GUI (uses prebuilt assets)
 cargo run -- web               # Launch in web mode (opens browser)

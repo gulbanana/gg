@@ -1,5 +1,6 @@
 import { defineConfig } from "vite";
 import { svelte } from "@sveltejs/vite-plugin-svelte";
+import { playwright } from "@vitest/browser-playwright";
 
 // https://vitejs.dev/config/
 export default defineConfig(async () => ({
@@ -21,5 +22,30 @@ export default defineConfig(async () => ({
 
   build: {
     target: ["es2022", "chrome97", "edge97", "safari15"]
-  }
+  },
+
+  test: {
+    projects: [
+      {
+        extends: true,
+        test: {
+          name: "app",
+          include: ["app/**/*.test.ts"],
+          browser: {
+            provider: playwright(),
+            enabled: true,
+            headless: true,
+            instances: [{ browser: "chromium" }],
+          },
+        },
+      },
+      {
+        test: {
+          name: "e2e",
+          include: ["e2e/**/*.test.ts"],
+          testTimeout: 120000,
+        },
+      },
+    ],
+  },
 }));

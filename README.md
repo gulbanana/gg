@@ -49,7 +49,8 @@ Initial setup:
 3. (Linux) Install system dependencies (on Debian-likes, `apt install libpango1.0-dev libatk1.0-dev libgdk-pixbuf2.0-dev libgtk-3-dev libjavascriptcoregtk-4.1-dev libwebkit2gtk-4.1-dev`).
 
 Some useful commands:
-* `cargo test` - execute unit tests.
+* `cargo check`, `npm run check` - execute type checkers.
+* `cargo test`, `npm run test` - execute unit tests.
 * `cargo gen` - update the IPC message types in app/messages from src/messages.rs.
 * `cargo tauri dev` - launch a debug build with automatic reloading.
 * `cargo tauri dev -- -- --debug` - run locally with --debug. Yes, both `--` are necessary.

@@ -4,13 +4,11 @@
   "version": "0.37.2",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
     "check": "svelte-check --tsconfig ./tsconfig.json",
-    "tauri": "tauri",
-    "gen": "cargo test -F ts-rs",
-    "test": "cargo test"
+    "prebuild": "npm ci && npm run check",
+    "build": "vite build",
+    "test": "vitest run",
+    "tauri": "tauri"
   },
   "dependencies": {
     "@catppuccin/palette": "^1.0.3",
@@ -20,13 +18,18 @@
     "modern-normalize": "^2.0.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.0",
     "@sveltejs/vite-plugin-svelte": "^6.0.0",
     "@tauri-apps/cli": "^2.9.0",
+    "@testing-library/svelte": "^5.3.1",
     "@tsconfig/svelte": "^5.0.2",
+    "@types/node": "^25.0.10",
+    "@vitest/browser-playwright": "^4.0.18",
     "svelte": "^5.0.0",
     "svelte-check": "^4.0.0",
     "tslib": "^2.6.0",
     "typescript": "^5.0.2",
-    "vite": "^7.2.6"
+    "vite": "^7.2.6",
+    "vitest": "^4.0.18"
   }
 }

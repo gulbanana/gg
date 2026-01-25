@@ -4,8 +4,12 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "skipLibCheck": true,
+    "strict": true,
+    "types": [
+      "node"
+    ]
   },
   "include": [
-    "vite.config.ts"
+    "*.ts"
   ]
 }
