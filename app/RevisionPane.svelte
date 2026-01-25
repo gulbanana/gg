@@ -181,7 +181,13 @@
                 <AuthorSpan author={newest.author} />
                 <TimestampSpan timestamp={newest.author.timestamp} />
 
-                <ToggleWidget bind:checked={resetAuthor}>Reset</ToggleWidget>
+                <ToggleWidget
+                    safe
+                    tip="reset author"
+                    bind:checked={resetAuthor}
+                    disabled={newest.is_immutable}
+                    on="unlock"
+                    off="lock" />
                 <span></span>
                 <ActionWidget
                     tip="set commit message"
