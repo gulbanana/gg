@@ -16,14 +16,17 @@
       "Bash(cargo clippy:*)",
       "Bash(npm run check:*)",
       "Bash(npm run build:*)",
+      "Bash(npm run format:*)",
       "Bash(unzip:*)",
       "Bash(zip:*)",
       "WebSearch",
       "WebFetch(domain:www.anthropic.com)",
       "WebFetch(domain:github.com)",
       "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:docs.rs)",
       "Skill(jj-git-replacement)",
-      "Skill(update-jj)"
+      "Skill(update-jj)",
+      "Skill(cargo-dedupe)"
     ]
   },
   "outputStyle": "default"

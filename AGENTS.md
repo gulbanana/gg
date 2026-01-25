@@ -132,6 +132,22 @@ Lowercase, minimal. Don't describe *what* code does. Explain *why* when non-obvi
 // Read recent workspaces for initial menu build
 ```
 
+## Import Style
+
+Prefer `use` for structs/types, but qualify function calls using the module they're in:
+```rust
+use anyhow::{Context, Error, Result};
+use jj_cli::git_util;
+
+// GOOD: struct via use, function qualified by containing module
+let err = Error::new(e.error);
+let options = git_util::load_git_import_options(&ui, &settings);
+
+// BAD: qualifying struct, qualifying function by crate
+let err = anyhow::Error::new(e.error);
+let options = jj_cli::git_util::load_git_import_options(&ui, &settings);
+```
+
 ## TypeScript Style
 
 Use `let` instead of `const` for variable declarations.
