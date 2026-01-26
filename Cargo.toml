@@ -11,8 +11,8 @@ keywords = ["jujutsu", "jj", "vcs", "scm", "gui"]
 categories = ["development-tools"]
 include = [
     "/dist/**/*",
-    "/gen/**/*",
-    "/res/**/*",
+    "/res/hallucination.png",
+    "/res/icons/*",
     "/src/**/*",
     "/build.rs",
     "/Tauri.toml",
