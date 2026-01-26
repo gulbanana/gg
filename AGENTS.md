@@ -1,8 +1,4 @@
-# CLAUDE.md
-
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
-## Project Overview
+# Project Overview
 
 GG is a GUI for Jujutsu (jj) version control. It's a Tauri desktop app with Svelte/TypeScript frontend (`app/`) and Rust backend (`src/`). Two launch modes: native GUI (`gg gui`) and browser-based web mode (`gg web`).
 
