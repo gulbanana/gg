@@ -1,7 +1,6 @@
 {
   "permissions": {
     "allow": [
-      "mcp__ide__getDiagnostics",
       "Bash(jj status:*)",
       "Bash(jj log:*)",
       "Bash(jj show:*)",
@@ -15,24 +14,12 @@
       "Bash(cargo fmt:*)",
       "Bash(cargo clippy:*)",
       "Bash(npm run check:*)",
-      "Bash(npm.cmd run check:*)",
       "Bash(npm run build:*)",
-      "Bash(npm.cmd run build:*)",
       "Bash(npm run test:*)",
-      "Bash(npm.cmd run test:*)",
       "Bash(npx vitest:*)",
-      "Bash(npx.cmd vitest:*)",
-      "Bash(unzip:*)",
-      "Bash(zip:*)",
       "WebSearch",
-      "WebFetch(domain:www.anthropic.com)",
-      "WebFetch(domain:github.com)",
-      "WebFetch(domain:raw.githubusercontent.com)",
-      "WebFetch(domain:docs.rs)",
-      "Skill(jj-git-replacement)",
       "Skill(update-jj)",
       "Skill(cargo-dedupe)"
     ]
-  },
-  "outputStyle": "default"
+  }
 }
