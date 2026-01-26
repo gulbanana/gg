@@ -8,6 +8,7 @@ Planned Features
 * Window menu for common OS functions.
 * Better handling of the case where a git remote refuses push because you haven't fetched yet.
 * Improved revset entry, with the ability to save and edit favourite revsets.
+* Analogues of more commands like `jj parallelise` and `jj absorb`.
 
 UI Expansion
 ------------
