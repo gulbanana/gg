@@ -13,6 +13,8 @@
     import SelectWidget from "./controls/SelectWidget.svelte";
     import ListWidget, { type List, type Selection } from "./controls/ListWidget.svelte";
     import { type EnhancedRow, default as GraphLog, type EnhancedLine } from "./GraphLog.svelte";
+    import ListWidget, { type List } from "./controls/ListWidget.svelte";
+    import { Splitpanes, Pane as SplitPane } from "svelte-splitpanes";
 
     export let default_query: string;
     export let latest_query: string;
@@ -354,6 +356,10 @@
         display: grid;
         grid-template-columns: auto 1fr;
         gap: 3px;
+    }
+    :global(.body) {
+        overflow-y: auto !important;
+        height: 95vh !important;
     }
 
     input {
