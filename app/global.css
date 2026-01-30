@@ -133,6 +133,7 @@
 
 textarea,
 select,
+::picker(select),
 input {
   outline: none;
   border: 1px solid var(--ctp-overlay0);
