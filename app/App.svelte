@@ -251,7 +251,7 @@
             <Pane />
         {:else if $repoConfigEvent.type == "Workspace"}
             {#key $repoConfigEvent.absolute_path}
-                <LogPane default_query={$repoConfigEvent.default_query} latest_query={$repoConfigEvent.latest_query} />
+                <LogPane query_choices={$repoConfigEvent.query_choices} latest_query={$repoConfigEvent.latest_query} />
             {/key}
 
             <div class="separator"></div>

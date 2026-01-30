@@ -14,18 +14,37 @@
     import ListWidget, { type List, type Selection } from "./controls/ListWidget.svelte";
     import { type EnhancedRow, default as GraphLog, type EnhancedLine } from "./GraphLog.svelte";
 
-    export let default_query: string;
+    export let query_choices: Record<string, string>;
     export let latest_query: string;
 
-    const presets = [
-        { label: "Default", value: default_query },
-        { label: "Tracked Bookmarks", value: "@ | ancestors(bookmarks(), 5)" },
-        {
-            label: "Remote Bookmarks",
-            value: "@ | ancestors(remote_bookmarks(), 5)",
-        },
-        { label: "All Revisions", value: "all()" },
-    ];
+    function toTitleCase(kebab: string): string {
+        return kebab
+            .split("-")
+            .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+            .join(" ");
+    }
+
+    $: presets = (() => {
+        let result: { label: string; value: string; separator?: boolean }[] = [];
+
+        // revsets.log first
+        if (query_choices["default"] !== undefined) {
+            result.push({ label: "Default", value: query_choices["default"] });
+        }
+
+        // followed by [gg.revsets]
+        let others = Object.entries(query_choices)
+            .filter(([key]) => key !== "default")
+            .map(([key, value]) => ({ label: toTitleCase(key), value }))
+            .sort((a, b) => a.label.localeCompare(b.label));
+
+        if (others.length > 0) {
+            result.push({ label: "", value: "", separator: true });
+            result.push(...others);
+        }
+
+        return result;
+    })();
 
     let choices: ReturnType<typeof getChoices>;
     let entered_query = latest_query;

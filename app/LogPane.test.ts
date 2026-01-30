@@ -23,7 +23,7 @@ describe("LogPane", () => {
 
         const { container } = render(LogPane, {
             props: {
-                default_query: "all()",
+                query_choices: { default: "all()" },
                 latest_query: "all()",
             },
         });
@@ -36,7 +36,7 @@ describe("LogPane", () => {
 
         const { container } = render(LogPane, {
             props: {
-                default_query: "all()",
+                query_choices: { default: "all()" },
                 latest_query: "all()",
             },
         });

@@ -1,6 +1,7 @@
 #[cfg(all(test, not(feature = "ts-rs")))]
 pub mod tests;
 
+use std::collections::HashMap;
 use std::path::Path;
 use std::time::Duration;
 
@@ -96,7 +97,9 @@ impl GGSettings for UserSettings {
     }
 }
 
-pub fn read_config(repo_path: Option<&Path>) -> Result<(UserSettings, RevsetAliasesMap)> {
+pub fn read_config(
+    repo_path: Option<&Path>,
+) -> Result<(UserSettings, RevsetAliasesMap, HashMap<String, String>)> {
     let mut layers = vec![];
     let mut config_env = ConfigEnv::from_environment();
 
@@ -114,9 +117,29 @@ pub fn read_config(repo_path: Option<&Path>) -> Result<(UserSettings, RevsetAlia
 
     let config = config_env.resolve_config(&raw_config)?;
     let aliases_map = build_aliases_map(&config)?;
+    let query_choices = read_revset_query_choices(&config);
     let workspace_settings = UserSettings::from_config(config)?;
 
-    Ok((workspace_settings, aliases_map))
+    Ok((workspace_settings, aliases_map, query_choices))
+}
+
+pub fn read_revset_query_choices(stacked_config: &StackedConfig) -> HashMap<String, String> {
+    let table_name = ConfigNamePathBuf::from_iter(["gg", "revsets"]);
+    let mut choices = HashMap::new();
+
+    for layer in stacked_config.layers() {
+        let table = match layer.look_up_table(&table_name) {
+            Ok(Some(table)) => table,
+            Ok(None) => continue,
+            Err(_) => continue,
+        };
+        for (key, item) in table.iter() {
+            if let Some(value) = item.as_str() {
+                choices.insert(key.to_string(), value.to_string());
+            }
+        }
+    }
+    choices
 }
 
 pub fn build_aliases_map(stacked_config: &StackedConfig) -> Result<RevsetAliasesMap> {

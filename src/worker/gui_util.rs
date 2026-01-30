@@ -77,6 +77,7 @@ pub struct WorkspaceData {
     extensions: RevsetExtensions,
     pub workspace_settings: UserSettings,
     pub aliases_map: RevsetAliasesMap,
+    pub query_choices: HashMap<String, String>,
 }
 
 /// state derived from a specific operation
@@ -108,7 +109,7 @@ impl WorkerSession {
         let factory = DefaultWorkspaceLoaderFactory;
         let loader = factory.create(find_workspace_dir(cwd))?;
 
-        let (settings, aliases_map) = read_config(Some(loader.repo_path()))?;
+        let (settings, aliases_map, revset_query_choices) = read_config(Some(loader.repo_path()))?;
 
         let workspace = loader.load(
             &settings,
@@ -126,6 +127,7 @@ impl WorkerSession {
             path_converter,
             aliases_map,
             extensions: Default::default(),
+            query_choices: revset_query_choices,
         };
 
         let operation = load_at_head(&workspace, &data)?;
@@ -493,23 +495,40 @@ impl WorkspaceSession<'_> {
             None => vec![],
         };
 
-        let default_query = self
+        let default_revset = self
             .data
             .workspace_settings
             .get_string("revsets.log")
             .unwrap_or_default();
 
+        let mut query_choices = HashMap::new();
+        query_choices.insert("default".to_string(), default_revset.clone());
+
+        if self.data.query_choices.is_empty() {
+            query_choices.insert(
+                "tracked-bookmarks".to_string(),
+                "@ | ancestors(bookmarks(), 5)".to_string(),
+            );
+            query_choices.insert(
+                "remote-bookmarks".to_string(),
+                "@ | ancestors(remote_bookmarks(), 5)".to_string(),
+            );
+            query_choices.insert("all-revisions".to_string(), "all()".to_string());
+        } else {
+            query_choices.extend(self.data.query_choices.clone());
+        }
+
         let latest_query = self
             .session
             .latest_query
             .as_ref()
-            .unwrap_or(&default_query)
+            .unwrap_or(&default_revset)
             .clone();
 
         Ok(messages::RepoConfig::Workspace {
             absolute_path,
             git_remotes,
-            default_query,
+            query_choices,
             latest_query,
             status: self.format_status(),
             theme_override: self.data.workspace_settings.ui_theme_override(),

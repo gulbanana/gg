@@ -356,8 +356,11 @@ impl Session for WorkspaceSession<'_> {
                         log::warn!("Failed to write config array: {err:#}");
                     }
 
-                    (self.data.workspace_settings, self.data.aliases_map) =
-                        read_config(Some(self.workspace.repo_path()))?;
+                    (
+                        self.data.workspace_settings,
+                        self.data.aliases_map,
+                        self.data.query_choices,
+                    ) = read_config(Some(self.workspace.repo_path()))?;
                 }
             };
         }

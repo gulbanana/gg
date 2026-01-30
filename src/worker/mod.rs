@@ -121,7 +121,7 @@ impl WorkerSession {
         }
 
         let canonical_location = dunce::canonicalize(location)?;
-        let (settings, _) = crate::config::read_config(None)?;
+        let (settings, _, _) = crate::config::read_config(None)?;
 
         if colocated {
             let git_path = location.join(".git");
@@ -161,7 +161,7 @@ impl WorkerSession {
         }
 
         let canonical_location = dunce::canonicalize(location)?;
-        let (settings, _) = crate::config::read_config(None)?;
+        let (settings, _, _) = crate::config::read_config(None)?;
 
         // init empty
         let (_workspace, repo) = if colocated {

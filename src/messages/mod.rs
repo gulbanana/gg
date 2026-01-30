@@ -63,7 +63,7 @@ pub enum RepoConfig {
     Workspace {
         absolute_path: DisplayPath,
         git_remotes: Vec<String>,
-        default_query: String,
+        query_choices: HashMap<String, String>,
         latest_query: String,
         status: RepoStatus,
         theme_override: Option<String>,

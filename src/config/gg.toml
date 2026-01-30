@@ -29,3 +29,8 @@ mark-unpushed-bookmarks = true
 default-port = 0       # Port to bind to in web mode (0 = random)
 client-timeout = "10m" # Disconnect clients after this duration of inactivity
 launch-browser = true  # Open browser automatically when starting web mode
+
+[gg.revsets]
+# add values here to customise the presets in the log pane. "kebab-case" keys will become "Title Case" entries. examples:
+# local-bookmarks = "bookmarks() & ~remote_bookmarks()"
+# WC-ancestors = "..@"

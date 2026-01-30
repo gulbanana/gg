@@ -208,7 +208,7 @@ fn spawn_app() -> Result<()> {
 }
 
 fn run_app(args: Args) -> Result<()> {
-    let (settings, _) = read_config(args.workspace().as_deref())?;
+    let (settings, _, _) = read_config(args.workspace().as_deref())?;
     let mode = args.mode().unwrap_or_else(|| settings.default_mode());
     let context = tauri::generate_context!();
 
