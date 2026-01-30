@@ -15,7 +15,8 @@
     "@tauri-apps/api": "^2.9.0",
     "@tauri-apps/plugin-shell": "^2.3.0",
     "feather-icons": "^4.29.1",
-    "modern-normalize": "^2.0.0"
+    "modern-normalize": "^2.0.0",
+    "svelte-splitpanes": "^8.0.12"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.0",
@@ -25,11 +26,16 @@
     "@tsconfig/svelte": "^5.0.2",
     "@types/node": "^25.0.10",
     "@vitest/browser-playwright": "^4.0.18",
-    "svelte": "^5.0.0",
+    "svelte": "^5.43.0",
     "svelte-check": "^4.0.0",
     "tslib": "^2.6.0",
     "typescript": "^5.0.2",
     "vite": "^7.2.6",
     "vitest": "^4.0.18"
+  },
+  "pnpm":{
+    "patchedDependencies": {
+      "svelte-splitpanes@8.0.12": "./patches/svelte-splitpanes.patch"
+    }
   }
 }
