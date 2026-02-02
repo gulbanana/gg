@@ -2,7 +2,7 @@
 
 ![screenshot](res/screenshot.png)
 
-GG is a GUI for the version control system [Jujutsu](https://github.com/martinvonz/jj). It takes advantage of Jujutsu's composable primitives to present an interactive view of your repository. Just imagine: what if you were always in the middle of an interactive rebase, but this was actually good?
+GG is a GUI for the version control system [Jujutsu](https://github.com/jj-vcs/jj). It takes advantage of Jujutsu's composable primitives to present an interactive view of your repository. Just imagine: what if you were always in the middle of an interactive rebase, but this was actually good?
 
 ## Installation
 GG is a desktop application with a keyboard & mouse interface, written in [Tauri](https://tauri.app/). Binaries are available for several platforms on the [releases page](https://github.com/gulbanana/gg/releases). Use the `.dmg` or `.app.tar.gz` on MacOS, and the `.msi` or `.exe` on Windows. 
@@ -20,8 +20,8 @@ Put `gg` on your path and run it from a Jujutsu workspace, pass the workspace di
 GG uses `jj config`; `revset-aliases.immutable_heads()` is particularly important, as it determines how much history you can edit. GG has some additional settings of its own, with defaults and documentation [here](src/config/gg.toml).
 
 ## Features
-GG doesn't require [JJ](https://martinvonz.github.io/jj/latest/install-and-setup/) to run, but you'll need it for tasks GG doesn't cover. What it *can* do:
-- Use the left pane to query and browse the log. Click to select revisions, double-click to edit (if mutable) or create a new child (if immutable).
+GG doesn't require [JJ](https://jj-vcs.github.io/jj/latest/install-and-setup/) to run, but you'll need it for tasks GG doesn't cover. What it *can* do:
+- Use the left pane to query and browse the log. Click to select revisions, shift-click for multiple selection, double-click to edit (if mutable) or create a new child (if immutable).
 - Use the right pane to inspect and edit revisions - set descriptions, issue commands, view their parents and changes.
 - Drag revisions around to rebase them; move them into or out of a revision's parents to add merges and move entire subtrees. Or just abandon them entirely.
 - Drag files around to squash them into new revisions or throw away changes (restoring from parents).
