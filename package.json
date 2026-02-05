@@ -12,15 +12,15 @@
   },
   "dependencies": {
     "@catppuccin/palette": "^1.0.3",
-    "@tauri-apps/api": "^2.9.0",
-    "@tauri-apps/plugin-shell": "^2.3.0",
+    "@tauri-apps/api": "^2.10.1",
+    "@tauri-apps/plugin-shell": "^2.3.5",
     "feather-icons": "^4.29.1",
     "modern-normalize": "^2.0.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.0",
     "@sveltejs/vite-plugin-svelte": "^6.0.0",
-    "@tauri-apps/cli": "^2.9.0",
+    "@tauri-apps/cli": "^2.10.0",
     "@testing-library/svelte": "^5.3.1",
     "@tsconfig/svelte": "^5.0.2",
     "@types/node": "^25.0.10",
