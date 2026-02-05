@@ -1,6 +1,7 @@
 # GG Changelog
 
-## Unreleased
+## [0.38.0](releases/tag/v0.38.0)
+This release is based on Jujutsu 0.38.
 
 ### Added
 - There's a toggle in the bottom left of the screen marked with a 🛡; turning it on acts like `jj --ignore immutable`, affording you infinite power.
