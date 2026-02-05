@@ -51,7 +51,7 @@ jobs:
       - name: install frontend dependencies
         run: npm ci 
 
-      - uses: tauri-apps/tauri-action@v0
+      - uses: tauri-apps/tauri-action@action-v0.5.25
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
