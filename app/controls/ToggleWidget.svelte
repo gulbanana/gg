@@ -5,6 +5,7 @@
     export let tip: string = "";
     export let checked: boolean;
     export let safe: boolean = false;
+    export let secondary: boolean = false;
     export let disabled: boolean = false;
     export let on: string;
     export let off: string;
@@ -21,6 +22,7 @@
 <button
     {disabled}
     class:safe
+    class:secondary
     class:checked
     on:click={toggle}
     on:dragenter={dragOverWidget}
@@ -88,10 +90,24 @@
             border-right-color: var(--ctp-teal);
             border-bottom-color: var(--ctp-teal);
         }
+
+        &.secondary {
+            color: var(--ctp-text);
+            background: var(--ctp-base);
+            &:hover {
+                background: var(--ctp-overlay0);
+            }
+            &:active {
+                border-right-color: var(--ctp-overlay0);
+                border-bottom-color: var(--ctp-overlay0);
+                /* border-top-color: var(--ctp-text);
+                border-left-color: var(--ctp-text); */
+            }
+        }
     }
 
     button:disabled {
         background: var(--ctp-mantle);
-        color: var(--ctp-subtext1);
+        color: var(--ctp-overlay2);
     }
 </style>

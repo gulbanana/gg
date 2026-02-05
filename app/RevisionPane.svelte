@@ -185,6 +185,7 @@
 
                 <ToggleWidget
                     safe
+                    secondary
                     tip="reset author"
                     bind:checked={resetAuthor}
                     disabled={newest.is_immutable}
