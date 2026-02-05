@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "check": "svelte-check --tsconfig ./tsconfig.json",
-    "prebuild": "npm ci && npm run check",
+    "prebuild": "npm run check",
     "build": "vite build",
     "test": "vitest run",
     "tauri": "tauri"

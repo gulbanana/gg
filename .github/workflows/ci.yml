@@ -24,6 +24,7 @@ jobs:
             node-version: '20'
             cache: 'npm'
       
+      - run: npm ci
       - run: npm run build
 
       # build backend, required for frontend tests
