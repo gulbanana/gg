@@ -1,5 +1,5 @@
 productName = "gg"
-version = "0.38.0"
+version = "0.38.1"
 identifier = "au.gulbanana.gg"
 
 [[app.security.capabilities]]

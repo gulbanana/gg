@@ -1,6 +1,6 @@
 # GG Changelog
 
-## Unreleased
+## [0.38.1](releases/tag/v0.38.1)
 
 ### Fixed
 - `XDG_CONFIG_HOME` wasn't being used to look up global gitignores.
