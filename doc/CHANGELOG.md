@@ -1,5 +1,10 @@
 # GG Changelog
 
+## Unreleased
+
+### Fixed
+- `XDG_CONFIG_HOME` wasn't being used to look up global gitignores.
+
 ## [0.38.0](releases/tag/v0.38.0)
 This release is based on Jujutsu 0.38.
 

@@ -820,7 +820,9 @@ impl WorkspaceSession<'_> {
             return Ok(false); // The workspace has been deleted
         };
 
-        let base_ignores = self.operation.base_ignores(self.workspace.workspace_root())?;
+        let base_ignores = self
+            .operation
+            .base_ignores(self.workspace.workspace_root())?;
 
         // Compare working-copy tree and operation with repo's, and reload as needed.
         let mut locked_ws = self.workspace.start_working_copy_mutation()?;
@@ -1195,6 +1197,15 @@ impl SessionOperation {
     }
 
     pub fn base_ignores(&self, workspace_root: &Path) -> Result<Arc<GitIgnoreFile>> {
+        fn xdg_config_home() -> Option<PathBuf> {
+            if let Ok(x) = std::env::var("XDG_CONFIG_HOME")
+                && !x.is_empty()
+            {
+                return Some(PathBuf::from(x));
+            }
+            etcetera::home_dir().ok().map(|home| home.join(".config"))
+        }
+
         let get_excludes_file_path = |config: &gix::config::File| -> Option<PathBuf> {
             if let Some(value) = config.string("core.excludesFile") {
                 let path = std::str::from_utf8(&value)
@@ -1202,7 +1213,7 @@ impl SessionOperation {
                     .map(file_util::expand_home_path)?;
                 Some(workspace_root.join(path))
             } else {
-                dirs::config_dir().map(|x| x.join("git").join("ignore"))
+                xdg_config_home().map(|x| x.join("git").join("ignore"))
             }
         };
 
@@ -1393,4 +1404,3 @@ pub fn get_git_remote_names(git_repo: &gix::Repository) -> Vec<String> {
         .map(|remote| remote.to_string())
         .collect()
 }
-

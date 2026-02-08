@@ -302,3 +302,87 @@ async fn transaction_snapshot_path_is_visible() -> Result<()> {
 
     Ok(())
 }
+
+// serialize tests that mutate XDG_CONFIG_HOME
+static XDG_ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+#[tokio::test]
+async fn snapshot_respects_xdg_gitignore_colocated() -> Result<()> {
+    let _lock = XDG_ENV_LOCK.lock().unwrap();
+
+    let xdg_dir = tempdir()?;
+    let ignore_dir = xdg_dir.path().join("git");
+    fs::create_dir_all(&ignore_dir)?;
+    fs::write(ignore_dir.join("ignore"), "*.ignored\n")?;
+
+    unsafe { std::env::set_var("XDG_CONFIG_HOME", xdg_dir.path()) };
+    let _guard = SetVarGuard("XDG_CONFIG_HOME");
+
+    let workspace_dir = tempdir()?;
+    let mut session = WorkerSession::default();
+    session.init_workspace(&workspace_dir.path().to_owned(), true)?;
+    let mut ws = session.load_directory(workspace_dir.path())?;
+
+    fs::write(workspace_dir.path().join("tracked.txt"), "hello")?;
+    fs::write(workspace_dir.path().join("should_be.ignored"), "hidden")?;
+
+    assert!(ws.import_and_snapshot(true, false).await?);
+
+    let commit = ws.get_commit(ws.wc_id())?;
+    let tracked = commit
+        .tree()
+        .path_value(RepoPath::from_internal_string("tracked.txt")?)?;
+    let ignored = commit
+        .tree()
+        .path_value(RepoPath::from_internal_string("should_be.ignored")?)?;
+
+    assert!(tracked.is_resolved() && tracked.first().as_ref().is_some());
+    assert!(ignored.is_absent());
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn snapshot_respects_xdg_gitignore_internal() -> Result<()> {
+    let _lock = XDG_ENV_LOCK.lock().unwrap();
+
+    let xdg_dir = tempdir()?;
+    let ignore_dir = xdg_dir.path().join("git");
+    fs::create_dir_all(&ignore_dir)?;
+    fs::write(ignore_dir.join("ignore"), "*.ignored\n")?;
+
+    unsafe { std::env::set_var("XDG_CONFIG_HOME", xdg_dir.path()) };
+    let _guard = SetVarGuard("XDG_CONFIG_HOME");
+
+    let workspace_dir = tempdir()?;
+    let mut session = WorkerSession::default();
+    session.init_workspace(&workspace_dir.path().to_owned(), false)?;
+    let mut ws = session.load_directory(workspace_dir.path())?;
+
+    fs::write(workspace_dir.path().join("tracked.txt"), "hello")?;
+    fs::write(workspace_dir.path().join("should_be.ignored"), "hidden")?;
+
+    assert!(ws.import_and_snapshot(true, false).await?);
+
+    let commit = ws.get_commit(ws.wc_id())?;
+    let tracked = commit
+        .tree()
+        .path_value(RepoPath::from_internal_string("tracked.txt")?)?;
+    let ignored = commit
+        .tree()
+        .path_value(RepoPath::from_internal_string("should_be.ignored")?)?;
+
+    assert!(tracked.is_resolved() && tracked.first().as_ref().is_some());
+    assert!(ignored.is_absent());
+
+    Ok(())
+}
+
+/// RAII guard that removes an env var on drop
+struct SetVarGuard(&'static str);
+
+impl Drop for SetVarGuard {
+    fn drop(&mut self) {
+        unsafe { std::env::remove_var(self.0) };
+    }
+}

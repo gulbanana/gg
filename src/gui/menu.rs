@@ -717,7 +717,7 @@ fn extract_repo_name(url: &str) -> String {
 fn abbreviate_path(path: &str) -> String {
     let path = Path::new(path);
 
-    if let Some(home) = dirs::home_dir()
+    if let Ok(home) = etcetera::home_dir()
         && let Ok(relative) = path.strip_prefix(&home)
     {
         let sep = path::MAIN_SEPARATOR;
