@@ -188,7 +188,7 @@
                     secondary
                     tip="reset author"
                     bind:checked={resetAuthor}
-                    disabled={newest.is_immutable}
+                    disabled={newestImmutable}
                     on="unlock"
                     off="lock" />
                 <span></span>
