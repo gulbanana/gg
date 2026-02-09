@@ -133,7 +133,6 @@
 
 textarea,
 select,
-::picker(select),
 input {
   outline: none;
   border: 1px solid var(--ctp-overlay0);
@@ -167,6 +166,18 @@ input {
 
   &::-webkit-scrollbar-track {
     background-color: var(--ctp-base);
+  }
+}
+
+@supports (appearance: base-select) {
+  ::picker(select) {
+    outline: none;
+    border: 1px solid var(--ctp-overlay0);
+    border-radius: 3px;
+    padding: 1px;
+
+    background-color: var(--ctp-base);
+    color: var(--ctp-text);
   }
 }
 

@@ -17,33 +17,24 @@
     let dispatch = createEventDispatcher();
 </script>
 
-<select {id} bind:value on:change={(event) => dispatch("change", event)}>
-    {#each options as option}
-        {#if option.separator}
-            <hr class="separator" />
-        {:else}
-            <option selected={value == option.value} value={option.value}>
-                <slot {option}>{option.value}</slot>
-            </option>
-        {/if}
-    {/each}
-</select>
+<div class="wrapper">
+    <select {id} bind:value on:change={(event) => dispatch("change", event)}>
+        {#each options as option}
+            {#if option.separator}
+                <hr class="separator" />
+            {:else}
+                <option selected={value == option.value} value={option.value}>
+                    <slot {option}>{option.value}</slot>
+                </option>
+            {/if}
+        {/each}
+    </select>
+    <Icon name="chevron-down" />
+</div>
 
 <style>
-    select,
-    ::picker(select) {
-        appearance: base-select;
-    }
-
     select {
-        height: 30px;
-        min-width: 150px;
         padding-left: 3px;
-        padding-right: 3px;
-
-        display: flex;
-        align-items: center;
-
         cursor: pointer;
 
         &:focus-visible {
@@ -51,34 +42,71 @@
         }
     }
 
-    ::picker(select) {
-        margin-top: 3px;
-        padding-bottom: 6px;
+    /* fallback for browsers without base-select (Safari) */
+    .wrapper {
+        display: flex;
+        position: relative;
     }
 
-    select::picker-icon {
-        content: "";
-        display: block;
-        width: 6px;
-        height: 6px;
-        border-right: 2px solid currentColor;
-        border-bottom: 2px solid currentColor;
-        transform: rotate(45deg);
-        margin-top: -2px;
-        margin-right: 4px;
+    .wrapper > :global(:last-child) {
+        position: absolute;
+        right: 3px;
+        height: 32px;
     }
 
-    select:open::picker-icon {
-        transform: rotate(225deg);
-        margin-top: 4px;
+    select {
+        appearance: none;
     }
 
-    option {
-        outline: none;
-    }
+    /* customisable select for browsers that support it */
+    @supports (appearance: base-select) {
+        .wrapper > :global(:last-child) {
+            display: none;
+        }
 
-    .separator {
-        border-color: var(--ctp-overlay0);
-        margin: 6px 0;
+        select,
+        ::picker(select) {
+            appearance: base-select;
+        }
+
+        select {
+            height: 30px;
+            min-width: 150px;
+            padding-right: 3px;
+
+            display: flex;
+            align-items: center;
+        }
+
+        ::picker(select) {
+            margin-top: 3px;
+            padding-bottom: 6px;
+        }
+
+        select::picker-icon {
+            content: "";
+            display: block;
+            width: 6px;
+            height: 6px;
+            border-right: 2px solid currentColor;
+            border-bottom: 2px solid currentColor;
+            transform: rotate(45deg);
+            margin-top: -2px;
+            margin-right: 4px;
+        }
+
+        select:open::picker-icon {
+            transform: rotate(225deg);
+            margin-top: 4px;
+        }
+
+        option {
+            outline: none;
+        }
+
+        .separator {
+            border-color: var(--ctp-overlay0);
+            margin: 6px 0;
+        }
     }
 </style>
