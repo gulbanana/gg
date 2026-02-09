@@ -1,5 +1,11 @@
 # GG Changelog
 
+## [0.38.2](releases/tag/v0.38.2)
+
+### Fixed
+- The revset selector and textbox colours were broken on MacOS due to some CSS that Safari doesn't yet support.
+- The reset-author toggle in the right pane didn't become clickable when toggling on "ignore immutability" until you performed some other operation.
+
 ## [0.38.1](releases/tag/v0.38.1)
 
 ### Fixed
