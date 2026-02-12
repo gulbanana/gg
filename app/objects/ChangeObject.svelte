@@ -3,6 +3,7 @@
     import type { RevHeader } from "../messages/RevHeader";
     import type { Operand } from "../messages/Operand";
     import type { ExternalDiff } from "../messages/ExternalDiff";
+    import type { ExternalResolve } from "../messages/ExternalResolve";
     import Icon from "../controls/Icon.svelte";
     import ActionWidget from "../controls/ActionWidget.svelte";
     import Object from "./Object.svelte";
@@ -17,6 +18,7 @@
     let operand: Operand | null = headers ? { type: "Change", headers, path: change.path, hunk: null } : null;
 
     $: hasDiffTool = $repoConfigEvent.type === "Workspace" && $repoConfigEvent.has_external_diff_tool;
+    $: hasMergeTool = $repoConfigEvent.type === "Workspace" && $repoConfigEvent.has_external_merge_tool;
 
     let icon = "file";
     let state: "add" | "change" | "remove" | null = null;
@@ -46,6 +48,14 @@
             path: change.path,
         });
     }
+
+    function onExternalResolve() {
+        if (!headers) return;
+        mutate<ExternalResolve>("external_resolve", {
+            id: headers[0].id,
+            path: change.path,
+        });
+    }
 </script>
 
 <Object
@@ -61,7 +71,11 @@
         <div class="layout" class:target>
             <Icon name={icon} state={context ? null : state} />
             <span>{hint ?? change.path.relative_path}</span>
-            {#if hasDiffTool && operand}
+            {#if hasMergeTool && change.has_conflict && operand}
+                <ActionWidget tip="resolve in merge tool" onClick={onExternalResolve}>
+                    <Icon name="external-link" />
+                </ActionWidget>
+            {:else if hasDiffTool && operand}
                 <ActionWidget safe tip="open in diff tool" onClick={onExternalDiff}>
                     <Icon name="external-link" />
                 </ActionWidget>

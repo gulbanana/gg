@@ -12,6 +12,14 @@
   ```
   ...then revisions created by GG will be authored by "GG Author" instead of "JJ Author".
 - If `ui.diff-formatter` is set to a non-builtin tool, an "open in diff tool" button will appear for each file in the changelist. If you don't want this, or want to use *different* external tool than you use with jj-cli, set `gg.ui.diff-formatter` - an empty string will disable external diffing. 
+- If `ui.merge-editor` is set, or both merge-editor and diff-formatter are set, conflicted files will have an "resolve with merge tool" button instead. Sample config for a less cluttered change list:
+  ```
+  [ui]
+  diff-formatter = "bc3"
+  merge-editor = "bc3"
+  [gg.ui]
+  diff-formatter="" # overrides ui.diff-formatter, removing the difftool button but not the mergetool button
+  ```
 
 ### Fixed
 - Pushes were silently rejected when branches had moved or been locked down; now an error is displayed.

@@ -225,3 +225,11 @@ pub struct ExternalDiff {
     pub id: RevId,
     pub path: TreePath,
 }
+
+/// Resolves a file's conflict in the user's configured external merge tool
+#[derive(Deserialize, Debug)]
+#[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
+pub struct ExternalResolve {
+    pub id: RevId,
+    pub path: TreePath,
+}
