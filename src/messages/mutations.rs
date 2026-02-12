@@ -217,3 +217,11 @@ pub struct GitFetch {
 #[derive(Deserialize, Debug)]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
 pub struct UndoOperation;
+
+/// Opens a file's diff in the user's configured external diff tool
+#[derive(Deserialize, Debug)]
+#[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
+pub struct ExternalDiff {
+    pub id: RevId,
+    pub path: TreePath,
+}

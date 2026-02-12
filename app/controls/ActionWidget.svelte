@@ -12,7 +12,7 @@
 <button
     disabled={isDisabled}
     class:safe
-    on:click={isDisabled ? undefined : onClick}
+    on:click|stopPropagation={isDisabled ? undefined : onClick}
     on:dragenter={dragOverWidget}
     on:dragover={dragOverWidget}
     title={isDisabled ? "" : tip}>
