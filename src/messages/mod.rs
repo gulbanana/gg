@@ -71,6 +71,7 @@ pub enum RepoConfig {
         track_recent_workspaces: bool,
         ignore_immutable: bool,
         has_external_diff_tool: bool,
+        has_external_merge_tool: bool,
     },
     #[allow(dead_code)] // used by frontend
     TimeoutError,

@@ -2,4 +2,4 @@
 import type { DisplayPath } from "./DisplayPath";
 import type { RepoStatus } from "./RepoStatus";
 
-export type RepoConfig = { "type": "Initial" } | { "type": "Workspace", absolute_path: DisplayPath, git_remotes: Array<string>, query_choices: Record<string, string>, latest_query: string, status: RepoStatus, theme_override: string | null, mark_unpushed_bookmarks: boolean, track_recent_workspaces: boolean, ignore_immutable: boolean, has_external_diff_tool: boolean, } | { "type": "TimeoutError" } | { "type": "LoadError", absolute_path: DisplayPath, message: string, } | { "type": "WorkerError", message: string, };
+export type RepoConfig = { "type": "Initial" } | { "type": "Workspace", absolute_path: DisplayPath, git_remotes: Array<string>, query_choices: Record<string, string>, latest_query: string, status: RepoStatus, theme_override: string | null, mark_unpushed_bookmarks: boolean, track_recent_workspaces: boolean, ignore_immutable: boolean, has_external_diff_tool: boolean, has_external_merge_tool: boolean, } | { "type": "TimeoutError" } | { "type": "LoadError", absolute_path: DisplayPath, message: string, } | { "type": "WorkerError", message: string, };

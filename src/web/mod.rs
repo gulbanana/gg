@@ -32,9 +32,9 @@ use crate::config::{GGSettings, read_config};
 use crate::messages::{
     AbandonRevisions, AdoptRevision, BackoutRevisions, CheckoutRevision, CopyChanges, CopyHunk,
     CreateRef, CreateRevision, CreateRevisionBetween, DeleteRef, DescribeRevision,
-    DuplicateRevisions, ExternalDiff, GitFetch, GitPush, InsertRevisions, MoveChanges, MoveHunk,
-    MoveRef, MoveRevisions, MutationOptions, RenameBookmark, TrackBookmark, UndoOperation,
-    UntrackBookmark,
+    DuplicateRevisions, ExternalDiff, ExternalResolve, GitFetch, GitPush, InsertRevisions,
+    MoveChanges, MoveHunk, MoveRef, MoveRevisions, MutationOptions, RenameBookmark, TrackBookmark,
+    UndoOperation, UntrackBookmark,
 };
 use crate::worker::{Mutation, Session, SessionEvent, WorkerSession};
 use sink::{SseEvent, SseSink};
@@ -266,6 +266,7 @@ async fn handle_mutate(
         "git_push" => execute_mutation::<GitPush>(&state, body),
         "git_fetch" => execute_mutation::<GitFetch>(&state, body),
         "external_diff" => execute_mutation::<ExternalDiff>(&state, body),
+        "external_resolve" => execute_mutation::<ExternalResolve>(&state, body),
         "undo_operation" => {
             let (tx, rx) = channel();
             state.worker_tx.send(SessionEvent::ExecuteMutation {

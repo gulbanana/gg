@@ -38,14 +38,14 @@ use crate::git_util::AuthContext;
 use crate::messages::{
     AbandonRevisions, AdoptRevision, BackoutRevisions, CheckoutRevision, CopyChanges, CopyHunk,
     CreateRef, CreateRevision, CreateRevisionBetween, DeleteRef, DescribeRevision,
-    DuplicateRevisions, ExternalDiff, GitFetch, GitPush, GitRefspec, InsertRevisions, MoveChanges,
-    MoveHunk, MoveRef, MoveRevisions, MutationResult, RenameBookmark, StoreRef, TrackBookmark,
-    TreePath, UndoOperation, UntrackBookmark,
+    DuplicateRevisions, ExternalDiff, ExternalResolve, GitFetch, GitPush, GitRefspec,
+    InsertRevisions, MoveChanges, MoveHunk, MoveRef, MoveRevisions, MutationResult, RenameBookmark,
+    StoreRef, TrackBookmark, TreePath, UndoOperation, UntrackBookmark,
 };
 
 use jj_cli::{
     git_util::load_git_import_options,
-    merge_tools::{self, ExternalMergeTool},
+    merge_tools::{self, ConflictResolveError, ExternalMergeTool, MergeEditor},
     ui::Ui,
 };
 
@@ -2045,6 +2045,59 @@ impl Mutation for ExternalDiff {
         });
 
         Ok(MutationResult::Unchanged)
+    }
+}
+
+#[async_trait(?Send)]
+impl Mutation for ExternalResolve {
+    async fn execute(
+        self: Box<Self>,
+        ws: &mut WorkspaceSession,
+        _options: &crate::messages::MutationOptions,
+    ) -> Result<MutationResult> {
+        let commit = ws.resolve_change_id(&self.id)?;
+
+        if ws.check_immutable(vec![commit.id().clone()])? {
+            precondition!("Revision is immutable");
+        }
+
+        let tree = commit.tree();
+        let repo_path = RepoPath::from_internal_string(&self.path.repo_path)?;
+
+        let ui = Ui::null();
+        let merge_editor = MergeEditor::from_settings(
+            &ui,
+            &ws.data.workspace_settings,
+            ws.data.path_converter.clone(),
+            ConflictMarkerStyle::Git,
+        )
+        .context("failed to load merge editor config")?;
+
+        let (new_tree, _partial) = match merge_editor.edit_files(&ui, &tree, &[repo_path]) {
+            Ok(result) => result,
+            Err(ConflictResolveError::EmptyOrUnchanged) => {
+                return Ok(MutationResult::Unchanged);
+            }
+            Err(err) => return Err(err.into()),
+        };
+
+        if new_tree.tree_ids() == tree.tree_ids() {
+            return Ok(MutationResult::Unchanged);
+        }
+
+        let mut tx = ws.start_transaction().await?;
+        tx.repo_mut()
+            .rewrite_commit(&commit)
+            .set_tree(new_tree)
+            .write()?;
+
+        match ws.finish_transaction(tx, format!("resolve conflicts in {}", commit.id().hex()))? {
+            Some(new_status) => Ok(MutationResult::Updated {
+                new_status,
+                new_selection: None,
+            }),
+            None => Ok(MutationResult::Unchanged),
+        }
     }
 }
 

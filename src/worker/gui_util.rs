@@ -72,7 +72,7 @@ pub struct WorkspaceSession<'a> {
 }
 
 pub struct WorkspaceData {
-    path_converter: RepoPathUiConverter,
+    pub path_converter: RepoPathUiConverter,
     extensions: RevsetExtensions,
     pub workspace_settings: UserSettings,
     pub aliases_map: RevsetAliasesMap,
@@ -524,13 +524,10 @@ impl WorkspaceSession<'_> {
             .unwrap_or(&default_revset)
             .clone();
 
-        let has_external_diff_tool = self
-            .data
-            .workspace_settings
-            .get::<jj_cli::config::CommandNameAndArgs>("ui.diff-formatter")
-            .ok()
-            .map(|tool| !matches!(tool.as_str(), Some(s) if s.starts_with(':')))
-            .unwrap_or(false);
+        let has_external_diff_tool =
+            has_external_tool(&self.data.workspace_settings, "ui.diff-formatter");
+        let has_external_merge_tool =
+            has_external_tool(&self.data.workspace_settings, "ui.merge-editor");
 
         Ok(messages::RepoConfig::Workspace {
             absolute_path,
@@ -543,6 +540,7 @@ impl WorkspaceSession<'_> {
             track_recent_workspaces: self.data.workspace_settings.ui_track_recent_workspaces(),
             ignore_immutable: self.session.ignore_immutable,
             has_external_diff_tool,
+            has_external_merge_tool,
         })
     }
 
@@ -1358,6 +1356,15 @@ fn build_ref_index(repo: &ReadonlyRepo) -> RefIndex {
     }
 
     index
+}
+
+/// checks whether a jj config key points to an external (non-builtin) tool
+fn has_external_tool(settings: &UserSettings, config_key: &'static str) -> bool {
+    settings
+        .get::<jj_cli::config::CommandNameAndArgs>(config_key)
+        .ok()
+        .map(|tool| !matches!(tool.as_str(), Some(s) if s.starts_with(':')))
+        .unwrap_or(false)
 }
 
 /************************************************/
