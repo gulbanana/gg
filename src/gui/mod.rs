@@ -26,9 +26,9 @@ use crate::config::GGSettings;
 use crate::messages::{
     self, AbandonRevisions, AdoptRevision, BackoutRevisions, CheckoutRevision, CloneRepository,
     CopyChanges, CopyHunk, CreateRef, CreateRevision, CreateRevisionBetween, DeleteRef,
-    DescribeRevision, DuplicateRevisions, GitFetch, GitPush, InitRepository, InsertRevisions,
-    MoveChanges, MoveHunk, MoveRef, MoveRevisions, MutationOptions, MutationResult, RenameBookmark,
-    TrackBookmark, UndoOperation, UntrackBookmark,
+    DescribeRevision, DuplicateRevisions, ExternalDiff, GitFetch, GitPush, InitRepository,
+    InsertRevisions, MoveChanges, MoveHunk, MoveRef, MoveRevisions, MutationOptions,
+    MutationResult, RenameBookmark, TrackBookmark, UndoOperation, UntrackBookmark,
 };
 use crate::worker::{Mutation, Session, SessionEvent, WorkerSession};
 use sink::TauriSink;
@@ -192,6 +192,7 @@ pub fn run_gui(options: super::RunOptions) -> Result<()> {
             move_ref,
             git_push,
             git_fetch,
+            external_diff,
             undo_operation,
         ])
         .menu(move |handle| menu::build_main(handle, &recent_workspaces))
@@ -714,6 +715,16 @@ fn git_fetch(
     window: Window,
     app_state: State<AppState>,
     mutation: GitFetch,
+    options: MutationOptions,
+) -> Result<MutationResult, InvokeError> {
+    try_mutate(window, app_state, mutation, options)
+}
+
+#[tauri::command(async)]
+fn external_diff(
+    window: Window,
+    app_state: State<AppState>,
+    mutation: ExternalDiff,
     options: MutationOptions,
 ) -> Result<MutationResult, InvokeError> {
     try_mutate(window, app_state, mutation, options)

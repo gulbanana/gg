@@ -524,6 +524,14 @@ impl WorkspaceSession<'_> {
             .unwrap_or(&default_revset)
             .clone();
 
+        let has_external_diff_tool = self
+            .data
+            .workspace_settings
+            .get::<jj_cli::config::CommandNameAndArgs>("ui.diff-formatter")
+            .ok()
+            .map(|tool| !matches!(tool.as_str(), Some(s) if s.starts_with(':')))
+            .unwrap_or(false);
+
         Ok(messages::RepoConfig::Workspace {
             absolute_path,
             git_remotes,
@@ -534,6 +542,7 @@ impl WorkspaceSession<'_> {
             mark_unpushed_bookmarks: self.data.workspace_settings.ui_mark_unpushed_bookmarks(),
             track_recent_workspaces: self.data.workspace_settings.ui_track_recent_workspaces(),
             ignore_immutable: self.session.ignore_immutable,
+            has_external_diff_tool,
         })
     }
 

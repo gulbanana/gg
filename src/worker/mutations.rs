@@ -38,12 +38,16 @@ use crate::git_util::AuthContext;
 use crate::messages::{
     AbandonRevisions, AdoptRevision, BackoutRevisions, CheckoutRevision, CopyChanges, CopyHunk,
     CreateRef, CreateRevision, CreateRevisionBetween, DeleteRef, DescribeRevision,
-    DuplicateRevisions, GitFetch, GitPush, GitRefspec, InsertRevisions, MoveChanges, MoveHunk,
-    MoveRef, MoveRevisions, MutationResult, RenameBookmark, StoreRef, TrackBookmark, TreePath,
-    UndoOperation, UntrackBookmark,
+    DuplicateRevisions, ExternalDiff, GitFetch, GitPush, GitRefspec, InsertRevisions, MoveChanges,
+    MoveHunk, MoveRef, MoveRevisions, MutationResult, RenameBookmark, StoreRef, TrackBookmark,
+    TreePath, UndoOperation, UntrackBookmark,
 };
 
-use jj_cli::{git_util::load_git_import_options, ui::Ui};
+use jj_cli::{
+    git_util::load_git_import_options,
+    merge_tools::{self, ExternalMergeTool},
+    ui::Ui,
+};
 
 use super::Mutation;
 use super::gui_util::{WorkspaceSession, get_git_remote_names};
@@ -1959,6 +1963,88 @@ impl Mutation for UndoOperation {
             }
             None => Ok(MutationResult::Unchanged),
         }
+    }
+}
+
+#[async_trait(?Send)]
+impl Mutation for ExternalDiff {
+    async fn execute(
+        self: Box<Self>,
+        ws: &mut WorkspaceSession,
+        _options: &crate::messages::MutationOptions,
+    ) -> Result<MutationResult> {
+        let commit = ws.resolve_change_id(&self.id)?;
+        let parents: Vec<_> = commit.parents().collect::<Result<_, _>>()?;
+        let from_tree = rewrite::merge_commit_trees(ws.repo(), &parents).await?;
+        let to_tree = commit.tree();
+
+        let tool_args: jj_cli::config::CommandNameAndArgs =
+            ws.data.workspace_settings.get("ui.diff-formatter")?;
+        let tool = if let Some(name) = tool_args.as_str() {
+            merge_tools::get_external_tool_config(&ws.data.workspace_settings, name)?
+                .unwrap_or_else(|| ExternalMergeTool::with_program(name))
+        } else {
+            ExternalMergeTool::with_diff_args(&tool_args)
+        };
+
+        let repo_path = RepoPath::from_internal_string(&self.path.repo_path)?;
+        let store = ws.repo().store().clone();
+        let left_content = read_file_content(&store, &from_tree, repo_path).await?;
+        let right_content = read_file_content(&store, &to_tree, repo_path).await?;
+        let relative_path = repo_path.to_fs_path_unchecked(std::path::Path::new(""));
+
+        std::thread::spawn(move || {
+            let run = || -> Result<()> {
+                let temp_dir = tempfile::Builder::new().prefix("jj-diff-").tempdir()?;
+
+                let left_dir = temp_dir.path().join("left");
+                let right_dir = temp_dir.path().join("right");
+                let left_path = left_dir.join(&relative_path);
+                let right_path = right_dir.join(&relative_path);
+
+                if let Some(parent) = left_path.parent() {
+                    std::fs::create_dir_all(parent)?;
+                }
+                if let Some(parent) = right_path.parent() {
+                    std::fs::create_dir_all(parent)?;
+                }
+                std::fs::write(&left_path, &left_content)?;
+                std::fs::write(&right_path, &right_content)?;
+
+                let left_rel = left_path
+                    .strip_prefix(temp_dir.path())
+                    .unwrap()
+                    .to_str()
+                    .unwrap()
+                    .to_owned();
+                let right_rel = right_path
+                    .strip_prefix(temp_dir.path())
+                    .unwrap()
+                    .to_str()
+                    .unwrap()
+                    .to_owned();
+                let patterns = HashMap::from([
+                    ("left", left_rel),
+                    ("right", right_rel),
+                    ("width", "80".to_owned()),
+                ]);
+
+                let ui = Ui::null();
+                merge_tools::invoke_external_diff(
+                    &ui,
+                    &mut std::io::sink(),
+                    &tool,
+                    temp_dir.path(),
+                    &patterns,
+                )?;
+                Ok(())
+            };
+            if let Err(e) = run() {
+                log::error!("external diff tool: {e:#}");
+            }
+        });
+
+        Ok(MutationResult::Unchanged)
     }
 }
 

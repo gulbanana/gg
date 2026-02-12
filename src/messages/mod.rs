@@ -70,6 +70,7 @@ pub enum RepoConfig {
         mark_unpushed_bookmarks: bool,
         track_recent_workspaces: bool,
         ignore_immutable: bool,
+        has_external_diff_tool: bool,
     },
     #[allow(dead_code)] // used by frontend
     TimeoutError,
