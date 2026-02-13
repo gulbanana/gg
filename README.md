@@ -57,4 +57,4 @@ Some useful commands:
 * `cargo tauri build` - create a standard release build. Require codesigning setup.
 * `cargo tauri build --target universal-apple-darwin` - create a fat binary for MacOS.
 
-[DESIGN.md](DESIGN.md) has some basic information about how GG works and why.
+[DESIGN.md](doc/DESIGN.md) has some basic information about how GG works and why.
