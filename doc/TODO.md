@@ -6,7 +6,6 @@ Planned Features
 * Some way to access the resolve (mergetool) workflow. Difftools too, although this is less useful.
 * Structured op descriptions - extracted ids etc, maybe via tags. This would benefit from being in JJ core.
 * Window menu for common OS functions.
-* Better handling of the case where a git remote refuses push because you haven't fetched yet.
 * Analogues of more commands like `jj parallelise` and `jj absorb`.
 * In-app custom revset editing.
 

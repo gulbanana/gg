@@ -1,5 +1,10 @@
 # GG Changelog
 
+## Unreleased
+
+### Fixed
+- Pushes were silently rejected when branches had moved or been locked down; now an error is displayed.
+
 ## [0.38.2](releases/tag/v0.38.2)
 
 ### Fixed

@@ -22,7 +22,7 @@ use jj_lib::{
     object_id::ObjectId as ObjectIdTrait,
     op_store::{RefTarget, RemoteRef, RemoteRefState},
     op_walk,
-    ref_name::{RefNameBuf, RemoteName, RemoteNameBuf, RemoteRefSymbol},
+    ref_name::{GitRefNameBuf, RefNameBuf, RemoteName, RemoteNameBuf, RemoteRefSymbol},
     refs::{self, BookmarkPushAction, BookmarkPushUpdate, LocalAndRemoteRef},
     repo::Repo,
     repo_path::RepoPath,
@@ -1797,8 +1797,42 @@ impl Mutation for GitPush {
                 )
             });
 
-            if let Err(err) = result {
-                return Ok(auth_ctx.into_result(err.into()));
+            match result {
+                Err(err) => return Ok(auth_ctx.into_result(err.into())),
+                Ok(stats) if !stats.all_ok() => {
+                    let format_refs = |refs: &[(_, Option<String>)]| {
+                        refs.iter()
+                            .map(|(ref_name, reason): &(GitRefNameBuf, _)| match reason {
+                                Some(msg) if msg.as_str() != "stale info" => {
+                                    format!("{} (reason: {})", ref_name.as_str(), msg)
+                                }
+                                _ => ref_name.as_str().to_string(),
+                            })
+                            .join(", ")
+                    };
+
+                    let mut message = String::new();
+
+                    if !stats.rejected.is_empty() {
+                        message += &format!(
+                            "The following references unexpectedly moved on the remote: {}. Try fetching first.",
+                            format_refs(&stats.rejected)
+                        );
+                    }
+
+                    if !stats.remote_rejected.is_empty() {
+                        if !message.is_empty() {
+                            message += "\n\n";
+                        }
+                        message += &format!(
+                            "The remote rejected the following updates: {}. Check if you have permission to push.",
+                            format_refs(&stats.remote_rejected)
+                        );
+                    }
+
+                    return Ok(MutationResult::PreconditionError { message });
+                }
+                Ok(_) => (),
             }
         }
 
