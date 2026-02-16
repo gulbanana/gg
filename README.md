@@ -30,7 +30,7 @@ GG doesn't require [JJ](https://jj-vcs.github.io/jj/latest/install-and-setup/) t
 - Push and fetch git changes using the bottom bar.
 - Undo anything with ⟲ in the bottom right corner.
 
-More detail is available in [the changelog](doc/CHANGELOG.md).
+More detail is available in [the changelog](CHANGELOG.md).
 
 ### Future Features
 There's no roadmap as such, but items on [the to-do list](doc/TODO.md) may or may not be implemented in future. Just about everything is subject to change for now, including the name.
