@@ -175,7 +175,8 @@ impl Mutation for BackoutRevisions {
         tx.repo_mut()
             .rewrite_commit(&working_copy)
             .set_tree(new_wc_tree)
-            .write()?;
+            .write()
+            .await?;
 
         let transaction_description = if commits.len() == 1 {
             format!("back out commit {}", newest.id().hex())
@@ -249,7 +250,11 @@ impl Mutation for CreateRevision {
         // use as parents of new revision
         let parent_ids: Vec<_> = parent_commits.iter().map(Commit::id).cloned().collect();
         let merged_tree = rewrite::merge_commit_trees(tx.repo(), &parent_commits).await?;
-        let new_commit = tx.repo_mut().new_commit(parent_ids, merged_tree).write()?;
+        let new_commit = tx
+            .repo_mut()
+            .new_commit(parent_ids, merged_tree)
+            .write()
+            .await?;
 
         // make it the working copy
         tx.repo_mut().edit(ws.name().to_owned(), &new_commit)?;
@@ -283,7 +288,11 @@ impl Mutation for CreateRevisionBetween {
         let parent_commits = vec![parent_id];
         let merged_tree = rewrite::merge_commit_trees(tx.repo(), &parent_commits).await?;
 
-        let new_commit = tx.repo_mut().new_commit(parent_ids, merged_tree).write()?;
+        let new_commit = tx
+            .repo_mut()
+            .new_commit(parent_ids, merged_tree)
+            .write()
+            .await?;
 
         let before_commit = ws
             .resolve_change_id(&self.before_id)
@@ -338,7 +347,7 @@ impl Mutation for DescribeRevision {
             commit_builder = commit_builder.set_author(new_author);
         }
 
-        commit_builder.write()?;
+        commit_builder.write().await?;
 
         match ws.finish_transaction(tx, format!("describe commit {}", described.id().hex()))? {
             Some(new_status) => Ok(MutationResult::Updated {
@@ -383,7 +392,8 @@ impl Mutation for DuplicateRevisions {
                 .clear_rewrite_source()
                 .generate_new_change_id()
                 .set_parents(clone_parents?)
-                .write()?;
+                .write()
+                .await?;
             clones.insert(clonee, clone);
         }
 
@@ -671,7 +681,8 @@ impl Mutation for MoveChanges {
                 tx.repo_mut()
                     .rewrite_commit(commit)
                     .set_tree(commit_remainder)
-                    .write()?;
+                    .write()
+                    .await?;
             }
         }
 
@@ -723,7 +734,8 @@ impl Mutation for MoveChanges {
             .rewrite_commit(&to)
             .set_tree(new_to_tree)
             .set_description(description)
-            .write()?;
+            .write()
+            .await?;
 
         match ws.finish_transaction(
             tx,
@@ -787,7 +799,8 @@ impl Mutation for CopyChanges {
                 tx.repo_mut()
                     .rewrite_commit(commit)
                     .set_tree(new_tree)
-                    .write()?;
+                    .write()
+                    .await?;
             }
         }
 
@@ -1280,7 +1293,8 @@ impl Mutation for MoveHunk {
             repo_path,
             sibling_blob_id,
             sibling_executable,
-        )?;
+        )
+        .await?;
 
         // Remove hunk from source: backout the base→sibling diff from from_tree
         let remainder_tree = MergedTree::merge(Merge::from_vec(vec![
@@ -1338,7 +1352,8 @@ impl Mutation for MoveHunk {
                 .rewrite_commit(&to)
                 .set_tree(new_to_tree)
                 .set_description(description)
-                .write()?;
+                .write()
+                .await?;
 
             if abandon_source {
                 tx.repo_mut().record_abandoned_commit(&from);
@@ -1346,7 +1361,8 @@ impl Mutation for MoveHunk {
                 tx.repo_mut()
                     .rewrite_commit(&from)
                     .set_tree(remainder_tree)
-                    .write()?;
+                    .write()
+                    .await?;
             }
 
             // Rebase all descendants, which includes rebasing source's descendants onto modified ancestor
@@ -1359,7 +1375,8 @@ impl Mutation for MoveHunk {
                 tx.repo_mut()
                     .rewrite_commit(&from)
                     .set_tree(remainder_tree)
-                    .write()?;
+                    .write()
+                    .await?;
             }
 
             if from_is_ancestor {
@@ -1410,7 +1427,8 @@ impl Mutation for MoveHunk {
                 .rewrite_commit(&to)
                 .set_tree(new_to_tree)
                 .set_description(description)
-                .write()?;
+                .write()
+                .await?;
 
             // Rebase all descendants as usual
             tx.repo_mut().rebase_descendants()?;
@@ -1569,13 +1587,14 @@ impl Mutation for CopyHunk {
         };
 
         let new_to_tree =
-            update_tree_entry(store, &to_tree, repo_path, new_to_blob_id, to_executable)?;
+            update_tree_entry(store, &to_tree, repo_path, new_to_blob_id, to_executable).await?;
 
         // rewrite destination
         tx.repo_mut()
             .rewrite_commit(&to)
             .set_tree(new_to_tree)
-            .write()?;
+            .write()
+            .await?;
 
         tx.repo_mut().rebase_descendants()?;
 
@@ -2129,7 +2148,8 @@ impl Mutation for ExternalResolve {
         tx.repo_mut()
             .rewrite_commit(&commit)
             .set_tree(new_tree)
-            .write()?;
+            .write()
+            .await?;
 
         match ws.finish_transaction(tx, format!("resolve conflicts in {}", commit.id().hex()))? {
             Some(new_status) => Ok(MutationResult::Updated {
@@ -2314,7 +2334,7 @@ fn apply_hunk_to_base(base_content: &[u8], hunk: &crate::messages::ChangeHunk) -
     Ok(result_bytes)
 }
 
-fn update_tree_entry(
+async fn update_tree_entry(
     _store: &Arc<jj_lib::store::Store>,
     original_tree: &MergedTree,
     path: &RepoPath,
@@ -2330,6 +2350,6 @@ fn update_tree_entry(
             copy_id: CopyId::placeholder(),
         }),
     );
-    let new_tree = builder.write_tree()?;
+    let new_tree = builder.write_tree().await?;
     Ok(new_tree)
 }

@@ -188,8 +188,8 @@ fn recent_workspaces_returns_configured_paths() {
 }
 
 mod extract_overrides {
-    use super::super::{extract_overrides, native_keys, GGSettings};
-    use super::{settings_with_extracted_overrides, JJ_TEST_DEFAULTS};
+    use super::super::{GGSettings, extract_overrides, native_keys};
+    use super::{JJ_TEST_DEFAULTS, settings_with_extracted_overrides};
     use jj_lib::config::{ConfigLayer, ConfigSource, StackedConfig};
     use jj_lib::settings::UserSettings;
 

@@ -48,6 +48,7 @@ use jj_lib::{
     working_copy::{CheckoutStats, SnapshotOptions, WorkingCopyFreshness},
     workspace::{self, DefaultWorkspaceLoaderFactory, Workspace, WorkspaceLoaderFactory},
 };
+use pollster::FutureExt as _;
 use thiserror::Error;
 
 use super::WorkerSession;
@@ -919,7 +920,8 @@ impl WorkspaceSession<'_> {
             let commit = mut_repo
                 .rewrite_commit(&wc_commit)
                 .set_tree(new_tree_id)
-                .write()?;
+                .write()
+                .await?;
             mut_repo.set_wc_commit(workspace_name.clone(), commit.id().clone())?;
 
             mut_repo.rebase_descendants()?;
@@ -1392,7 +1394,8 @@ fn load_at_head(workspace: &Workspace, data: &WorkspaceData) -> Result<SessionOp
                     .clone(),
             )
         },
-    )?;
+    )
+    .block_on()?;
 
     let repo: Arc<ReadonlyRepo> = workspace
         .repo_loader()
