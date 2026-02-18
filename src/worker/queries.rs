@@ -325,8 +325,8 @@ pub async fn query_revisions(ws: &WorkspaceSession<'_>, set: RevSet) -> Result<R
 
     // trees before and after the revset
     let oldest_commit = commits.last().ok_or(anyhow!("slice is_empty()"))?;
-    let oldest_parents: Result<Vec<_>, _> = oldest_commit.parents().collect();
-    let parent_tree = rewrite::merge_commit_trees(ws.repo(), &oldest_parents?).await?;
+    let oldest_parents = oldest_commit.parents().await?;
+    let parent_tree = rewrite::merge_commit_trees(ws.repo(), &oldest_parents).await?;
 
     let newest_commit = commits.first().ok_or(anyhow!("slice is_empty()"))?;
     let final_tree = newest_commit.tree();
@@ -401,9 +401,9 @@ pub async fn query_revisions(ws: &WorkspaceSession<'_>, set: RevSet) -> Result<R
     // optimization: if anything was immutable, the oldest revision's parents must also be immutable
     let parents = oldest_commit
         .parents()
-        .map_ok(|p| ws.format_header(&p, known_immutable))
-        .collect::<Result<Vec<_>, _>>()?
-        .into_iter()
+        .await?
+        .iter()
+        .map(|p| ws.format_header(p, known_immutable))
         .collect::<Result<Vec<_>, _>>()?;
 
     Ok(RevsResult::Detail {

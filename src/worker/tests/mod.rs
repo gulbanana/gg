@@ -215,12 +215,12 @@ pub mod revs {
     }
 }
 
-#[test]
-fn wc_path_is_visible() -> Result<()> {
+#[tokio::test]
+async fn wc_path_is_visible() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
-    let ws = session.load_workspace(repo.path())?;
+    let ws = session.load_workspace(repo.path()).await?;
 
     let commit = ws.get_commit(ws.wc_id())?;
     let value = commit
@@ -243,7 +243,7 @@ async fn snapshot_updates_wc_if_changed() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
-    let mut ws = session.load_workspace(repo.path())?;
+    let mut ws = session.load_workspace(repo.path()).await?;
     let old_wc = ws.wc_id().clone();
 
     assert!(!ws.import_and_snapshot(true, false).await?);
@@ -262,13 +262,13 @@ async fn transaction_updates_wc_if_snapshot() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
-    let mut ws = session.load_workspace(repo.path())?;
+    let mut ws = session.load_workspace(repo.path()).await?;
     let old_wc = ws.wc_id().clone();
 
     fs::write(repo.path().join("new.txt"), []).unwrap();
 
     let tx = ws.start_transaction().await?;
-    ws.finish_transaction(tx, "do nothing")?;
+    ws.finish_transaction(tx, "do nothing").await?;
 
     assert_ne!(&old_wc, ws.wc_id());
 
@@ -280,12 +280,12 @@ async fn transaction_snapshot_path_is_visible() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
-    let mut ws = session.load_workspace(repo.path())?;
+    let mut ws = session.load_workspace(repo.path()).await?;
 
     fs::write(repo.path().join("new.txt"), []).unwrap();
 
     let tx = ws.start_transaction().await?;
-    ws.finish_transaction(tx, "do nothing")?;
+    ws.finish_transaction(tx, "do nothing").await?;
 
     let commit = ws.get_commit(ws.wc_id())?;
     let value = commit
@@ -320,8 +320,10 @@ async fn snapshot_respects_xdg_gitignore_colocated() -> Result<()> {
 
     let workspace_dir = tempdir()?;
     let mut session = WorkerSession::default();
-    session.init_repository(&workspace_dir.path().to_owned(), true)?;
-    let mut ws = session.load_workspace(workspace_dir.path())?;
+    session
+        .init_repository(&workspace_dir.path().to_owned(), true)
+        .await?;
+    let mut ws = session.load_workspace(workspace_dir.path()).await?;
 
     fs::write(workspace_dir.path().join("tracked.txt"), "hello")?;
     fs::write(workspace_dir.path().join("should_be.ignored"), "hidden")?;
@@ -356,8 +358,10 @@ async fn snapshot_respects_xdg_gitignore_internal() -> Result<()> {
 
     let workspace_dir = tempdir()?;
     let mut session = WorkerSession::default();
-    session.init_repository(&workspace_dir.path().to_owned(), false)?;
-    let mut ws = session.load_workspace(workspace_dir.path())?;
+    session
+        .init_repository(&workspace_dir.path().to_owned(), false)
+        .await?;
+    let mut ws = session.load_workspace(workspace_dir.path()).await?;
 
     fs::write(workspace_dir.path().join("tracked.txt"), "hello")?;
     fs::write(workspace_dir.path().join("should_be.ignored"), "hidden")?;
@@ -383,7 +387,7 @@ async fn add_workspace_creates_new_workspace() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
-    let mut ws = session.load_workspace(repo.path())?;
+    let mut ws = session.load_workspace(repo.path()).await?;
     let original_wc = ws.wc_id().clone();
 
     let new_ws_path = repo.path().join("second-workspace");
@@ -411,14 +415,8 @@ async fn add_workspace_creates_new_workspace() -> Result<()> {
     assert_ne!(new_wc_id, ws.wc_id());
 
     // new WC commit has the same parents as the original
-    let original_parents: Vec<_> = ws
-        .get_commit(ws.wc_id())?
-        .parents()
-        .collect::<Result<Vec<_>, _>>()?;
-    let new_parents: Vec<_> = ws
-        .get_commit(new_wc_id)?
-        .parents()
-        .collect::<Result<Vec<_>, _>>()?;
+    let original_parents = ws.get_commit(ws.wc_id())?.parents().await?;
+    let new_parents = ws.get_commit(new_wc_id)?.parents().await?;
     assert_eq!(
         original_parents.iter().map(|c| c.id()).collect::<Vec<_>>(),
         new_parents.iter().map(|c| c.id()).collect::<Vec<_>>()
@@ -432,7 +430,7 @@ async fn add_workspace_rejects_duplicate_name() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
-    let mut ws = session.load_workspace(repo.path())?;
+    let mut ws = session.load_workspace(repo.path()).await?;
 
     let new_ws_path = repo.path().join("second-workspace");
     ws.add_workspace("second".to_owned(), new_ws_path).await?;
@@ -454,7 +452,7 @@ async fn add_workspace_rejects_empty_name() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
-    let mut ws = session.load_workspace(repo.path())?;
+    let mut ws = session.load_workspace(repo.path()).await?;
 
     let err = ws
         .add_workspace("".to_owned(), repo.path().join("empty-name"))
@@ -473,7 +471,7 @@ async fn add_workspace_rejects_nonempty_destination() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
-    let mut ws = session.load_workspace(repo.path())?;
+    let mut ws = session.load_workspace(repo.path()).await?;
 
     let nonempty = repo.path().join("nonempty");
     fs::create_dir(&nonempty)?;
@@ -496,7 +494,7 @@ async fn forget_workspace_removes_workspace() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
-    let mut ws = session.load_workspace(repo.path())?;
+    let mut ws = session.load_workspace(repo.path()).await?;
 
     // add a workspace, then forget it
     let new_ws_path = repo.path().join("to-forget");
@@ -528,7 +526,7 @@ async fn forget_workspace_rejects_current() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
-    let mut ws = session.load_workspace(repo.path())?;
+    let mut ws = session.load_workspace(repo.path()).await?;
     let current_name = ws.name().as_str().to_owned();
 
     let err = ws.forget_workspace(current_name).await.unwrap_err();
@@ -545,7 +543,7 @@ async fn forget_workspace_rejects_nonexistent() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
-    let mut ws = session.load_workspace(repo.path())?;
+    let mut ws = session.load_workspace(repo.path()).await?;
 
     let err = ws
         .forget_workspace("nonexistent".to_owned())
@@ -564,7 +562,7 @@ async fn list_workspaces_returns_sorted_names() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
-    let mut ws = session.load_workspace(repo.path())?;
+    let mut ws = session.load_workspace(repo.path()).await?;
     let current_name = ws.name().as_symbol().to_string();
 
     // initially only the current workspace exists

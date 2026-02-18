@@ -18,8 +18,8 @@ use jj_lib::{
     conflicts::{self, ConflictMarkerStyle, ConflictMaterializeOptions, MaterializedTreeValue},
     files::FileMergeHunkLevel,
     git::{
-        self, GitBranchPushTargets, GitFetchRefExpression, GitSettings, GitSubprocessOptions,
-        REMOTE_NAME_FOR_LOCAL_GIT_REPO,
+        self, GitBranchPushTargets, GitFetchRefExpression, GitPushOptions, GitSettings,
+        GitSubprocessOptions, REMOTE_NAME_FOR_LOCAL_GIT_REPO,
     },
     merge::SameChange,
     merged_tree::MergedTree,
@@ -62,7 +62,7 @@ impl Mutation for ExternalDiff {
         _options: &MutationOptions,
     ) -> Result<MutationResult> {
         let commit = ws.resolve_change_id(&self.id)?;
-        let parents: Vec<_> = commit.parents().collect::<Result<_, _>>()?;
+        let parents = commit.parents().await?;
         let from_tree = rewrite::merge_commit_trees(ws.repo(), &parents).await?;
         let to_tree = commit.tree();
 
@@ -177,9 +177,13 @@ impl Mutation for ExternalResolve {
         tx.repo_mut()
             .rewrite_commit(&commit)
             .set_tree(new_tree)
-            .write()?;
+            .write()
+            .await?;
 
-        match ws.finish_transaction(tx, format!("resolve conflicts in {}", commit.id().hex()))? {
+        match ws
+            .finish_transaction(tx, format!("resolve conflicts in {}", commit.id().hex()))
+            .await?
+        {
             Some(new_status) => Ok(MutationResult::Updated {
                 new_status,
                 new_selection: None,
@@ -269,7 +273,10 @@ impl Mutation for GitFetch {
             }
         }
 
-        match ws.finish_transaction(tx, "fetch from git remote(s)".to_string())? {
+        match ws
+            .finish_transaction(tx, "fetch from git remote(s)".to_string())
+            .await?
+        {
             Some(new_status) => Ok(MutationResult::Updated {
                 new_status,
                 new_selection: None,
@@ -491,6 +498,7 @@ impl Mutation for GitPush {
                         RemoteName::new(remote_name),
                         &targets,
                         cb,
+                        &GitPushOptions::default(),
                     )
                 },
             );
@@ -534,30 +542,33 @@ impl Mutation for GitPush {
             }
         }
 
-        match ws.finish_transaction(
-            tx,
-            match &self.refspec {
-                GitRefspec::AllBookmarks { remote_name } => {
-                    format!("push all tracked bookmarks to git remote {}", remote_name)
-                }
-                GitRefspec::AllRemotes { bookmark_ref } => {
-                    format!(
-                        "push {} to all tracked git remotes",
-                        bookmark_ref.as_bookmark()?
-                    )
-                }
-                GitRefspec::RemoteBookmark {
-                    remote_name,
-                    bookmark_ref,
-                } => {
-                    format!(
-                        "push {} to git remote {}",
-                        bookmark_ref.as_bookmark()?,
-                        remote_name
-                    )
-                }
-            },
-        )? {
+        match ws
+            .finish_transaction(
+                tx,
+                match &self.refspec {
+                    GitRefspec::AllBookmarks { remote_name } => {
+                        format!("push all tracked bookmarks to git remote {}", remote_name)
+                    }
+                    GitRefspec::AllRemotes { bookmark_ref } => {
+                        format!(
+                            "push {} to all tracked git remotes",
+                            bookmark_ref.as_bookmark()?
+                        )
+                    }
+                    GitRefspec::RemoteBookmark {
+                        remote_name,
+                        bookmark_ref,
+                    } => {
+                        format!(
+                            "push {} to git remote {}",
+                            bookmark_ref.as_bookmark()?,
+                            remote_name
+                        )
+                    }
+                },
+            )
+            .await?
+        {
             Some(new_status) => Ok(MutationResult::Updated {
                 new_status,
                 new_selection: None,
@@ -588,13 +599,16 @@ impl Mutation for UndoOperation {
 
         let mut tx = ws.start_transaction().await?;
         let repo_loader = tx.base_repo().loader();
-        let head_repo = repo_loader.load_at(&head_op)?;
-        let parent_repo = repo_loader.load_at(&parent_op)?;
-        tx.repo_mut().merge(&head_repo, &parent_repo)?;
+        let head_repo = repo_loader.load_at(&head_op).await?;
+        let parent_repo = repo_loader.load_at(&parent_op).await?;
+        tx.repo_mut().merge(&head_repo, &parent_repo).await?;
         let restored_view = tx.repo().view().store_view().clone();
         tx.repo_mut().set_view(restored_view);
 
-        match ws.finish_transaction(tx, format!("undo operation {}", head_op.id().hex()))? {
+        match ws
+            .finish_transaction(tx, format!("undo operation {}", head_op.id().hex()))
+            .await?
+        {
             Some(new_status) => {
                 let working_copy = ws.get_commit(ws.wc_id())?;
                 let new_selection = Some(ws.format_header(&working_copy, None)?);
@@ -705,7 +719,7 @@ mod tests {
         let repo = mkrepo();
 
         let mut session = WorkerSession::default();
-        let mut ws = session.load_workspace(repo.path())?;
+        let mut ws = session.load_workspace(repo.path()).await?;
 
         let immutable_matcher = StringMatcher::Exact("immutable_bookmark".to_string());
         let (_, ref_at_start) = ws
@@ -769,7 +783,7 @@ mod tests {
         let repo = mkrepo();
 
         let mut session = WorkerSession::default();
-        let mut ws = session.load_workspace(repo.path())?;
+        let mut ws = session.load_workspace(repo.path()).await?;
 
         let immutable_matcher = StringMatcher::Exact("immutable_bookmark".to_string());
 
@@ -834,7 +848,7 @@ auto-track = "glob:*.txt"
         fs::write(&config_path, config_content).unwrap();
 
         let mut session = WorkerSession::default();
-        let mut ws = session.load_workspace(repo.path())?;
+        let mut ws = session.load_workspace(repo.path()).await?;
 
         // Write two new files, one tracked and one untracked
         fs::write(repo.path().join("tracked.txt"), "tracked content").unwrap();

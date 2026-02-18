@@ -59,8 +59,7 @@ impl Mutation for MoveChanges {
         // construct trees: from_tree is newest state, parent_tree is base before oldest
         let matcher = build_matcher(&self.paths)?;
         let from_tree = from_newest.tree();
-        let oldest_parents: Result<Vec<_>, _> = from_oldest.parents().collect();
-        let oldest_parents = oldest_parents?;
+        let oldest_parents = from_oldest.parents().await?;
         let parent_tree = rewrite::merge_commit_trees(tx.repo(), &oldest_parents).await?;
         let split_tree = rewrite::restore_tree(
             &from_tree,
@@ -77,8 +76,7 @@ impl Mutation for MoveChanges {
         // process each source commit: abandon, rewrite, or leave unchanged
         for commit in &from_commits {
             let commit_tree = commit.tree();
-            let commit_parents: Result<Vec<_>, _> = commit.parents().collect();
-            let commit_parents = commit_parents?;
+            let commit_parents = commit.parents().await?;
             let commit_parent_tree =
                 rewrite::merge_commit_trees(tx.repo(), &commit_parents).await?;
             let commit_remainder = rewrite::restore_tree(
@@ -100,25 +98,28 @@ impl Mutation for MoveChanges {
                 tx.repo_mut()
                     .rewrite_commit(commit)
                     .set_tree(commit_remainder)
-                    .write()?;
+                    .write()
+                    .await?;
             }
         }
 
         // rebase descendants of source, which may include destination
         if tx.repo().index().is_ancestor(from_oldest.id(), to.id())? {
             let mut rebase_map = std::collections::HashMap::new();
-            tx.repo_mut().rebase_descendants_with_options(
-                &RebaseOptions::default(),
-                |old_commit, rebased_commit| {
-                    rebase_map.insert(
-                        old_commit.id().clone(),
-                        match rebased_commit {
-                            RebasedCommit::Rewritten(new_commit) => new_commit.id().clone(),
-                            RebasedCommit::Abandoned { parent_id } => parent_id,
-                        },
-                    );
-                },
-            )?;
+            tx.repo_mut()
+                .rebase_descendants_with_options(
+                    &RebaseOptions::default(),
+                    |old_commit, rebased_commit| {
+                        rebase_map.insert(
+                            old_commit.id().clone(),
+                            match rebased_commit {
+                                RebasedCommit::Rewritten(new_commit) => new_commit.id().clone(),
+                                RebasedCommit::Abandoned { parent_id } => parent_id,
+                            },
+                        );
+                    },
+                )
+                .await?;
             let rebased_to_id = rebase_map
                 .get(to.id())
                 .ok_or_else(|| anyhow!("descendant to_commit not found in rebase map"))?
@@ -152,17 +153,21 @@ impl Mutation for MoveChanges {
             .rewrite_commit(&to)
             .set_tree(new_to_tree)
             .set_description(description)
-            .write()?;
+            .write()
+            .await?;
 
-        match ws.finish_transaction(
-            tx,
-            format!(
-                "move changes from {}::{} to {}",
-                from_oldest.id().hex(),
-                from_newest.id().hex(),
-                to.id().hex()
-            ),
-        )? {
+        match ws
+            .finish_transaction(
+                tx,
+                format!(
+                    "move changes from {}::{} to {}",
+                    from_oldest.id().hex(),
+                    from_newest.id().hex(),
+                    to.id().hex()
+                ),
+            )
+            .await?
+        {
             Some(new_status) => Ok(MutationResult::Updated {
                 new_status,
                 new_selection: None,
@@ -216,7 +221,8 @@ impl Mutation for CopyChanges {
                 tx.repo_mut()
                     .rewrite_commit(commit)
                     .set_tree(new_tree)
-                    .write()?;
+                    .write()
+                    .await?;
             }
         }
 
@@ -224,7 +230,7 @@ impl Mutation for CopyChanges {
             return Ok(MutationResult::Unchanged);
         }
 
-        tx.repo_mut().rebase_descendants()?;
+        tx.repo_mut().rebase_descendants().await?;
 
         let description = if commits.len() == 1 {
             format!("restore into commit {}", commits[0].id().hex())
@@ -232,7 +238,7 @@ impl Mutation for CopyChanges {
             format!("restore into {} commits", commits.len())
         };
 
-        match ws.finish_transaction(tx, description)? {
+        match ws.finish_transaction(tx, description).await? {
             Some(new_status) => Ok(MutationResult::Updated {
                 new_status,
                 new_selection: None,
@@ -267,8 +273,7 @@ impl Mutation for MoveHunk {
 
         // Get the base tree (from's parent) - this is the tree the hunk was computed against
         let from_tree = from.tree();
-        let from_parents: Result<Vec<_>, _> = from.parents().collect();
-        let from_parents = from_parents?;
+        let from_parents = from.parents().await?;
         if from_parents.len() != 1 {
             precondition!("Cannot move hunk from a merge commit");
         }
@@ -293,7 +298,8 @@ impl Mutation for MoveHunk {
             repo_path,
             sibling_blob_id,
             sibling_executable,
-        )?;
+        )
+        .await?;
 
         // Remove hunk from source: backout the base→sibling diff from from_tree
         let remainder_tree = MergedTree::merge(Merge::from_vec(vec![
@@ -351,7 +357,8 @@ impl Mutation for MoveHunk {
                 .rewrite_commit(&to)
                 .set_tree(new_to_tree)
                 .set_description(description)
-                .write()?;
+                .write()
+                .await?;
 
             if abandon_source {
                 tx.repo_mut().record_abandoned_commit(&from);
@@ -359,11 +366,12 @@ impl Mutation for MoveHunk {
                 tx.repo_mut()
                     .rewrite_commit(&from)
                     .set_tree(remainder_tree)
-                    .write()?;
+                    .write()
+                    .await?;
             }
 
             // Rebase all descendants, which includes rebasing source's descendants onto modified ancestor
-            tx.repo_mut().rebase_descendants()?;
+            tx.repo_mut().rebase_descendants().await?;
         } else {
             // Parent→Child or Unrelated: modify source first
             if abandon_source {
@@ -372,24 +380,27 @@ impl Mutation for MoveHunk {
                 tx.repo_mut()
                     .rewrite_commit(&from)
                     .set_tree(remainder_tree)
-                    .write()?;
+                    .write()
+                    .await?;
             }
 
             if from_is_ancestor {
                 // Parent→Child: rebase descendants first, then apply hunk to the rebased destination
                 let mut rebase_map = std::collections::HashMap::new();
-                tx.repo_mut().rebase_descendants_with_options(
-                    &RebaseOptions::default(),
-                    |old_commit, rebased_commit| {
-                        rebase_map.insert(
-                            old_commit.id().clone(),
-                            match rebased_commit {
-                                RebasedCommit::Rewritten(new_commit) => new_commit.id().clone(),
-                                RebasedCommit::Abandoned { parent_id } => parent_id,
-                            },
-                        );
-                    },
-                )?;
+                tx.repo_mut()
+                    .rebase_descendants_with_options(
+                        &RebaseOptions::default(),
+                        |old_commit, rebased_commit| {
+                            rebase_map.insert(
+                                old_commit.id().clone(),
+                                match rebased_commit {
+                                    RebasedCommit::Rewritten(new_commit) => new_commit.id().clone(),
+                                    RebasedCommit::Abandoned { parent_id } => parent_id,
+                                },
+                            );
+                        },
+                    )
+                    .await?;
 
                 // The destination was rebased onto the modified source, so its tree changed.
                 // Recompute the hunk application against the rebased tree.
@@ -423,21 +434,25 @@ impl Mutation for MoveHunk {
                 .rewrite_commit(&to)
                 .set_tree(new_to_tree)
                 .set_description(description)
-                .write()?;
+                .write()
+                .await?;
 
             // Rebase all descendants as usual
-            tx.repo_mut().rebase_descendants()?;
+            tx.repo_mut().rebase_descendants().await?;
         }
 
-        match ws.finish_transaction(
-            tx,
-            format!(
-                "move hunk in {} from {} to {}",
-                self.path.repo_path,
-                from.id().hex(),
-                to.id().hex()
-            ),
-        )? {
+        match ws
+            .finish_transaction(
+                tx,
+                format!(
+                    "move hunk in {} from {} to {}",
+                    self.path.repo_path,
+                    from.id().hex(),
+                    to.id().hex()
+                ),
+            )
+            .await?
+        {
             Some(new_status) => Ok(MutationResult::Updated {
                 new_status,
                 new_selection: None,
@@ -582,23 +597,27 @@ impl Mutation for CopyHunk {
         };
 
         let new_to_tree =
-            update_tree_entry(store, &to_tree, repo_path, new_to_blob_id, to_executable)?;
+            update_tree_entry(store, &to_tree, repo_path, new_to_blob_id, to_executable).await?;
 
         // rewrite destination
         tx.repo_mut()
             .rewrite_commit(&to)
             .set_tree(new_to_tree)
-            .write()?;
+            .write()
+            .await?;
 
-        tx.repo_mut().rebase_descendants()?;
+        tx.repo_mut().rebase_descendants().await?;
 
-        match ws.finish_transaction(
-            tx,
-            format!(
-                "restore hunk in {} from {} into {}",
-                self.path.repo_path, self.from_id.hex, self.to_id.commit.hex
-            ),
-        )? {
+        match ws
+            .finish_transaction(
+                tx,
+                format!(
+                    "restore hunk in {} from {} into {}",
+                    self.path.repo_path, self.from_id.hex, self.to_id.commit.hex
+                ),
+            )
+            .await?
+        {
             Some(new_status) => Ok(MutationResult::Updated {
                 new_status,
                 new_selection: None,
@@ -703,7 +722,7 @@ fn combine_messages(sources: &[&Commit], destination: &Commit, abandon_source: b
     }
 }
 
-fn update_tree_entry(
+async fn update_tree_entry(
     _store: &Arc<jj_lib::store::Store>,
     original_tree: &MergedTree,
     path: &RepoPath,
@@ -719,7 +738,7 @@ fn update_tree_entry(
             copy_id: CopyId::placeholder(),
         }),
     );
-    let new_tree = builder.write_tree()?;
+    let new_tree = builder.write_tree().await?;
     Ok(new_tree)
 }
 
@@ -747,7 +766,7 @@ mod tests {
         let repo = mkrepo();
 
         let mut session = WorkerSession::default();
-        let mut ws = session.load_workspace(repo.path())?;
+        let mut ws = session.load_workspace(repo.path()).await?;
 
         let parent_header =
             queries::query_revision(&ws, &revs::conflict_bookmark())?.expect("exists");
@@ -774,7 +793,7 @@ mod tests {
         let repo = mkrepo();
 
         let mut session = WorkerSession::default();
-        let mut ws = session.load_workspace(repo.path())?;
+        let mut ws = session.load_workspace(repo.path()).await?;
 
         let from_rev = query_by_id(&ws, revs::main_bookmark()).await?;
         let to_rev = query_by_id(&ws, revs::working_copy()).await?;
@@ -806,7 +825,7 @@ mod tests {
         let repo = mkrepo();
 
         let mut session = WorkerSession::default();
-        let mut ws = session.load_workspace(repo.path())?;
+        let mut ws = session.load_workspace(repo.path()).await?;
 
         // commit A: adds x.txt and y.txt
         fs::write(repo.path().join("x.txt"), "x content").unwrap();
@@ -898,7 +917,7 @@ mod tests {
         let repo = mkrepo();
 
         let mut session = WorkerSession::default();
-        let mut ws = session.load_workspace(repo.path())?;
+        let mut ws = session.load_workspace(repo.path()).await?;
 
         // commit A: add z.txt
         fs::write(repo.path().join("z.txt"), "version 1").unwrap();
@@ -1006,7 +1025,7 @@ mod tests {
         let repo = mkrepo();
 
         let mut session = WorkerSession::default();
-        let mut ws = session.load_workspace(repo.path())?;
+        let mut ws = session.load_workspace(repo.path()).await?;
 
         let from_rev = query_by_id(&ws, revs::resolve_conflict()).await?;
         let to_rev = query_by_id(&ws, revs::working_copy()).await?;
@@ -1040,7 +1059,7 @@ mod tests {
         let repo = mkrepo();
 
         let mut session = WorkerSession::default();
-        let mut ws = session.load_workspace(repo.path())?;
+        let mut ws = session.load_workspace(repo.path()).await?;
 
         // hunk_child_single modifies line 2 of hunk_test.txt
         // hunk_grandchild (child of hunk_child_single) modifies line 3 of hunk_test.txt
@@ -1078,7 +1097,7 @@ mod tests {
         let repo = mkrepo();
 
         let mut session = WorkerSession::default();
-        let mut ws = session.load_workspace(repo.path())?;
+        let mut ws = session.load_workspace(repo.path()).await?;
 
         // try to restore into a range of immutable commits
         let result = CopyChanges {
@@ -1100,7 +1119,7 @@ mod tests {
 
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let mut ws = session.load_workspace(repo.path())?;
+        let mut ws = session.load_workspace(repo.path()).await?;
 
         // Move one of two hunks from descendant (hunk_child_multi) to ancestor (hunk_base)
         // hunk_child_multi modifies lines 2 and 4: line2 -> changed2, line4 -> changed4
@@ -1178,7 +1197,7 @@ mod tests {
     async fn move_hunk_message() -> anyhow::Result<()> {
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let mut ws = session.load_workspace(repo.path())?;
+        let mut ws = session.load_workspace(repo.path()).await?;
 
         // Move only hunk from source, abandoning it
         let hunk = ChangeHunk {
@@ -1225,7 +1244,7 @@ mod tests {
     async fn move_hunk_invalid() -> anyhow::Result<()> {
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let mut ws = session.load_workspace(repo.path())?;
+        let mut ws = session.load_workspace(repo.path()).await?;
 
         // Invalid hunk - doesn't match the actual content of b.txt in hunk_source
         let hunk = ChangeHunk {
@@ -1260,7 +1279,7 @@ mod tests {
 
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let mut ws = session.load_workspace(repo.path())?;
+        let mut ws = session.load_workspace(repo.path()).await?;
 
         // hunk_child_single's only change is line 2: "line2" -> "modified2"
         let hunk = ChangeHunk {
@@ -1324,7 +1343,7 @@ mod tests {
 
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let mut ws = session.load_workspace(repo.path())?;
+        let mut ws = session.load_workspace(repo.path()).await?;
 
         // hunk_child_single modifies line 2: "line2" -> "modified2"
         // hunk_sibling extends the file with new6, new7, new8
@@ -1399,7 +1418,7 @@ mod tests {
 
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let mut ws = session.load_workspace(repo.path())?;
+        let mut ws = session.load_workspace(repo.path()).await?;
 
         // Hunk from hunk_source that changes line 1: "1" -> "11"
         // hunk_source's parent has b.txt = "1\n" (single line)
@@ -1461,7 +1480,7 @@ mod tests {
 
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let mut ws = session.load_workspace(repo.path())?;
+        let mut ws = session.load_workspace(repo.path()).await?;
 
         let repo_path = jj_lib::repo_path::RepoPath::from_internal_string("hunk_test.txt")?;
 
@@ -1562,13 +1581,13 @@ mod tests {
         }
 
         // Verify grandchild is now a direct child of hunk_base (parent was abandoned)
-        let grandchild_parents: Vec<_> = dest_after.parents().collect();
+        let grandchild_parents = dest_after.parents().await?;
         assert_eq!(
             grandchild_parents.len(),
             1,
             "Grandchild should have one parent"
         );
-        let parent = grandchild_parents[0].as_ref().unwrap();
+        let parent = &grandchild_parents[0];
         let base = get_by_chid(&ws, &revs::hunk_base())?;
         assert_eq!(
             parent.id(),
@@ -1587,7 +1606,7 @@ mod tests {
 
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let mut ws = session.load_workspace(repo.path())?;
+        let mut ws = session.load_workspace(repo.path()).await?;
 
         // hunk_child_multi has: line1, changed2, line3, changed4, line5
         // hunk_sibling has: line1, line2, line3, line4, line5, new6, new7, new8
@@ -1669,7 +1688,7 @@ mod tests {
 
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let mut ws = session.load_workspace(repo.path())?;
+        let mut ws = session.load_workspace(repo.path()).await?;
 
         // Get the original content of a.txt in hunk_child_multi before the move
         let child_before = get_by_chid(&ws, &revs::hunk_child_multi())?;
@@ -1782,7 +1801,7 @@ mod tests {
 
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let mut ws = session.load_workspace(repo.path())?;
+        let mut ws = session.load_workspace(repo.path()).await?;
 
         // hunk_child_multi has two hunks: line2->changed2 and line4->changed4
         let hunk = ChangeHunk {
@@ -1860,7 +1879,7 @@ mod tests {
 
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let mut ws = session.load_workspace(repo.path())?;
+        let mut ws = session.load_workspace(repo.path()).await?;
 
         // Copy/restore hunk from hunk_base (parent) to hunk_child_single (child)
         let hunk = ChangeHunk {
@@ -1918,7 +1937,7 @@ mod tests {
     async fn copy_hunk_to_conflict() -> anyhow::Result<()> {
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let mut ws = session.load_workspace(repo.path())?;
+        let mut ws = session.load_workspace(repo.path()).await?;
 
         // Use the existing conflict_bookmark from test repo
         let conflict_commit = revs::conflict_bookmark();
@@ -1967,7 +1986,7 @@ mod tests {
     async fn copy_hunk_out_of_bounds() -> anyhow::Result<()> {
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let mut ws = session.load_workspace(repo.path())?;
+        let mut ws = session.load_workspace(repo.path()).await?;
 
         // small_parent has small.txt with "line1\nline2\n"
         // small_child has small.txt with "line1\nchanged\n"
@@ -2013,7 +2032,7 @@ mod tests {
     async fn copy_hunk_unchanged() -> anyhow::Result<()> {
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let mut ws = session.load_workspace(repo.path())?;
+        let mut ws = session.load_workspace(repo.path()).await?;
 
         // hunk_base has line1-line5, hunk_sibling has line1-line5 plus new6-new8
         let hunk = ChangeHunk {
@@ -2054,7 +2073,7 @@ mod tests {
 
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let mut ws = session.load_workspace(repo.path())?;
+        let mut ws = session.load_workspace(repo.path()).await?;
 
         // hunk_child_multi modifies two lines: line2->changed2 and line4->changed4
         let hunk = ChangeHunk {

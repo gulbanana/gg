@@ -67,14 +67,17 @@ impl Mutation for TrackBookmark {
 
                 tx.repo_mut().track_remote_bookmark(remote_ref_symbol)?;
 
-                match ws.finish_transaction(
-                    tx,
-                    format!(
-                        "track remote bookmark {:?}@{:?}",
-                        bookmark_name_ref.as_str(),
-                        remote_name_ref.as_str()
-                    ),
-                )? {
+                match ws
+                    .finish_transaction(
+                        tx,
+                        format!(
+                            "track remote bookmark {:?}@{:?}",
+                            bookmark_name_ref.as_str(),
+                            remote_name_ref.as_str()
+                        ),
+                    )
+                    .await?
+                {
                     Some(new_status) => Ok(MutationResult::Updated {
                         new_status,
                         new_selection: None,
@@ -149,10 +152,13 @@ impl Mutation for UntrackBookmark {
             }
         }
 
-        match ws.finish_transaction(
-            tx,
-            format!("untrack remote {}", combine_bookmarks(&untracked)),
-        )? {
+        match ws
+            .finish_transaction(
+                tx,
+                format!("untrack remote {}", combine_bookmarks(&untracked)),
+            )
+            .await?
+        {
             Some(new_status) => Ok(MutationResult::Updated {
                 new_status,
                 new_selection: None,
@@ -189,14 +195,17 @@ impl Mutation for RenameBookmark {
         tx.repo_mut()
             .set_local_bookmark_target(&old_name_ref, RefTarget::absent());
 
-        match ws.finish_transaction(
-            tx,
-            format!(
-                "rename {} to {}",
-                old_name_ref.as_str(),
-                new_name_ref.as_str()
-            ),
-        )? {
+        match ws
+            .finish_transaction(
+                tx,
+                format!(
+                    "rename {} to {}",
+                    old_name_ref.as_str(),
+                    new_name_ref.as_str()
+                ),
+            )
+            .await?
+        {
             Some(new_status) => Ok(MutationResult::Updated {
                 new_status,
                 new_selection: None,
@@ -241,14 +250,17 @@ impl Mutation for CreateRef {
                     RefTarget::normal(commit.id().clone()),
                 );
 
-                match ws.finish_transaction(
-                    tx,
-                    format!(
-                        "create {} pointing to commit {}",
-                        bookmark_name_ref.as_str(),
-                        ws.format_commit_id(commit.id()).hex
-                    ),
-                )? {
+                match ws
+                    .finish_transaction(
+                        tx,
+                        format!(
+                            "create {} pointing to commit {}",
+                            bookmark_name_ref.as_str(),
+                            ws.format_commit_id(commit.id()).hex
+                        ),
+                    )
+                    .await?
+                {
                     Some(new_status) => Ok(MutationResult::Updated {
                         new_status,
                         new_selection: None,
@@ -266,14 +278,17 @@ impl Mutation for CreateRef {
                 tx.repo_mut()
                     .set_local_tag_target(&tag_name_ref, RefTarget::normal(commit.id().clone()));
 
-                match ws.finish_transaction(
-                    tx,
-                    format!(
-                        "create {} pointing to commit {}",
-                        tag_name_ref.as_str(),
-                        ws.format_commit_id(commit.id()).hex
-                    ),
-                )? {
+                match ws
+                    .finish_transaction(
+                        tx,
+                        format!(
+                            "create {} pointing to commit {}",
+                            tag_name_ref.as_str(),
+                            ws.format_commit_id(commit.id()).hex
+                        ),
+                    )
+                    .await?
+                {
                     Some(new_status) => Ok(MutationResult::Updated {
                         new_status,
                         new_selection: None,
@@ -315,14 +330,17 @@ impl Mutation for DeleteRef {
                 tx.repo_mut()
                     .set_remote_bookmark(remote_ref_symbol, remote_ref);
 
-                match ws.finish_transaction(
-                    tx,
-                    format!(
-                        "forget {}@{}",
-                        bookmark_name_ref.as_str(),
-                        remote_name_ref.as_str()
-                    ),
-                )? {
+                match ws
+                    .finish_transaction(
+                        tx,
+                        format!(
+                            "forget {}@{}",
+                            bookmark_name_ref.as_str(),
+                            remote_name_ref.as_str()
+                        ),
+                    )
+                    .await?
+                {
                     Some(new_status) => Ok(MutationResult::Updated {
                         new_status,
                         new_selection: None,
@@ -337,7 +355,10 @@ impl Mutation for DeleteRef {
                 tx.repo_mut()
                     .set_local_bookmark_target(&bookmark_name_ref, RefTarget::absent());
 
-                match ws.finish_transaction(tx, format!("forget {}", bookmark_name_ref.as_str()))? {
+                match ws
+                    .finish_transaction(tx, format!("forget {}", bookmark_name_ref.as_str()))
+                    .await?
+                {
                     Some(new_status) => Ok(MutationResult::Updated {
                         new_status,
                         new_selection: None,
@@ -352,7 +373,10 @@ impl Mutation for DeleteRef {
                 tx.repo_mut()
                     .set_local_tag_target(&tag_name_ref, RefTarget::absent());
 
-                match ws.finish_transaction(tx, format!("forget tag {}", tag_name_ref.as_str()))? {
+                match ws
+                    .finish_transaction(tx, format!("forget tag {}", tag_name_ref.as_str()))
+                    .await?
+                {
                     Some(new_status) => Ok(MutationResult::Updated {
                         new_status,
                         new_selection: None,
@@ -396,14 +420,17 @@ impl Mutation for MoveRef {
                     RefTarget::normal(commit.id().clone()),
                 );
 
-                match ws.finish_transaction(
-                    tx,
-                    format!(
-                        "point {:?} to commit {}",
-                        &bookmark_name_ref,
-                        commit.id().hex()
-                    ),
-                )? {
+                match ws
+                    .finish_transaction(
+                        tx,
+                        format!(
+                            "point {:?} to commit {}",
+                            &bookmark_name_ref,
+                            commit.id().hex()
+                        ),
+                    )
+                    .await?
+                {
                     Some(new_status) => Ok(MutationResult::Updated {
                         new_status,
                         new_selection: None,
@@ -421,14 +448,17 @@ impl Mutation for MoveRef {
                 tx.repo_mut()
                     .set_local_tag_target(&tag_name_ref, RefTarget::normal(commit.id().clone()));
 
-                match ws.finish_transaction(
-                    tx,
-                    format!(
-                        "point {:?} to commit {}",
-                        tag_name_ref.as_str(),
-                        commit.id().hex()
-                    ),
-                )? {
+                match ws
+                    .finish_transaction(
+                        tx,
+                        format!(
+                            "point {:?} to commit {}",
+                            tag_name_ref.as_str(),
+                            commit.id().hex()
+                        ),
+                    )
+                    .await?
+                {
                     Some(new_status) => Ok(MutationResult::Updated {
                         new_status,
                         new_selection: None,
@@ -501,7 +531,7 @@ mod tests {
     async fn create_bookmark() -> Result<()> {
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let mut ws = session.load_workspace(repo.path())?;
+        let mut ws = session.load_workspace(repo.path()).await?;
 
         let result = CreateRef {
             id: revs::main_bookmark(),
@@ -527,7 +557,7 @@ mod tests {
     async fn create_bookmark_already_exists() -> Result<()> {
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let mut ws = session.load_workspace(repo.path())?;
+        let mut ws = session.load_workspace(repo.path()).await?;
 
         let result = CreateRef {
             id: revs::working_copy(),
@@ -545,7 +575,7 @@ mod tests {
     async fn create_remote_bookmark_fails() -> Result<()> {
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let mut ws = session.load_workspace(repo.path())?;
+        let mut ws = session.load_workspace(repo.path()).await?;
 
         let result = CreateRef {
             id: revs::working_copy(),
@@ -563,7 +593,7 @@ mod tests {
     async fn create_tag() -> Result<()> {
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let mut ws = session.load_workspace(repo.path())?;
+        let mut ws = session.load_workspace(repo.path()).await?;
 
         let result = CreateRef {
             id: revs::main_bookmark(),
@@ -589,7 +619,7 @@ mod tests {
     async fn create_tag_already_exists() -> Result<()> {
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let mut ws = session.load_workspace(repo.path())?;
+        let mut ws = session.load_workspace(repo.path()).await?;
 
         // create tag first
         CreateRef {
@@ -618,7 +648,7 @@ mod tests {
     async fn delete_bookmark() -> Result<()> {
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let mut ws = session.load_workspace(repo.path())?;
+        let mut ws = session.load_workspace(repo.path()).await?;
 
         let result = DeleteRef {
             r#ref: local_bookmark("main"),
@@ -643,7 +673,7 @@ mod tests {
     async fn delete_tag() -> Result<()> {
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let mut ws = session.load_workspace(repo.path())?;
+        let mut ws = session.load_workspace(repo.path()).await?;
 
         // create then delete
         CreateRef {
@@ -675,7 +705,7 @@ mod tests {
 
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let mut ws = session.load_workspace(repo.path())?;
+        let mut ws = session.load_workspace(repo.path()).await?;
 
         let result = MoveRef {
             r#ref: local_bookmark("main"),
@@ -702,7 +732,7 @@ mod tests {
     async fn move_nonexistent_bookmark() -> Result<()> {
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let mut ws = session.load_workspace(repo.path())?;
+        let mut ws = session.load_workspace(repo.path()).await?;
 
         let result = MoveRef {
             r#ref: local_bookmark("does-not-exist"),
@@ -720,7 +750,7 @@ mod tests {
     async fn move_remote_bookmark_fails() -> Result<()> {
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let mut ws = session.load_workspace(repo.path())?;
+        let mut ws = session.load_workspace(repo.path()).await?;
 
         let result = MoveRef {
             r#ref: remote_bookmark("main", "origin"),
@@ -740,7 +770,7 @@ mod tests {
 
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let mut ws = session.load_workspace(repo.path())?;
+        let mut ws = session.load_workspace(repo.path()).await?;
 
         CreateRef {
             id: revs::main_bookmark(),
@@ -776,7 +806,7 @@ mod tests {
     async fn rename_bookmark() -> Result<()> {
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let mut ws = session.load_workspace(repo.path())?;
+        let mut ws = session.load_workspace(repo.path()).await?;
 
         let result = RenameBookmark {
             r#ref: local_bookmark("main"),
@@ -810,7 +840,7 @@ mod tests {
     async fn rename_nonexistent_bookmark() -> Result<()> {
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let mut ws = session.load_workspace(repo.path())?;
+        let mut ws = session.load_workspace(repo.path()).await?;
 
         let result = RenameBookmark {
             r#ref: local_bookmark("ghost"),
@@ -828,7 +858,7 @@ mod tests {
     async fn rename_bookmark_to_existing_name() -> Result<()> {
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let mut ws = session.load_workspace(repo.path())?;
+        let mut ws = session.load_workspace(repo.path()).await?;
 
         // create a second bookmark so we can try renaming to it
         CreateRef {
@@ -856,7 +886,7 @@ mod tests {
     async fn track_tag_fails() -> Result<()> {
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let mut ws = session.load_workspace(repo.path())?;
+        let mut ws = session.load_workspace(repo.path()).await?;
 
         let result = TrackBookmark { r#ref: tag("v1.0") }
             .execute_unboxed(&mut ws)
@@ -871,7 +901,7 @@ mod tests {
     async fn track_local_bookmark_fails() -> Result<()> {
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let mut ws = session.load_workspace(repo.path())?;
+        let mut ws = session.load_workspace(repo.path()).await?;
 
         let result = TrackBookmark {
             r#ref: local_bookmark("main"),
@@ -890,7 +920,7 @@ mod tests {
     async fn untrack_tag_fails() -> Result<()> {
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let mut ws = session.load_workspace(repo.path())?;
+        let mut ws = session.load_workspace(repo.path()).await?;
 
         let result = UntrackBookmark { r#ref: tag("v1.0") }
             .execute_unboxed(&mut ws)
@@ -907,7 +937,7 @@ mod tests {
     async fn track_already_tracked_fails() -> Result<()> {
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let mut ws = session.load_workspace(repo.path())?;
+        let mut ws = session.load_workspace(repo.path()).await?;
 
         // main@origin is tracked by default in the test repo
         let result = TrackBookmark {
@@ -925,7 +955,7 @@ mod tests {
     async fn untrack_then_track_round_trip() -> Result<()> {
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let mut ws = session.load_workspace(repo.path())?;
+        let mut ws = session.load_workspace(repo.path()).await?;
 
         // untrack main@origin
         let result = UntrackBookmark {
@@ -950,7 +980,7 @@ mod tests {
     async fn untrack_not_tracked_fails() -> Result<()> {
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let mut ws = session.load_workspace(repo.path())?;
+        let mut ws = session.load_workspace(repo.path()).await?;
 
         // untrack main@origin first
         UntrackBookmark {

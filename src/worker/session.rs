@@ -170,7 +170,7 @@ impl Session for WorkerSession {
                     )?;
                 }
                 Ok(SessionEvent::InitWorkspace { tx, wd, colocated }) => {
-                    tx.send(self.init_repository(&wd, colocated))?;
+                    tx.send(self.init_repository(&wd, colocated).await)?;
                 }
                 Ok(SessionEvent::CloneWorkspace {
                     tx,
@@ -178,7 +178,7 @@ impl Session for WorkerSession {
                     wd,
                     colocated,
                 }) => {
-                    tx.send(self.clone_repository(&source_url, &wd, colocated))?;
+                    tx.send(self.clone_repository(&source_url, &wd, colocated).await)?;
                 }
                 Ok(SessionEvent::OpenWorkspace { mut tx, mut wd }) => loop {
                     let resolved_wd = match wd.clone().or(latest_wd) {
@@ -196,7 +196,7 @@ impl Session for WorkerSession {
                         },
                     };
 
-                    let mut ws = match self.load_workspace(&resolved_wd) {
+                    let mut ws = match self.load_workspace(&resolved_wd).await {
                         Ok(ws) => ws,
                         Err(err) => {
                             latest_wd = None;
@@ -257,7 +257,7 @@ impl Session for WorkspaceSession<'_> {
                     return Ok(WorkspaceResult::Reopen(tx, cwd));
                 }
                 SessionEvent::InitWorkspace { tx, wd, colocated } => {
-                    tx.send(self.session.init_repository(&wd, colocated))?;
+                    tx.send(self.session.init_repository(&wd, colocated).await)?;
                 }
                 SessionEvent::CloneWorkspace {
                     tx,
@@ -265,7 +265,11 @@ impl Session for WorkspaceSession<'_> {
                     wd,
                     colocated,
                 } => {
-                    tx.send(self.session.clone_repository(&source_url, &wd, colocated))?;
+                    tx.send(
+                        self.session
+                            .clone_repository(&source_url, &wd, colocated)
+                            .await,
+                    )?;
                 }
                 SessionEvent::QueryRevisions { tx, set } => {
                     tx.send(queries::query_revisions(&self, set).await)?
@@ -299,7 +303,7 @@ impl Session for WorkspaceSession<'_> {
                     handle_query(&mut state, &self, tx, rx, revset_string, None).await?;
                 }
                 SessionEvent::ExecuteSnapshot { tx } => {
-                    let updated_head = self.load_at_head()?; // alternatively, this could be folded into snapshot so that it's done by all mutations
+                    let updated_head = self.load_at_head().await?; // alternatively, this could be folded into snapshot so that it's done by all mutations
                     let auto_update_stale = self
                         .data
                         .workspace_settings
@@ -404,6 +408,7 @@ impl Session for WorkspaceSession<'_> {
                     (
                         self.data.workspace_settings,
                         self.data.aliases_map,
+                        self.data.fileset_aliases_map,
                         self.data.query_choices,
                     ) = read_config(Some(self.workspace.repo_path()))?;
                 }
@@ -443,6 +448,7 @@ impl Session for WorkspaceSession<'_> {
                     (
                         self.data.workspace_settings,
                         self.data.aliases_map,
+                        self.data.fileset_aliases_map,
                         self.data.query_choices,
                     ) = read_config(Some(self.workspace.repo_path()))?;
                 }
