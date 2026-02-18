@@ -44,6 +44,7 @@ export default defineConfig(async () => ({
           name: "e2e",
           include: ["e2e/**/*.test.ts"],
           testTimeout: 120000,
+          hookTimeout: 120000,
         },
       },
     ],
