@@ -108,7 +108,7 @@ impl WorkerSession {
         let factory = DefaultWorkspaceLoaderFactory;
         let loader = factory.create(find_workspace_dir(cwd))?;
 
-        let (settings, aliases_map, revset_query_choices) = read_config(Some(loader.repo_path()))?;
+        let (settings, aliases_map, preset_choices) = read_config(Some(loader.repo_path()))?;
 
         let workspace = loader.load(
             &settings,
@@ -126,7 +126,7 @@ impl WorkerSession {
             path_converter,
             aliases_map,
             extensions: Default::default(),
-            query_choices: revset_query_choices,
+            query_choices: preset_choices,
         };
 
         let operation = load_at_head(&workspace, &data)?;

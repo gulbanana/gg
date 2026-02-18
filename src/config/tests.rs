@@ -188,8 +188,8 @@ fn recent_workspaces_returns_configured_paths() {
 }
 
 mod extract_overrides {
-    use super::super::{GGSettings, extract_overrides, native_keys};
-    use super::{JJ_TEST_DEFAULTS, settings_with_extracted_overrides};
+    use super::super::{extract_overrides, native_keys, GGSettings};
+    use super::{settings_with_extracted_overrides, JJ_TEST_DEFAULTS};
     use jj_lib::config::{ConfigLayer, ConfigSource, StackedConfig};
     use jj_lib::settings::UserSettings;
 
@@ -366,23 +366,24 @@ mod extract_overrides {
     }
 
     #[test]
-    fn revset_preset_is_native() {
-        // custom revset presets are GG-native, not jj overrides
+    fn preset_is_native() {
+        // custom presets are GG-native, not jj overrides
         let settings = settings_with_extracted_overrides(
             r#"
-            [gg.revsets]
+            [gg.presets]
             my-custom-preset = "bookmarks()"
             "#,
         );
-        assert!(settings.get_string("revsets.my-custom-preset").is_err());
+        assert!(settings.get_string("presets.my-custom-preset").is_err());
         assert_eq!(
-            settings.get_string("gg.revsets.my-custom-preset").unwrap(),
+            settings.get_string("gg.presets.my-custom-preset").unwrap(),
             "bookmarks()"
         );
     }
 
     #[test]
-    fn revset_jj_keys_are_overrides() {
+    fn revset_override_is_forwarded() {
+        // gg.revsets.* keys are pure jj overrides now that presets live elsewhere
         let settings = settings_with_extracted_overrides(
             r#"
             [gg.revsets]
@@ -390,7 +391,6 @@ mod extract_overrides {
             log = "all()"
             "#,
         );
-        // these specific keys should be injected as jj overrides
         assert_eq!(
             settings.get_string("revsets.short-prefixes").unwrap(),
             "trunk()"
@@ -399,17 +399,23 @@ mod extract_overrides {
     }
 
     #[test]
-    fn revset_mixed_native_and_override() {
-        // custom preset + jj key in the same revsets table
+    fn preset_and_revset_override_coexist() {
+        // presets stay native, revset overrides get forwarded
         let settings = settings_with_extracted_overrides(
             r#"
-            [gg.revsets]
+            [gg.presets]
             my-preset = "trunk()..@"
+
+            [gg.revsets]
             short-prefixes = "trunk()"
             "#,
         );
         // my-preset is native — not injected
-        assert!(settings.get_string("revsets.my-preset").is_err());
+        assert!(settings.get_string("presets.my-preset").is_err());
+        assert_eq!(
+            settings.get_string("gg.presets.my-preset").unwrap(),
+            "trunk()..@"
+        );
         // short-prefixes is a jj override — injected
         assert_eq!(
             settings.get_string("revsets.short-prefixes").unwrap(),

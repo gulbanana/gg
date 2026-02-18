@@ -5,8 +5,8 @@ use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::time::Duration;
 
-use anyhow::{Result, anyhow};
-use jj_cli::config::{ConfigEnv, config_from_environment, default_config_layers};
+use anyhow::{anyhow, Result};
+use jj_cli::config::{config_from_environment, default_config_layers, ConfigEnv};
 use jj_cli::ui::Ui;
 use jj_lib::{
     config::{ConfigGetError, ConfigLayer, ConfigNamePathBuf, ConfigSource, StackedConfig},
@@ -103,9 +103,6 @@ impl GGSettings for UserSettings {
 /// Native GG keys that have dynamic defaults and can't appear in gg.toml.
 const EXTRA_NATIVE_KEYS: &[&str] = &["queries.auto-snapshot", "ui.mark-unpushed-branches"];
 
-/// Keys under `gg.revsets.*` that are jj overrides, not GG presets.
-const JJ_REVSET_KEYS: &[&str] = &["log", "log-graph-prioritise", "short-prefixes"];
-
 /// Collect all leaf key paths from gg.toml under `[gg]` to identify native GG settings.
 fn native_keys() -> HashSet<String> {
     fn collect_leaves(table: &toml_edit::Table, prefix: &str, keys: &mut HashSet<String>) {
@@ -158,7 +155,7 @@ pub fn read_config(
 
     let mut config = config_env.resolve_config(&raw_config)?;
     let aliases_map = build_aliases_map(&config)?;
-    let query_choices = read_revset_query_choices(&config);
+    let query_choices = read_preset_choices(&config);
 
     if let Some(overrides) = extract_overrides(&config) {
         config.add_layer(overrides);
@@ -225,12 +222,7 @@ fn collect_override_entries(
 
 /// Returns true if a key path (relative to `gg.`) is a native GG setting.
 fn is_native_key(path: &str, native_keys: &HashSet<String>) -> bool {
-    if let Some(revset_key) = path.strip_prefix("revsets.") {
-        // under revsets.*, everything is native (GG presets) except specific jj keys
-        !JJ_REVSET_KEYS.contains(&revset_key)
-    } else {
-        native_keys.contains(path)
-    }
+    path.starts_with("presets.") || native_keys.contains(path)
 }
 
 /// Ensure parent tables exist in the override doc and set the leaf value.
@@ -249,8 +241,8 @@ fn set_in_doc(doc: &mut toml_edit::DocumentMut, path: &str, item: &toml_edit::It
     table.insert(leaf[0], item.clone());
 }
 
-pub fn read_revset_query_choices(stacked_config: &StackedConfig) -> HashMap<String, String> {
-    let table_name = ConfigNamePathBuf::from_iter(["gg", "revsets"]);
+pub fn read_preset_choices(stacked_config: &StackedConfig) -> HashMap<String, String> {
+    let table_name = ConfigNamePathBuf::from_iter(["gg", "presets"]);
     let mut choices = HashMap::new();
 
     for layer in stacked_config.layers() {

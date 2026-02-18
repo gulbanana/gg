@@ -32,7 +32,7 @@
             result.push({ label: "Default", value: query_choices["default"] });
         }
 
-        // followed by [gg.revsets]
+        // followed by [gg.presets]
         let others = Object.entries(query_choices)
             .filter(([key]) => key !== "default")
             .map(([key, value]) => ({ label: toTitleCase(key), value }))
