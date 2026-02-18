@@ -109,7 +109,7 @@ pub fn build_main(app_handle: &AppHandle, recent_items: &[String]) -> tauri::Res
             )?,
             &MenuItem::with_id(
                 app_handle,
-                "menu_revision_backout",
+                "menu_revision_revert",
                 "Revert into working copy",
                 true,
                 None::<&str>,
@@ -234,7 +234,7 @@ pub fn build_context(
             )?,
             &MenuItem::with_id(
                 app_handle,
-                "revision_backout",
+                "revision_revert",
                 "Revert into working copy",
                 true,
                 None::<&str>,
@@ -353,7 +353,7 @@ struct RevisionEnablement {
     new_child: bool,
     new_parent: bool,
     edit: bool,
-    backout: bool,
+    revert: bool,
     duplicate: bool,
     abandon: bool,
     squash: bool,
@@ -375,7 +375,7 @@ fn compute_revision_enablement(
         new_child: true,
         new_parent: !any_immutable && oldest_has_single_parent,
         edit: is_singleton && !any_immutable && !newest.map(|h| h.is_working_copy).unwrap_or(false),
-        backout: true,
+        revert: true,
         duplicate: true,
         abandon: !any_immutable,
         squash: !any_immutable && oldest_has_single_parent,
@@ -400,7 +400,7 @@ pub fn handle_selection(
             revision_submenu.enable("menu_revision_new_child", false)?;
             revision_submenu.enable("menu_revision_new_parent", false)?;
             revision_submenu.enable("menu_revision_edit", false)?;
-            revision_submenu.enable("menu_revision_backout", false)?;
+            revision_submenu.enable("menu_revision_revert", false)?;
             revision_submenu.enable("menu_revision_duplicate", false)?;
             revision_submenu.enable("menu_revision_abandon", false)?;
             revision_submenu.enable("menu_revision_squash", false)?;
@@ -412,7 +412,7 @@ pub fn handle_selection(
             revision_submenu.enable("menu_revision_new_child", state.new_child)?;
             revision_submenu.enable("menu_revision_new_parent", state.new_parent)?;
             revision_submenu.enable("menu_revision_edit", state.edit)?;
-            revision_submenu.enable("menu_revision_backout", state.backout)?;
+            revision_submenu.enable("menu_revision_revert", state.revert)?;
             revision_submenu.enable("menu_revision_duplicate", state.duplicate)?;
             revision_submenu.enable("menu_revision_abandon", state.abandon)?;
             revision_submenu.enable("menu_revision_squash", state.squash)?;
@@ -442,7 +442,7 @@ pub fn handle_context(window: Window, ctx: Operand, ignore_immutable: bool) -> R
             context_menu.enable("revision_new_child", state.new_child)?;
             context_menu.enable("revision_new_parent", state.new_parent)?;
             context_menu.enable("revision_edit", state.edit)?;
-            context_menu.enable("revision_backout", state.backout)?;
+            context_menu.enable("revision_revert", state.revert)?;
             context_menu.enable("revision_duplicate", state.duplicate)?;
             context_menu.enable("revision_abandon", state.abandon)?;
             context_menu.enable("revision_squash", state.squash)?;
@@ -461,7 +461,7 @@ pub fn handle_context(window: Window, ctx: Operand, ignore_immutable: bool) -> R
             context_menu.enable("revision_new_child", state.new_child)?;
             context_menu.enable("revision_new_parent", state.new_parent)?;
             context_menu.enable("revision_edit", state.edit)?;
-            context_menu.enable("revision_backout", state.backout)?;
+            context_menu.enable("revision_revert", state.revert)?;
             context_menu.enable("revision_duplicate", state.duplicate)?;
             context_menu.enable("revision_abandon", state.abandon)?;
             context_menu.enable("revision_squash", state.squash)?;
@@ -595,7 +595,7 @@ pub fn handle_event(window: &Window, event: MenuEvent) -> Result<()> {
         "menu_revision_new_child" => window.emit_to(target, "gg://menu/revision", "new_child")?,
         "menu_revision_new_parent" => window.emit_to(target, "gg://menu/revision", "new_parent")?,
         "menu_revision_edit" => window.emit_to(target, "gg://menu/revision", "edit")?,
-        "menu_revision_backout" => window.emit_to(target, "gg://menu/revision", "backout")?,
+        "menu_revision_revert" => window.emit_to(target, "gg://menu/revision", "revert")?,
         "menu_revision_duplicate" => window.emit_to(target, "gg://menu/revision", "duplicate")?,
         "menu_revision_abandon" => window.emit_to(target, "gg://menu/revision", "abandon")?,
         "menu_revision_squash" => window.emit_to(target, "gg://menu/revision", "squash")?,
@@ -604,7 +604,7 @@ pub fn handle_event(window: &Window, event: MenuEvent) -> Result<()> {
         "revision_new_child" => window.emit_to(target, "gg://context/revision", "new_child")?,
         "revision_new_parent" => window.emit_to(target, "gg://context/revision", "new_parent")?,
         "revision_edit" => window.emit_to(target, "gg://context/revision", "edit")?,
-        "revision_backout" => window.emit_to(target, "gg://context/revision", "backout")?,
+        "revision_revert" => window.emit_to(target, "gg://context/revision", "revert")?,
         "revision_duplicate" => window.emit_to(target, "gg://context/revision", "duplicate")?,
         "revision_abandon" => window.emit_to(target, "gg://context/revision", "abandon")?,
         "revision_squash" => window.emit_to(target, "gg://context/revision", "squash")?,
