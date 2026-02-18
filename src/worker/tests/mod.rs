@@ -215,12 +215,12 @@ mod revs {
     }
 }
 
-#[test]
-fn wc_path_is_visible() -> Result<()> {
+#[tokio::test]
+async fn wc_path_is_visible() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
-    let ws = session.load_directory(repo.path())?;
+    let ws = session.load_directory(repo.path()).await?;
 
     let commit = ws.get_commit(ws.wc_id())?;
     let value = commit
@@ -243,7 +243,7 @@ async fn snapshot_updates_wc_if_changed() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
-    let mut ws = session.load_directory(repo.path())?;
+    let mut ws = session.load_directory(repo.path()).await?;
     let old_wc = ws.wc_id().clone();
 
     assert!(!ws.import_and_snapshot(true, false).await?);
@@ -262,7 +262,7 @@ async fn transaction_updates_wc_if_snapshot() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
-    let mut ws = session.load_directory(repo.path())?;
+    let mut ws = session.load_directory(repo.path()).await?;
     let old_wc = ws.wc_id().clone();
 
     fs::write(repo.path().join("new.txt"), []).unwrap();
@@ -280,7 +280,7 @@ async fn transaction_snapshot_path_is_visible() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
-    let mut ws = session.load_directory(repo.path())?;
+    let mut ws = session.load_directory(repo.path()).await?;
 
     fs::write(repo.path().join("new.txt"), []).unwrap();
 
@@ -321,7 +321,7 @@ async fn snapshot_respects_xdg_gitignore_colocated() -> Result<()> {
     let workspace_dir = tempdir()?;
     let mut session = WorkerSession::default();
     session.init_workspace(&workspace_dir.path().to_owned(), true)?;
-    let mut ws = session.load_directory(workspace_dir.path())?;
+    let mut ws = session.load_directory(workspace_dir.path()).await?;
 
     fs::write(workspace_dir.path().join("tracked.txt"), "hello")?;
     fs::write(workspace_dir.path().join("should_be.ignored"), "hidden")?;
@@ -357,7 +357,7 @@ async fn snapshot_respects_xdg_gitignore_internal() -> Result<()> {
     let workspace_dir = tempdir()?;
     let mut session = WorkerSession::default();
     session.init_workspace(&workspace_dir.path().to_owned(), false)?;
-    let mut ws = session.load_directory(workspace_dir.path())?;
+    let mut ws = session.load_directory(workspace_dir.path()).await?;
 
     fs::write(workspace_dir.path().join("tracked.txt"), "hello")?;
     fs::write(workspace_dir.path().join("should_be.ignored"), "hidden")?;

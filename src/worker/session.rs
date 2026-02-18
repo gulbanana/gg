@@ -158,7 +158,7 @@ impl Session for WorkerSession {
                         },
                     };
 
-                    let mut ws = match self.load_directory(&resolved_wd) {
+                    let mut ws = match self.load_directory(&resolved_wd).await {
                         Ok(ws) => ws,
                         Err(err) => {
                             latest_wd = None;
@@ -261,7 +261,7 @@ impl Session for WorkspaceSession<'_> {
                     handle_query(&mut state, &self, tx, rx, revset_string, None).await?;
                 }
                 SessionEvent::ExecuteSnapshot { tx } => {
-                    let updated_head = self.load_at_head()?; // alternatively, this could be folded into snapshot so that it's done by all mutations
+                    let updated_head = self.load_at_head().await?; // alternatively, this could be folded into snapshot so that it's done by all mutations
                     let auto_update_stale = self
                         .data
                         .workspace_settings

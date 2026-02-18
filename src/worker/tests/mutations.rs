@@ -22,7 +22,7 @@ async fn abandon_revisions() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
-    let mut ws = session.load_directory(repo.path())?;
+    let mut ws = session.load_directory(repo.path()).await?;
 
     let page = queries::query_log(&ws, "all()", 100)?;
     assert_eq!(24, page.rows.len());
@@ -44,7 +44,7 @@ async fn abandon_revisions_range() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
-    let mut ws = session.load_directory(repo.path())?;
+    let mut ws = session.load_directory(repo.path()).await?;
 
     let abandoned_set = RevSet::sequence(revs::conflict_bookmark(), revs::resolve_conflict());
 
@@ -82,7 +82,7 @@ async fn abandon_revisions_range() -> Result<()> {
 async fn backout_revisions() -> Result<()> {
     let repo = mkrepo();
     let mut session = WorkerSession::default();
-    let mut ws = session.load_directory(repo.path())?;
+    let mut ws = session.load_directory(repo.path()).await?;
 
     // update to small_child, which contains small.txt with "line1\nchanged\n"
     CheckoutRevision {
@@ -127,7 +127,7 @@ async fn backout_revisions_range() -> Result<()> {
 
     let repo = mkrepo();
     let mut session = WorkerSession::default();
-    let mut ws = session.load_directory(repo.path())?;
+    let mut ws = session.load_directory(repo.path()).await?;
 
     // update to hunk_grandchild
     CheckoutRevision {
@@ -171,7 +171,7 @@ async fn checkout_revision() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
-    let mut ws = session.load_directory(repo.path())?;
+    let mut ws = session.load_directory(repo.path()).await?;
 
     let head_header = queries::query_revision(&ws, &revs::working_copy())?;
     let conflict_header = queries::query_revision(&ws, &revs::conflict_bookmark())?;
@@ -201,7 +201,7 @@ async fn copy_changes() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
-    let mut ws = session.load_directory(repo.path())?;
+    let mut ws = session.load_directory(repo.path()).await?;
 
     let from_rev = query_by_id(&ws, revs::resolve_conflict()).await?;
     let to_rev = query_by_id(&ws, revs::working_copy()).await?;
@@ -235,7 +235,7 @@ async fn copy_changes_range() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
-    let mut ws = session.load_directory(repo.path())?;
+    let mut ws = session.load_directory(repo.path()).await?;
 
     // hunk_child_single modifies line 2 of hunk_test.txt
     // hunk_grandchild (child of hunk_child_single) modifies line 3 of hunk_test.txt
@@ -273,7 +273,7 @@ async fn copy_changes_range_immutable() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
-    let mut ws = session.load_directory(repo.path())?;
+    let mut ws = session.load_directory(repo.path()).await?;
 
     // try to restore into a range of immutable commits
     let result = CopyChanges {
@@ -294,7 +294,7 @@ async fn immutability_of_bookmark() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
-    let mut ws = session.load_directory(repo.path())?;
+    let mut ws = session.load_directory(repo.path()).await?;
 
     let immutable_matcher = StringMatcher::Exact("immutable_bookmark".to_string());
     let (_, ref_at_start) = ws
@@ -358,7 +358,7 @@ async fn immutable_workspace_head() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
-    let mut ws = session.load_directory(repo.path())?;
+    let mut ws = session.load_directory(repo.path()).await?;
 
     let immutable_matcher = StringMatcher::Exact("immutable_bookmark".to_string());
 
@@ -414,7 +414,7 @@ async fn create_revision_single_parent() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
-    let mut ws = session.load_directory(repo.path())?;
+    let mut ws = session.load_directory(repo.path()).await?;
 
     let parent_header = queries::query_revision(&ws, &revs::working_copy())?.expect("exists");
     assert!(parent_header.is_working_copy);
@@ -447,7 +447,7 @@ async fn create_revision_multi_parent() -> Result<()> {
     let repo: tempfile::TempDir = mkrepo();
 
     let mut session = WorkerSession::default();
-    let mut ws = session.load_directory(repo.path())?;
+    let mut ws = session.load_directory(repo.path()).await?;
 
     // conflict_bookmark is parent of resolve_conflict, forming a linear range of 2 commits
     let result = CreateRevision {
@@ -475,7 +475,7 @@ async fn describe_revision() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
-    let mut ws = session.load_directory(repo.path())?;
+    let mut ws = session.load_directory(repo.path()).await?;
 
     let header = queries::query_revision(&ws, &revs::working_copy())?.expect("exists");
     assert!(header.description.lines[0].is_empty());
@@ -500,7 +500,7 @@ async fn describe_revision_with_snapshot() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
-    let mut ws = session.load_directory(repo.path())?;
+    let mut ws = session.load_directory(repo.path()).await?;
 
     let rev = query_by_id(&ws, revs::working_copy()).await?;
     assert_matches!(rev, RevsResult::Detail { headers, changes, .. } if headers.last().unwrap().description.lines[0].is_empty() && changes.is_empty());
@@ -526,7 +526,7 @@ async fn duplicate_revisions() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
-    let mut ws = session.load_directory(repo.path())?;
+    let mut ws = session.load_directory(repo.path()).await?;
 
     let header = queries::query_revision(&ws, &revs::working_copy())?.expect("exists");
     assert!(header.description.lines[0].is_empty());
@@ -549,7 +549,7 @@ async fn duplicate_revisions_range() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
-    let mut ws = session.load_directory(repo.path())?;
+    let mut ws = session.load_directory(repo.path()).await?;
 
     let page = queries::query_log(&ws, "all()", 100)?;
     let initial_count = page.rows.len();
@@ -572,7 +572,7 @@ async fn insert_revisions_single() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
-    let mut ws = session.load_directory(repo.path())?;
+    let mut ws = session.load_directory(repo.path()).await?;
 
     let page = queries::query_log(&ws, "main::@", 4)?;
     assert_eq!(2, page.rows.len());
@@ -596,7 +596,7 @@ async fn insert_revisions_range() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
-    let mut ws = session.load_directory(repo.path())?;
+    let mut ws = session.load_directory(repo.path()).await?;
 
     // before: main -> @
     let page = queries::query_log(&ws, "main::@", 5)?;
@@ -642,7 +642,7 @@ async fn move_changes_all_paths() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
-    let mut ws = session.load_directory(repo.path())?;
+    let mut ws = session.load_directory(repo.path()).await?;
 
     let parent_header = queries::query_revision(&ws, &revs::conflict_bookmark())?.expect("exists");
     assert!(parent_header.has_conflict);
@@ -667,7 +667,7 @@ async fn move_changes_single_path() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
-    let mut ws = session.load_directory(repo.path())?;
+    let mut ws = session.load_directory(repo.path()).await?;
 
     let from_rev = query_by_id(&ws, revs::main_bookmark()).await?;
     let to_rev = query_by_id(&ws, revs::working_copy()).await?;
@@ -699,7 +699,7 @@ async fn move_changes_range_partial() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
-    let mut ws = session.load_directory(repo.path())?;
+    let mut ws = session.load_directory(repo.path()).await?;
 
     // commit A: adds x.txt and y.txt
     fs::write(repo.path().join("x.txt"), "x content").unwrap();
@@ -791,7 +791,7 @@ async fn move_changes_range_partial_multi_touch() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
-    let mut ws = session.load_directory(repo.path())?;
+    let mut ws = session.load_directory(repo.path()).await?;
 
     // commit A: add z.txt
     fs::write(repo.path().join("z.txt"), "version 1").unwrap();
@@ -899,7 +899,7 @@ async fn adopt_revision() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
-    let mut ws = session.load_directory(repo.path())?;
+    let mut ws = session.load_directory(repo.path()).await?;
 
     let page = queries::query_log(&ws, "@+", 1)?;
     assert_eq!(0, page.rows.len());
@@ -922,7 +922,7 @@ async fn move_revisions_single() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
-    let mut ws = session.load_directory(repo.path())?;
+    let mut ws = session.load_directory(repo.path()).await?;
 
     // initially, resolve_conflict is a child of conflict_bookmark
     let before = get_by_chid(&ws, &revs::resolve_conflict())?;
@@ -954,7 +954,7 @@ async fn move_revisions_range() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
-    let mut ws = session.load_directory(repo.path())?;
+    let mut ws = session.load_directory(repo.path()).await?;
 
     // rebase conflict_bookmark::resolve_conflict onto the working copy
     let result = MoveRevisions {
@@ -991,7 +991,7 @@ async fn move_revisions_range_internal_structure_preserved() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
-    let mut ws = session.load_directory(repo.path())?;
+    let mut ws = session.load_directory(repo.path()).await?;
 
     // get original parent of hunk_child_single (should be hunk_base)
     let child_before = get_by_chid(&ws, &revs::hunk_child_single())?;
@@ -1045,7 +1045,7 @@ async fn move_revisions_range_disinherits_to_oldest_parent() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
-    let mut ws = session.load_directory(repo.path())?;
+    let mut ws = session.load_directory(repo.path()).await?;
 
     // Create a chain: working_copy -> A -> B -> C
     // Then move A::B somewhere else, C should be orphaned to working_copy (A's parent)
@@ -1185,7 +1185,7 @@ async fn move_revisions_range_disinherits_children_of_middle() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
-    let mut ws = session.load_directory(repo.path())?;
+    let mut ws = session.load_directory(repo.path()).await?;
 
     // Create commit A on working_copy
     let result = CreateRevision {
@@ -1344,7 +1344,7 @@ async fn move_revisions_range_multiple_external_children() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
-    let mut ws = session.load_directory(repo.path())?;
+    let mut ws = session.load_directory(repo.path()).await?;
 
     // Create commit A
     let result = CreateRevision {
@@ -1463,7 +1463,7 @@ async fn move_hunk_descendant_partial() -> anyhow::Result<()> {
 
     let repo = mkrepo();
     let mut session = WorkerSession::default();
-    let mut ws = session.load_directory(repo.path())?;
+    let mut ws = session.load_directory(repo.path()).await?;
 
     // Move one of two hunks from descendant (hunk_child_multi) to ancestor (hunk_base)
     // hunk_child_multi modifies lines 2 and 4: line2 -> changed2, line4 -> changed4
@@ -1541,7 +1541,7 @@ async fn move_hunk_descendant_partial() -> anyhow::Result<()> {
 async fn move_hunk_message() -> anyhow::Result<()> {
     let repo = mkrepo();
     let mut session = WorkerSession::default();
-    let mut ws = session.load_directory(repo.path())?;
+    let mut ws = session.load_directory(repo.path()).await?;
 
     // Move only hunk from source, abandoning it
     let hunk = ChangeHunk {
@@ -1588,7 +1588,7 @@ async fn move_hunk_message() -> anyhow::Result<()> {
 async fn move_hunk_invalid() -> anyhow::Result<()> {
     let repo = mkrepo();
     let mut session = WorkerSession::default();
-    let mut ws = session.load_directory(repo.path())?;
+    let mut ws = session.load_directory(repo.path()).await?;
 
     // Invalid hunk - doesn't match the actual content of b.txt in hunk_source
     let hunk = ChangeHunk {
@@ -1623,7 +1623,7 @@ async fn move_hunk_descendant_abandons_source() -> anyhow::Result<()> {
 
     let repo = mkrepo();
     let mut session = WorkerSession::default();
-    let mut ws = session.load_directory(repo.path())?;
+    let mut ws = session.load_directory(repo.path()).await?;
 
     // hunk_child_single's only change is line 2: "line2" -> "modified2"
     let hunk = ChangeHunk {
@@ -1687,7 +1687,7 @@ async fn move_hunk_unrelated() -> anyhow::Result<()> {
 
     let repo = mkrepo();
     let mut session = WorkerSession::default();
-    let mut ws = session.load_directory(repo.path())?;
+    let mut ws = session.load_directory(repo.path()).await?;
 
     // hunk_child_single modifies line 2: "line2" -> "modified2"
     // hunk_sibling extends the file with new6, new7, new8
@@ -1762,7 +1762,7 @@ async fn move_hunk_unrelated_different_structure_creates_conflict() -> anyhow::R
 
     let repo = mkrepo();
     let mut session = WorkerSession::default();
-    let mut ws = session.load_directory(repo.path())?;
+    let mut ws = session.load_directory(repo.path()).await?;
 
     // Hunk from hunk_source that changes line 1: "1" -> "11"
     // hunk_source's parent has b.txt = "1\n" (single line)
@@ -1824,7 +1824,7 @@ async fn move_hunk_ancestor_to_descendant() -> anyhow::Result<()> {
 
     let repo = mkrepo();
     let mut session = WorkerSession::default();
-    let mut ws = session.load_directory(repo.path())?;
+    let mut ws = session.load_directory(repo.path()).await?;
 
     let repo_path = jj_lib::repo_path::RepoPath::from_internal_string("hunk_test.txt")?;
 
@@ -1950,7 +1950,7 @@ async fn move_hunk_between_siblings() -> anyhow::Result<()> {
 
     let repo = mkrepo();
     let mut session = WorkerSession::default();
-    let mut ws = session.load_directory(repo.path())?;
+    let mut ws = session.load_directory(repo.path()).await?;
 
     // hunk_child_multi has: line1, changed2, line3, changed4, line5
     // hunk_sibling has: line1, line2, line3, line4, line5, new6, new7, new8
@@ -2032,7 +2032,7 @@ async fn move_hunk_does_not_affect_other_files() -> anyhow::Result<()> {
 
     let repo = mkrepo();
     let mut session = WorkerSession::default();
-    let mut ws = session.load_directory(repo.path())?;
+    let mut ws = session.load_directory(repo.path()).await?;
 
     // Get the original content of a.txt in hunk_child_multi before the move
     let child_before = get_by_chid(&ws, &revs::hunk_child_multi())?;
@@ -2143,7 +2143,7 @@ async fn copy_hunk_from_parent() -> anyhow::Result<()> {
 
     let repo = mkrepo();
     let mut session = WorkerSession::default();
-    let mut ws = session.load_directory(repo.path())?;
+    let mut ws = session.load_directory(repo.path()).await?;
 
     // Copy/restore hunk from hunk_base (parent) to hunk_child_single (child)
     let hunk = ChangeHunk {
@@ -2201,7 +2201,7 @@ async fn copy_hunk_from_parent() -> anyhow::Result<()> {
 async fn copy_hunk_to_conflict() -> anyhow::Result<()> {
     let repo = mkrepo();
     let mut session = WorkerSession::default();
-    let mut ws = session.load_directory(repo.path())?;
+    let mut ws = session.load_directory(repo.path()).await?;
 
     // Use the existing conflict_bookmark from test repo
     let conflict_commit = revs::conflict_bookmark();
@@ -2250,7 +2250,7 @@ async fn copy_hunk_to_conflict() -> anyhow::Result<()> {
 async fn copy_hunk_out_of_bounds() -> anyhow::Result<()> {
     let repo = mkrepo();
     let mut session = WorkerSession::default();
-    let mut ws = session.load_directory(repo.path())?;
+    let mut ws = session.load_directory(repo.path()).await?;
 
     // small_parent has small.txt with "line1\nline2\n"
     // small_child has small.txt with "line1\nchanged\n"
@@ -2296,7 +2296,7 @@ async fn copy_hunk_out_of_bounds() -> anyhow::Result<()> {
 async fn copy_hunk_unchanged() -> anyhow::Result<()> {
     let repo = mkrepo();
     let mut session = WorkerSession::default();
-    let mut ws = session.load_directory(repo.path())?;
+    let mut ws = session.load_directory(repo.path()).await?;
 
     // hunk_base has line1-line5, hunk_sibling has line1-line5 plus new6-new8
     let hunk = ChangeHunk {
@@ -2337,7 +2337,7 @@ async fn copy_hunk_multiple_hunks() -> anyhow::Result<()> {
 
     let repo = mkrepo();
     let mut session = WorkerSession::default();
-    let mut ws = session.load_directory(repo.path())?;
+    let mut ws = session.load_directory(repo.path()).await?;
 
     // hunk_child_multi modifies two lines: line2->changed2 and line4->changed4
     let hunk = ChangeHunk {
@@ -2397,7 +2397,7 @@ async fn move_hunk_second_of_two_hunks() -> anyhow::Result<()> {
 
     let repo = mkrepo();
     let mut session = WorkerSession::default();
-    let mut ws = session.load_directory(repo.path())?;
+    let mut ws = session.load_directory(repo.path()).await?;
 
     // hunk_child_multi has two hunks: line2->changed2 and line4->changed4
     let hunk = ChangeHunk {
@@ -2483,7 +2483,7 @@ auto-track = "glob:*.txt"
     fs::write(&config_path, config_content).unwrap();
 
     let mut session = WorkerSession::default();
-    let mut ws = session.load_directory(repo.path())?;
+    let mut ws = session.load_directory(repo.path()).await?;
 
     // Write two new files, one tracked and one untracked
     fs::write(repo.path().join("tracked.txt"), "tracked content").unwrap();

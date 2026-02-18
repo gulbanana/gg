@@ -48,7 +48,6 @@ use jj_lib::{
     working_copy::{CheckoutStats, SnapshotOptions, WorkingCopyFreshness},
     workspace::{self, DefaultWorkspaceLoaderFactory, Workspace, WorkspaceLoaderFactory},
 };
-use pollster::FutureExt as _;
 use thiserror::Error;
 
 use super::WorkerSession;
@@ -105,7 +104,7 @@ impl From<BackendError> for RevsetError {
 }
 
 impl WorkerSession {
-    pub fn load_directory(&mut self, cwd: &Path) -> Result<WorkspaceSession<'_>> {
+    pub async fn load_directory(&mut self, cwd: &Path) -> Result<WorkspaceSession<'_>> {
         let factory = DefaultWorkspaceLoaderFactory;
         let loader = factory.create(find_workspace_dir(cwd))?;
 
@@ -130,7 +129,7 @@ impl WorkerSession {
             query_choices: preset_choices,
         };
 
-        let operation = load_at_head(&workspace, &data)?;
+        let operation = load_at_head(&workspace, &data).await?;
 
         let index_store = workspace.repo_loader().index_store();
         let index = index_store
@@ -187,8 +186,8 @@ impl WorkspaceSession<'_> {
             .map(|backend| backend.git_repo().to_owned())
     }
 
-    pub fn load_at_head(&mut self) -> Result<bool> {
-        let head = load_at_head(&self.workspace, &self.data)?;
+    pub async fn load_at_head(&mut self) -> Result<bool> {
+        let head = load_at_head(&self.workspace, &self.data).await?;
         if head.repo.op_id() != self.operation.repo.op_id() {
             self.operation = head;
             Ok(true)
@@ -1373,7 +1372,7 @@ fn has_external_tool(settings: &UserSettings, config_key: &'static str) -> bool 
 /* misc helpers that should be better organised */
 /************************************************/
 
-fn load_at_head(workspace: &Workspace, data: &WorkspaceData) -> Result<SessionOperation> {
+async fn load_at_head(workspace: &Workspace, data: &WorkspaceData) -> Result<SessionOperation> {
     let loader = workspace.repo_loader();
 
     let op = op_heads_store::resolve_op_heads(
@@ -1395,7 +1394,7 @@ fn load_at_head(workspace: &Workspace, data: &WorkspaceData) -> Result<SessionOp
             )
         },
     )
-    .block_on()?;
+    .await?;
 
     let repo: Arc<ReadonlyRepo> = workspace
         .repo_loader()
