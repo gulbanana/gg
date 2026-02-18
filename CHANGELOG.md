@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Added
+- JJ config settings can now be overridden for GG only by prefixing a setting with `gg.`. For example, if you have...
+  ```
+  [user]
+  name = "JJ Author"
+  [gg.user]
+  name = "GG Author"
+  ```
+  ...then revisions created by GG will be authored by "GG Author" instead of "JJ Author".
+
 ### Fixed
 - Pushes were silently rejected when branches had moved or been locked down; now an error is displayed.
 

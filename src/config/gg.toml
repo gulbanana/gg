@@ -22,8 +22,8 @@ track-recent-workspaces = true
 # When set, bookmarks that are local-only or remote-only will be visually indicated.
 mark-unpushed-bookmarks = true
 
-# "light" or "dark". If not set, your OS settings will be used.
-# theme-override =
+# "light" or "dark". If empty, your OS settings will be used.
+theme-override = ""
 
 [gg.web]
 default-port = 0       # Port to bind to in web mode (0 = random)
