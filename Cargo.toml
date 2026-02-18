@@ -45,7 +45,7 @@ tauri-build = { version = "2.0.0", features = ["config-toml"] }
 [dev-dependencies]
 assert_matches = "1.5"
 http-body-util = "0.1.3"
-tempfile = "3.23"
+tempfile = "3.24"
 tower = "0.5.2"
 zip = "6.0"
 
@@ -63,12 +63,12 @@ tauri-plugin-shell = "2.0.0"
 tauri-plugin-window-state = "2.0.0"
 tauri-plugin-log = "2.0.0"
 
-jj-lib = { version = "0.38.0", features = ["watchman"] }
-jj-cli = "0.38.0"
+jj-lib = { git = "https://github.com/jj-vcs/jj.git", branch = "main", features = ["watchman"] }
+jj-cli = { git = "https://github.com/jj-vcs/jj.git", branch = "main" }
 
 # deps shared with JJ, which we try to keep on the same version
 anyhow = "1.0.100"
-clap = { version = "4.5.57", features = [
+clap = { version = "4.5.60", features = [
     "derive",
     "deprecated",
     "wrap_help",
@@ -79,7 +79,7 @@ etcetera = "0.11.0"
 dunce = "1.0.5"
 itertools = "0.14"
 indexmap = "2.13"
-gix = { version = "0.78.0", default-features = false, features = [
+gix = { version = "0.80.0", default-features = false, features = [
     "index",
     "max-performance-safe",
     "blob-diff",
@@ -87,13 +87,13 @@ gix = { version = "0.78.0", default-features = false, features = [
 async-trait = "0.1.89"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0.149"
-tempfile = "3.23"
+tempfile = "3.24"
 tokio = { version = "1.49.0", features = ["io-util"] }
 toml_edit = { version = "0.24", features = ["serde"] }
 thiserror = "2.0.18"
 
 # deps used by JJ but with different features
-chrono = { version = "0.4.43", features = ["serde"] }
+chrono = { version = "0.4.44", features = ["serde"] }
 
 # extra deps not used by JJ
 log = "0.4"

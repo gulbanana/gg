@@ -19,6 +19,7 @@ use jj_cli::config::{ConfigEnv, config_from_environment, default_config_layers};
 use jj_cli::ui::Ui;
 use jj_lib::{
     config::{ConfigGetError, ConfigLayer, ConfigNamePathBuf, ConfigSource, StackedConfig},
+    fileset::FilesetAliasesMap,
     revset::RevsetAliasesMap,
     settings::UserSettings,
 };
@@ -146,7 +147,12 @@ fn native_keys() -> HashSet<String> {
 /// Returns `(settings, revset_aliases, preset_query_choices)`.
 pub fn read_config(
     repo_path: Option<&Path>,
-) -> Result<(UserSettings, RevsetAliasesMap, HashMap<String, String>)> {
+) -> Result<(
+    UserSettings,
+    RevsetAliasesMap,
+    FilesetAliasesMap,
+    HashMap<String, String>,
+)> {
     let mut layers = vec![];
     let mut config_env = ConfigEnv::from_environment();
 
@@ -166,6 +172,7 @@ pub fn read_config(
 
     let mut config = config_env.resolve_config(&raw_config)?;
     let aliases_map = build_aliases_map(&config)?;
+    let fileset_aliases_map = build_fileset_aliases_map(&config)?;
     let query_choices = read_preset_choices(&config);
 
     if let Some(overrides) = extract_overrides(&config) {
@@ -174,7 +181,12 @@ pub fn read_config(
 
     let workspace_settings = UserSettings::from_config(config)?;
 
-    Ok((workspace_settings, aliases_map, query_choices))
+    Ok((
+        workspace_settings,
+        aliases_map,
+        fileset_aliases_map,
+        query_choices,
+    ))
 }
 
 /// Scans all config layers for `gg.*` keys that aren't GG's own settings and
@@ -274,6 +286,37 @@ fn read_preset_choices(stacked_config: &StackedConfig) -> HashMap<String, String
 fn build_aliases_map(stacked_config: &StackedConfig) -> Result<RevsetAliasesMap> {
     let table_name = ConfigNamePathBuf::from_iter(["revset-aliases"]);
     let mut aliases_map = RevsetAliasesMap::new();
+    // Load from all config layers in order. 'f(x)' in default layer should be
+    // overridden by 'f(a)' in user.
+    for layer in stacked_config.layers() {
+        let table = match layer.look_up_table(&table_name) {
+            Ok(Some(table)) => table,
+            Ok(None) => continue,
+            Err(item) => {
+                return Err(ConfigGetError::Type {
+                    name: table_name.to_string(),
+                    error: format!("Expected a table, but is {}", item.type_name()).into(),
+                    source_path: layer.path.clone(),
+                }
+                .into());
+            }
+        };
+        for (decl, item) in table.iter() {
+            let r = item
+                .as_str()
+                .ok_or_else(|| format!("Expected a string, but is {}", item.type_name()))
+                .and_then(|v| aliases_map.insert(decl, v).map_err(|e| e.to_string()));
+            if let Err(s) = r {
+                return Err(anyhow!("Failed to load `{table_name}.{decl}`: {s}"));
+            }
+        }
+    }
+    Ok(aliases_map)
+}
+
+pub fn build_fileset_aliases_map(stacked_config: &StackedConfig) -> Result<FilesetAliasesMap> {
+    let table_name = ConfigNamePathBuf::from_iter(["fileset-aliases"]);
+    let mut aliases_map = FilesetAliasesMap::new();
     // Load from all config layers in order. 'f(x)' in default layer should be
     // overridden by 'f(a)' in user.
     for layer in stacked_config.layers() {

@@ -98,7 +98,7 @@ pub async fn run_web(options: super::RunOptions, web_options: WebOptions) -> Res
         .chain(std::io::stderr())
         .apply()?;
 
-    let (repo_settings, _, _) = read_config(options.workspace.as_deref())?;
+    let (repo_settings, _, _, _) = read_config(options.workspace.as_deref())?;
     let client_timeout = repo_settings.web_client_timeout();
     let (app, shutdown_rx) = create_app(options, Some(client_timeout))?;
 

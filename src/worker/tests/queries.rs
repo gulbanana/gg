@@ -5,12 +5,12 @@ use anyhow::Result;
 use assert_matches::assert_matches;
 use std::collections::HashSet;
 
-#[test]
-fn log_all() -> Result<()> {
+#[tokio::test]
+async fn log_all() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
-    let ws = session.load_directory(repo.path())?;
+    let ws = session.load_directory(repo.path()).await?;
 
     let all_rows = queries::query_log(&ws, "all()", 100)?;
 
@@ -20,12 +20,12 @@ fn log_all() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn log_paged() -> Result<()> {
+#[tokio::test]
+async fn log_paged() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
-    let ws = session.load_directory(repo.path())?;
+    let ws = session.load_directory(repo.path()).await?;
 
     let page_rows = queries::query_log(&ws, "all()", 6)?;
 
@@ -35,12 +35,12 @@ fn log_paged() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn log_subset() -> Result<()> {
+#[tokio::test]
+async fn log_subset() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
-    let ws = session.load_directory(repo.path())?;
+    let ws = session.load_directory(repo.path()).await?;
 
     let several_rows = queries::query_log(&ws, "bookmarks()", 100)?;
 
@@ -49,12 +49,12 @@ fn log_subset() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn log_mutable() -> Result<()> {
+#[tokio::test]
+async fn log_mutable() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
-    let ws = session.load_directory(repo.path())?;
+    let ws = session.load_directory(repo.path()).await?;
 
     let single_row = queries::query_log(&ws, "wnpusytq", 100)?
         .rows
@@ -66,12 +66,12 @@ fn log_mutable() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn log_immutable() -> Result<()> {
+#[tokio::test]
+async fn log_immutable() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
-    let ws = session.load_directory(repo.path())?;
+    let ws = session.load_directory(repo.path()).await?;
 
     let single_row = queries::query_log(&ws, "ywknyuol", 100)?
         .rows
@@ -83,12 +83,12 @@ fn log_immutable() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn revision() -> Result<()> {
+#[tokio::test]
+async fn revision() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
-    let ws = session.load_directory(repo.path())?;
+    let ws = session.load_directory(repo.path()).await?;
 
     let header = queries::query_revision(&ws, &revs::main_bookmark())?.expect("revision exists");
 
@@ -107,7 +107,7 @@ async fn revision_with_conflict() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
-    let ws = session.load_directory(repo.path())?;
+    let ws = session.load_directory(repo.path()).await?;
 
     let id = revs::conflict_bookmark();
     let result = queries::query_revisions(
@@ -158,7 +158,7 @@ async fn conflicted_paths_are_not_duplicated() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
-    let ws = session.load_directory(repo.path())?;
+    let ws = session.load_directory(repo.path()).await?;
 
     let result = queries::query_revisions(
         &ws,
@@ -201,7 +201,7 @@ async fn revision_without_conflict() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
-    let ws = session.load_directory(repo.path())?;
+    let ws = session.load_directory(repo.path()).await?;
 
     let id = revs::main_bookmark();
     let result = queries::query_revisions(
@@ -242,7 +242,7 @@ async fn revision_resolves_conflict() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
-    let ws = session.load_directory(repo.path())?;
+    let ws = session.load_directory(repo.path()).await?;
 
     // resolve_conflict is a child of conflict_bookmark that resolves the conflict
     let id = revs::resolve_conflict();
@@ -310,7 +310,7 @@ async fn revisions_nonexistent_range_returns_not_found() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
-    let ws = session.load_directory(repo.path())?;
+    let ws = session.load_directory(repo.path()).await?;
 
     // use fake change IDs that don't exist in the repo
     let nonexistent_set = RevSet {
@@ -335,7 +335,7 @@ async fn merge_introduces_conflict() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
-    let ws = session.load_directory(repo.path())?;
+    let ws = session.load_directory(repo.path()).await?;
 
     // First verify that a parent of the conflict commit has no conflict
     let parent_id = revs::hunk_source(); // xoooutru - one parent of conflict_bookmark
@@ -431,7 +431,7 @@ async fn inherited_conflict_persists() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
-    let ws = session.load_directory(repo.path())?;
+    let ws = session.load_directory(repo.path()).await?;
 
     // Query the child that inherits but doesn't resolve the conflict
     let child_id = revs::inherited_conflict();
@@ -499,7 +499,7 @@ async fn range_through_inherited_conflict() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
-    let ws = session.load_directory(repo.path())?;
+    let ws = session.load_directory(repo.path()).await?;
 
     // Query range from parent (conflict_bookmark) to child (inherited_conflict)
     let result = queries::query_revisions(
@@ -547,7 +547,7 @@ mod conflict_chain_ranges {
     async fn range_ends_in_conflict() -> Result<()> {
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let ws = session.load_directory(repo.path())?;
+        let ws = session.load_directory(repo.path()).await?;
 
         // Range from resolve_conflict to chain_conflict
         // resolve_conflict has no conflicts, chain_conflict does
@@ -596,7 +596,7 @@ mod conflict_chain_ranges {
     async fn range_conflict_to_resolved() -> Result<()> {
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let ws = session.load_directory(repo.path())?;
+        let ws = session.load_directory(repo.path()).await?;
 
         // Range from chain_conflict to chain_resolved
         let result = queries::query_revisions(
@@ -643,7 +643,7 @@ mod conflict_chain_ranges {
     async fn range_through_multiple_conflict_states() -> Result<()> {
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let ws = session.load_directory(repo.path())?;
+        let ws = session.load_directory(repo.path()).await?;
 
         // Range from original conflict through to final resolution
         let result = queries::query_revisions(
@@ -693,7 +693,7 @@ mod conflict_chain_ranges {
     async fn single_chain_conflict() -> Result<()> {
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let ws = session.load_directory(repo.path())?;
+        let ws = session.load_directory(repo.path()).await?;
 
         let id = revs::chain_conflict();
         let result = queries::query_revisions(
@@ -727,7 +727,7 @@ mod conflict_chain_ranges {
     async fn single_chain_resolved() -> Result<()> {
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let ws = session.load_directory(repo.path())?;
+        let ws = session.load_directory(repo.path()).await?;
 
         let id = revs::chain_resolved();
         let result = queries::query_revisions(
@@ -760,12 +760,12 @@ mod conflict_chain_ranges {
     }
 }
 
-#[test]
-fn remotes_all() -> Result<()> {
+#[tokio::test]
+async fn remotes_all() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
-    let ws = session.load_directory(repo.path())?;
+    let ws = session.load_directory(repo.path()).await?;
 
     let remotes = queries::query_remotes(&ws, None)?;
 
@@ -776,12 +776,12 @@ fn remotes_all() -> Result<()> {
     Ok(())
 }
 
-#[test]
-fn remotes_tracking_bookmark() -> Result<()> {
+#[tokio::test]
+async fn remotes_tracking_bookmark() -> Result<()> {
     let repo = mkrepo();
 
     let mut session = WorkerSession::default();
-    let ws = session.load_directory(repo.path())?;
+    let ws = session.load_directory(repo.path()).await?;
 
     let remotes = queries::query_remotes(&ws, Some(String::from("main")))?;
 
@@ -819,7 +819,7 @@ mod revisions_immutability {
     async fn single_revision_immutable() -> Result<()> {
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let ws = session.load_directory(repo.path())?;
+        let ws = session.load_directory(repo.path()).await?;
 
         let set = mkset(revs::immutable_bookmark(), revs::immutable_bookmark());
         let result = queries::query_revisions(&ws, set).await?;
@@ -838,7 +838,7 @@ mod revisions_immutability {
     async fn single_revision_mutable() -> Result<()> {
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let ws = session.load_directory(repo.path())?;
+        let ws = session.load_directory(repo.path()).await?;
 
         let set = mkset(revs::main_bookmark(), revs::main_bookmark());
         let result = queries::query_revisions(&ws, set).await?;
@@ -857,7 +857,7 @@ mod revisions_immutability {
     async fn sequence_all_immutable() -> Result<()> {
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let ws = session.load_directory(repo.path())?;
+        let ws = session.load_directory(repo.path()).await?;
 
         // immutable_grandparent -> immutable_parent -> immutable_bookmark (all immutable)
         let set = mkset(revs::immutable_grandparent(), revs::immutable_bookmark());
@@ -878,7 +878,7 @@ mod revisions_immutability {
     async fn sequence_all_mutable() -> Result<()> {
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let ws = session.load_directory(repo.path())?;
+        let ws = session.load_directory(repo.path()).await?;
 
         // main_bookmark -> working_copy (both mutable)
         let set = mkset(revs::main_bookmark(), revs::working_copy());
@@ -899,7 +899,7 @@ mod revisions_immutability {
     async fn sequence_oldest_immutable_newest_mutable() -> Result<()> {
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let ws = session.load_directory(repo.path())?;
+        let ws = session.load_directory(repo.path()).await?;
 
         // immutable_bookmark -> main_bookmark (oldest immutable, newest mutable)
         let set = mkset(revs::immutable_bookmark(), revs::main_bookmark());
@@ -920,7 +920,7 @@ mod revisions_immutability {
     async fn sequence_mixed_immutability_longer() -> Result<()> {
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let ws = session.load_directory(repo.path())?;
+        let ws = session.load_directory(repo.path()).await?;
 
         // immutable_parent -> immutable_bookmark -> main_bookmark -> working_copy
         // First two immutable, last two mutable

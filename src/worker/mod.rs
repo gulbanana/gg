@@ -30,7 +30,7 @@ use std::sync::Arc;
 
 use anyhow::{Context, Error, Result, anyhow};
 use jj_cli::{git_util::load_git_import_options, ui::Ui};
-use jj_lib::git::{GitFetch, GitFetchRefExpression, GitSettings};
+use jj_lib::git::{self, GitFetch, GitFetchRefExpression, GitSettings};
 use jj_lib::ref_name::{RefNameBuf, RemoteName, RemoteNameBuf, RemoteRefSymbol};
 use jj_lib::repo::{Repo, StoreFactories};
 use jj_lib::settings::UserSettings;
@@ -38,7 +38,6 @@ use jj_lib::str_util::StringExpression;
 use jj_lib::workspace::{
     self, DefaultWorkspaceLoaderFactory, Workspace, WorkspaceLoaderFactory as _,
 };
-use jj_lib::{backend::CommitId, git};
 use serde::Serialize;
 
 use crate::messages::mutations::{MutationOptions, MutationResult};
@@ -177,7 +176,7 @@ impl WorkerSession {
     /// new repo shares it; otherwise a fresh Git backend is created (either
     /// colocated or internal depending on the flag). Returns the canonicalized
     /// path on success.
-    fn init_workspace(&self, location: &PathBuf, colocated: bool) -> Result<PathBuf> {
+    async fn init_workspace(&self, location: &PathBuf, colocated: bool) -> Result<PathBuf> {
         // precondition: not already a jj repo
         let jj_path = location.join(".jj");
         if jj_path.exists() {
@@ -187,17 +186,17 @@ impl WorkerSession {
         }
 
         let canonical_location = dunce::canonicalize(location)?;
-        let (settings, _, _) = crate::config::read_config(None)?;
+        let (settings, _, _, _) = crate::config::read_config(None)?;
 
         if colocated {
             let git_path = location.join(".git");
             if git_path.exists() {
-                Workspace::init_external_git(&settings, &canonical_location, &git_path)?; // existing .git/, create .jj
+                Workspace::init_external_git(&settings, &canonical_location, &git_path).await?; // existing .git/, create .jj
             } else {
-                Workspace::init_colocated_git(&settings, &canonical_location)?; // create .git/ and .jj/
+                Workspace::init_colocated_git(&settings, &canonical_location).await?; // create .git/ and .jj/
             }
         } else {
-            Workspace::init_internal_git(&settings, &canonical_location)?; // create .jj/ with a .git/ inside it
+            Workspace::init_internal_git(&settings, &canonical_location).await?; // create .jj/ with a .git/ inside it
         }
 
         Ok(canonical_location)
@@ -209,7 +208,7 @@ impl WorkerSession {
     /// `source_url` (added as the `origin` remote), and check out the default
     /// branch. Progress events are pushed through the session's [`EventSink`].
     /// Returns the canonicalized path on success.
-    fn clone_workspace(
+    async fn clone_workspace(
         &self,
         source_url: &str,
         location: &PathBuf,
@@ -232,13 +231,13 @@ impl WorkerSession {
         }
 
         let canonical_location = dunce::canonicalize(location)?;
-        let (settings, _, _) = crate::config::read_config(None)?;
+        let (settings, _, _, _) = crate::config::read_config(None)?;
 
         // init empty
         let (_workspace, repo) = if colocated {
-            Workspace::init_colocated_git(&settings, &canonical_location)?
+            Workspace::init_colocated_git(&settings, &canonical_location).await?
         } else {
-            Workspace::init_internal_git(&settings, &canonical_location)?
+            Workspace::init_internal_git(&settings, &canonical_location).await?
         };
 
         // add origin
@@ -254,7 +253,7 @@ impl WorkerSession {
                 &StringExpression::all(),
             )
             .context("add_remote(origin)")?;
-            tx.commit("add git remote origin")?;
+            tx.commit("add git remote origin").await?;
         }
 
         // reload to apply config
@@ -264,7 +263,7 @@ impl WorkerSession {
             &StoreFactories::default(),
             &workspace::default_working_copy_factories(),
         )?;
-        let repo = workspace.repo_loader().load_at_head()?;
+        let repo = workspace.repo_loader().load_at_head().await?;
 
         // fetch from origin
         let mut auth_ctx = AuthContext::new(None);
@@ -273,7 +272,8 @@ impl WorkerSession {
         let import_options = load_git_import_options(&Ui::null(), &git_settings, &remote_settings)
             .map_err(|e| Error::new(e.error))?;
 
-        let git_head_id =
+        // perform sync git operations in with_callbacks, return the transaction for async finalization
+        let fetch_result =
             auth_ctx.with_callbacks(Some(self.sink.clone()), self.enable_askpass, |cb, env| {
                 let mut subprocess_options = git_settings.to_subprocess_options();
                 subprocess_options.environment = env;
@@ -297,7 +297,7 @@ impl WorkerSession {
 
                 // find HEAD if at all possible
                 let workspace_name = workspace.workspace_name().to_owned();
-                let mut checkout_commit_id = None;
+                let mut default_branch = None;
                 if let Some(bookmark_name) = Self::find_default_branch(tx.repo()) {
                     let bookmark_ref = RefNameBuf::from(bookmark_name.as_str());
                     let remote_ref = RemoteNameBuf::from("origin");
@@ -309,31 +309,39 @@ impl WorkerSession {
                     if let Some(commit_id) = remote_bookmark.target.as_normal().cloned() {
                         let commit = tx.repo().store().get_commit(&commit_id)?;
                         tx.repo_mut().track_remote_bookmark(symbol)?;
-                        tx.repo_mut().check_out(workspace_name, &commit)?;
-
-                        checkout_commit_id = Some(commit_id);
+                        default_branch = Some((workspace_name, commit, commit_id));
                     }
                 }
 
-                // nominal rebase to preserve invariants
-                tx.repo_mut().rebase_descendants()?;
-                tx.commit("clone from git remote")?;
-
-                Ok::<Option<CommitId>, Error>(checkout_commit_id)
+                Ok::<_, Error>((tx, default_branch))
             })?;
 
+        // async finalization outside the sync closure
+        let (mut tx, default_branch) = fetch_result;
+        let mut checkout_commit_id = None;
+        if let Some((workspace_name, commit, commit_id)) = default_branch {
+            tx.repo_mut().check_out(workspace_name, &commit).await?;
+            checkout_commit_id = Some(commit_id);
+        }
+
+        // nominal rebase to preserve invariants
+        tx.repo_mut().rebase_descendants().await?;
+        tx.commit("clone from git remote").await?;
+
         // check out the working copy after one last reload
-        if let Some(wc_id) = git_head_id {
+        if let Some(wc_id) = checkout_commit_id {
             let loader = DefaultWorkspaceLoaderFactory.create(&canonical_location)?;
             let mut workspace = loader.load(
                 &settings,
                 &jj_lib::repo::StoreFactories::default(),
                 &jj_lib::workspace::default_working_copy_factories(),
             )?;
-            let repo = workspace.repo_loader().load_at_head()?;
+            let repo = workspace.repo_loader().load_at_head().await?;
 
             let commit = repo.store().get_commit(&wc_id)?;
-            workspace.check_out(repo.op_id().clone(), None, &commit)?;
+            workspace
+                .check_out(repo.op_id().clone(), None, &commit)
+                .await?;
         }
 
         Ok(canonical_location)
