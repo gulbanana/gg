@@ -133,6 +133,7 @@ impl Mutation for BackoutRevisions {
         // wc_tree: contents of the working copy before we add to it
         let working_copy = ws.get_commit(ws.wc_id())?;
         let wc_tree = working_copy.tree();
+        let wc_tree_ids = wc_tree.tree_ids().clone();
 
         // prepare conflict labels
         let (reverted_label, parent_label) = if commits.len() == 1 {
@@ -158,13 +159,18 @@ impl Mutation for BackoutRevisions {
         };
         let wc_label = format!("{} (backout destination)", working_copy.conflict_label());
 
-        // three-way merge: wc + (reverted - parent)
+        // three-way merge: wc + (parent - reverted)
         let new_wc_tree = MergedTree::merge(Merge::from_vec(vec![
             (wc_tree, wc_label),
             (reverted_tree, reverted_label),
             (parent_tree, parent_label),
         ]))
         .await?;
+
+        // changes already present in working copy
+        if new_wc_tree.tree_ids() == &wc_tree_ids {
+            return Ok(MutationResult::Unchanged);
+        }
 
         tx.repo_mut()
             .rewrite_commit(&working_copy)
