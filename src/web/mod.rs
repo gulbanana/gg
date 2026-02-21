@@ -152,6 +152,8 @@ fn create_app(
     let app = Router::new()
         // static assets
         .route("/", get(serve_index))
+        .route("/log", get(serve_index))
+        .route("/revision", get(serve_index))
         .route("/assets/{*path}", get(serve_asset))
         .fallback(get(serve_fallback))
         // API endpoints
