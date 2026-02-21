@@ -5,8 +5,8 @@ use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::time::Duration;
 
-use anyhow::{anyhow, Result};
-use jj_cli::config::{config_from_environment, default_config_layers, ConfigEnv};
+use anyhow::{Result, anyhow};
+use jj_cli::config::{ConfigEnv, config_from_environment, default_config_layers};
 use jj_cli::ui::Ui;
 use jj_lib::{
     config::{ConfigGetError, ConfigLayer, ConfigNamePathBuf, ConfigSource, StackedConfig},

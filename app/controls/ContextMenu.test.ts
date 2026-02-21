@@ -13,6 +13,7 @@ let mockHeader: RevHeader = {
     author: { email: "test@test.com", name: "Test", timestamp: "2024-01-01T00:00:00Z" },
     has_conflict: false,
     is_working_copy: false,
+    working_copy_of: null,
     is_immutable: false,
     refs: [],
     parent_ids: [{ type: "CommitId", hex: "parent1", prefix: "par", rest: "ent1" }],

@@ -18,6 +18,7 @@
   [gg.ui]
   diff-formatter="" # overrides ui.diff-formatter, removing the difftool button but not the mergetool button
   ```
+- Revisions which are the working copy of another workspace are displayed with a yellow dot.
 
 ### Changed
 - `[gg.revsets]` has been renamed to `[gg.presets]`. Sorry about the churn, but the earlier name was a mistake - it clashes with jj's `[revsets]` config table.

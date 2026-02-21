@@ -38,6 +38,7 @@ function createMockRevs(): Extract<RevsResult, { type: "Detail" }> {
                 },
                 has_conflict: false,
                 is_working_copy: false,
+                working_copy_of: null,
                 is_immutable: false,
                 refs: [],
                 parent_ids: [],

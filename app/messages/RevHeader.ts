@@ -5,4 +5,4 @@ import type { RevAuthor } from "./RevAuthor";
 import type { RevId } from "./RevId";
 import type { StoreRef } from "./StoreRef";
 
-export interface RevHeader { id: RevId, description: MultilineString, author: RevAuthor, has_conflict: boolean, is_working_copy: boolean, is_immutable: boolean, refs: Array<StoreRef>, parent_ids: Array<CommitId>, }
+export interface RevHeader { id: RevId, description: MultilineString, author: RevAuthor, has_conflict: boolean, is_working_copy: boolean, working_copy_of: string | null, is_immutable: boolean, refs: Array<StoreRef>, parent_ids: Array<CommitId>, }

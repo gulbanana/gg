@@ -84,6 +84,7 @@ pub struct SessionOperation {
     pub repo: Arc<ReadonlyRepo>,
     pub wc_id: CommitId,
     ref_index: OnceCell<Rc<RefIndex>>,
+    workspace_index: OnceCell<HashMap<CommitId, String>>,
     prefix_context: IdPrefixContext,
 }
 
@@ -482,6 +483,20 @@ impl WorkspaceSession<'_> {
             .get_or_init(|| Rc::new(build_ref_index(self.operation.repo.as_ref())))
     }
 
+    /// commit id -> workspace name, for workspaces other than the current one
+    fn workspace_index(&self) -> &HashMap<CommitId, String> {
+        self.operation.workspace_index.get_or_init(|| {
+            self.operation
+                .repo
+                .view()
+                .wc_commit_ids()
+                .iter()
+                .filter(|(_, id)| **id != self.operation.wc_id)
+                .map(|(name, id)| (id.clone(), name.as_symbol().to_string()))
+                .collect()
+        })
+    }
+
     /************************************
      * IPC-message formatting functions *
      ************************************/
@@ -641,7 +656,9 @@ impl WorkspaceSession<'_> {
             description: commit.description().into(),
             author: commit.author().try_into()?,
             has_conflict: commit.has_conflict(),
-            is_working_copy: *commit.id() == self.operation.wc_id,
+            working_copy_of: self.workspace_index().get(commit.id()).cloned(),
+            is_working_copy: *commit.id() == self.operation.wc_id
+                || self.workspace_index().contains_key(commit.id()),
             is_immutable,
             refs,
             parent_ids: commit
@@ -1195,6 +1212,7 @@ impl SessionOperation {
             repo,
             wc_id,
             ref_index: OnceCell::default(),
+            workspace_index: OnceCell::default(),
             prefix_context,
         }
     }
