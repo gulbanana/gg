@@ -29,7 +29,7 @@ pub struct AppState {
     clients: Arc<Mutex<HashMap<String, Instant>>>,
     has_ever_connected: Arc<Mutex<bool>>,
     pending_disconnects: Arc<Mutex<HashMap<String, JoinHandle<()>>>>,
-    client_timeout: Duration,
+    client_timeout: Option<Duration>,
 }
 
 impl AppState {
@@ -38,7 +38,7 @@ impl AppState {
         worker_tx: Sender<SessionEvent>,
         progress_tx: broadcast::Sender<SseEvent>,
         shutdown_tx: oneshot::Sender<()>,
-        client_timeout: Duration,
+        client_timeout: Option<Duration>,
     ) -> Self {
         Self {
             context: Arc::new(context),
@@ -158,6 +158,11 @@ impl AppState {
 
     // poll-based death check - once the heartbeat starts, it must not stop
     pub fn is_dead(&self) -> bool {
+        let client_timeout = match self.client_timeout {
+            Some(t) => t,
+            None => return false,
+        };
+
         let has_ever_connected = *self.has_ever_connected.lock().unwrap();
         if !has_ever_connected {
             return false;
@@ -166,7 +171,7 @@ impl AppState {
         let mut clients = self.clients.lock().unwrap();
         let stale: Vec<String> = clients
             .iter()
-            .filter(|(_, last_seen)| last_seen.elapsed() > self.client_timeout)
+            .filter(|(_, last_seen)| last_seen.elapsed() > client_timeout)
             .map(|(id, _)| id.clone())
             .collect();
         for id in stale {

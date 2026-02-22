@@ -24,6 +24,7 @@ use crate::{
 /// implemented by states of the event loop
 pub trait Session {
     type Transition;
+    #[allow(async_fn_in_trait)]
     async fn handle_events(self, rx: &Receiver<SessionEvent>) -> Result<Self::Transition>;
 }
 

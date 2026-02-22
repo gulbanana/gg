@@ -1,40 +1,19 @@
 #![cfg_attr(feature = "app", windows_subsystem = "windows")]
 
-mod config;
-mod git_util;
 mod gui;
 #[cfg(target_os = "macos")]
 mod macos;
-mod messages;
-mod web;
 #[cfg(windows)]
 mod windows;
-mod worker;
 
-use std::fmt::Display;
 use std::path::PathBuf;
 
 #[allow(unused_imports)]
 use anyhow::{Result, anyhow};
-use clap::{Parser, ValueEnum};
-use config::{GGSettings, read_config};
-use jj_lib::settings::UserSettings;
-
-#[derive(Clone, Debug, Default, PartialEq, Eq, ValueEnum)]
-enum LaunchMode {
-    #[default]
-    Gui,
-    Web,
-}
-
-impl Display for LaunchMode {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            LaunchMode::Gui => write!(f, "gui"),
-            LaunchMode::Web => write!(f, "web"),
-        }
-    }
-}
+use clap::Parser;
+use gg_cli::{LaunchMode, RunOptions};
+use gg_cli::config::{GGSettings, read_config};
+use gg_cli::web;
 
 #[derive(clap::Subcommand, Debug)]
 enum Subcommand {
@@ -125,18 +104,9 @@ impl Args {
     }
 }
 
-pub struct RunOptions {
-    pub context: tauri::Context<tauri::Wry>,
-    pub settings: UserSettings,
-    pub workspace: Option<PathBuf>,
-    pub debug: bool,
-    pub is_child: bool,
-    pub ignore_immutable: bool,
-}
-
 fn main() -> Result<()> {
     // may be executed as a git authenticator, which overrides everything else
-    if let Some(result) = git_util::run_askpass() {
+    if let Some(result) = gg_cli::git_util::run_askpass() {
         return result;
     }
 

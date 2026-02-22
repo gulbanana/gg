@@ -10,7 +10,7 @@ use tauri::{
 use tauri_plugin_dialog::{DialogExt, FilePath};
 
 use super::{AppState, handler};
-use crate::messages::{Operand, RepoEvent, RevHeader, StoreRef};
+use gg_cli::messages::{Operand, RepoEvent, RevHeader, StoreRef};
 
 pub fn build_main(app_handle: &AppHandle, recent_items: &[String]) -> tauri::Result<Menu<Wry>> {
     #[cfg(target_os = "macos")]

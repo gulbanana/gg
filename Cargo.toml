@@ -24,6 +24,10 @@ include = [
 [package.metadata.release]
 pre-release-hook = ["npm", "run", "build"]
 
+[lib]
+name = "gg_cli"
+path = "src/lib.rs"
+
 [[bin]]
 name = "gg"
 path = "src/main.rs"

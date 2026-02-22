@@ -62,6 +62,7 @@ pub struct WebOptions {
     pub no_launch: bool,
 }
 
+#[doc(hidden)]
 #[tokio::main]
 pub async fn run_web(options: super::RunOptions, web_options: WebOptions) -> Result<()> {
     fern::Dispatch::new()
@@ -79,7 +80,7 @@ pub async fn run_web(options: super::RunOptions, web_options: WebOptions) -> Res
 
     let (repo_settings, _, _) = read_config(options.workspace.as_deref())?;
     let client_timeout = repo_settings.web_client_timeout();
-    let (app, shutdown_rx) = create_app(options, client_timeout)?;
+    let (app, shutdown_rx) = create_app(options, Some(client_timeout))?;
 
     // bind to selected or random port
     let port = web_options
@@ -115,9 +116,9 @@ pub async fn run_web(options: super::RunOptions, web_options: WebOptions) -> Res
     Ok(())
 }
 
-fn create_app(
+pub fn create_app(
     options: super::RunOptions,
-    client_timeout: Duration,
+    client_timeout: Option<Duration>,
 ) -> Result<(Router, oneshot::Receiver<()>)> {
     let (shutdown_tx, shutdown_rx) = oneshot::channel(); // this one needs async
     let (worker_tx, worker_rx) = channel();
@@ -163,15 +164,16 @@ fn create_app(
         .route("/api/events", get(stream_events))
         .with_state(state.clone());
 
-    // shut down if we don't get a ping for ten minutes
-    tokio::spawn(async move {
-        loop {
-            tokio::time::sleep(Duration::from_secs(60)).await;
-            if state.is_dead() {
-                break;
+    if client_timeout.is_some() {
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(Duration::from_secs(60)).await;
+                if state.is_dead() {
+                    break;
+                }
             }
-        }
-    });
+        });
+    }
 
     if options.is_child {
         println!("Startup complete.");

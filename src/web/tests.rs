@@ -19,7 +19,7 @@ async fn integration_test() -> Result<()> {
             is_child: false,
             ignore_immutable: false,
         },
-        Duration::from_secs(600),
+        Some(Duration::from_secs(600)),
     )?;
 
     let request = http::Request::builder()

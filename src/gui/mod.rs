@@ -22,15 +22,15 @@ use tauri::webview::WebviewWindowBuilder;
 use tauri::{AppHandle, Emitter, EventTarget, Listener, Manager, State, Window, WindowEvent, Wry};
 use tauri_plugin_window_state::StateFlags;
 
-use crate::config::GGSettings;
-use crate::messages::{
+use gg_cli::config::GGSettings;
+use gg_cli::messages::{
     self, AbandonRevisions, AdoptRevision, BackoutRevisions, CheckoutRevision, CloneRepository,
     CopyChanges, CopyHunk, CreateRef, CreateRevision, CreateRevisionBetween, DeleteRef,
     DescribeRevision, DuplicateRevisions, ExternalDiff, ExternalResolve, GitFetch, GitPush,
     InitRepository, InsertRevisions, MoveChanges, MoveHunk, MoveRef, MoveRevisions,
     MutationOptions, MutationResult, RenameBookmark, TrackBookmark, UndoOperation, UntrackBookmark,
 };
-use crate::worker::{Mutation, Session, SessionEvent, WorkerSession};
+use gg_cli::worker::{Mutation, Session, SessionEvent, WorkerSession};
 use sink::TauriSink;
 
 struct AppState {
