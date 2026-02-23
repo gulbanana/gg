@@ -328,6 +328,23 @@ impl Mutation for DescribeRevision {
             return Ok(MutationResult::Unchanged);
         }
 
+        if self.reset_author {
+            let missing_name = ws.data.workspace_settings.user_name().is_empty();
+            let missing_email = ws.data.workspace_settings.user_email().is_empty();
+            if missing_name || missing_email {
+                let field = match (missing_name, missing_email) {
+                    (true, true) => "Name and email not configured.",
+                    (true, false) => "Name not configured.",
+                    (false, true) => "Email not configured.",
+                    _ => unreachable!(),
+                };
+                precondition!(
+                    "{field} Set them with `jj config set --user user.name \"Some One\"` \
+                     and `jj config set --user user.email \"someone@example.com\"`."
+                );
+            }
+        }
+
         let mut commit_builder = tx
             .repo_mut()
             .rewrite_commit(&described)

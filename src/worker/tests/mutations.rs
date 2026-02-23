@@ -13,7 +13,13 @@ use crate::{
 };
 use anyhow::Result;
 use assert_matches::assert_matches;
-use jj_lib::{object_id::ObjectId as _, repo::Repo as _, str_util::StringMatcher};
+use jj_lib::{
+    config::{ConfigLayer, ConfigSource},
+    object_id::ObjectId as _,
+    repo::Repo as _,
+    settings::UserSettings,
+    str_util::StringMatcher,
+};
 use std::fs;
 use tokio::io::AsyncReadExt;
 
@@ -517,6 +523,96 @@ async fn describe_revision_with_snapshot() -> Result<()> {
 
     let rev = query_by_id(&ws, revs::working_copy()).await?;
     assert_matches!(rev, RevsResult::Detail { headers, changes, .. } if headers.last().unwrap().description.lines[0] == "wip" && !changes.is_empty());
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn describe_revision_reset_author_rejects_empty_name() -> Result<()> {
+    let repo = mkrepo();
+
+    let mut session = WorkerSession::default();
+    let mut ws = session.load_directory(repo.path())?;
+
+    let mut config = ws.data.workspace_settings.config().clone();
+    config.add_layer(
+        ConfigLayer::parse(
+            ConfigSource::CommandArg,
+            "user.name = \"\"\nuser.email = \"test@example.com\"",
+        )
+        .unwrap(),
+    );
+    ws.data.workspace_settings = UserSettings::from_config(config).unwrap();
+
+    let result = DescribeRevision {
+        id: revs::working_copy(),
+        new_description: "wip".to_owned(),
+        reset_author: true,
+    }
+    .execute_unboxed(&mut ws)
+    .await?;
+
+    assert_matches!(result, MutationResult::PreconditionError { message } if message.contains("Name not configured"));
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn describe_revision_reset_author_rejects_empty_email() -> Result<()> {
+    let repo = mkrepo();
+
+    let mut session = WorkerSession::default();
+    let mut ws = session.load_directory(repo.path())?;
+
+    let mut config = ws.data.workspace_settings.config().clone();
+    config.add_layer(
+        ConfigLayer::parse(
+            ConfigSource::CommandArg,
+            "user.name = \"Test User\"\nuser.email = \"\"",
+        )
+        .unwrap(),
+    );
+    ws.data.workspace_settings = UserSettings::from_config(config).unwrap();
+
+    let result = DescribeRevision {
+        id: revs::working_copy(),
+        new_description: "wip".to_owned(),
+        reset_author: true,
+    }
+    .execute_unboxed(&mut ws)
+    .await?;
+
+    assert_matches!(result, MutationResult::PreconditionError { message } if message.contains("Email not configured"));
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn describe_revision_reset_author_rejects_empty_name_and_email() -> Result<()> {
+    let repo = mkrepo();
+
+    let mut session = WorkerSession::default();
+    let mut ws = session.load_directory(repo.path())?;
+
+    let mut config = ws.data.workspace_settings.config().clone();
+    config.add_layer(
+        ConfigLayer::parse(
+            ConfigSource::CommandArg,
+            "user.name = \"\"\nuser.email = \"\"",
+        )
+        .unwrap(),
+    );
+    ws.data.workspace_settings = UserSettings::from_config(config).unwrap();
+
+    let result = DescribeRevision {
+        id: revs::working_copy(),
+        new_description: "wip".to_owned(),
+        reset_author: true,
+    }
+    .execute_unboxed(&mut ws)
+    .await?;
+
+    assert_matches!(result, MutationResult::PreconditionError { message } if message.contains("Name and email not configured"));
 
     Ok(())
 }

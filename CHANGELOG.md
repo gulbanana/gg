@@ -18,6 +18,7 @@
   [gg.ui]
   diff-formatter="" # overrides ui.diff-formatter, removing the difftool button but not the mergetool button
   ```
+- Describing a revision with "reset author" now checks that `user.name` and `user.email` are configured, and shows an error if not.
 - Tags now have an icon.
 - Revisions which are the working copy of another workspace are displayed with a yellow dot. The workspace's name is displayed alongside bookmarks and tags.
 
