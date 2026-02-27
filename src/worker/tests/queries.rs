@@ -3,6 +3,7 @@ use crate::messages::{RevSet, RevsResult, StoreRef};
 use crate::worker::{WorkerSession, queries};
 use anyhow::Result;
 use assert_matches::assert_matches;
+use std::collections::HashSet;
 
 #[test]
 fn log_all() -> Result<()> {
@@ -147,6 +148,48 @@ async fn revision_with_conflict() -> Result<()> {
     assert!(
         conflict_lines.contains("<<<<<<<") && conflict_lines.contains(">>>>>>>"),
         "Expected conflict markers in conflict hunks, got: {conflict_lines}"
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn conflicted_paths_are_not_duplicated() -> Result<()> {
+    let repo = mkrepo();
+
+    let mut session = WorkerSession::default();
+    let ws = session.load_directory(repo.path())?;
+
+    let result = queries::query_revisions(
+        &ws,
+        RevSet {
+            from: revs::hunk_source(),
+            to: revs::inherited_conflict(),
+        },
+    )
+    .await?;
+
+    let RevsResult::Detail {
+        changes, conflicts, ..
+    } = result
+    else {
+        panic!("Expected RevsResult::Detail");
+    };
+
+    let conflict_paths: HashSet<String> = conflicts
+        .into_iter()
+        .map(|conflict| conflict.path.repo_path)
+        .collect();
+    let duplicated_paths: Vec<String> = changes
+        .into_iter()
+        .map(|change| change.path.repo_path)
+        .filter(|path| conflict_paths.contains(path))
+        .collect();
+
+    assert!(
+        duplicated_paths.is_empty(),
+        "Expected conflicted paths to appear once, duplicates: {:?}",
+        duplicated_paths
     );
 
     Ok(())
