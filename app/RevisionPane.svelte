@@ -258,7 +258,7 @@
                             headers={revs.headers}
                             selected={$changeSelectEvent?.path?.repo_path === change.path.repo_path} />
                         {#if $changeSelectEvent?.path?.repo_path === change.path.repo_path}
-                            <div class="change" style="--lines: {minLines(change)}">
+                            <div class="change" style="--lines: {minLines(change)}" tabindex="-1">
                                 {#each change.hunks as hunk}
                                     <div class="hunk">
                                         <HunkObject header={singleton ? newest : null} path={change.path} {hunk} />

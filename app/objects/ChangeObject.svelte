@@ -10,6 +10,7 @@
     import Zone from "./Zone.svelte";
     import { changeSelectEvent, repoConfigEvent } from "../stores";
     import { mutate } from "../ipc";
+    import ActionLink from "../controls/ActionLink.svelte";
 
     export let headers: RevHeader[] | null;
     export let change: RevChange;
@@ -73,12 +74,12 @@
             <span>{hint ?? change.path.relative_path}</span>
             {#if hasMergeTool && change.has_conflict && operand}
                 <ActionWidget tip="resolve in merge tool" onClick={onExternalResolve}>
-                    <Icon name="external-link" />
+                    <Icon name="external-link" /> Resolve
                 </ActionWidget>
             {:else if hasDiffTool && operand}
-                <ActionWidget safe tip="open in diff tool" onClick={onExternalDiff}>
+                <ActionLink tip="open in diff tool" onClick={onExternalDiff}>
                     <Icon name="external-link" />
-                </ActionWidget>
+                </ActionLink>
             {/if}
         </div>
     </Zone>
