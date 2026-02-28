@@ -3,7 +3,7 @@
     import type { Operand } from "../messages/Operand";
     import type { RevHeader } from "../messages/RevHeader";
     import type { StoreRef } from "../messages/StoreRef";
-    import { ignoreToggled, selectionHeaders } from "../stores";
+    import { ignoreToggled } from "../stores";
     import RevisionMutator from "../mutators/RevisionMutator";
     import ChangeMutator from "../mutators/ChangeMutator";
     import RefMutator from "../mutators/RefMutator";
@@ -93,7 +93,7 @@
 
     $: revisionEnabled =
         operand.type === "Revision" || operand.type === "Revisions"
-            ? isRevisionEnabled($selectionHeaders, $ignoreToggled)
+            ? isRevisionEnabled(getRevisionHeaders(), $ignoreToggled)
             : null;
     $: changeEnabled = operand.type === "Change" ? isChangeEnabled(operand.headers, $ignoreToggled) : null;
     $: refEnabled = operand.type === "Ref" ? isRefEnabled(operand.ref) : null;

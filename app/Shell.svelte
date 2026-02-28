@@ -149,7 +149,7 @@
         };
         $revisionSelectEvent = { from: syntheticId, to: syntheticId };
     }
-    $: if ($repoStatusEvent && $revisionSelectEvent && route.type !== "log") {
+    $: if ($repoStatusEvent && $revisionSelectEvent) {
         loadChange($revisionSelectEvent);
     }
     $: if (!isTauri()) {
