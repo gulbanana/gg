@@ -1,3 +1,12 @@
+//! GG-specific configuration, loaded on top of jj's standard config layers.
+//!
+//! All GG settings live under the `[gg]` table in jj config. Keys that don't
+//! match a known GG setting are treated as jj overrides — for example,
+//! `gg.user.name = "bar"` overrides `user.name` only within GG.
+//!
+//! Use [`read_config`] to load the merged configuration, and [`GGSettings`]
+//! to access individual values with their defaults.
+
 #[cfg(all(test, not(feature = "ts-rs")))]
 pub mod tests;
 
@@ -14,10 +23,13 @@ use jj_lib::{
     settings::UserSettings,
 };
 
-use crate::LaunchMode;
-
+/// Typed accessors for GG's `[gg.*]` config keys.
+///
+/// Implemented on [`UserSettings`] so callers can read GG settings from the
+/// same object used for jj settings. Each method falls back to a sensible
+/// default when the key is absent. See `config/gg.toml` for the full list of
+/// keys and their defaults.
 pub trait GGSettings {
-    fn default_mode(&self) -> LaunchMode;
     fn query_log_page_size(&self) -> usize;
     fn query_large_repo_heuristic(&self) -> i64;
     fn query_auto_snapshot(&self) -> Option<bool>;
@@ -32,14 +44,6 @@ pub trait GGSettings {
 }
 
 impl GGSettings for UserSettings {
-    fn default_mode(&self) -> LaunchMode {
-        match self.get_string("gg.default-mode").ok().as_deref() {
-            Some("gui") => LaunchMode::Gui,
-            Some("web") => LaunchMode::Web,
-            _ => LaunchMode::Gui,
-        }
-    }
-
     fn query_log_page_size(&self) -> usize {
         self.get_int("gg.queries.log-page-size").unwrap_or(1000) as usize
     }
@@ -133,6 +137,13 @@ fn native_keys() -> HashSet<String> {
     keys
 }
 
+/// Load the merged jj + GG configuration.
+///
+/// Layers (low → high priority): jj defaults, bundled `gg.toml` defaults,
+/// user config, and (when `repo_path` is `Some`) repo-level config. Any
+/// non-native `gg.*` keys are extracted as jj overrides (see module docs).
+///
+/// Returns `(settings, revset_aliases, preset_query_choices)`.
 pub fn read_config(
     repo_path: Option<&Path>,
 ) -> Result<(UserSettings, RevsetAliasesMap, HashMap<String, String>)> {
@@ -241,7 +252,7 @@ fn set_in_doc(doc: &mut toml_edit::DocumentMut, path: &str, item: &toml_edit::It
     table.insert(leaf[0], item.clone());
 }
 
-pub fn read_preset_choices(stacked_config: &StackedConfig) -> HashMap<String, String> {
+fn read_preset_choices(stacked_config: &StackedConfig) -> HashMap<String, String> {
     let table_name = ConfigNamePathBuf::from_iter(["gg", "presets"]);
     let mut choices = HashMap::new();
 
@@ -260,7 +271,7 @@ pub fn read_preset_choices(stacked_config: &StackedConfig) -> HashMap<String, St
     choices
 }
 
-pub fn build_aliases_map(stacked_config: &StackedConfig) -> Result<RevsetAliasesMap> {
+fn build_aliases_map(stacked_config: &StackedConfig) -> Result<RevsetAliasesMap> {
     let table_name = ConfigNamePathBuf::from_iter(["revset-aliases"]);
     let mut aliases_map = RevsetAliasesMap::new();
     // Load from all config layers in order. 'f(x)' in default layer should be

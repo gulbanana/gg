@@ -1,3 +1,16 @@
+//! Web mode: an Axum HTTP server that serves the GG frontend and exposes a
+//! JSON API.
+//!
+//! The main entry point for library consumers is [`create_app`], which returns
+//! an [`axum::Router`] and a shutdown receiver. The router serves:
+//!
+//! - Static assets (the embedded Svelte frontend) at `/` and `/assets/*`
+//! - Query endpoints at `/api/query/*`
+//! - Mutation endpoints at `/api/mutate/{command}` (POST, JSON body)
+//! - Trigger endpoints at `/api/trigger/*`
+//! - Server-Sent Events at `/api/events` for push updates (config changes,
+//!   progress, etc.)
+
 mod queries;
 mod sink;
 mod state;
@@ -55,10 +68,18 @@ impl<E: Into<anyhow::Error>> From<E> for ApiError {
     }
 }
 
+/// Options specific to the `gg web` CLI subcommand.
+///
+/// These control how [`run_web`] binds and launches the server. They are not
+/// needed when calling [`create_app`] directly.
 #[derive(Default)]
 pub struct WebOptions {
+    /// TCP port to bind to. When `None`, uses the value from
+    /// `gg.web.default-port` in jj config (default 2178).
     pub port: Option<u16>,
+    /// Force-open the browser regardless of config.
     pub launch: bool,
+    /// Suppress browser launch regardless of config.
     pub no_launch: bool,
 }
 
@@ -116,6 +137,37 @@ pub async fn run_web(options: super::RunOptions, web_options: WebOptions) -> Res
     Ok(())
 }
 
+/// Build an Axum [`Router`] that serves the GG frontend and JSON API.
+///
+/// This is the primary integration point for embedding GG in another service.
+/// It spawns a background worker thread (via [`WorkerSession`]) and wires up
+/// all routes. The returned [`oneshot::Receiver`] fires when the server should
+/// shut down (e.g. the last SSE client disconnected after `client_timeout`).
+///
+/// # Arguments
+///
+/// - `options` — workspace path, settings, and flags (see [`RunOptions`](super::RunOptions))
+/// - `client_timeout` — when `Some`, the server shuts itself down after all
+///   SSE clients have been disconnected for this duration
+///
+/// # Example
+///
+/// ```no_run
+/// use std::path::PathBuf;
+/// use gg_cli::{RunOptions, web};
+///
+/// #[tokio::main]
+/// async fn main() -> anyhow::Result<()> {
+///     let options = RunOptions::new(PathBuf::from("."));
+///     let (app, shutdown_rx) = web::create_app(options, None)?;
+///
+///     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+///     axum::serve(listener, app)
+///         .with_graceful_shutdown(async { let _ = shutdown_rx.await; })
+///         .await?;
+///     Ok(())
+/// }
+/// ```
 pub fn create_app(
     options: super::RunOptions,
     client_timeout: Option<Duration>,

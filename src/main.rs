@@ -11,8 +11,9 @@ use std::path::PathBuf;
 #[allow(unused_imports)]
 use anyhow::{Result, anyhow};
 use clap::Parser;
-use gg_cli::{LaunchMode, RunOptions};
-use gg_cli::config::{GGSettings, read_config};
+use gg_cli::RunOptions;
+use gg_cli::config::read_config;
+use jj_lib::settings::UserSettings;
 use gg_cli::web;
 
 #[derive(clap::Subcommand, Debug)]
@@ -104,6 +105,18 @@ impl Args {
     }
 }
 
+enum LaunchMode {
+    Gui,
+    Web,
+}
+
+fn default_mode(settings: &UserSettings) -> LaunchMode {
+    match settings.get_string("gg.default-mode").ok().as_deref() {
+        Some("web") => LaunchMode::Web,
+        _ => LaunchMode::Gui,
+    }
+}
+
 fn main() -> Result<()> {
     // may be executed as a git authenticator, which overrides everything else
     if let Some(result) = gg_cli::git_util::run_askpass() {
@@ -179,7 +192,7 @@ fn spawn_app() -> Result<()> {
 
 fn run_app(args: Args) -> Result<()> {
     let (settings, _, _) = read_config(args.workspace().as_deref())?;
-    let mode = args.mode().unwrap_or_else(|| settings.default_mode());
+    let mode = args.mode().unwrap_or_else(|| default_mode(&settings));
     let context = tauri::generate_context!();
 
     // When spawned as a child process, foreground flag is set by the parent

@@ -21,6 +21,7 @@
 - Describing a revision with "reset author" now checks that `user.name` and `user.email` are configured, and shows an error if not.
 - Tags now have an icon.
 - Revisions which are the working copy of another workspace are displayed with a yellow dot. The workspace's name is displayed alongside bookmarks and tags.
+- The gg-cli crate, despite its name, can now be used as a library. There's just enough of an API surface to embed your own version of `gg web`, or you can build on its lower-level WorkerSession. Web mode has two new endpoints, `/log[?revset=]` and `/revision?revset`, which may be useful for embedding.
 
 ### Changed
 - `[gg.revsets]` has been renamed to `[gg.presets]`. Sorry about the churn, but the earlier name was a mistake - it clashes with jj's `[revsets]` config table.

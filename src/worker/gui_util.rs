@@ -59,7 +59,7 @@ use crate::{
 
 /// jj-dependent state, available when a workspace is open
 pub struct WorkspaceSession<'a> {
-    pub(crate) session: &'a mut WorkerSession,
+    pub session: &'a mut WorkerSession,
 
     // workspace-level data, initialised once
     pub workspace: Workspace,

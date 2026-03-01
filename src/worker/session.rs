@@ -21,61 +21,91 @@ use crate::{
     messages,
 };
 
-/// implemented by states of the event loop
+/// A state in the worker thread's event loop.
+///
+/// Each state consumes [`SessionEvent`] messages from `rx` until it either
+/// transitions to another state (returned as `Transition`) or the channel
+/// closes.
 pub trait Session {
+    /// The value produced when this state exits — either the next state's
+    /// input or `()` for the outermost loop.
     type Transition;
     #[allow(async_fn_in_trait)]
     async fn handle_events(self, rx: &Receiver<SessionEvent>) -> Result<Self::Transition>;
 }
 
-/// messages sent to a worker from other threads. most come with a channel allowing a response
+/// Messages sent from the frontend (or test harness) to a worker thread.
+///
+/// Most variants carry a [`Sender`] so the caller can block on the response.
+/// In web mode, [`crate::web::create_app`] handles the wiring — it spawns the
+/// worker thread, creates the channel, and translates HTTP requests into these
+/// events. In GUI mode, the Tauri IPC handlers do the same.
+///
+/// To drive a [`WorkerSession`] yourself, create an
+/// `mpsc::channel::<SessionEvent>()`, send events on the `Sender` half, and
+/// pass the `Receiver` half to [`Session::handle_events`].
 #[derive(Debug)]
-#[allow(clippy::large_enum_variant)] // QueryRevisions ~300b, but CloneWorkspace is >72b as well
+#[allow(clippy::large_enum_variant)]
 pub enum SessionEvent {
+    /// Shut down the worker thread gracefully.
     #[allow(dead_code)] // used by tests
     EndSession,
+    /// Load (or reload) a workspace at the given path. When `wd` is `None`,
+    /// the worker falls back to its default working directory.
     OpenWorkspace {
         tx: Sender<Result<messages::RepoConfig>>,
         wd: Option<PathBuf>,
     },
+    /// Initialize a new Jujutsu repository at `wd`.
     InitWorkspace {
         tx: Sender<Result<PathBuf>>,
         wd: PathBuf,
         colocated: bool,
     },
+    /// Clone a remote repository into `wd`.
     CloneWorkspace {
         tx: Sender<Result<PathBuf>>,
         source_url: String,
         wd: PathBuf,
         colocated: bool,
     },
+    /// Look up one or more revisions by change/commit ID.
     QueryRevisions {
         tx: Sender<Result<messages::RevsResult>>,
         set: messages::RevSet,
     },
+    /// List Git remotes, optionally filtered to those tracking a bookmark.
     QueryRemotes {
         tx: Sender<Result<Vec<String>>>,
         tracking_bookmark: Option<String>,
     },
+    /// Start a new log query with the given revset string.
     QueryLog {
         tx: Sender<Result<messages::LogPage>>,
         query: String,
     },
+    /// Fetch the next page of results from an in-progress log query.
     QueryLogNextPage {
         tx: Sender<Result<messages::LogPage>>,
     },
+    /// Snapshot the working copy if it has changed since the last check.
+    /// Returns `Some` when the working-copy commit was updated.
     ExecuteSnapshot {
         tx: Sender<Option<messages::RepoStatus>>,
     },
+    /// Run a mutation (e.g. abandon, rebase, bookmark create) against the
+    /// loaded workspace.
     ExecuteMutation {
         tx: Sender<messages::MutationResult>,
         mutation: Box<dyn Mutation + Send + Sync>,
         options: messages::MutationOptions,
     },
+    /// Read an array-valued key from jj config.
     ReadConfigArray {
         tx: Sender<Result<Vec<String>>>,
         key: Vec<String>,
     },
+    /// Write an array-valued key to jj config at the given scope.
     WriteConfigArray {
         scope: ConfigSource,
         key: Vec<String>,

@@ -1,4 +1,18 @@
-//! Message types used to communicate between backend and frontend
+//! Serializable message types shared between the Rust backend and the
+//! TypeScript frontend. Not currently extensible.
+//!
+//! Every type here derives [`Serialize`] and/or
+//! [`Deserialize`]. When the `ts-rs` feature is enabled,
+//! `cargo gen` (alias for `cargo test -F ts-rs`) exports matching TypeScript
+//! definitions into `app/messages/`.
+//!
+//! The most important subsets are:
+//!
+//! - **Queries** ([`queries`] submodule) — request/response types for read-only
+//!   operations like log listing and revision details.
+//! - **Mutations** ([`mutations`] submodule) — request types that modify the
+//!   repository. Each mutation struct implements the [`Mutation`](crate::worker::Mutation)
+//!   trait, which defines how the change is executed on the worker thread.
 
 mod mutations;
 mod queries;
@@ -13,7 +27,7 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "ts-rs")]
 use ts_rs::TS;
 
-/// Utility type used to abstract crlf/<br>/etc
+/// Utility type used to abstract crlf/&lt;br&gt;/etc
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
 pub struct MultilineString {
@@ -54,6 +68,7 @@ pub struct TreePath {
     pub relative_path: DisplayPath,
 }
 
+/// Configuration sent to the frontend when a workspace is opened.
 #[derive(Serialize, Clone, Debug)]
 #[serde(tag = "type")]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
@@ -84,6 +99,7 @@ pub enum RepoConfig {
     },
 }
 
+/// Current state of the repository after an operation.
 #[derive(Serialize, Clone, Debug)]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
 pub struct RepoStatus {
@@ -91,6 +107,7 @@ pub struct RepoStatus {
     pub working_copy: CommitId,
 }
 
+/// Events requiring user interaction during clone/init flows.
 #[derive(Serialize, Clone, Debug)]
 #[serde(tag = "type")]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
@@ -189,6 +206,7 @@ pub enum Operand {
     },
 }
 
+/// A prompt for user input (e.g. credentials for git operations).
 #[derive(Serialize, Debug, Clone)]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
 pub struct InputRequest {
@@ -197,12 +215,14 @@ pub struct InputRequest {
     pub fields: Vec<InputField>,
 }
 
+/// User-provided values for an [`InputRequest`].
 #[derive(Deserialize, Debug, Clone)]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
 pub struct InputResponse {
     pub fields: HashMap<String, String>,
 }
 
+/// A single field in an [`InputRequest`] form.
 #[derive(Serialize, Debug, Clone)]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
 pub struct InputField {
@@ -219,6 +239,7 @@ impl From<&str> for InputField {
     }
 }
 
+/// Progress updates for long-running operations like git fetch/push.
 #[derive(Serialize, Clone, Debug)]
 #[serde(tag = "type")]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]

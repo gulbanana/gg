@@ -71,6 +71,7 @@ pub struct CreateRevisionBetween {
     pub before_id: RevId,
 }
 
+/// Inserts revisions between two points in the graph.
 #[derive(Deserialize, Debug)]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
 pub struct InsertRevisions {
@@ -79,6 +80,7 @@ pub struct InsertRevisions {
     pub before_id: RevId,
 }
 
+/// Rebases revisions onto new parents.
 #[derive(Deserialize, Debug)]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
 pub struct MoveRevisions {
@@ -94,6 +96,7 @@ pub struct AdoptRevision {
     pub parent_ids: Vec<CommitId>,
 }
 
+/// Moves a single diff hunk from one revision to another.
 #[derive(Deserialize, Debug)]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
 pub struct MoveHunk {
@@ -103,6 +106,7 @@ pub struct MoveHunk {
     pub hunk: ChangeHunk,
 }
 
+/// Copies a single diff hunk from one revision into another.
 #[derive(Deserialize, Debug)]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
 pub struct CopyHunk {
@@ -128,6 +132,7 @@ pub struct DuplicateRevisions {
     pub set: RevSet,
 }
 
+/// Abandons revisions, rebasing their children onto their parents.
 #[derive(Deserialize, Debug)]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
 pub struct AbandonRevisions {
@@ -141,6 +146,7 @@ pub struct BackoutRevisions {
     pub set: RevSet,
 }
 
+/// Moves file-level changes from one revision to another.
 #[derive(Deserialize, Debug)]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
 pub struct MoveChanges {
@@ -149,6 +155,7 @@ pub struct MoveChanges {
     pub paths: Vec<TreePath>,
 }
 
+/// Copies file-level changes from one revision into another.
 #[derive(Deserialize, Debug)]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
 pub struct CopyChanges {
@@ -157,18 +164,21 @@ pub struct CopyChanges {
     pub paths: Vec<TreePath>,
 }
 
+/// Starts tracking a remote bookmark locally.
 #[derive(Deserialize, Debug)]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
 pub struct TrackBookmark {
     pub r#ref: StoreRef,
 }
 
+/// Stops tracking a remote bookmark locally.
 #[derive(Deserialize, Debug)]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
 pub struct UntrackBookmark {
     pub r#ref: StoreRef,
 }
 
+/// Renames a local bookmark.
 #[derive(Deserialize, Debug)]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
 pub struct RenameBookmark {
@@ -176,6 +186,7 @@ pub struct RenameBookmark {
     pub new_name: String,
 }
 
+/// Creates a new bookmark or tag on a revision.
 #[derive(Deserialize, Debug)]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
 pub struct CreateRef {
@@ -183,12 +194,14 @@ pub struct CreateRef {
     pub r#ref: StoreRef,
 }
 
+/// Deletes a bookmark or tag.
 #[derive(Deserialize, Debug)]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
 pub struct DeleteRef {
     pub r#ref: StoreRef,
 }
 
+/// Moves a bookmark or tag to a different revision.
 #[derive(Deserialize, Debug)]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
 pub struct MoveRef {
@@ -196,6 +209,7 @@ pub struct MoveRef {
     pub to_id: RevId,
 }
 
+/// Pushes bookmarks to a git remote.
 #[derive(Deserialize, Debug)]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
 pub struct GitPush {
@@ -204,6 +218,7 @@ pub struct GitPush {
     pub input: Option<InputResponse>,
 }
 
+/// Fetches bookmarks from a git remote.
 #[derive(Deserialize, Debug)]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
 pub struct GitFetch {
@@ -214,6 +229,7 @@ pub struct GitFetch {
     pub input: Option<InputResponse>,
 }
 
+/// Reverts the most recent jj operation.
 #[derive(Deserialize, Debug)]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
 pub struct UndoOperation;

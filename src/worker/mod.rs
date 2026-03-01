@@ -1,5 +1,18 @@
-//! Worker per window, owning repo data (jj-lib is not thread-safe)
-//! The worker thread is a state machine, running different handle functions based on loaded data
+//! Worker thread that owns all jj-lib state for a single window or connection.
+//!
+//! jj-lib is not thread-safe, so each window gets its own worker thread.
+//! The thread runs a state machine with three levels:
+//!
+//! 1. **[`WorkerSession`]** — initial state before a repository is loaded.
+//!    Handles `OpenWorkspace`, `InitWorkspace`, and `CloneWorkspace` events.
+//! 2. **`WorkspaceSession`** (internal) — a repository is loaded and ready for
+//!    queries and mutations.
+//! 3. **`QuerySession`** (internal) — a log query is in progress and the
+//!    frontend is paging through results.
+//!
+//! Callers drive the worker by sending [`SessionEvent`] messages over a
+//! standard [`std::sync::mpsc`] channel. See [`web::create_app`](crate::web::create_app)
+//! for an example of wiring this up.
 
 mod gui_util;
 mod mutations;
@@ -33,19 +46,30 @@ use crate::messages;
 use gui_util::WorkspaceSession;
 pub use session::{Session, SessionEvent};
 
-/// implemented by structured-change commands
+/// A repository-modifying operation (e.g. abandon, rebase, bookmark create).
+///
+/// Concrete mutation types live in [`crate::messages`] and are deserialized
+/// from frontend requests. This trait is effectively sealed — [`execute`](Mutation::execute)
+/// takes a `WorkspaceSession` which is not exported — so it cannot be
+/// implemented outside of this crate.
 #[async_trait::async_trait(?Send)]
 pub trait Mutation: Debug {
+    /// Human-readable name used in error messages and logging.
+    /// Defaults to the Rust type name.
     fn describe(&self) -> String {
         std::any::type_name::<Self>().to_owned()
     }
 
+    /// Run the mutation against a loaded workspace. Implementations should
+    /// start a jj transaction, perform their changes, and commit it.
     async fn execute(
         self: Box<Self>,
         ws: &mut WorkspaceSession,
         options: &messages::MutationOptions,
     ) -> Result<messages::MutationResult>;
 
+    /// Test helper that avoids the `Box<Self>` indirection and uses default
+    /// options.
     #[cfg(test)]
     async fn execute_unboxed(self, ws: &mut WorkspaceSession) -> Result<messages::MutationResult>
     where
@@ -57,13 +81,22 @@ pub trait Mutation: Debug {
     }
 }
 
-/// mode-specific dispatch mechanism for sending events to the frontend
+/// Abstraction over how backend-to-frontend push events are delivered.
+///
+/// In GUI mode this wraps Tauri's event emitter; in web mode it feeds a
+/// broadcast channel that clients consume via Server-Sent Events (SSE).
+/// Provide your own implementation to integrate with a different transport.
 pub trait EventSink: Send + Sync {
+    /// Emit a named event with a pre-serialized JSON payload.
     fn send(&self, event_name: &str, payload: serde_json::Value);
 }
 
-// extension trait to keep EventSink dyn-compatible
+/// Convenience extension that serializes a typed payload before sending.
+///
+/// Automatically implemented for all `EventSink` implementors — kept as a
+/// separate trait so that `EventSink` itself remains dyn-compatible.
 pub trait EventSinkExt: EventSink {
+    /// Serialize `payload` to JSON and forward to [`EventSink::send`].
     fn send_typed<T: Serialize>(&self, event_name: &str, payload: &T) {
         let value = serde_json::to_value(payload).expect("T: Serialize");
         self.send(event_name, value)
@@ -72,17 +105,36 @@ pub trait EventSinkExt: EventSink {
 
 impl<S: EventSink + ?Sized> EventSinkExt for S {}
 
-/// state that doesn't depend on jj-lib borrowings
+/// Initial state of the worker thread, before any repository is loaded.
+///
+/// Create one with [`WorkerSession::new`], then call
+/// [`handle_events`](Session::handle_events) in a dedicated thread to start
+/// processing [`SessionEvent`] messages. The session automatically transitions
+/// to an internal `WorkspaceSession` when it receives
+/// [`SessionEvent::OpenWorkspace`].
+///
+/// See the [crate-level docs](crate) for a usage overview.
 pub struct WorkerSession {
+    /// Override the default log page size (mainly useful in tests).
     pub force_log_page_size: Option<usize>,
+    /// Tracks the most recently evaluated revset string for paging.
     pub latest_query: Option<String>,
+    /// Working directory to open when no explicit path is given.
     pub working_directory: Option<PathBuf>,
+    /// Channel for pushing events to the frontend.
     pub sink: Arc<dyn EventSink>,
+    /// Jujutsu user settings (loaded from `jj config`).
     pub user_settings: UserSettings,
+    /// When `true`, immutability checks on commits are skipped.
     pub ignore_immutable: bool,
 }
 
 impl WorkerSession {
+    /// Create a new worker session.
+    ///
+    /// After construction, spawn a thread and call
+    /// [`handle_events`](Session::handle_events) with the receiving end of
+    /// a [`SessionEvent`] channel.
     pub fn new(
         sink: Arc<dyn EventSink>,
         working_directory: Option<PathBuf>,
@@ -99,8 +151,11 @@ impl WorkerSession {
         }
     }
 
-    // AppImage runs the executable from somewhere weird, but sets OWD=cwd() first.
-    pub fn get_cwd(&self) -> Result<PathBuf> {
+    /// Resolve the effective working directory.
+    ///
+    /// Checks, in order: the explicit `working_directory` field, the `$OWD`
+    /// environment variable (set by AppImage), and finally `std::env::current_dir`.
+    fn get_cwd(&self) -> Result<PathBuf> {
         self.working_directory
             .as_ref()
             .map(|cwd| Ok(fs::canonicalize(cwd.clone())?))
@@ -112,8 +167,13 @@ impl WorkerSession {
             .unwrap_or_else(|| env::current_dir().map_err(Error::new))
     }
 
-    /// actually creates a repository, but jj considers that a special case of creating a workspace
-    pub fn init_workspace(&self, location: &PathBuf, colocated: bool) -> Result<PathBuf> {
+    /// Initialize a new Jujutsu repository at `location`.
+    ///
+    /// When `colocated` is `true` and a `.git/` directory already exists, the
+    /// new repo shares it; otherwise a fresh Git backend is created (either
+    /// colocated or internal depending on the flag). Returns the canonicalized
+    /// path on success.
+    fn init_workspace(&self, location: &PathBuf, colocated: bool) -> Result<PathBuf> {
         // precondition: not already a jj repo
         let jj_path = location.join(".jj");
         if jj_path.exists() {
@@ -139,8 +199,13 @@ impl WorkerSession {
         Ok(canonical_location)
     }
 
-    /// clone a repository, which is a three-stage process: init, fetch, checkout
-    pub fn clone_workspace(
+    /// Clone a remote repository into `location`.
+    ///
+    /// This is a three-stage process: initialize an empty repo, fetch from
+    /// `source_url` (added as the `origin` remote), and check out the default
+    /// branch. Progress events are pushed through the session's [`EventSink`].
+    /// Returns the canonicalized path on success.
+    fn clone_workspace(
         &self,
         source_url: &str,
         location: &PathBuf,

@@ -2,7 +2,7 @@
 //!
 //! gg acts as server (started by a user) and client (started by git) to implement the askpass
 //! protocol. its own ipc protocol is trivial, yet underspecified: the client sends newline-delimited
-//! prompts to the server, which responds with either OK:<existing InputResponse> or NO if it needs
+//! prompts to the server, which responds with either OK:(existing InputResponse) or NO if it needs
 //! to provision an InputRequest first.
 
 use std::{

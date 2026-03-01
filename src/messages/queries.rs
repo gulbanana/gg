@@ -11,6 +11,7 @@ pub trait Id {
     fn rest(&self) -> &String;
 }
 
+/// A commit's unique hash identifier with disambiguated prefix.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(tag = "type")]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
@@ -32,6 +33,7 @@ impl Id for CommitId {
     }
 }
 
+/// A change's unique identifier with disambiguated prefix.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(tag = "type")]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
@@ -86,6 +88,7 @@ impl RevSet {
     }
 }
 
+/// Summary metadata for a revision displayed in the log.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
 pub struct RevHeader {
@@ -100,6 +103,7 @@ pub struct RevHeader {
     pub parent_ids: Vec<CommitId>,
 }
 
+/// A revision's author name, email, and timestamp.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
 pub struct RevAuthor {
@@ -120,6 +124,7 @@ impl TryFrom<&Signature> for RevAuthor {
     }
 }
 
+/// A file-level change within a revision's diff.
 #[derive(Serialize, Deserialize, Debug)]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
 pub struct RevChange {
@@ -129,6 +134,7 @@ pub struct RevChange {
     pub hunks: Vec<ChangeHunk>,
 }
 
+/// A file-level conflict in a revision's parent tree.
 #[derive(Serialize, Deserialize, Debug)]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
 pub struct RevConflict {
@@ -136,6 +142,7 @@ pub struct RevConflict {
     pub hunk: ChangeHunk,
 }
 
+/// The type of modification made to a file in a diff.
 #[derive(Serialize, Deserialize, Debug)]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
 pub enum ChangeKind {
@@ -145,6 +152,7 @@ pub enum ChangeKind {
     Modified,
 }
 
+/// A single contiguous diff hunk with its location and content.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
 pub struct ChangeHunk {
@@ -152,6 +160,7 @@ pub struct ChangeHunk {
     pub lines: MultilineString,
 }
 
+/// Line ranges in the source and target files for a diff hunk.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
 pub struct HunkLocation {
@@ -159,6 +168,7 @@ pub struct HunkLocation {
     pub to_file: FileRange,
 }
 
+/// A contiguous range of lines in a file.
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
 pub struct FileRange {
@@ -166,6 +176,7 @@ pub struct FileRange {
     pub len: usize,
 }
 
+/// Response to a revision detail query: either not found or full details.
 #[derive(Serialize, Debug)]
 #[serde(tag = "type")]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
@@ -188,10 +199,12 @@ pub enum RevsResult {
     },
 }
 
+/// (column, row) position of a node in the log graph.
 #[derive(Serialize, Clone, Copy, Debug)]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
 pub struct LogCoordinates(pub usize, pub usize);
 
+/// An edge segment in the log graph connecting two nodes.
 #[derive(Serialize, Debug)]
 #[serde(tag = "type")]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
@@ -218,6 +231,7 @@ pub enum LogLine {
     },
 }
 
+/// A single row in the log graph with its revision and edges.
 #[derive(Serialize, Debug)]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
 pub struct LogRow {
@@ -227,6 +241,7 @@ pub struct LogRow {
     pub lines: Vec<LogLine>,
 }
 
+/// A paginated slice of the log graph.
 #[derive(Serialize)]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
 pub struct LogPage {
