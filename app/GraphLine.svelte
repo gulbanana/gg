@@ -21,10 +21,8 @@
     let childY = r1 * 30 + 21;
     let parentY = r2 * 30 + 9;
 
-    let blockX: number;
-    let blockY: number;
-    let blockW: number;
-    let blockH: number;
+    type Block = { x: number; y: number; w: number; h: number };
+    let blocks: Block[] = [];
 
     if (isMerge) {
         // instead of a parent, we have a mergepoint
@@ -33,27 +31,41 @@
         let midY = c2 > c1 ? childY + 9 : parentY - 9;
         let radius = c2 > c1 ? 6 : -6;
         let sweep = c2 > c1 ? 0 : 1;
-        path = `M${childX},${childY} 
-            L${childX},${midY - 6} 
+        path = `M${childX},${childY}
+            L${childX},${midY - 6}
             A6,6,0,0,${sweep},${childX + radius},${midY}
             L${mergeX - radius},${midY}
-            A6,6,0,0,${1 - sweep},${mergeX},${midY + 6} 
+            A6,6,0,0,${1 - sweep},${mergeX},${midY + 6}
             L${mergeX},${parentY}`;
 
-        blockX = c1 < c2 ? c1 * 18 + 2 : c2 * 18 + 2;
-        blockY = r1 * 30 + 22;
-        blockW = c1 < c2 ? (c2 - c1 + 1) * 18 - 5 : (c1 - c2 + 1) * 18 - 5;
-        blockH = 14;
+        blocks.push({
+            x: c1 < c2 ? c1 * 18 + 2 : c2 * 18 + 2,
+            y: midY - 8,
+            w: c1 < c2 ? (c2 - c1 + 1) * 18 - 5 : (c1 - c2 + 1) * 18 - 5,
+            h: 14,
+        });
+        // vertical segment at child column
+        let topH = (midY - 6) - childY;
+        if (topH > 2) {
+            blocks.push({ x: c1 * 18 + 2, y: childY, w: 14, h: topH });
+        }
+        // vertical segment at merge column
+        let bottomH = parentY - (midY + 6);
+        if (bottomH > 2) {
+            blocks.push({ x: c2 * 18 + 2, y: midY + 6, w: 14, h: bottomH });
+        }
     } else if (c1 == c2) {
         // same-column, straight line
         let x = c1 * 18 + 9;
 
         path = `M${x},${childY} L${x},${parentY}`;
 
-        blockX = c1 * 18 + 2;
-        blockY = r1 * 30 + 21;
-        blockW = 14;
-        blockH = (r2 - r1) * 30 - 12;
+        blocks.push({
+            x: c1 * 18 + 2,
+            y: r1 * 30 + 21,
+            w: 14,
+            h: (r2 - r1) * 30 - 12,
+        });
     } else {
         // different-column, curved line
         let childX = c1 * 18 + 9;
@@ -61,26 +73,41 @@
         let midY = allowEarlyBreak && c1 > c2 ? parentY - 9 : childY + 9;
         let radius = c2 > c1 ? 6 : -6;
         let sweep = c2 > c1 ? 0 : 1;
-        path = `M${childX},${childY} 
-            L${childX},${midY - 6} 
+        path = `M${childX},${childY}
+            L${childX},${midY - 6}
             A6,6,0,0,${sweep},${childX + radius},${midY}
             L${parentX - radius},${midY}
-            A6,6,0,0,${1 - sweep},${parentX},${midY + 6} 
+            A6,6,0,0,${1 - sweep},${parentX},${midY + 6}
             L${parentX},${parentY}`;
 
-        blockX = c1 < c2 ? c1 * 18 + 16 : c2 * 18 + 16;
-        blockY = r1 * 30 + 22;
-        blockW = c1 < c2 ? (c2 - c1) * 18 - 14 : (c1 - c2) * 18 - 14;
-        blockH = 14;
+        // horizontal segment
+        blocks.push({
+            x: c1 < c2 ? c1 * 18 + 16 : c2 * 18 + 16,
+            y: midY - 8,
+            w: c1 < c2 ? (c2 - c1) * 18 - 14 : (c1 - c2) * 18 - 14,
+            h: 14,
+        });
+        // vertical segment at child column
+        let topH = (midY - 6) - childY;
+        if (topH > 2) {
+            blocks.push({ x: c1 * 18 + 2, y: childY, w: 14, h: topH });
+        }
+        // vertical segment at parent column
+        let bottomH = parentY - (midY + 6);
+        if (bottomH > 2) {
+            blocks.push({ x: c2 * 18 + 2, y: midY + 6, w: 14, h: bottomH });
+        }
     }
 </script>
 
 {#if !line.indirect}
-    <foreignObject x={blockX} y={blockY} width={blockW} height={blockH}>
-        <Zone {operand} let:target>
-            <div class="backdrop" class:target></div>
-        </Zone>
-    </foreignObject>
+    {#each blocks as block}
+        <foreignObject x={block.x} y={block.y} width={block.w} height={block.h}>
+            <Zone {operand} let:target>
+                <div class="backdrop" class:target></div>
+            </Zone>
+        </foreignObject>
+    {/each}
 {/if}
 
 <path d={path} fill="none" stroke-dasharray={line.indirect ? "1,2" : "none"} class:target={$currentTarget == operand} />

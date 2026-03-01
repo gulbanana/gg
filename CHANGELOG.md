@@ -29,6 +29,7 @@
 - Pushes were silently rejected when branches had moved or been locked down; now an error is displayed.
 - Reverting from the GUI-mode context menu was broken.
 - Dragging a revision onto a parent edge no longer drops other parents when the rebased child is a merge commit.
+- Drag-and-drop onto the vertical segments of curved graph lines now works correctly. Previously only the horizontal part of a curved line was a valid drop target.
 
 ## [0.38.2](releases/tag/v0.38.2)
 
