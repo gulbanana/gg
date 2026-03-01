@@ -1,6 +1,7 @@
 import { vi } from "vitest";
 import { cleanup } from "@testing-library/svelte";
 import { mockIPC, clearMocks } from "@tauri-apps/api/mocks";
+import { wait } from "./ipc";
 
 export type IpcHandler = (cmd: string, args: Record<string, unknown>) => unknown;
 
@@ -26,6 +27,9 @@ export function setupMocks(ipcHandler?: IpcHandler) {
 export async function cleanupMocks() {
     // unmount components before clearing mocks to avoid cleanup errors
     cleanup();
+    // drain any in-flight IPC calls so they complete against the real mock,
+    // not the stub that returns undefined
+    await wait();
     clearMocks();
 
     // reset to minimal valid state instead of deleting - lingering async operations
@@ -37,7 +41,7 @@ export async function cleanupMocks() {
     };
     (window as any).__TAURI_EVENT_PLUGIN_INTERNALS__ = {
         _listeners: new Map(),
-        unregisterListener: () => {},
+        unregisterListener: () => { },
     };
     vi.resetModules();
 }

@@ -9,6 +9,8 @@ export { isTauri, onEvent, type Query, type Settable } from "./events";
  */
 export type InvokeArgs = Record<string, unknown>;
 
+let inFlight = new Set<Promise<void>>();
+
 /**
  * call an IPC which provides readonly information about the repo
  */
@@ -166,26 +168,44 @@ function getClientId(): string {
  * route to Tauri or HTTP based on runtime environment
  */
 async function call<T>(mode: "query" | "mutate" | "trigger", command: string, args?: InvokeArgs): Promise<T> {
-    if (isTauri()) {
-        const { invoke } = await import("@tauri-apps/api/core");
-        return invoke<T>(command, args);
-    } else {
-        if (mode == "trigger") {
-            const payload = { ...args, client_id: getClientId() };
-            const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
-            navigator.sendBeacon(`/api/${mode}/${command}`, blob);
-            return undefined as T;
+    let done!: () => void;
+    let tracking = new Promise<void>(r => done = r);
+    inFlight.add(tracking);
+    try {
+        if (isTauri()) {
+            const { invoke } = await import("@tauri-apps/api/core");
+            return await invoke<T>(command, args);
         } else {
-            const response = await fetch(`/api/${mode}/${command}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(args ?? {})
-            });
-            if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(errorText || `HTTP ${response.status}`);
+            if (mode == "trigger") {
+                const payload = { ...args, client_id: getClientId() };
+                const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+                navigator.sendBeacon(`/api/${mode}/${command}`, blob);
+                return undefined as T;
+            } else {
+                const response = await fetch(`/api/${mode}/${command}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(args ?? {})
+                });
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(errorText || `HTTP ${response.status}`);
+                }
+                return await response.json();
             }
-            return response.json();
         }
+    } finally {
+        done();
+        inFlight.delete(tracking);
+    }
+}
+
+
+/**
+ * wait for all current IPC calls to settle, so mocks aren't pulled out from under them
+ */
+export async function wait(): Promise<void> {
+    while (inFlight.size > 0) {
+        await Promise.allSettled([...inFlight]);
     }
 }
