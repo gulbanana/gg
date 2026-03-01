@@ -25,6 +25,7 @@
 
 ### Changed
 - `[gg.revsets]` has been renamed to `[gg.presets]`. Sorry about the churn, but the earlier name was a mistake - it clashes with jj's `[revsets]` config table.
+- Button and context menu colours are slightly less theme-respecting for a more consistent experience.
 
 ### Fixed
 - Pushes were silently rejected when branches had moved or been locked down; now an error is displayed.
