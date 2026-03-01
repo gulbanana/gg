@@ -1,7 +1,7 @@
 {
   "name": "gg",
   "private": true,
-  "version": "0.38.3",
+  "version": "0.38.4",
   "type": "module",
   "scripts": {
     "check": "svelte-check --tsconfig ./tsconfig.json",
