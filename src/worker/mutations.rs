@@ -479,7 +479,7 @@ impl Mutation for InsertRevisions {
             format!("insert {} commits", targets.len())
         };
         let rebased_oldest =
-            rewrite::rebase_commit(tx.repo_mut(), oldest.clone(), vec![after_id]).await?;
+            rewrite::rebase_commit(tx.repo_mut(), oldest.clone(), vec![after_id.clone()]).await?;
 
         // newest commit may have been rebased, so find its new ID
         let newest = targets.first().expect("non-empty targets");
@@ -505,8 +505,22 @@ impl Mutation for InsertRevisions {
                 .unwrap_or_else(|| newest.id().clone())
         };
 
+        // replace after as a parent of before, preserving other parents
+        let new_before_parent_ids: Vec<_> = before
+            .parent_ids()
+            .iter()
+            .map(|parent_id| {
+                let mapped_parent_id = rebased_children.get(parent_id).unwrap_or(parent_id);
+                if mapped_parent_id == &after_id {
+                    new_newest_id.clone()
+                } else {
+                    mapped_parent_id.clone()
+                }
+            })
+            .collect();
+
         // rebase graph suffix onto the end of the inserted range
-        rewrite::rebase_commit(tx.repo_mut(), before, vec![new_newest_id]).await?;
+        rewrite::rebase_commit(tx.repo_mut(), before, new_before_parent_ids).await?;
 
         match ws.finish_transaction(tx, transaction_description)? {
             Some(new_status) => Ok(MutationResult::Updated {

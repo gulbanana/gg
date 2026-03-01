@@ -28,6 +28,7 @@
 ### Fixed
 - Pushes were silently rejected when branches had moved or been locked down; now an error is displayed.
 - Reverting from the GUI-mode context menu was broken.
+- Dragging a revision onto a parent edge no longer drops other parents when the rebased child is a merge commit.
 
 ## [0.38.2](releases/tag/v0.38.2)
 

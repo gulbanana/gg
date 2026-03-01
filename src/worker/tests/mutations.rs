@@ -734,6 +734,57 @@ async fn insert_revisions_range() -> Result<()> {
 }
 
 #[tokio::test]
+async fn insert_revisions_single_preserves_merge_child_other_parents() -> Result<()> {
+    let repo = mkrepo();
+
+    let mut session = WorkerSession::default();
+    let mut ws = session.load_directory(repo.path())?;
+
+    let merge_before = get_by_chid(&ws, &revs::chain_conflict())?;
+    let merge_parents_before: Vec<_> = merge_before.parent_ids().to_vec();
+    assert!(
+        merge_parents_before.len() >= 2,
+        "expected merge commit in test repository"
+    );
+
+    let replaced_parent_id = merge_parents_before[0].clone();
+    let preserved_parent_ids = merge_parents_before[1..].to_vec();
+    let after_id = ws.format_id(&ws.get_commit(&replaced_parent_id)?);
+
+    let result = InsertRevisions {
+        set: RevSet::singleton(revs::hunk_grandchild()),
+        after_id,
+        before_id: revs::chain_conflict(),
+    }
+    .execute_unboxed(&mut ws)
+    .await?;
+    assert_matches!(result, MutationResult::Updated { .. });
+
+    let inserted_after = get_by_chid(&ws, &revs::hunk_grandchild())?;
+    let merge_after = get_by_chid(&ws, &revs::chain_conflict())?;
+    let merge_parents_after: Vec<_> = merge_after.parent_ids().to_vec();
+
+    assert_eq!(merge_parents_after.len(), merge_parents_before.len());
+    assert!(
+        merge_parents_after.contains(inserted_after.id()),
+        "merge child should include inserted revision as a parent"
+    );
+    assert!(
+        !merge_parents_after.contains(&replaced_parent_id),
+        "targeted parent edge should be replaced"
+    );
+
+    for preserved_parent_id in preserved_parent_ids {
+        assert!(
+            merge_parents_after.contains(&preserved_parent_id),
+            "merge child should keep non-target parents"
+        );
+    }
+
+    Ok(())
+}
+
+#[tokio::test]
 async fn move_changes_all_paths() -> Result<()> {
     let repo = mkrepo();
 
