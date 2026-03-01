@@ -1,6 +1,6 @@
 # GG Changelog
 
-## Unreleased
+## [Unreleased]
 
 ### Added
 - JJ config settings can now be overridden for GG only by prefixing a setting with `gg.`. For example, if you have...
