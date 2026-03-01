@@ -39,6 +39,9 @@
         gap: 3px;
 
         cursor: pointer;
+
+        /* unthemed, but it looks good in practice and people are used to it */
+        color: black;
     }
 
     button:not(:disabled) {

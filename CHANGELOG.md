@@ -1,6 +1,6 @@
 # GG Changelog
 
-## [0.38.3](releases/tag/v0.38.3)
+## [Unreleased]
 
 ### Added
 - JJ config settings can now be overridden for GG only by prefixing a setting with `gg.`. For example, if you have...
@@ -31,6 +31,7 @@
 - Reverting from the GUI-mode context menu was broken.
 - Dragging a revision onto a parent edge no longer drops other parents when the rebased child is a merge commit.
 - Drag-and-drop onto the vertical segments of curved graph lines now works correctly. Previously only the horizontal part of a curved line was a valid drop target.
+- Scrollbar colours on MacOS weren't respecting dark theme.
 
 ## [0.38.2](releases/tag/v0.38.2)
 
