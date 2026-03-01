@@ -10,7 +10,7 @@
     let route = parseRoute();
 </script>
 
-<Shell {route} revsetOverride={route.type === "revision" ? route.revset : null}
+<Shell revsetOverride={route.type === "revision" ? route.revset : null}
        let:workspace let:selection>
     {#if route.type === "log"}
         {#key workspace.absolute_path}

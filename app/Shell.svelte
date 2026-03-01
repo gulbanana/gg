@@ -1,5 +1,4 @@
 <script lang="ts">
-    import type { Route } from "./route.js";
     import type { RevSet } from "./messages/RevSet";
     import type { RevsResult } from "./messages/RevsResult";
     import type { RepoConfig } from "./messages/RepoConfig";
@@ -42,7 +41,6 @@
         };
     }
 
-    export let route: Route;
     export let revsetOverride: string | null = null;
 
     let selection: Query<RevsResult> = {
