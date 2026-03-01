@@ -1,3 +1,7 @@
+//! Request types that modify the repository. Each mutation struct implements
+//! the [`Mutation`](crate::worker::Mutation) trait, which defines how the
+//! change is executed on the worker thread.
+
 use super::*;
 
 /// Common options for all mutations
@@ -29,6 +33,23 @@ pub enum MutationResult {
     },
     InternalError {
         message: MultilineString,
+    },
+}
+
+/// Specifies which bookmarks/remotes to push or fetch
+#[derive(Deserialize, Debug)]
+#[serde(tag = "type")]
+#[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
+pub enum GitRefspec {
+    AllBookmarks {
+        remote_name: String,
+    },
+    AllRemotes {
+        bookmark_ref: StoreRef,
+    },
+    RemoteBookmark {
+        remote_name: String,
+        bookmark_ref: StoreRef,
     },
 }
 

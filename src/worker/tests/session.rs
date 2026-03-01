@@ -1,6 +1,9 @@
 use super::{mkid, mkrepo, revs};
 use crate::{
-    messages::{LogPage, RepoConfig, RevSet, RevsResult},
+    messages::{
+        RepoConfig, RevSet,
+        queries::{LogPage, RevsResult},
+    },
     worker::{Session, SessionEvent, WorkerSession},
 };
 use anyhow::{Context, Result};

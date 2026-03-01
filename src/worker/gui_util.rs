@@ -54,7 +54,7 @@ use super::WorkerSession;
 
 use crate::{
     config::{GGSettings, read_config},
-    messages::{self, RevId, RevSet},
+    messages::{self, *},
 };
 
 /// jj-dependent state, available when a workspace is open
@@ -643,7 +643,7 @@ impl WorkspaceSession<'_> {
         &self,
         commit: &Commit,
         known_immutable: Option<bool>,
-    ) -> Result<messages::RevHeader> {
+    ) -> Result<RevHeader> {
         let index = self.ref_index();
         let refs = index.get(commit.id()).to_vec();
 
@@ -651,7 +651,7 @@ impl WorkspaceSession<'_> {
             .map(Result::Ok)
             .unwrap_or_else(|| self.check_immutable(vec![commit.id().clone()]))?;
 
-        Ok(messages::RevHeader {
+        Ok(RevHeader {
             id: self.format_id(commit),
             description: commit.description().into(),
             author: commit.author().try_into()?,

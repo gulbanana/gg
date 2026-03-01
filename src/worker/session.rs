@@ -71,7 +71,7 @@ pub enum SessionEvent {
     },
     /// Look up one or more revisions by change/commit ID.
     QueryRevisions {
-        tx: Sender<Result<messages::RevsResult>>,
+        tx: Sender<Result<messages::queries::RevsResult>>,
         set: messages::RevSet,
     },
     /// List Git remotes, optionally filtered to those tracking a bookmark.
@@ -81,12 +81,12 @@ pub enum SessionEvent {
     },
     /// Start a new log query with the given revset string.
     QueryLog {
-        tx: Sender<Result<messages::LogPage>>,
+        tx: Sender<Result<messages::queries::LogPage>>,
         query: String,
     },
     /// Fetch the next page of results from an in-progress log query.
     QueryLogNextPage {
-        tx: Sender<Result<messages::LogPage>>,
+        tx: Sender<Result<messages::queries::LogPage>>,
     },
     /// Snapshot the working copy if it has changed since the last check.
     /// Returns `Some` when the working-copy commit was updated.
@@ -96,9 +96,9 @@ pub enum SessionEvent {
     /// Run a mutation (e.g. abandon, rebase, bookmark create) against the
     /// loaded workspace.
     ExecuteMutation {
-        tx: Sender<messages::MutationResult>,
+        tx: Sender<messages::mutations::MutationResult>,
         mutation: Box<dyn Mutation + Send + Sync>,
-        options: messages::MutationOptions,
+        options: messages::mutations::MutationOptions,
     },
     /// Read an array-valued key from jj config.
     ReadConfigArray {
@@ -320,7 +320,7 @@ impl Session for WorkspaceSession<'_> {
                                 Err(err) => {
                                     let err = err.context(error_message);
                                     log::error!("{err:?}");
-                                    messages::MutationResult::InternalError {
+                                    messages::mutations::MutationResult::InternalError {
                                         message: (&*format!("{err:?}")).into(),
                                     }
                                 }
@@ -334,7 +334,7 @@ impl Session for WorkspaceSession<'_> {
                             };
 
                             log::error!("{error_message}");
-                            tx.send(messages::MutationResult::InternalError {
+                            tx.send(messages::mutations::MutationResult::InternalError {
                                 message: (&*error_message).into(),
                             })?;
                         }
@@ -432,7 +432,7 @@ impl Session for QuerySession<'_, '_> {
 async fn handle_query(
     state: &mut WorkspaceState,
     ws: &WorkspaceSession<'_>,
-    tx: Sender<Result<messages::LogPage>>,
+    tx: Sender<Result<messages::queries::LogPage>>,
     rx: &Receiver<SessionEvent>,
     revset_str: Option<&str>,
     query_state: Option<QueryState>,

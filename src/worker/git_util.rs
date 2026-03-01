@@ -16,7 +16,9 @@ use jj_lib::git::{GitProgress, GitSidebandLineTerminator, GitSubprocessCallback}
 
 use crate::{
     askpass::serve_askpass,
-    messages::{InputField, InputRequest, InputResponse, MultilineString, MutationResult},
+    messages::{
+        InputField, InputRequest, InputResponse, MultilineString, mutations::MutationResult,
+    },
     worker::EventSinkExt,
 };
 

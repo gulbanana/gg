@@ -6,7 +6,10 @@ use std::sync::mpsc::channel;
 use axum::{Json, Router, extract::State, routing::post};
 use serde::Deserialize;
 
-use crate::messages::{self, LogPage, RepoConfig, RevSet, RevsResult};
+use crate::messages::{
+    RepoConfig, RepoStatus, RevSet,
+    queries::{LogPage, RevsResult},
+};
 use crate::worker::SessionEvent;
 
 use super::ApiError;
@@ -132,7 +135,7 @@ async fn query_recent_workspaces(
 
 async fn query_snapshot(
     State(state): State<AppState>,
-) -> Result<Json<Option<messages::RepoStatus>>, ApiError> {
+) -> Result<Json<Option<RepoStatus>>, ApiError> {
     let (tx, rx) = channel();
     state.worker_tx.send(SessionEvent::ExecuteSnapshot { tx })?;
     let result = rx.recv()?;

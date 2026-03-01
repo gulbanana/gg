@@ -42,7 +42,7 @@ use tauri_plugin_log::fern;
 use tokio::sync::{broadcast, oneshot};
 
 use crate::config::{GGSettings, read_config};
-use crate::messages::{
+use crate::messages::mutations::{
     AbandonRevisions, AdoptRevision, BackoutRevisions, CheckoutRevision, CopyChanges, CopyHunk,
     CreateRef, CreateRevision, CreateRevisionBetween, DeleteRef, DescribeRevision,
     DuplicateRevisions, ExternalDiff, ExternalResolve, GitFetch, GitPush, InsertRevisions,

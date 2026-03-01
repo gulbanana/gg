@@ -35,11 +35,14 @@ use jj_lib::{
 use tokio::io::AsyncReadExt;
 
 use crate::messages::{
-    AbandonRevisions, AdoptRevision, BackoutRevisions, CheckoutRevision, CopyChanges, CopyHunk,
-    CreateRef, CreateRevision, CreateRevisionBetween, DeleteRef, DescribeRevision,
-    DuplicateRevisions, ExternalDiff, ExternalResolve, GitFetch, GitPush, GitRefspec,
-    InsertRevisions, MoveChanges, MoveHunk, MoveRef, MoveRevisions, MutationResult, RenameBookmark,
-    StoreRef, TrackBookmark, TreePath, UndoOperation, UntrackBookmark,
+    ChangeHunk, StoreRef, TreePath,
+    mutations::{
+        AbandonRevisions, AdoptRevision, BackoutRevisions, CheckoutRevision, CopyChanges, CopyHunk,
+        CreateRef, CreateRevision, CreateRevisionBetween, DeleteRef, DescribeRevision,
+        DuplicateRevisions, ExternalDiff, ExternalResolve, GitFetch, GitPush, GitRefspec,
+        InsertRevisions, MoveChanges, MoveHunk, MoveRef, MoveRevisions, MutationOptions,
+        MutationResult, RenameBookmark, TrackBookmark, UndoOperation, UntrackBookmark,
+    },
 };
 
 use jj_cli::{
@@ -65,7 +68,7 @@ impl Mutation for AbandonRevisions {
     async fn execute(
         self: Box<Self>,
         ws: &mut WorkspaceSession,
-        options: &crate::messages::MutationOptions,
+        options: &MutationOptions,
     ) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
 
@@ -112,7 +115,7 @@ impl Mutation for BackoutRevisions {
     async fn execute(
         self: Box<Self>,
         ws: &mut WorkspaceSession,
-        _options: &crate::messages::MutationOptions,
+        _options: &MutationOptions,
     ) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
 
@@ -204,7 +207,7 @@ impl Mutation for CheckoutRevision {
     async fn execute(
         self: Box<Self>,
         ws: &mut WorkspaceSession,
-        options: &crate::messages::MutationOptions,
+        options: &MutationOptions,
     ) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
 
@@ -242,7 +245,7 @@ impl Mutation for CreateRevision {
     async fn execute(
         self: Box<Self>,
         ws: &mut WorkspaceSession,
-        _options: &crate::messages::MutationOptions,
+        _options: &MutationOptions,
     ) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
 
@@ -274,7 +277,7 @@ impl Mutation for CreateRevisionBetween {
     async fn execute(
         self: Box<Self>,
         ws: &mut WorkspaceSession,
-        options: &crate::messages::MutationOptions,
+        options: &MutationOptions,
     ) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
 
@@ -316,7 +319,7 @@ impl Mutation for DescribeRevision {
     async fn execute(
         self: Box<Self>,
         ws: &mut WorkspaceSession,
-        options: &crate::messages::MutationOptions,
+        options: &MutationOptions,
     ) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
 
@@ -374,7 +377,7 @@ impl Mutation for DuplicateRevisions {
     async fn execute(
         self: Box<Self>,
         ws: &mut WorkspaceSession,
-        _options: &crate::messages::MutationOptions,
+        _options: &MutationOptions,
     ) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
 
@@ -435,7 +438,7 @@ impl Mutation for InsertRevisions {
     async fn execute(
         self: Box<Self>,
         ws: &mut WorkspaceSession,
-        options: &crate::messages::MutationOptions,
+        options: &MutationOptions,
     ) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
 
@@ -539,7 +542,7 @@ impl Mutation for MoveRevisions {
     async fn execute(
         self: Box<Self>,
         ws: &mut WorkspaceSession,
-        options: &crate::messages::MutationOptions,
+        options: &MutationOptions,
     ) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
 
@@ -594,7 +597,7 @@ impl Mutation for AdoptRevision {
     async fn execute(
         self: Box<Self>,
         ws: &mut WorkspaceSession,
-        options: &crate::messages::MutationOptions,
+        options: &MutationOptions,
     ) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
 
@@ -637,7 +640,7 @@ impl Mutation for MoveChanges {
     async fn execute(
         self: Box<Self>,
         ws: &mut WorkspaceSession,
-        options: &crate::messages::MutationOptions,
+        options: &MutationOptions,
     ) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
 
@@ -781,7 +784,7 @@ impl Mutation for CopyChanges {
     async fn execute(
         self: Box<Self>,
         ws: &mut WorkspaceSession,
-        options: &crate::messages::MutationOptions,
+        options: &MutationOptions,
     ) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
 
@@ -851,7 +854,7 @@ impl Mutation for TrackBookmark {
     async fn execute(
         self: Box<Self>,
         ws: &mut WorkspaceSession,
-        _options: &crate::messages::MutationOptions,
+        _options: &MutationOptions,
     ) -> Result<MutationResult> {
         match self.r#ref {
             StoreRef::Tag { tag_name } => {
@@ -913,7 +916,7 @@ impl Mutation for UntrackBookmark {
     async fn execute(
         self: Box<Self>,
         ws: &mut WorkspaceSession,
-        _options: &crate::messages::MutationOptions,
+        _options: &MutationOptions,
     ) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
 
@@ -989,7 +992,7 @@ impl Mutation for RenameBookmark {
     async fn execute(
         self: Box<Self>,
         ws: &mut WorkspaceSession,
-        _options: &crate::messages::MutationOptions,
+        _options: &MutationOptions,
     ) -> Result<MutationResult> {
         let old_name = self.r#ref.as_bookmark()?;
         let old_name_ref = RefNameBuf::from(old_name);
@@ -1033,7 +1036,7 @@ impl Mutation for CreateRef {
     async fn execute(
         self: Box<Self>,
         ws: &mut WorkspaceSession,
-        _options: &crate::messages::MutationOptions,
+        _options: &MutationOptions,
     ) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
 
@@ -1112,7 +1115,7 @@ impl Mutation for DeleteRef {
     async fn execute(
         self: Box<Self>,
         ws: &mut WorkspaceSession,
-        _options: &crate::messages::MutationOptions,
+        _options: &MutationOptions,
     ) -> Result<MutationResult> {
         match self.r#ref {
             StoreRef::RemoteBookmark {
@@ -1192,7 +1195,7 @@ impl Mutation for MoveRef {
     async fn execute(
         self: Box<Self>,
         ws: &mut WorkspaceSession,
-        _options: &crate::messages::MutationOptions,
+        _options: &MutationOptions,
     ) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
 
@@ -1267,7 +1270,7 @@ impl Mutation for MoveHunk {
     async fn execute(
         self: Box<Self>,
         ws: &mut WorkspaceSession,
-        options: &crate::messages::MutationOptions,
+        options: &MutationOptions,
     ) -> Result<MutationResult> {
         let from = ws.resolve_change_id(&self.from_id)?;
         let mut to = ws.resolve_commit_id(&self.to_id)?;
@@ -1472,7 +1475,7 @@ impl Mutation for CopyHunk {
     async fn execute(
         self: Box<Self>,
         ws: &mut WorkspaceSession,
-        options: &crate::messages::MutationOptions,
+        options: &MutationOptions,
     ) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
 
@@ -1633,7 +1636,7 @@ impl Mutation for GitPush {
     async fn execute(
         self: Box<Self>,
         ws: &mut WorkspaceSession,
-        _options: &crate::messages::MutationOptions,
+        _options: &MutationOptions,
     ) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
 
@@ -1921,7 +1924,7 @@ impl Mutation for GitFetch {
     async fn execute(
         self: Box<Self>,
         ws: &mut WorkspaceSession,
-        _options: &crate::messages::MutationOptions,
+        _options: &MutationOptions,
     ) -> Result<MutationResult> {
         let mut tx = ws.start_transaction().await?;
 
@@ -2012,7 +2015,7 @@ impl Mutation for UndoOperation {
     async fn execute(
         self: Box<Self>,
         ws: &mut WorkspaceSession,
-        _options: &crate::messages::MutationOptions,
+        _options: &MutationOptions,
     ) -> Result<MutationResult> {
         let head_op = op_walk::resolve_op_with_repo(ws.repo(), "@")?; // XXX this should be behind an abstraction, maybe reused in snapshot
         let mut parent_ops = head_op.parents();
@@ -2052,7 +2055,7 @@ impl Mutation for ExternalDiff {
     async fn execute(
         self: Box<Self>,
         ws: &mut WorkspaceSession,
-        _options: &crate::messages::MutationOptions,
+        _options: &MutationOptions,
     ) -> Result<MutationResult> {
         let commit = ws.resolve_change_id(&self.id)?;
         let parents: Vec<_> = commit.parents().collect::<Result<_, _>>()?;
@@ -2134,7 +2137,7 @@ impl Mutation for ExternalResolve {
     async fn execute(
         self: Box<Self>,
         ws: &mut WorkspaceSession,
-        _options: &crate::messages::MutationOptions,
+        _options: &MutationOptions,
     ) -> Result<MutationResult> {
         let commit = ws.resolve_change_id(&self.id)?;
 
@@ -2293,7 +2296,7 @@ async fn read_file_content(
 ///
 /// Line numbers must match exactly since the hunk was computed against this base.
 #[allow(clippy::manual_strip)]
-fn apply_hunk_to_base(base_content: &[u8], hunk: &crate::messages::ChangeHunk) -> Result<Vec<u8>> {
+fn apply_hunk_to_base(base_content: &[u8], hunk: &ChangeHunk) -> Result<Vec<u8>> {
     let base_text = String::from_utf8_lossy(base_content);
     let base_lines: Vec<&str> = base_text.lines().collect();
     let ends_with_newline = base_content.ends_with(b"\n");

@@ -1,10 +1,13 @@
 use super::{get_by_chid, mkrepo, revs};
 use crate::{
     messages::{
-        AbandonRevisions, AdoptRevision, BackoutRevisions, ChangeHunk, CheckoutRevision,
-        CopyChanges, CopyHunk, CreateRevision, DescribeRevision, DuplicateRevisions, FileRange,
-        HunkLocation, InsertRevisions, MoveChanges, MoveHunk, MoveRef, MoveRevisions,
-        MultilineString, MutationResult, RevSet, RevsResult, StoreRef, TreePath,
+        ChangeHunk, ChangeLocation, ChangeRange, MultilineString, RevSet, StoreRef, TreePath,
+        mutations::{
+            AbandonRevisions, AdoptRevision, BackoutRevisions, CheckoutRevision, CopyChanges,
+            CopyHunk, CreateRevision, DescribeRevision, DuplicateRevisions, InsertRevisions,
+            MoveChanges, MoveHunk, MoveRef, MoveRevisions, MutationResult,
+        },
+        queries::RevsResult,
     },
     worker::{
         Mutation, WorkerSession, queries,
@@ -1616,9 +1619,9 @@ async fn move_hunk_descendant_partial() -> anyhow::Result<()> {
     // hunk_child_multi modifies lines 2 and 4: line2 -> changed2, line4 -> changed4
     // Move only the line 2 change to hunk_base, keeping line 4 change in source
     let hunk = ChangeHunk {
-        location: HunkLocation {
-            from_file: FileRange { start: 1, len: 3 },
-            to_file: FileRange { start: 1, len: 3 },
+        location: ChangeLocation {
+            from_file: ChangeRange { start: 1, len: 3 },
+            to_file: ChangeRange { start: 1, len: 3 },
         },
         lines: MultilineString {
             lines: vec![
@@ -1692,9 +1695,9 @@ async fn move_hunk_message() -> anyhow::Result<()> {
 
     // Move only hunk from source, abandoning it
     let hunk = ChangeHunk {
-        location: HunkLocation {
-            from_file: FileRange { start: 2, len: 1 },
-            to_file: FileRange { start: 2, len: 1 },
+        location: ChangeLocation {
+            from_file: ChangeRange { start: 2, len: 1 },
+            to_file: ChangeRange { start: 2, len: 1 },
         },
         lines: MultilineString {
             lines: vec!["-line2".to_owned(), "+modified2".to_owned()],
@@ -1739,9 +1742,9 @@ async fn move_hunk_invalid() -> anyhow::Result<()> {
 
     // Invalid hunk - doesn't match the actual content of b.txt in hunk_source
     let hunk = ChangeHunk {
-        location: HunkLocation {
-            from_file: FileRange { start: 1, len: 1 },
-            to_file: FileRange { start: 1, len: 1 },
+        location: ChangeLocation {
+            from_file: ChangeRange { start: 1, len: 1 },
+            to_file: ChangeRange { start: 1, len: 1 },
         },
         lines: MultilineString {
             lines: vec!["-nonexistent".to_owned(), "+something".to_owned()],
@@ -1774,9 +1777,9 @@ async fn move_hunk_descendant_abandons_source() -> anyhow::Result<()> {
 
     // hunk_child_single's only change is line 2: "line2" -> "modified2"
     let hunk = ChangeHunk {
-        location: HunkLocation {
-            from_file: FileRange { start: 1, len: 3 },
-            to_file: FileRange { start: 1, len: 3 },
+        location: ChangeLocation {
+            from_file: ChangeRange { start: 1, len: 3 },
+            to_file: ChangeRange { start: 1, len: 3 },
         },
         lines: MultilineString {
             lines: vec![
@@ -1839,9 +1842,9 @@ async fn move_hunk_unrelated() -> anyhow::Result<()> {
     // hunk_child_single modifies line 2: "line2" -> "modified2"
     // hunk_sibling extends the file with new6, new7, new8
     let hunk = ChangeHunk {
-        location: HunkLocation {
-            from_file: FileRange { start: 1, len: 3 },
-            to_file: FileRange { start: 1, len: 3 },
+        location: ChangeLocation {
+            from_file: ChangeRange { start: 1, len: 3 },
+            to_file: ChangeRange { start: 1, len: 3 },
         },
         lines: MultilineString {
             lines: vec![
@@ -1914,9 +1917,9 @@ async fn move_hunk_unrelated_different_structure_creates_conflict() -> anyhow::R
     // Hunk from hunk_source that changes line 1: "1" -> "11"
     // hunk_source's parent has b.txt = "1\n" (single line)
     let hunk = ChangeHunk {
-        location: HunkLocation {
-            from_file: FileRange { start: 1, len: 1 },
-            to_file: FileRange { start: 1, len: 1 },
+        location: ChangeLocation {
+            from_file: ChangeRange { start: 1, len: 1 },
+            to_file: ChangeRange { start: 1, len: 1 },
         },
         lines: MultilineString {
             lines: vec!["-1".to_owned(), "+11".to_owned()],
@@ -2013,9 +2016,9 @@ async fn move_hunk_ancestor_to_descendant() -> anyhow::Result<()> {
 
     // The hunk in hunk_child_single's context: parent (hunk_base) has line2, child has modified2
     let hunk = ChangeHunk {
-        location: HunkLocation {
-            from_file: FileRange { start: 1, len: 3 },
-            to_file: FileRange { start: 1, len: 3 },
+        location: ChangeLocation {
+            from_file: ChangeRange { start: 1, len: 3 },
+            to_file: ChangeRange { start: 1, len: 3 },
         },
         lines: MultilineString {
             lines: vec![
@@ -2105,9 +2108,9 @@ async fn move_hunk_between_siblings() -> anyhow::Result<()> {
     //
     // Move the line2->changed2 hunk from hunk_child_multi to hunk_sibling
     let hunk = ChangeHunk {
-        location: HunkLocation {
-            from_file: FileRange { start: 1, len: 3 },
-            to_file: FileRange { start: 1, len: 3 },
+        location: ChangeLocation {
+            from_file: ChangeRange { start: 1, len: 3 },
+            to_file: ChangeRange { start: 1, len: 3 },
         },
         lines: MultilineString {
             lines: vec![
@@ -2214,9 +2217,9 @@ async fn move_hunk_does_not_affect_other_files() -> anyhow::Result<()> {
 
     // Move a hunk in hunk_test.txt from child to parent
     let hunk = ChangeHunk {
-        location: HunkLocation {
-            from_file: FileRange { start: 1, len: 3 },
-            to_file: FileRange { start: 1, len: 3 },
+        location: ChangeLocation {
+            from_file: ChangeRange { start: 1, len: 3 },
+            to_file: ChangeRange { start: 1, len: 3 },
         },
         lines: MultilineString {
             lines: vec![
@@ -2294,9 +2297,9 @@ async fn copy_hunk_from_parent() -> anyhow::Result<()> {
 
     // Copy/restore hunk from hunk_base (parent) to hunk_child_single (child)
     let hunk = ChangeHunk {
-        location: HunkLocation {
-            from_file: FileRange { start: 1, len: 3 },
-            to_file: FileRange { start: 1, len: 3 },
+        location: ChangeLocation {
+            from_file: ChangeRange { start: 1, len: 3 },
+            to_file: ChangeRange { start: 1, len: 3 },
         },
         lines: MultilineString {
             lines: vec![
@@ -2356,9 +2359,9 @@ async fn copy_hunk_to_conflict() -> anyhow::Result<()> {
 
     // Try to copy a hunk to the conflicted commit
     let hunk = ChangeHunk {
-        location: HunkLocation {
-            from_file: FileRange { start: 1, len: 1 },
-            to_file: FileRange { start: 1, len: 1 },
+        location: ChangeLocation {
+            from_file: ChangeRange { start: 1, len: 1 },
+            to_file: ChangeRange { start: 1, len: 1 },
         },
         lines: MultilineString {
             lines: vec!["-original".to_owned(), "+changed".to_owned()],
@@ -2402,9 +2405,9 @@ async fn copy_hunk_out_of_bounds() -> anyhow::Result<()> {
     // small_parent has small.txt with "line1\nline2\n"
     // small_child has small.txt with "line1\nchanged\n"
     let hunk = ChangeHunk {
-        location: HunkLocation {
-            from_file: FileRange { start: 1, len: 1 },
-            to_file: FileRange { start: 10, len: 5 }, // Way out of bounds
+        location: ChangeLocation {
+            from_file: ChangeRange { start: 1, len: 1 },
+            to_file: ChangeRange { start: 10, len: 5 }, // Way out of bounds
         },
         lines: MultilineString {
             lines: vec!["-something".to_owned(), "+else".to_owned()],
@@ -2447,9 +2450,9 @@ async fn copy_hunk_unchanged() -> anyhow::Result<()> {
 
     // hunk_base has line1-line5, hunk_sibling has line1-line5 plus new6-new8
     let hunk = ChangeHunk {
-        location: HunkLocation {
-            from_file: FileRange { start: 1, len: 3 },
-            to_file: FileRange { start: 1, len: 3 },
+        location: ChangeLocation {
+            from_file: ChangeRange { start: 1, len: 3 },
+            to_file: ChangeRange { start: 1, len: 3 },
         },
         lines: MultilineString {
             lines: vec![
@@ -2488,9 +2491,9 @@ async fn copy_hunk_multiple_hunks() -> anyhow::Result<()> {
 
     // hunk_child_multi modifies two lines: line2->changed2 and line4->changed4
     let hunk = ChangeHunk {
-        location: HunkLocation {
-            from_file: FileRange { start: 3, len: 3 },
-            to_file: FileRange { start: 3, len: 3 },
+        location: ChangeLocation {
+            from_file: ChangeRange { start: 3, len: 3 },
+            to_file: ChangeRange { start: 3, len: 3 },
         },
         lines: MultilineString {
             lines: vec![
@@ -2548,9 +2551,9 @@ async fn move_hunk_second_of_two_hunks() -> anyhow::Result<()> {
 
     // hunk_child_multi has two hunks: line2->changed2 and line4->changed4
     let hunk = ChangeHunk {
-        location: HunkLocation {
-            from_file: FileRange { start: 3, len: 3 },
-            to_file: FileRange { start: 3, len: 3 },
+        location: ChangeLocation {
+            from_file: ChangeRange { start: 3, len: 3 },
+            to_file: ChangeRange { start: 3, len: 3 },
         },
         lines: MultilineString {
             lines: vec![
