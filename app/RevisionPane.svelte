@@ -170,10 +170,18 @@
                 bind:value={editableDescription}
                 on:dragenter={dragOverWidget}
                 on:dragover={dragOverWidget}
+            on:blur={(ev)=>{
+                if(descriptionChanged){
+                    updateDescription();
+                }
+            }}
                 on:keydown={(ev) => {
                     if (descriptionChanged && ev.key === "Enter" && (ev.metaKey || ev.ctrlKey)) {
                         updateDescription();
                     }
+                if(ev.key.toLowerCase() == "escape"){
+                    fullDescription = currentDescription;
+                }
                 }}></textarea>
         {/if}
 
