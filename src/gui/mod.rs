@@ -22,8 +22,8 @@ use tauri::webview::WebviewWindowBuilder;
 use tauri::{AppHandle, Emitter, EventTarget, Listener, Manager, State, Window, WindowEvent, Wry};
 use tauri_plugin_window_state::StateFlags;
 
-use gg_cli::config::GGSettings;
-use gg_cli::messages::{
+use gg_lib::config::GGSettings;
+use gg_lib::messages::{
     self,
     mutations::{
         AbandonRevisions, AdoptRevision, BackoutRevisions, CheckoutRevision, CloneRepository,
@@ -34,7 +34,7 @@ use gg_cli::messages::{
         UntrackBookmark,
     },
 };
-use gg_cli::worker::{Mutation, Session, SessionEvent, WorkerSession};
+use gg_lib::worker::{Mutation, Session, SessionEvent, WorkerSession};
 use sink::TauriSink;
 
 struct AppState {
@@ -153,7 +153,7 @@ pub fn run_gui(options: super::RunOptions) -> Result<()> {
                     },
                 )
                 .level_for(
-                    "gg_cli",
+                    "gg_lib",
                     if options.debug {
                         LevelFilter::Debug
                     } else {

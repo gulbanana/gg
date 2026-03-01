@@ -25,7 +25,7 @@ include = [
 pre-release-hook = ["npm", "run", "build"]
 
 [lib]
-name = "gg_cli"
+name = "gg_lib"
 path = "src/lib.rs"
 
 [[bin]]

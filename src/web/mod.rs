@@ -94,7 +94,7 @@ pub async fn run_web(options: super::RunOptions, web_options: WebOptions) -> Res
     fern::Dispatch::new()
         .level(LevelFilter::Warn)
         .level_for("gg", gg_level)
-        .level_for("gg_cli", gg_level)
+        .level_for("gg_lib", gg_level)
         .chain(std::io::stderr())
         .apply()?;
 
@@ -153,7 +153,7 @@ pub async fn run_web(options: super::RunOptions, web_options: WebOptions) -> Res
 ///
 /// ```no_run
 /// use std::path::PathBuf;
-/// use gg_cli::{RunOptions, web};
+/// use gg_lib::{RunOptions, web};
 ///
 /// #[tokio::main]
 /// async fn main() -> anyhow::Result<()> {

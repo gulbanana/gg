@@ -11,9 +11,9 @@ use std::path::PathBuf;
 #[allow(unused_imports)]
 use anyhow::{Result, anyhow};
 use clap::Parser;
-use gg_cli::config::read_config;
-use gg_cli::web;
-use gg_cli::{RunOptions, askpass};
+use gg_lib::config::read_config;
+use gg_lib::web;
+use gg_lib::{RunOptions, askpass};
 use jj_lib::settings::UserSettings;
 
 #[derive(clap::Subcommand, Debug)]
