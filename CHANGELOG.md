@@ -32,6 +32,7 @@
 - Dragging a revision onto a parent edge no longer drops other parents when the rebased child is a merge commit.
 - Drag-and-drop onto the vertical segments of curved graph lines now works correctly. Previously only the horizontal part of a curved line was a valid drop target.
 - Scrollbar colours on MacOS weren't respecting dark theme.
+- Scrollbars in the log pane were covering part of the log until the window was resized.
 
 ## [0.38.2](releases/tag/v0.38.2)
 

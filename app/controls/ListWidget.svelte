@@ -41,8 +41,14 @@
     });
 
     function pollScroll() {
-        if (box && box.scrollTop !== scrollTop) {
-            scrollTop = box.scrollTop;
+        if (box) {
+            if (box.scrollTop !== scrollTop) {
+                scrollTop = box.scrollTop;
+            }
+            // ResizeObserver doesn't fire when a scrollbar appears/disappears
+            if (box.clientWidth !== clientWidth) {
+                clientWidth = box.clientWidth;
+            }
         }
 
         pollFrame = requestAnimationFrame(pollScroll);
