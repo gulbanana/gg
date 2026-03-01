@@ -39,8 +39,7 @@ use jj_lib::{
 };
 
 use crate::messages::{
-    ChangeHunk, ChangeKind, FileRange, HunkLocation, LogCoordinates, LogLine, LogPage, LogRow,
-    MultilineString, RevChange, RevConflict, RevSet, RevsResult,
+    ChangeHunk, ChangeLocation, ChangeRange, MultilineString, RevSet, queries::*,
 };
 #[cfg(test)]
 use crate::messages::{RevHeader, RevId};
@@ -570,12 +569,12 @@ fn get_unified_hunks(
             },
         },
     ) {
-        let location = HunkLocation {
-            from_file: FileRange {
+        let location = ChangeLocation {
+            from_file: ChangeRange {
                 start: hunk.left_line_range.start,
                 len: hunk.left_line_range.len(),
             },
-            to_file: FileRange {
+            to_file: ChangeRange {
                 start: hunk.right_line_range.start,
                 len: hunk.right_line_range.len(),
             },

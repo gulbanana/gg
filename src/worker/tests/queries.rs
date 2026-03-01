@@ -1,5 +1,5 @@
 use super::{mkid, mkrepo, revs};
-use crate::messages::{RevSet, RevsResult, StoreRef};
+use crate::messages::{RevSet, StoreRef, queries::RevsResult};
 use crate::worker::{WorkerSession, queries};
 use anyhow::Result;
 use assert_matches::assert_matches;
@@ -800,7 +800,7 @@ mod revisions_immutability {
     //! immutable_bookmark and its ancestors are immutable; main_bookmark and working_copy are mutable.
 
     use super::*;
-    use crate::messages::{RevSet, RevsResult};
+    use crate::messages::{RevSet, queries::RevsResult};
 
     /// Helper to create a RevSet from two RevIds
     fn mkset(from: crate::messages::RevId, to: crate::messages::RevId) -> RevSet {

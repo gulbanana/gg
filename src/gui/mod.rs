@@ -24,11 +24,15 @@ use tauri_plugin_window_state::StateFlags;
 
 use gg_cli::config::GGSettings;
 use gg_cli::messages::{
-    self, AbandonRevisions, AdoptRevision, BackoutRevisions, CheckoutRevision, CloneRepository,
-    CopyChanges, CopyHunk, CreateRef, CreateRevision, CreateRevisionBetween, DeleteRef,
-    DescribeRevision, DuplicateRevisions, ExternalDiff, ExternalResolve, GitFetch, GitPush,
-    InitRepository, InsertRevisions, MoveChanges, MoveHunk, MoveRef, MoveRevisions,
-    MutationOptions, MutationResult, RenameBookmark, TrackBookmark, UndoOperation, UntrackBookmark,
+    self,
+    mutations::{
+        AbandonRevisions, AdoptRevision, BackoutRevisions, CheckoutRevision, CloneRepository,
+        CopyChanges, CopyHunk, CreateRef, CreateRevision, CreateRevisionBetween, DeleteRef,
+        DescribeRevision, DuplicateRevisions, ExternalDiff, ExternalResolve, GitFetch, GitPush,
+        InitRepository, InsertRevisions, MoveChanges, MoveHunk, MoveRef, MoveRevisions,
+        MutationOptions, MutationResult, RenameBookmark, TrackBookmark, UndoOperation,
+        UntrackBookmark,
+    },
 };
 use gg_cli::worker::{Mutation, Session, SessionEvent, WorkerSession};
 use sink::TauriSink;
@@ -115,7 +119,7 @@ fn label_for_path(path: Option<&PathBuf>) -> String {
 fn resolve_set(
     session_tx: &Sender<SessionEvent>,
     set: messages::RevSet,
-) -> Result<messages::RevsResult> {
+) -> Result<messages::queries::RevsResult> {
     let (tx, rx) = channel();
     session_tx.send(SessionEvent::QueryRevisions { tx, set })?;
     rx.recv()?
@@ -272,7 +276,7 @@ fn forward_accelerator(window: Window, state: State<AppState>, key: char, ctrl: 
                 if session_tx
                     .send(SessionEvent::QueryRevisions { tx, set })
                     .is_ok()
-                    && let Ok(Ok(messages::RevsResult::Detail { headers, .. })) = rx.recv()
+                    && let Ok(Ok(messages::queries::RevsResult::Detail { headers, .. })) = rx.recv()
                     && let Some(header) = headers.first()
                     && !header.is_immutable
                     && header.parent_ids.len() == 1
@@ -328,7 +332,7 @@ fn set_modifier_state(
     // re-resolve selection and update menu enablement
     let headers: Option<Vec<messages::RevHeader>> =
         selection.and_then(|set| match resolve_set(&session_tx, set) {
-            Ok(messages::RevsResult::Detail { headers, .. }) => Some(headers),
+            Ok(messages::queries::RevsResult::Detail { headers, .. }) => Some(headers),
             _ => None,
         });
 
@@ -429,7 +433,7 @@ fn query_log(
     window: Window,
     app_state: State<AppState>,
     revset: String,
-) -> Result<messages::LogPage, InvokeError> {
+) -> Result<messages::queries::LogPage, InvokeError> {
     let session_tx: Sender<SessionEvent> = app_state.get_session(window.label());
     let (call_tx, call_rx) = channel();
 
@@ -449,7 +453,7 @@ fn query_log(
 fn query_log_next_page(
     window: Window,
     app_state: State<AppState>,
-) -> Result<messages::LogPage, InvokeError> {
+) -> Result<messages::queries::LogPage, InvokeError> {
     let session_tx: Sender<SessionEvent> = app_state.get_session(window.label());
     let (call_tx, call_rx) = channel();
 
@@ -467,7 +471,7 @@ fn query_revisions(
     window: Window,
     app_state: State<AppState>,
     set: messages::RevSet,
-) -> Result<messages::RevsResult, InvokeError> {
+) -> Result<messages::queries::RevsResult, InvokeError> {
     let session_tx = app_state.get_session(window.label());
     resolve_set(&session_tx, set).map_err(InvokeError::from_anyhow)
 }
@@ -844,7 +848,7 @@ pub fn try_create_window(app_handle: &AppHandle, workspace: Option<PathBuf>) -> 
             };
             let headers: Option<Vec<messages::RevHeader>> =
                 set.and_then(|set| match resolve_set(&session_tx, set) {
-                    Ok(messages::RevsResult::Detail { headers, .. }) => Some(headers),
+                    Ok(messages::queries::RevsResult::Detail { headers, .. }) => Some(headers),
                     _ => None,
                 });
             if let Some(menu) = handle.menu() {
@@ -1034,7 +1038,7 @@ fn handle_window_event(window: &Window, event: &WindowEvent) -> Result<()> {
             };
             let headers: Option<Vec<messages::RevHeader>> =
                 selection.and_then(|set| match resolve_set(&session_tx, set) {
-                    Ok(messages::RevsResult::Detail { headers, .. }) => Some(headers),
+                    Ok(messages::queries::RevsResult::Detail { headers, .. }) => Some(headers),
                     _ => None,
                 });
             if let Some(menu) = window.app_handle().menu() {

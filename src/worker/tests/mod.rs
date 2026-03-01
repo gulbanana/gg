@@ -16,7 +16,7 @@ use tempfile::{TempDir, tempdir};
 use zip::ZipArchive;
 
 use crate::{
-    messages::{ChangeId, CommitId, RevId, RevSet, RevsResult},
+    messages::{ChangeId, CommitId, RevId, RevSet, queries::RevsResult},
     worker::{EventSink, WorkerSession, WorkspaceSession, queries::query_revisions},
 };
 

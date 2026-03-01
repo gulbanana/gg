@@ -29,6 +29,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::{Context, Error, Result, anyhow};
+use jj_cli::{git_util::load_git_import_options, ui::Ui};
 use jj_lib::git::{GitFetch, GitFetchRefExpression, GitSettings};
 use jj_lib::ref_name::{RefNameBuf, RemoteName, RemoteNameBuf, RemoteRefSymbol};
 use jj_lib::repo::{Repo, StoreFactories};
@@ -40,9 +41,7 @@ use jj_lib::workspace::{
 use jj_lib::{backend::CommitId, git};
 use serde::Serialize;
 
-use jj_cli::{git_util::load_git_import_options, ui::Ui};
-
-use crate::messages;
+use crate::messages::mutations::{MutationOptions, MutationResult};
 use git_util::AuthContext;
 use gui_util::WorkspaceSession;
 pub use session::{Session, SessionEvent};
@@ -66,18 +65,18 @@ pub trait Mutation: Debug {
     async fn execute(
         self: Box<Self>,
         ws: &mut WorkspaceSession,
-        options: &messages::MutationOptions,
-    ) -> Result<messages::MutationResult>;
+        options: &MutationOptions,
+    ) -> Result<MutationResult>;
 
     /// Test helper that avoids the `Box<Self>` indirection and uses default
     /// options.
     #[cfg(test)]
-    async fn execute_unboxed(self, ws: &mut WorkspaceSession) -> Result<messages::MutationResult>
+    async fn execute_unboxed(self, ws: &mut WorkspaceSession) -> Result<MutationResult>
     where
         Self: Sized,
     {
         Box::new(self)
-            .execute(ws, &messages::MutationOptions::default())
+            .execute(ws, &MutationOptions::default())
             .await
     }
 }

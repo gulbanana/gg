@@ -1,28 +1,19 @@
 //! Serializable message types shared between the Rust backend and the
-//! TypeScript frontend. Not currently extensible.
+//! TypeScript frontend.
 //!
 //! Every type here derives [`Serialize`] and/or
 //! [`Deserialize`]. When the `ts-rs` feature is enabled,
 //! `cargo gen` (alias for `cargo test -F ts-rs`) exports matching TypeScript
 //! definitions into `app/messages/`.
-//!
-//! The most important subsets are:
-//!
-//! - **Queries** ([`queries`] submodule) — request/response types for read-only
-//!   operations like log listing and revision details.
-//! - **Mutations** ([`mutations`] submodule) — request types that modify the
-//!   repository. Each mutation struct implements the [`Mutation`](crate::worker::Mutation)
-//!   trait, which defines how the change is executed on the worker thread.
 
-mod mutations;
-mod queries;
-
-pub use mutations::*;
-pub use queries::*;
+pub mod mutations;
+pub mod queries;
 
 use std::{collections::HashMap, path::Path};
 
 use anyhow::{Result, anyhow};
+use chrono::{DateTime, FixedOffset, Local, TimeZone, Utc, offset::LocalResult};
+use jj_lib::backend::{Signature, Timestamp};
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "ts-rs")]
 use ts_rs::TS;
@@ -66,6 +57,154 @@ impl<T: AsRef<Path>> From<T> for DisplayPath {
 pub struct TreePath {
     pub repo_path: String,
     pub relative_path: DisplayPath,
+}
+
+/// A contiguous range of lines in a file.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
+pub struct ChangeRange {
+    pub start: usize,
+    pub len: usize,
+}
+
+/// A single contiguous diff hunk with its location and content.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
+pub struct ChangeHunk {
+    pub location: ChangeLocation,
+    pub lines: MultilineString,
+}
+
+/// Line ranges in the source and target files for a diff hunk.
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
+pub struct ChangeLocation {
+    pub from_file: ChangeRange,
+    pub to_file: ChangeRange,
+}
+
+/// A change or commit id with a disambiguated prefix
+#[allow(dead_code)] // the frontend needs these structs kept in sync
+pub trait Id {
+    fn hex(&self) -> &String;
+    fn prefix(&self) -> &String;
+    fn rest(&self) -> &String;
+}
+
+/// A commit's unique hash identifier with disambiguated prefix.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(tag = "type")]
+#[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
+pub struct CommitId {
+    pub hex: String,
+    pub prefix: String,
+    pub rest: String,
+}
+
+impl Id for CommitId {
+    fn hex(&self) -> &String {
+        &self.hex
+    }
+    fn prefix(&self) -> &String {
+        &self.prefix
+    }
+    fn rest(&self) -> &String {
+        &self.rest
+    }
+}
+
+/// A change's unique identifier with disambiguated prefix.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(tag = "type")]
+#[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
+pub struct ChangeId {
+    pub hex: String,
+    pub prefix: String,
+    pub rest: String,
+    pub offset: Option<usize>,
+    pub is_divergent: bool,
+}
+
+impl Id for ChangeId {
+    fn hex(&self) -> &String {
+        &self.hex
+    }
+    fn prefix(&self) -> &String {
+        &self.prefix
+    }
+    fn rest(&self) -> &String {
+        &self.rest
+    }
+}
+
+/// A pair of ids representing the ui's view of a revision.
+///
+/// The worker may use one or both depending on policy.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
+pub struct RevId {
+    pub change: ChangeId,
+    pub commit: CommitId,
+}
+
+/// A sequence (specifically) of revision ids.
+///
+/// Equivalent to either `from::to` or `to::from` - whichever one is nonempty.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
+pub struct RevSet {
+    pub from: RevId,
+    pub to: RevId,
+}
+
+#[cfg(test)]
+impl RevSet {
+    pub fn singleton(id: RevId) -> Self {
+        Self {
+            from: id.clone(),
+            to: id,
+        }
+    }
+
+    pub fn sequence(from: RevId, to: RevId) -> Self {
+        Self { from, to }
+    }
+}
+
+/// A revision's author name, email, and timestamp.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
+pub struct RevAuthor {
+    pub email: String,
+    pub name: String,
+    pub timestamp: chrono::DateTime<Local>,
+}
+
+impl TryFrom<&Signature> for RevAuthor {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &Signature) -> Result<RevAuthor> {
+        Ok(RevAuthor {
+            name: value.name.clone(),
+            email: value.email.clone(),
+            timestamp: format_timestamp(&value.timestamp)?.with_timezone(&Local),
+        })
+    }
+}
+
+/// Summary metadata for a revision displayed in the log.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
+pub struct RevHeader {
+    pub id: RevId,
+    pub description: MultilineString,
+    pub author: RevAuthor,
+    pub has_conflict: bool,
+    pub is_working_copy: bool,
+    pub working_copy_of: Option<String>,
+    pub is_immutable: bool,
+    pub refs: Vec<StoreRef>,
+    pub parent_ids: Vec<CommitId>,
 }
 
 /// Configuration sent to the frontend when a workspace is opened.
@@ -158,23 +297,6 @@ impl StoreRef {
     }
 }
 
-/// Specifies which bookmarks/remotes to push or fetch
-#[derive(Deserialize, Debug)]
-#[serde(tag = "type")]
-#[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
-pub enum GitRefspec {
-    AllBookmarks {
-        remote_name: String,
-    },
-    AllRemotes {
-        bookmark_ref: StoreRef,
-    },
-    RemoteBookmark {
-        remote_name: String,
-        bookmark_ref: StoreRef,
-    },
-}
-
 /// Refers to one of the repository's manipulatable objects
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(tag = "type")]
@@ -246,4 +368,24 @@ impl From<&str> for InputField {
 pub enum ProgressEvent {
     Progress { overall_percent: u32 },
     Message { text: String },
+}
+
+// similar to time_util::datetime_from_timestamp, which is not pub
+fn format_timestamp(context: &Timestamp) -> Result<DateTime<FixedOffset>> {
+    let utc = match Utc.timestamp_opt(
+        context.timestamp.0.div_euclid(1000),
+        (context.timestamp.0.rem_euclid(1000)) as u32 * 1000000,
+    ) {
+        LocalResult::None => {
+            return Err(anyhow!("no UTC instant exists for timestamp"));
+        }
+        LocalResult::Single(x) => x,
+        LocalResult::Ambiguous(y, _z) => y,
+    };
+
+    let tz = FixedOffset::east_opt(context.tz_offset * 60)
+        .or_else(|| FixedOffset::east_opt(0))
+        .ok_or(anyhow!("timezone offset out of bounds"))?;
+
+    Ok(utc.with_timezone(&tz))
 }
