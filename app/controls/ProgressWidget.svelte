@@ -25,16 +25,18 @@
     }
 
     .progress-label {
-        color: buttontext;
-        font-size: 16px;
         margin: 0;
+        color: black;
+        font-size: 16px;
     }
 
     progress {
         min-width: 600px;
         height: 24px;
         appearance: none;
+
         background: var(--ctp-flamingo);
+
         border-width: 1px;
         border-radius: 3px;
         border-color: var(--ctp-overlay0);

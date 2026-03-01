@@ -27,7 +27,6 @@
 
         outline: none;
         margin: 0;
-        background: var(--ctp-flamingo);
         border-width: 1px;
         border-radius: 3px;
         border-color: var(--ctp-overlay0);
@@ -42,6 +41,7 @@
 
         /* unthemed, but it looks good in practice and people are used to it */
         color: black;
+        background: var(--ctp-flamingo);
     }
 
     button:not(:disabled) {

@@ -39,11 +39,13 @@
 
         outline: none;
         margin: 0;
-        background: var(--ctp-flamingo);
         border-width: 1px;
         border-radius: 3px;
         border-color: var(--ctp-overlay0);
         box-shadow: 2px 2px var(--ctp-overlay0);
+
+        background: var(--ctp-flamingo);
+        color: black;
 
         font-family: var(--stack-industrial);
         display: flex;
