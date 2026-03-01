@@ -86,16 +86,15 @@ pub struct WebOptions {
 #[doc(hidden)]
 #[tokio::main]
 pub async fn run_web(options: super::RunOptions, web_options: WebOptions) -> Result<()> {
+    let gg_level = if options.debug {
+        LevelFilter::Debug
+    } else {
+        LevelFilter::Info
+    };
     fern::Dispatch::new()
         .level(LevelFilter::Warn)
-        .level_for(
-            "gg",
-            if options.debug {
-                LevelFilter::Debug
-            } else {
-                LevelFilter::Info
-            },
-        )
+        .level_for("gg", gg_level)
+        .level_for("gg_cli", gg_level)
         .chain(std::io::stderr())
         .apply()?;
 

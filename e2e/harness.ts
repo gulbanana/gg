@@ -39,7 +39,7 @@ export async function destroyContext(ctx: TestContext): Promise<void> {
 }
 
 export function startGG(ctx: TestContext): Promise<string> {
-    let ggProcess = spawn("cargo", ["run", "--", "web", ctx.tempDir, "--no-launch"], {
+    let ggProcess = spawn("cargo", ["run", "--", "web", ctx.tempDir, "--no-launch", "--foreground"], {
         cwd: PROJECT_ROOT,
         stdio: ["ignore", "pipe", "pipe"],
     });

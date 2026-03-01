@@ -153,6 +153,14 @@ pub fn run_gui(options: super::RunOptions) -> Result<()> {
                     },
                 )
                 .level_for(
+                    "gg_cli",
+                    if options.debug {
+                        LevelFilter::Debug
+                    } else {
+                        LevelFilter::Warn
+                    },
+                )
+                .level_for(
                     "tao",
                     if options.debug {
                         LevelFilter::Info

@@ -45,6 +45,7 @@ export default defineConfig(async () => ({
           include: ["e2e/**/*.test.ts"],
           testTimeout: 120000,
           hookTimeout: 120000,
+          fileParallelism: false,
         },
       },
     ],
