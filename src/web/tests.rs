@@ -18,6 +18,7 @@ async fn integration_test() -> Result<()> {
             debug: false,
             is_child: false,
             ignore_immutable: false,
+            enable_askpass: false,
         },
         Some(Duration::from_secs(600)),
     )?;

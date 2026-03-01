@@ -35,6 +35,7 @@ impl Default for WorkerSession {
             user_settings: crate::config::tests::settings_with_gg_defaults(),
             sink: Arc::new(NoProgress),
             ignore_immutable: false,
+            enable_askpass: false,
         }
     }
 }

@@ -11,10 +11,10 @@ use std::path::PathBuf;
 #[allow(unused_imports)]
 use anyhow::{Result, anyhow};
 use clap::Parser;
-use gg_cli::RunOptions;
 use gg_cli::config::read_config;
-use jj_lib::settings::UserSettings;
 use gg_cli::web;
+use gg_cli::{RunOptions, askpass};
+use jj_lib::settings::UserSettings;
 
 #[derive(clap::Subcommand, Debug)]
 enum Subcommand {
@@ -119,7 +119,7 @@ fn default_mode(settings: &UserSettings) -> LaunchMode {
 
 fn main() -> Result<()> {
     // may be executed as a git authenticator, which overrides everything else
-    if let Some(result) = gg_cli::git_util::run_askpass() {
+    if let Some(result) = askpass::run_askpass() {
         return result;
     }
 
@@ -208,6 +208,7 @@ fn run_app(args: Args) -> Result<()> {
         debug: args.debug,
         is_child,
         ignore_immutable: args.ignore_immutable,
+        enable_askpass: true,
     };
 
     match mode {

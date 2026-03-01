@@ -20,14 +20,11 @@
 //! `WorkspaceSession` (loaded) → `QuerySession` (pagination). Only the first state
 //! is public; transitions happen automatically in response to [`worker::SessionEvent`] messages.
 
+pub mod askpass;
 pub mod config;
 pub mod messages;
 pub mod web;
 pub mod worker;
-
-// internal modules exposed for the binary, not part of the public API
-#[doc(hidden)]
-pub mod git_util;
 
 pub use config::read_config;
 use jj_lib::settings::UserSettings;
@@ -53,6 +50,13 @@ pub struct RunOptions {
     /// scripted workflows where the revset-based immutable set is too
     /// restrictive.
     pub ignore_immutable: bool,
+
+    /// Enable an askpass IPC server for git authentication prompts.
+    /// When `false` (the default), the askpass socket/server is not started
+    /// and git operations that need credentials will fail.
+    /// Set to `true` if your main() calls [`askpass::run_askpass`] to
+    /// act as an askpass client.
+    pub enable_askpass: bool,
 
     /// Enable verbose logging (`LevelFilter::Debug` for the `gg` target).
     #[doc(hidden)]
@@ -80,6 +84,7 @@ impl RunOptions {
             debug: false,
             is_child: false,
             ignore_immutable: false,
+            enable_askpass: false,
         }
     }
 }

@@ -14,6 +14,7 @@
 //! standard [`std::sync::mpsc`] channel. See [`web::create_app`](crate::web::create_app)
 //! for an example of wiring this up.
 
+mod git_util;
 mod gui_util;
 mod mutations;
 mod queries;
@@ -41,8 +42,8 @@ use serde::Serialize;
 
 use jj_cli::{git_util::load_git_import_options, ui::Ui};
 
-use crate::git_util::AuthContext;
 use crate::messages;
+use git_util::AuthContext;
 use gui_util::WorkspaceSession;
 pub use session::{Session, SessionEvent};
 
@@ -127,6 +128,8 @@ pub struct WorkerSession {
     pub user_settings: UserSettings,
     /// When `true`, immutability checks on commits are skipped.
     pub ignore_immutable: bool,
+    /// When `true`, the askpass IPC server is started for git auth prompts.
+    pub enable_askpass: bool,
 }
 
 impl WorkerSession {
@@ -140,6 +143,7 @@ impl WorkerSession {
         working_directory: Option<PathBuf>,
         user_settings: UserSettings,
         ignore_immutable: bool,
+        enable_askpass: bool,
     ) -> Self {
         WorkerSession {
             force_log_page_size: None,
@@ -148,6 +152,7 @@ impl WorkerSession {
             working_directory,
             user_settings,
             ignore_immutable,
+            enable_askpass,
         }
     }
 
@@ -269,52 +274,54 @@ impl WorkerSession {
         let import_options = load_git_import_options(&Ui::null(), &git_settings, &remote_settings)
             .map_err(|e| Error::new(e.error))?;
 
-        let git_head_id = auth_ctx.with_callbacks(Some(self.sink.clone()), |cb, env| {
-            let mut subprocess_options = git_settings.to_subprocess_options();
-            subprocess_options.environment = env;
+        let git_head_id =
+            auth_ctx.with_callbacks(Some(self.sink.clone()), self.enable_askpass, |cb, env| {
+                let mut subprocess_options = git_settings.to_subprocess_options();
+                subprocess_options.environment = env;
 
-            let mut tx = repo.start_transaction();
-            let mut fetcher = GitFetch::new(tx.repo_mut(), subprocess_options, &import_options)?;
-            let refspecs = git::expand_fetch_refspecs(
-                remote_name,
-                GitFetchRefExpression {
-                    bookmark: StringExpression::all(),
-                    tag: StringExpression::none(),
-                },
-            )?;
+                let mut tx = repo.start_transaction();
+                let mut fetcher =
+                    GitFetch::new(tx.repo_mut(), subprocess_options, &import_options)?;
+                let refspecs = git::expand_fetch_refspecs(
+                    remote_name,
+                    GitFetchRefExpression {
+                        bookmark: StringExpression::all(),
+                        tag: StringExpression::none(),
+                    },
+                )?;
 
-            fetcher
-                .fetch(remote_name, refspecs, cb, None, None)
-                .context("Failed to fetch from remote")?;
+                fetcher
+                    .fetch(remote_name, refspecs, cb, None, None)
+                    .context("Failed to fetch from remote")?;
 
-            fetcher.import_refs().context("Failed to import refs")?;
+                fetcher.import_refs().context("Failed to import refs")?;
 
-            // find HEAD if at all possible
-            let workspace_name = workspace.workspace_name().to_owned();
-            let mut checkout_commit_id = None;
-            if let Some(bookmark_name) = Self::find_default_branch(tx.repo()) {
-                let bookmark_ref = RefNameBuf::from(bookmark_name.as_str());
-                let remote_ref = RemoteNameBuf::from("origin");
-                let symbol = RemoteRefSymbol {
-                    name: &bookmark_ref,
-                    remote: &remote_ref,
-                };
-                let remote_bookmark = tx.repo().view().get_remote_bookmark(symbol);
-                if let Some(commit_id) = remote_bookmark.target.as_normal().cloned() {
-                    let commit = tx.repo().store().get_commit(&commit_id)?;
-                    tx.repo_mut().track_remote_bookmark(symbol)?;
-                    tx.repo_mut().check_out(workspace_name, &commit)?;
+                // find HEAD if at all possible
+                let workspace_name = workspace.workspace_name().to_owned();
+                let mut checkout_commit_id = None;
+                if let Some(bookmark_name) = Self::find_default_branch(tx.repo()) {
+                    let bookmark_ref = RefNameBuf::from(bookmark_name.as_str());
+                    let remote_ref = RemoteNameBuf::from("origin");
+                    let symbol = RemoteRefSymbol {
+                        name: &bookmark_ref,
+                        remote: &remote_ref,
+                    };
+                    let remote_bookmark = tx.repo().view().get_remote_bookmark(symbol);
+                    if let Some(commit_id) = remote_bookmark.target.as_normal().cloned() {
+                        let commit = tx.repo().store().get_commit(&commit_id)?;
+                        tx.repo_mut().track_remote_bookmark(symbol)?;
+                        tx.repo_mut().check_out(workspace_name, &commit)?;
 
-                    checkout_commit_id = Some(commit_id);
+                        checkout_commit_id = Some(commit_id);
+                    }
                 }
-            }
 
-            // nominal rebase to preserve invariants
-            tx.repo_mut().rebase_descendants()?;
-            tx.commit("clone from git remote")?;
+                // nominal rebase to preserve invariants
+                tx.repo_mut().rebase_descendants()?;
+                tx.commit("clone from git remote")?;
 
-            Ok::<Option<CommitId>, Error>(checkout_commit_id)
-        })?;
+                Ok::<Option<CommitId>, Error>(checkout_commit_id)
+            })?;
 
         // check out the working copy after one last reload
         if let Some(wc_id) = git_head_id {

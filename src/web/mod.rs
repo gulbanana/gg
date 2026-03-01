@@ -186,6 +186,7 @@ pub fn create_app(
                 options.workspace,
                 options.settings,
                 options.ignore_immutable,
+                options.enable_askpass,
             );
             if let Err(err) = session.handle_events(&worker_rx).await {
                 log::error!("worker: {err:#}");

@@ -37,14 +37,16 @@ struct AppState {
     windows: Arc<Mutex<HashMap<String, WindowState>>>,
     settings: UserSettings,
     initial_ignore_immutable: bool,
+    enable_askpass: bool,
 }
 
 impl AppState {
-    fn new(settings: UserSettings, initial_ignore_immutable: bool) -> Self {
+    fn new(settings: UserSettings, initial_ignore_immutable: bool, enable_askpass: bool) -> Self {
         Self {
             windows: Arc::new(Mutex::new(HashMap::new())),
             settings,
             initial_ignore_immutable,
+            enable_askpass,
         }
     }
 }
@@ -197,7 +199,11 @@ pub fn run_gui(options: super::RunOptions) -> Result<()> {
             undo_operation,
         ])
         .menu(move |handle| menu::build_main(handle, &recent_workspaces))
-        .manage(AppState::new(options.settings, options.ignore_immutable))
+        .manage(AppState::new(
+            options.settings,
+            options.ignore_immutable,
+            options.enable_askpass,
+        ))
         .setup(move |app| {
             // after tauri initialises NSApplication, set the dock icon if we're running as CLI
             #[cfg(all(target_os = "macos", not(feature = "app")))]
@@ -780,6 +786,7 @@ pub fn try_create_window(app_handle: &AppHandle, workspace: Option<PathBuf>) -> 
     let (sender, receiver) = channel();
 
     let initial_ignore_immutable = app_state.initial_ignore_immutable;
+    let enable_askpass = app_state.enable_askpass;
     let handle = window.as_ref().window();
     let window_worker = thread::spawn(move || {
         async_runtime::block_on(worker_thread(
@@ -788,6 +795,7 @@ pub fn try_create_window(app_handle: &AppHandle, workspace: Option<PathBuf>) -> 
             workspace,
             settings,
             initial_ignore_immutable,
+            enable_askpass,
         ))
     });
 
@@ -858,6 +866,7 @@ async fn worker_thread(
     workspace: Option<PathBuf>,
     settings: UserSettings,
     ignore_immutable: bool,
+    enable_askpass: bool,
 ) {
     log::info!("Worker started.");
 
@@ -868,6 +877,7 @@ async fn worker_thread(
         workspace.clone(),
         settings.clone(),
         ignore_immutable,
+        enable_askpass,
     )
     .handle_events(&rx)
     .await

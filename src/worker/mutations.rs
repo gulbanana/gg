@@ -34,7 +34,6 @@ use jj_lib::{
 };
 use tokio::io::AsyncReadExt;
 
-use crate::git_util::AuthContext;
 use crate::messages::{
     AbandonRevisions, AdoptRevision, BackoutRevisions, CheckoutRevision, CopyChanges, CopyHunk,
     CreateRef, CreateRevision, CreateRevisionBetween, DeleteRef, DescribeRevision,
@@ -49,8 +48,11 @@ use jj_cli::{
     ui::Ui,
 };
 
-use super::Mutation;
-use super::gui_util::{WorkspaceSession, get_git_remote_names};
+use super::{
+    Mutation,
+    git_util::AuthContext,
+    gui_util::{WorkspaceSession, get_git_remote_names},
+};
 
 macro_rules! precondition {
     ($($args:tt)*) => {
@@ -1825,18 +1827,22 @@ impl Mutation for GitPush {
         for (remote_name, branch_updates) in remote_bookmark_updates.into_iter() {
             let targets = GitBranchPushTargets { branch_updates };
 
-            let result = auth_ctx.with_callbacks(Some(event_sink.clone()), |cb, env| {
-                let mut subprocess_options = subprocess_options.clone();
-                subprocess_options.environment = env;
+            let result = auth_ctx.with_callbacks(
+                Some(event_sink.clone()),
+                ws.session.enable_askpass,
+                |cb, env| {
+                    let mut subprocess_options = subprocess_options.clone();
+                    subprocess_options.environment = env;
 
-                git::push_branches(
-                    tx.repo_mut(),
-                    subprocess_options,
-                    RemoteName::new(remote_name),
-                    &targets,
-                    cb,
-                )
-            });
+                    git::push_branches(
+                        tx.repo_mut(),
+                        subprocess_options,
+                        RemoteName::new(remote_name),
+                        &targets,
+                        cb,
+                    )
+                },
+            );
 
             match result {
                 Err(err) => return Ok(auth_ctx.into_result(err.into())),
@@ -1965,21 +1971,25 @@ impl Mutation for GitFetch {
                 },
             )?;
 
-            let result = auth_ctx.with_callbacks(Some(progress_sender.clone()), |cb, env| {
-                let mut subprocess_options = git_settings.to_subprocess_options();
-                subprocess_options.environment = env;
+            let result = auth_ctx.with_callbacks(
+                Some(progress_sender.clone()),
+                ws.session.enable_askpass,
+                |cb, env| {
+                    let mut subprocess_options = git_settings.to_subprocess_options();
+                    subprocess_options.environment = env;
 
-                let mut fetcher =
-                    git::GitFetch::new(tx.repo_mut(), subprocess_options, &import_options)?;
+                    let mut fetcher =
+                        git::GitFetch::new(tx.repo_mut(), subprocess_options, &import_options)?;
 
-                fetcher
-                    .fetch(RemoteName::new(remote_name), refspecs, cb, None, None)
-                    .context("failed to fetch")?;
+                    fetcher
+                        .fetch(RemoteName::new(remote_name), refspecs, cb, None, None)
+                        .context("failed to fetch")?;
 
-                fetcher.import_refs().context("failed to import refs")?;
+                    fetcher.import_refs().context("failed to import refs")?;
 
-                Ok(())
-            });
+                    Ok(())
+                },
+            );
 
             if let Err(err) = result {
                 return Ok(auth_ctx.into_result(err));
