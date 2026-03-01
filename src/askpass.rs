@@ -8,7 +8,7 @@
 //! Flow:
 //! 1. Worker operations spin up a named-pipe/unix-socket listener and set env
 //!    vars so that git/ssh will invoke the current binary as the askpass program.
-//! 2. Git spawns `gg` (or your binary) with the prompt as argv[1]. [`run_askpass`]
+//! 2. Git spawns `gg` (or your binary) with the prompt as `argv[1]``. [`run_askpass`]
 //!    detects `GG_ASKPASS_SOCKET`, enters client mode, and forwards the prompt via IPC.
 //! 3. The server replies `OK:<credential>` or `NO`, and the client prints to stdout
 //!    (which git reads) or exits non-zero.
