@@ -3,8 +3,8 @@ mod session;
 
 use anyhow::Result;
 use jj_lib::{
-    backend::TreeValue, commit::Commit, repo::Repo as _, repo_path::RepoPath,
-    revset::RevsetIteratorExt,
+    backend::TreeValue, commit::Commit, ref_name::WorkspaceName, repo::Repo as _,
+    repo_path::RepoPath, revset::RevsetIteratorExt,
 };
 use std::{
     fs::{self, File},
@@ -374,6 +374,178 @@ async fn snapshot_respects_xdg_gitignore_internal() -> Result<()> {
 
     assert!(tracked.is_resolved() && tracked.first().as_ref().is_some());
     assert!(ignored.is_absent());
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn add_workspace_creates_new_workspace() -> Result<()> {
+    let repo = mkrepo();
+
+    let mut session = WorkerSession::default();
+    let mut ws = session.load_workspace(repo.path())?;
+    let original_wc = ws.wc_id().clone();
+
+    let new_ws_path = repo.path().join("second-workspace");
+    ws.add_workspace("second".to_owned(), new_ws_path.clone())
+        .await?;
+
+    // new workspace is registered in the view
+    assert!(ws.view().get_wc_commit_id(WorkspaceName::new("second")).is_some());
+
+    // new workspace has a .jj directory
+    assert!(new_ws_path.join(".jj").exists());
+
+    // original workspace's WC didn't change identity
+    assert_eq!(&original_wc, ws.wc_id());
+
+    // new workspace's WC commit is different from the original
+    let new_wc_id = ws.view().get_wc_commit_id(WorkspaceName::new("second")).unwrap();
+    assert_ne!(new_wc_id, ws.wc_id());
+
+    // new WC commit has the same parents as the original
+    let original_parents: Vec<_> = ws
+        .get_commit(ws.wc_id())?
+        .parents()
+        .collect::<Result<Vec<_>, _>>()?;
+    let new_parents: Vec<_> = ws
+        .get_commit(new_wc_id)?
+        .parents()
+        .collect::<Result<Vec<_>, _>>()?;
+    assert_eq!(
+        original_parents
+            .iter()
+            .map(|c| c.id())
+            .collect::<Vec<_>>(),
+        new_parents.iter().map(|c| c.id()).collect::<Vec<_>>()
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn add_workspace_rejects_duplicate_name() -> Result<()> {
+    let repo = mkrepo();
+
+    let mut session = WorkerSession::default();
+    let mut ws = session.load_workspace(repo.path())?;
+
+    let new_ws_path = repo.path().join("second-workspace");
+    ws.add_workspace("second".to_owned(), new_ws_path).await?;
+
+    let err = ws
+        .add_workspace("second".to_owned(), repo.path().join("third"))
+        .await
+        .unwrap_err();
+    assert!(
+        err.to_string().contains("already exists"),
+        "unexpected error: {err}"
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn add_workspace_rejects_empty_name() -> Result<()> {
+    let repo = mkrepo();
+
+    let mut session = WorkerSession::default();
+    let mut ws = session.load_workspace(repo.path())?;
+
+    let err = ws
+        .add_workspace("".to_owned(), repo.path().join("empty-name"))
+        .await
+        .unwrap_err();
+    assert!(
+        err.to_string().contains("cannot be empty"),
+        "unexpected error: {err}"
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn add_workspace_rejects_nonempty_destination() -> Result<()> {
+    let repo = mkrepo();
+
+    let mut session = WorkerSession::default();
+    let mut ws = session.load_workspace(repo.path())?;
+
+    let nonempty = repo.path().join("nonempty");
+    fs::create_dir(&nonempty)?;
+    fs::write(nonempty.join("file.txt"), "content")?;
+
+    let err = ws
+        .add_workspace("second".to_owned(), nonempty)
+        .await
+        .unwrap_err();
+    assert!(
+        err.to_string().contains("not an empty directory"),
+        "unexpected error: {err}"
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn forget_workspace_removes_workspace() -> Result<()> {
+    let repo = mkrepo();
+
+    let mut session = WorkerSession::default();
+    let mut ws = session.load_workspace(repo.path())?;
+
+    // add a workspace, then forget it
+    let new_ws_path = repo.path().join("to-forget");
+    ws.add_workspace("to-forget".to_owned(), new_ws_path.clone())
+        .await?;
+    assert!(ws.view().get_wc_commit_id(WorkspaceName::new("to-forget")).is_some());
+
+    ws.forget_workspace("to-forget".to_owned()).await?;
+
+    // workspace is no longer in the view
+    assert!(ws.view().get_wc_commit_id(WorkspaceName::new("to-forget")).is_none());
+
+    // directory is NOT deleted (matches jj behavior)
+    assert!(new_ws_path.exists());
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn forget_workspace_rejects_current() -> Result<()> {
+    let repo = mkrepo();
+
+    let mut session = WorkerSession::default();
+    let mut ws = session.load_workspace(repo.path())?;
+    let current_name = ws.name().as_str().to_owned();
+
+    let err = ws
+        .forget_workspace(current_name)
+        .await
+        .unwrap_err();
+    assert!(
+        err.to_string().contains("cannot forget the current"),
+        "unexpected error: {err}"
+    );
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn forget_workspace_rejects_nonexistent() -> Result<()> {
+    let repo = mkrepo();
+
+    let mut session = WorkerSession::default();
+    let mut ws = session.load_workspace(repo.path())?;
+
+    let err = ws
+        .forget_workspace("nonexistent".to_owned())
+        .await
+        .unwrap_err();
+    assert!(
+        err.to_string().contains("not found"),
+        "unexpected error: {err}"
+    );
 
     Ok(())
 }

@@ -33,7 +33,7 @@ use jj_lib::{
     object_id::ObjectId,
     op_heads_store,
     operation::Operation,
-    ref_name::WorkspaceName,
+    ref_name::{WorkspaceName, WorkspaceNameBuf},
     repo::{ReadonlyRepo, Repo, RepoLoaderError, StoreFactories},
     repo_path::{RepoPath, RepoPathUiConverter},
     revset::{
@@ -41,11 +41,13 @@ use jj_lib::{
         RevsetExtensions, RevsetIteratorExt, RevsetParseContext, RevsetResolutionError,
         RevsetWorkspaceContext, SymbolResolverExtension, UserRevsetExpression,
     },
+    rewrite,
     settings::{HumanByteSize, UserSettings},
     transaction::Transaction,
     view::View,
     working_copy::{CheckoutStats, SnapshotOptions, WorkingCopyFreshness},
     workspace::{self, DefaultWorkspaceLoaderFactory, Workspace, WorkspaceLoaderFactory},
+    workspace_store::{SimpleWorkspaceStore, WorkspaceStore as _},
 };
 use thiserror::Error;
 
@@ -161,12 +163,97 @@ impl WorkerSession {
 }
 
 impl WorkspaceSession<'_> {
-    pub(crate) fn name(&self) -> &WorkspaceName {
+    pub fn name(&self) -> &WorkspaceName {
         self.workspace.workspace_name()
     }
 
-    pub(crate) fn wc_id(&self) -> &CommitId {
+    pub fn wc_id(&self) -> &CommitId {
         &self.operation.wc_id
+    }
+
+    pub async fn add_workspace(&mut self, name: String, path: PathBuf) -> Result<()> {
+        let workspace_name: WorkspaceNameBuf = name.into();
+
+        anyhow::ensure!(
+            !workspace_name.as_str().is_empty(),
+            "workspace name cannot be empty"
+        );
+        anyhow::ensure!(
+            self.view().get_wc_commit_id(&workspace_name).is_none(),
+            "workspace '{}' already exists",
+            workspace_name.as_symbol()
+        );
+        if path.exists() {
+            anyhow::ensure!(
+                file_util::is_empty_dir(&path)?,
+                "destination path exists and is not an empty directory"
+            );
+        } else {
+            std::fs::create_dir(&path)
+                .with_context(|| format!("failed to create directory {}", path.display()))?;
+        }
+
+        // snapshot current workspace before creating the new one
+        self.import_and_snapshot(true, false).await?;
+
+        let (mut new_workspace, repo) = Workspace::init_workspace_with_existing_repo(
+            &path,
+            self.workspace.repo_path(),
+            &self.operation.repo,
+            &*workspace::default_working_copy_factory(),
+            workspace_name.clone(),
+        )?;
+
+        // set up the real WC commit for the new workspace
+        let mut tx = repo.start_transaction();
+
+        let wc_commit = tx.repo().store().get_commit(self.wc_id())?;
+        let parents: Vec<_> = wc_commit.parents().collect::<Result<_, _>>()?;
+        let parent_ids: Vec<_> = parents.iter().map(|c| c.id().clone()).collect();
+        let tree = rewrite::merge_commit_trees(tx.repo(), &parents).await?;
+        let new_wc_commit = tx.repo_mut().new_commit(parent_ids, tree).write()?;
+        tx.repo_mut().edit(workspace_name.clone(), &new_wc_commit)?;
+
+        tx.repo_mut().rebase_descendants()?;
+        if self.is_colocated {
+            git::export_refs(tx.repo_mut())?;
+        }
+        let repo = tx.commit(format!(
+            "create initial working-copy commit in workspace '{}'",
+            workspace_name.as_symbol()
+        ))?;
+
+        new_workspace.check_out(repo.op_id().clone(), None, &new_wc_commit)?;
+        self.operation = OperationData::new(self.name(), &self.data, repo);
+
+        Ok(())
+    }
+
+    pub async fn forget_workspace(&mut self, name: String) -> Result<()> {
+        let workspace_name: WorkspaceNameBuf = name.into();
+
+        anyhow::ensure!(
+            self.view().get_wc_commit_id(&workspace_name).is_some(),
+            "workspace '{}' not found",
+            workspace_name.as_symbol()
+        );
+        anyhow::ensure!(
+            *workspace_name != *self.name(),
+            "cannot forget the current workspace"
+        );
+
+        let mut tx = self.start_transaction().await?;
+        tx.repo_mut().remove_wc_commit(&workspace_name)?;
+
+        let workspace_store = SimpleWorkspaceStore::load(self.workspace.repo_path())?;
+        workspace_store.forget(&[&*workspace_name])?;
+
+        self.finish_transaction(
+            tx,
+            format!("forget workspace '{}'", workspace_name.as_symbol()),
+        )?;
+
+        Ok(())
     }
 
     pub(crate) fn sink(&self) -> Arc<dyn super::EventSink> {
