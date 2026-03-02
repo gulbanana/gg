@@ -1,0 +1,682 @@
+mod change;
+mod r#ref;
+mod revision;
+
+use std::collections::HashMap;
+use std::sync::Arc;
+
+use anyhow::{Context, Error, Result};
+use async_trait::async_trait;
+use itertools::Itertools;
+use jj_cli::{
+    git_util::load_git_import_options,
+    merge_tools::{self, ConflictResolveError, ExternalMergeTool, MergeEditor},
+    ui::Ui,
+};
+use jj_lib::{
+    backend::TreeValue,
+    conflicts::{self, ConflictMarkerStyle, ConflictMaterializeOptions, MaterializedTreeValue},
+    files::FileMergeHunkLevel,
+    git::{
+        self, GitBranchPushTargets, GitFetchRefExpression, GitSettings, GitSubprocessOptions,
+        REMOTE_NAME_FOR_LOCAL_GIT_REPO,
+    },
+    merge::SameChange,
+    merged_tree::MergedTree,
+    object_id::ObjectId as ObjectIdTrait,
+    op_walk,
+    ref_name::{GitRefNameBuf, RefNameBuf, RemoteName, RemoteNameBuf, RemoteRefSymbol},
+    refs::{self, BookmarkPushAction, BookmarkPushUpdate, LocalAndRemoteRef},
+    repo::Repo,
+    repo_path::RepoPath,
+    revset::{self, RevsetIteratorExt},
+    rewrite::{self},
+    store::Store,
+    str_util::StringExpression,
+    tree_merge::MergeOptions,
+};
+use tokio::io::AsyncReadExt;
+
+use super::{
+    Mutation,
+    git_util::{AuthContext, get_git_remote_names},
+    gui_util::WorkspaceSession,
+};
+
+use crate::messages::mutations::{
+    ExternalDiff, ExternalResolve, GitFetch, GitPush, GitRefspec, MutationOptions, MutationResult,
+    UndoOperation,
+};
+
+macro_rules! precondition {
+    ($($args:tt)*) => {
+        return Ok(MutationResult::PreconditionError { message: format!($($args)*) })
+    }
+}
+
+#[async_trait(?Send)]
+impl Mutation for ExternalDiff {
+    async fn execute(
+        self: Box<Self>,
+        ws: &mut WorkspaceSession,
+        _options: &MutationOptions,
+    ) -> Result<MutationResult> {
+        let commit = ws.resolve_change_id(&self.id)?;
+        let parents: Vec<_> = commit.parents().collect::<Result<_, _>>()?;
+        let from_tree = rewrite::merge_commit_trees(ws.repo(), &parents).await?;
+        let to_tree = commit.tree();
+
+        let tool_args: jj_cli::config::CommandNameAndArgs =
+            ws.data.workspace_settings.get("ui.diff-formatter")?;
+        let tool = if let Some(name) = tool_args.as_str() {
+            merge_tools::get_external_tool_config(&ws.data.workspace_settings, name)?
+                .unwrap_or_else(|| ExternalMergeTool::with_program(name))
+        } else {
+            ExternalMergeTool::with_diff_args(&tool_args)
+        };
+
+        let repo_path = RepoPath::from_internal_string(&self.path.repo_path)?;
+        let store = ws.repo().store().clone();
+        let left_content = read_file_content(&store, &from_tree, repo_path).await?;
+        let right_content = read_file_content(&store, &to_tree, repo_path).await?;
+        let relative_path = repo_path.to_fs_path_unchecked(std::path::Path::new(""));
+
+        std::thread::spawn(move || {
+            let run = || -> Result<()> {
+                let temp_dir = tempfile::Builder::new().prefix("jj-diff-").tempdir()?;
+
+                let left_dir = temp_dir.path().join("left");
+                let right_dir = temp_dir.path().join("right");
+                let left_path = left_dir.join(&relative_path);
+                let right_path = right_dir.join(&relative_path);
+
+                if let Some(parent) = left_path.parent() {
+                    std::fs::create_dir_all(parent)?;
+                }
+                if let Some(parent) = right_path.parent() {
+                    std::fs::create_dir_all(parent)?;
+                }
+                std::fs::write(&left_path, &left_content)?;
+                std::fs::write(&right_path, &right_content)?;
+
+                let left_rel = left_path
+                    .strip_prefix(temp_dir.path())
+                    .unwrap()
+                    .to_str()
+                    .unwrap()
+                    .to_owned();
+                let right_rel = right_path
+                    .strip_prefix(temp_dir.path())
+                    .unwrap()
+                    .to_str()
+                    .unwrap()
+                    .to_owned();
+                let patterns = HashMap::from([
+                    ("left", left_rel),
+                    ("right", right_rel),
+                    ("width", "80".to_owned()),
+                ]);
+
+                let ui = Ui::null();
+                merge_tools::invoke_external_diff(
+                    &ui,
+                    &mut std::io::sink(),
+                    &tool,
+                    temp_dir.path(),
+                    &patterns,
+                )?;
+                Ok(())
+            };
+            if let Err(e) = run() {
+                log::error!("external diff tool: {e:#}");
+            }
+        });
+
+        Ok(MutationResult::Unchanged)
+    }
+}
+
+#[async_trait(?Send)]
+impl Mutation for ExternalResolve {
+    async fn execute(
+        self: Box<Self>,
+        ws: &mut WorkspaceSession,
+        _options: &MutationOptions,
+    ) -> Result<MutationResult> {
+        let commit = ws.resolve_change_id(&self.id)?;
+
+        if ws.check_immutable(vec![commit.id().clone()])? {
+            precondition!("Revision is immutable");
+        }
+
+        let tree = commit.tree();
+        let repo_path = RepoPath::from_internal_string(&self.path.repo_path)?;
+
+        let ui = Ui::null();
+        let merge_editor = MergeEditor::from_settings(
+            &ui,
+            &ws.data.workspace_settings,
+            ws.data.path_converter.clone(),
+            ConflictMarkerStyle::Git,
+        )
+        .context("failed to load merge editor config")?;
+
+        let (new_tree, _partial) = match merge_editor.edit_files(&ui, &tree, &[repo_path]) {
+            Ok(result) => result,
+            Err(ConflictResolveError::EmptyOrUnchanged) => {
+                return Ok(MutationResult::Unchanged);
+            }
+            Err(err) => return Err(err.into()),
+        };
+
+        if new_tree.tree_ids() == tree.tree_ids() {
+            return Ok(MutationResult::Unchanged);
+        }
+
+        let mut tx = ws.start_transaction().await?;
+        tx.repo_mut()
+            .rewrite_commit(&commit)
+            .set_tree(new_tree)
+            .write()?;
+
+        match ws.finish_transaction(tx, format!("resolve conflicts in {}", commit.id().hex()))? {
+            Some(new_status) => Ok(MutationResult::Updated {
+                new_status,
+                new_selection: None,
+            }),
+            None => Ok(MutationResult::Unchanged),
+        }
+    }
+}
+
+#[async_trait(?Send)]
+impl Mutation for GitFetch {
+    async fn execute(
+        self: Box<Self>,
+        ws: &mut WorkspaceSession,
+        _options: &MutationOptions,
+    ) -> Result<MutationResult> {
+        let mut tx = ws.start_transaction().await?;
+
+        let git_repo = match ws.git_repo() {
+            Some(git_repo) => git_repo,
+            None => precondition!("No git backend"),
+        };
+
+        let mut remote_patterns = Vec::new();
+        match &self.refspec {
+            GitRefspec::AllBookmarks { remote_name } => {
+                remote_patterns.push((remote_name.clone(), None));
+            }
+            GitRefspec::AllRemotes { bookmark_ref } => {
+                let bookmark_name = bookmark_ref.as_bookmark()?;
+                for remote_name in get_git_remote_names(&git_repo) {
+                    remote_patterns.push((remote_name, Some(bookmark_name.to_owned())));
+                }
+            }
+            GitRefspec::RemoteBookmark {
+                remote_name,
+                bookmark_ref,
+            } => {
+                let bookmark_name = bookmark_ref.as_bookmark()?;
+                remote_patterns.push((remote_name.clone(), Some(bookmark_name.to_owned())));
+            }
+        }
+
+        // accumulate input requirements
+        let mut auth_ctx = AuthContext::new(self.input);
+        let progress_sender = ws.sink();
+        let git_settings = GitSettings::from_settings(&ws.data.workspace_settings)?;
+        let remote_settings = ws.data.workspace_settings.remote_settings()?;
+        let import_options = load_git_import_options(&Ui::null(), &git_settings, &remote_settings)
+            .map_err(|e| Error::new(e.error))?;
+
+        for (remote_name, pattern) in &remote_patterns {
+            let bookmark_expr = pattern
+                .clone()
+                .map(StringExpression::exact)
+                .unwrap_or_else(StringExpression::all);
+            let refspecs = git::expand_fetch_refspecs(
+                RemoteName::new(remote_name),
+                GitFetchRefExpression {
+                    bookmark: bookmark_expr,
+                    tag: StringExpression::none(),
+                },
+            )?;
+
+            let result = auth_ctx.with_callbacks(
+                Some(progress_sender.clone()),
+                ws.session.enable_askpass,
+                |cb, env| {
+                    let mut subprocess_options = git_settings.to_subprocess_options();
+                    subprocess_options.environment = env;
+
+                    let mut fetcher =
+                        git::GitFetch::new(tx.repo_mut(), subprocess_options, &import_options)?;
+
+                    fetcher
+                        .fetch(RemoteName::new(remote_name), refspecs, cb, None, None)
+                        .context("failed to fetch")?;
+
+                    fetcher.import_refs().context("failed to import refs")?;
+
+                    Ok(())
+                },
+            );
+
+            if let Err(err) = result {
+                return Ok(auth_ctx.into_result(err));
+            }
+        }
+
+        match ws.finish_transaction(tx, "fetch from git remote(s)".to_string())? {
+            Some(new_status) => Ok(MutationResult::Updated {
+                new_status,
+                new_selection: None,
+            }),
+            None => Ok(MutationResult::Unchanged),
+        }
+    }
+}
+
+#[async_trait(?Send)]
+impl Mutation for GitPush {
+    async fn execute(
+        self: Box<Self>,
+        ws: &mut WorkspaceSession,
+        _options: &MutationOptions,
+    ) -> Result<MutationResult> {
+        let mut tx = ws.start_transaction().await?;
+
+        // determine bookmarks to push, recording the old and new commits
+        let mut remote_bookmark_updates: Vec<(&str, Vec<(RefNameBuf, refs::BookmarkPushUpdate)>)> =
+            Vec::new();
+        let remote_bookmark_refs: Vec<_> = match &self.refspec {
+            GitRefspec::AllBookmarks { remote_name } => {
+                let remote_name_ref = RemoteNameBuf::from(remote_name);
+                let mut bookmark_updates = Vec::new();
+                for (bookmark_name, targets) in ws.view().local_remote_bookmarks(&remote_name_ref) {
+                    if !targets.remote_ref.is_tracked() {
+                        continue;
+                    }
+
+                    match classify_bookmark_push(bookmark_name.as_str(), remote_name, targets) {
+                        Err(message) => return Ok(MutationResult::PreconditionError { message }),
+                        Ok(None) => (),
+                        Ok(Some(update)) => {
+                            bookmark_updates.push((bookmark_name.to_owned(), update))
+                        }
+                    }
+                }
+                remote_bookmark_updates.push((remote_name, bookmark_updates));
+
+                ws.view()
+                    .remote_bookmarks(&remote_name_ref)
+                    .map(|(name, remote_ref)| (name.to_owned(), remote_ref))
+                    .collect()
+            }
+            GitRefspec::AllRemotes { bookmark_ref } => {
+                let bookmark_name = bookmark_ref.as_bookmark()?;
+                let bookmark_name_ref = RefNameBuf::from(bookmark_name);
+
+                let mut remote_bookmark_refs = Vec::new();
+                for (remote_name, group) in ws
+                    .view()
+                    .all_remote_bookmarks()
+                    .filter_map(|(remote_ref_symbol, remote_ref)| {
+                        if remote_ref.is_tracked()
+                            && remote_ref_symbol.name == bookmark_name_ref
+                            && remote_ref_symbol.remote != REMOTE_NAME_FOR_LOCAL_GIT_REPO
+                        {
+                            Some((remote_ref_symbol.remote, remote_ref))
+                        } else {
+                            None
+                        }
+                    })
+                    .chunk_by(|(remote_name, _)| *remote_name)
+                    .into_iter()
+                {
+                    let mut bookmark_updates = Vec::new();
+                    for (_, remote_ref) in group {
+                        let targets = LocalAndRemoteRef {
+                            local_target: ws.view().get_local_bookmark(&bookmark_name_ref),
+                            remote_ref,
+                        };
+                        match classify_bookmark_push(bookmark_name, remote_name.as_str(), targets) {
+                            Err(message) => {
+                                return Ok(MutationResult::PreconditionError { message });
+                            }
+                            Ok(None) => (),
+                            Ok(Some(update)) => {
+                                bookmark_updates.push((RefNameBuf::from(bookmark_name), update))
+                            }
+                        }
+                        remote_bookmark_refs.push((RefNameBuf::from(bookmark_name), remote_ref));
+                    }
+                    remote_bookmark_updates.push((remote_name.as_str(), bookmark_updates));
+                }
+
+                remote_bookmark_refs
+            }
+            GitRefspec::RemoteBookmark {
+                remote_name,
+                bookmark_ref,
+            } => {
+                let bookmark_name = bookmark_ref.as_bookmark()?;
+                let bookmark_name_ref = RefNameBuf::from(bookmark_name);
+                let local_target = ws.view().get_local_bookmark(&bookmark_name_ref);
+                let remote_name_ref = RemoteNameBuf::from(remote_name);
+                let remote_ref_symbol = RemoteRefSymbol {
+                    name: &bookmark_name_ref,
+                    remote: &remote_name_ref,
+                };
+                let remote_ref = ws.view().get_remote_bookmark(remote_ref_symbol);
+
+                match classify_bookmark_push(
+                    bookmark_name,
+                    remote_name,
+                    LocalAndRemoteRef {
+                        local_target,
+                        remote_ref,
+                    },
+                ) {
+                    Err(message) => return Ok(MutationResult::PreconditionError { message }),
+                    Ok(None) => (),
+                    Ok(Some(update)) => {
+                        remote_bookmark_updates
+                            .push((remote_name, vec![(RefNameBuf::from(bookmark_name), update)]));
+                    }
+                }
+
+                vec![(
+                    RefNameBuf::from(bookmark_name),
+                    ws.view().get_remote_bookmark(remote_ref_symbol),
+                )]
+            }
+        };
+
+        // check for conflicts
+        let mut new_heads = vec![];
+        for (_, bookmark_updates) in &mut remote_bookmark_updates {
+            for (_, update) in bookmark_updates {
+                if let Some(new_target) = &update.new_target {
+                    new_heads.push(new_target.clone());
+                }
+            }
+        }
+
+        let mut old_heads = remote_bookmark_refs
+            .into_iter()
+            .flat_map(|(_, old_head)| old_head.target.added_ids())
+            .cloned()
+            .collect_vec();
+        if old_heads.is_empty() {
+            old_heads.push(ws.repo().store().root_commit_id().clone());
+        }
+
+        for commit in revset::walk_revs(ws.repo(), &new_heads, &old_heads)?
+            .iter()
+            .commits(ws.repo().store())
+        {
+            let commit = commit?;
+            let mut reasons = vec![];
+            if commit.description().is_empty() {
+                reasons.push("it has no description");
+            }
+            if commit.author().name.is_empty()
+                || commit.author().email.is_empty()
+                || commit.committer().name.is_empty()
+                || commit.committer().email.is_empty()
+            {
+                reasons.push("it has no author and/or committer set");
+            }
+            if commit.has_conflict() {
+                reasons.push("it has conflicts");
+            }
+            if !reasons.is_empty() {
+                precondition!(
+                    "Won't push revision {} since {}",
+                    ws.format_change_id(commit.id(), commit.change_id()).prefix,
+                    reasons.join(" and ")
+                );
+            }
+        }
+
+        // check if there are any actual updates to push
+        let has_updates = remote_bookmark_updates
+            .iter()
+            .any(|(_, updates)| !updates.is_empty());
+        if !has_updates {
+            match &self.refspec {
+                GitRefspec::AllBookmarks { remote_name } => {
+                    precondition!(
+                        "No tracked bookmarks to push to remote '{remote_name}'. Track or push a bookmark first."
+                    );
+                }
+                GitRefspec::AllRemotes { bookmark_ref } => {
+                    let bookmark_name = bookmark_ref.as_bookmark()?;
+                    precondition!("Bookmark '{bookmark_name}' is not tracked at any remote.");
+                }
+                GitRefspec::RemoteBookmark {
+                    remote_name,
+                    bookmark_ref,
+                } => {
+                    let bookmark_name = bookmark_ref.as_bookmark()?;
+                    precondition!(
+                        "Bookmark '{bookmark_name}' is not tracked at remote '{remote_name}'. Track it first."
+                    );
+                }
+            }
+        }
+
+        // accumulate input requirements
+        let mut auth_ctx = AuthContext::new(self.input);
+        let event_sink = ws.sink();
+        let subprocess_options = GitSubprocessOptions::from_settings(&ws.data.workspace_settings)?;
+
+        // push to each remote
+        for (remote_name, branch_updates) in remote_bookmark_updates.into_iter() {
+            let targets = GitBranchPushTargets { branch_updates };
+
+            let result = auth_ctx.with_callbacks(
+                Some(event_sink.clone()),
+                ws.session.enable_askpass,
+                |cb, env| {
+                    let mut subprocess_options = subprocess_options.clone();
+                    subprocess_options.environment = env;
+
+                    git::push_branches(
+                        tx.repo_mut(),
+                        subprocess_options,
+                        RemoteName::new(remote_name),
+                        &targets,
+                        cb,
+                    )
+                },
+            );
+
+            match result {
+                Err(err) => return Ok(auth_ctx.into_result(err.into())),
+                Ok(stats) if !stats.all_ok() => {
+                    let format_refs = |refs: &[(_, Option<String>)]| {
+                        refs.iter()
+                            .map(|(ref_name, reason): &(GitRefNameBuf, _)| match reason {
+                                Some(msg) if msg.as_str() != "stale info" => {
+                                    format!("{} (reason: {})", ref_name.as_str(), msg)
+                                }
+                                _ => ref_name.as_str().to_string(),
+                            })
+                            .join(", ")
+                    };
+
+                    let mut message = String::new();
+
+                    if !stats.rejected.is_empty() {
+                        message += &format!(
+                            "The following references unexpectedly moved on the remote: {}. Try fetching first.",
+                            format_refs(&stats.rejected)
+                        );
+                    }
+
+                    if !stats.remote_rejected.is_empty() {
+                        if !message.is_empty() {
+                            message += "\n\n";
+                        }
+                        message += &format!(
+                            "The remote rejected the following updates: {}. Check if you have permission to push.",
+                            format_refs(&stats.remote_rejected)
+                        );
+                    }
+
+                    return Ok(MutationResult::PreconditionError { message });
+                }
+                Ok(_) => (),
+            }
+        }
+
+        match ws.finish_transaction(
+            tx,
+            match &self.refspec {
+                GitRefspec::AllBookmarks { remote_name } => {
+                    format!("push all tracked bookmarks to git remote {}", remote_name)
+                }
+                GitRefspec::AllRemotes { bookmark_ref } => {
+                    format!(
+                        "push {} to all tracked git remotes",
+                        bookmark_ref.as_bookmark()?
+                    )
+                }
+                GitRefspec::RemoteBookmark {
+                    remote_name,
+                    bookmark_ref,
+                } => {
+                    format!(
+                        "push {} to git remote {}",
+                        bookmark_ref.as_bookmark()?,
+                        remote_name
+                    )
+                }
+            },
+        )? {
+            Some(new_status) => Ok(MutationResult::Updated {
+                new_status,
+                new_selection: None,
+            }),
+            None => Ok(MutationResult::Unchanged),
+        }
+    }
+}
+
+// this is another case where it would be nice if we could reuse jj-cli's error messages
+#[async_trait(?Send)]
+impl Mutation for UndoOperation {
+    async fn execute(
+        self: Box<Self>,
+        ws: &mut WorkspaceSession,
+        _options: &MutationOptions,
+    ) -> Result<MutationResult> {
+        let head_op = op_walk::resolve_op_with_repo(ws.repo(), "@")?; // XXX this should be behind an abstraction, maybe reused in snapshot
+        let mut parent_ops = head_op.parents();
+
+        let Some(parent_op) = parent_ops.next().transpose()? else {
+            precondition!("Cannot undo repo initialization");
+        };
+
+        if parent_ops.next().is_some() {
+            precondition!("Cannot undo a merge operation");
+        };
+
+        let mut tx = ws.start_transaction().await?;
+        let repo_loader = tx.base_repo().loader();
+        let head_repo = repo_loader.load_at(&head_op)?;
+        let parent_repo = repo_loader.load_at(&parent_op)?;
+        tx.repo_mut().merge(&head_repo, &parent_repo)?;
+        let restored_view = tx.repo().view().store_view().clone();
+        tx.repo_mut().set_view(restored_view);
+
+        match ws.finish_transaction(tx, format!("undo operation {}", head_op.id().hex()))? {
+            Some(new_status) => {
+                let working_copy = ws.get_commit(ws.wc_id())?;
+                let new_selection = Some(ws.format_header(&working_copy, None)?);
+                Ok(MutationResult::Updated {
+                    new_status,
+                    new_selection,
+                })
+            }
+            None => Ok(MutationResult::Unchanged),
+        }
+    }
+}
+
+async fn read_file_content(
+    store: &Arc<Store>,
+    tree: &MergedTree,
+    path: &RepoPath,
+) -> Result<Vec<u8>> {
+    let entry = tree.path_value(path)?;
+    match entry.into_resolved() {
+        Ok(Some(TreeValue::File { id, .. })) => {
+            let mut reader = store.read_file(path, &id).await?;
+            let mut content = Vec::new();
+            reader.read_to_end(&mut content).await?;
+            Ok(content)
+        }
+        Ok(Some(_)) => Ok(Vec::new()),
+        Ok(None) => Ok(Vec::new()),
+        Err(_) => {
+            // handle conflicts by materializing them
+            match conflicts::materialize_tree_value(
+                store,
+                path,
+                tree.path_value(path)?,
+                tree.labels(),
+            )
+            .await?
+            {
+                MaterializedTreeValue::FileConflict(file) => {
+                    let mut content = Vec::new();
+                    conflicts::materialize_merge_result(
+                        &file.contents,
+                        &file.labels,
+                        &mut content,
+                        &ConflictMaterializeOptions {
+                            marker_style: ConflictMarkerStyle::Git,
+                            marker_len: None,
+                            merge: MergeOptions {
+                                hunk_level: FileMergeHunkLevel::Line,
+                                same_change: SameChange::Accept,
+                            },
+                        },
+                    )?;
+                    Ok(content)
+                }
+                _ => Ok(Vec::new()),
+            }
+        }
+    }
+}
+
+fn classify_bookmark_push(
+    bookmark_name: &str,
+    remote_name: &str,
+    targets: LocalAndRemoteRef,
+) -> Result<Option<BookmarkPushUpdate>, String> {
+    let push_action = refs::classify_bookmark_push_action(targets);
+    match push_action {
+        BookmarkPushAction::AlreadyMatches => Ok(None),
+        BookmarkPushAction::Update(update) => Ok(Some(update)),
+        BookmarkPushAction::LocalConflicted => {
+            Err(format!("Bookmark {} is conflicted.", bookmark_name))
+        }
+        BookmarkPushAction::RemoteConflicted => Err(format!(
+            "Bookmark {}@{} is conflicted. Try fetching first.",
+            bookmark_name, remote_name
+        )),
+        BookmarkPushAction::RemoteUntracked => Err(format!(
+            "Non-tracking remote bookmark {}@{} exists. Try tracking it first.",
+            bookmark_name, remote_name
+        )),
+    }
+}
+
+pub(crate) use precondition;
