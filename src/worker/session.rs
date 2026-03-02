@@ -163,7 +163,7 @@ impl Session for WorkerSession {
                     )?;
                 }
                 Ok(SessionEvent::InitWorkspace { tx, wd, colocated }) => {
-                    tx.send(self.init_workspace(&wd, colocated))?;
+                    tx.send(self.init_repository(&wd, colocated))?;
                 }
                 Ok(SessionEvent::CloneWorkspace {
                     tx,
@@ -171,7 +171,7 @@ impl Session for WorkerSession {
                     wd,
                     colocated,
                 }) => {
-                    tx.send(self.clone_workspace(&source_url, &wd, colocated))?;
+                    tx.send(self.clone_repository(&source_url, &wd, colocated))?;
                 }
                 Ok(SessionEvent::OpenWorkspace { mut tx, mut wd }) => loop {
                     let resolved_wd = match wd.clone().or(latest_wd) {
@@ -250,7 +250,7 @@ impl Session for WorkspaceSession<'_> {
                     return Ok(WorkspaceResult::Reopen(tx, cwd));
                 }
                 SessionEvent::InitWorkspace { tx, wd, colocated } => {
-                    tx.send(self.session.init_workspace(&wd, colocated))?;
+                    tx.send(self.session.init_repository(&wd, colocated))?;
                 }
                 SessionEvent::CloneWorkspace {
                     tx,
@@ -258,7 +258,7 @@ impl Session for WorkspaceSession<'_> {
                     wd,
                     colocated,
                 } => {
-                    tx.send(self.session.clone_workspace(&source_url, &wd, colocated))?;
+                    tx.send(self.session.clone_repository(&source_url, &wd, colocated))?;
                 }
                 SessionEvent::QueryRevisions { tx, set } => {
                     tx.send(queries::query_revisions(&self, set).await)?

@@ -50,7 +50,7 @@ use jj_lib::{
 };
 use thiserror::Error;
 
-use super::WorkerSession;
+use super::{WorkerSession, git_util::get_git_remote_names};
 
 use crate::{
     config::{GGSettings, read_config},
@@ -65,10 +65,10 @@ pub struct WorkspaceSession<'a> {
     pub workspace: Workspace,
     pub data: WorkspaceData,
     is_large: bool, // this is based on the head operation and thus derived from the rest of the data
+    is_colocated: bool, // theoretically operation-specific but we don't support switching horses
 
     // operation-specific data, containing a repo view and derived extras
-    operation: SessionOperation,
-    is_colocated: bool,
+    operation: OperationData,
 }
 
 pub struct WorkspaceData {
@@ -80,7 +80,7 @@ pub struct WorkspaceData {
 }
 
 /// state derived from a specific operation
-pub struct SessionOperation {
+pub struct OperationData {
     pub repo: Arc<ReadonlyRepo>,
     pub wc_id: CommitId,
     ref_index: OnceCell<Rc<RefIndex>>,
@@ -105,7 +105,7 @@ impl From<BackendError> for RevsetError {
 }
 
 impl WorkerSession {
-    pub fn load_directory(&mut self, cwd: &Path) -> Result<WorkspaceSession<'_>> {
+    pub(crate) fn load_directory(&mut self, cwd: &Path) -> Result<WorkspaceSession<'_>> {
         let factory = DefaultWorkspaceLoaderFactory;
         let loader = factory.create(find_workspace_dir(cwd))?;
 
@@ -149,8 +149,8 @@ impl WorkerSession {
             workspace,
             data,
             is_large,
-            operation,
             is_colocated,
+            operation,
         })
     }
 }
@@ -793,7 +793,7 @@ impl WorkspaceSession<'_> {
             git::export_refs(tx.repo_mut())?;
         }
 
-        self.operation = SessionOperation::new(self.name(), &self.data, tx.commit(description)?);
+        self.operation = OperationData::new(self.name(), &self.data, tx.commit(description)?);
 
         // XXX do this only if loaded at head, which is currently always true, but won't be once we have undo-redo
         if let Some(new_commit) = &maybe_new_wc_commit {
@@ -945,7 +945,7 @@ impl WorkspaceSession<'_> {
                 git::export_refs(mut_repo)?;
             }
 
-            self.operation = SessionOperation::new(
+            self.operation = OperationData::new(
                 &workspace_name,
                 &self.data,
                 tx.commit("snapshot working copy")?,
@@ -1007,7 +1007,7 @@ impl WorkspaceSession<'_> {
             tx.repo_mut().rebase_descendants()?;
 
             self.operation =
-                SessionOperation::new(&workspace_name, &self.data, tx.commit("import git head")?);
+                OperationData::new(&workspace_name, &self.data, tx.commit("import git head")?);
 
             locked_ws.finish(self.operation.repo.op_id().clone())?;
         } else {
@@ -1178,12 +1178,8 @@ impl WorkspaceData {
     }
 }
 
-impl SessionOperation {
-    pub fn new(
-        id: &WorkspaceName,
-        data: &WorkspaceData,
-        repo: Arc<ReadonlyRepo>,
-    ) -> SessionOperation {
+impl OperationData {
+    pub fn new(id: &WorkspaceName, data: &WorkspaceData, repo: Arc<ReadonlyRepo>) -> OperationData {
         let wc_id = repo
             .view()
             .get_wc_commit_id(id)
@@ -1208,7 +1204,7 @@ impl SessionOperation {
                 RevsetExpression::all()
             });
 
-        SessionOperation {
+        OperationData {
             repo,
             wc_id,
             ref_index: OnceCell::default(),
@@ -1389,7 +1385,7 @@ fn has_external_tool(settings: &UserSettings, config_key: &'static str) -> bool 
 /* misc helpers that should be better organised */
 /************************************************/
 
-fn load_at_head(workspace: &Workspace, data: &WorkspaceData) -> Result<SessionOperation> {
+fn load_at_head(workspace: &Workspace, data: &WorkspaceData) -> Result<OperationData> {
     let loader = workspace.repo_loader();
 
     let op = op_heads_store::resolve_op_heads(
@@ -1417,24 +1413,5 @@ fn load_at_head(workspace: &Workspace, data: &WorkspaceData) -> Result<SessionOp
         .load_at(&op)
         .context("load op head")?;
 
-    Ok(SessionOperation::new(
-        workspace.workspace_name(),
-        data,
-        repo,
-    ))
-}
-
-/// Lists only fetchable remotes
-pub fn get_git_remote_names(git_repo: &gix::Repository) -> Vec<String> {
-    git_repo
-        .remote_names()
-        .into_iter()
-        .filter(|name| {
-            matches!(
-                git_repo.try_find_remote(&**name),
-                Some(Ok(remote)) if remote.url(gix::remote::Direction::Fetch).is_some()
-            )
-        })
-        .map(|remote| remote.to_string())
-        .collect()
+    Ok(OperationData::new(workspace.workspace_name(), data, repo))
 }

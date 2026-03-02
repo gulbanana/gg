@@ -141,6 +141,21 @@ impl AuthContext {
     }
 }
 
+/// Lists only fetchable remotes
+pub fn get_git_remote_names(git_repo: &gix::Repository) -> Vec<String> {
+    git_repo
+        .remote_names()
+        .into_iter()
+        .filter(|name| {
+            matches!(
+                git_repo.try_find_remote(&**name),
+                Some(Ok(remote)) if remote.url(gix::remote::Direction::Fetch).is_some()
+            )
+        })
+        .map(|remote| remote.to_string())
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use std::io::{BufRead, BufReader, Write};

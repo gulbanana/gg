@@ -177,7 +177,7 @@ impl WorkerSession {
     /// new repo shares it; otherwise a fresh Git backend is created (either
     /// colocated or internal depending on the flag). Returns the canonicalized
     /// path on success.
-    fn init_workspace(&self, location: &PathBuf, colocated: bool) -> Result<PathBuf> {
+    fn init_repository(&self, location: &PathBuf, colocated: bool) -> Result<PathBuf> {
         // precondition: not already a jj repo
         let jj_path = location.join(".jj");
         if jj_path.exists() {
@@ -209,7 +209,7 @@ impl WorkerSession {
     /// `source_url` (added as the `origin` remote), and check out the default
     /// branch. Progress events are pushed through the session's [`EventSink`].
     /// Returns the canonicalized path on success.
-    fn clone_workspace(
+    fn clone_repository(
         &self,
         source_url: &str,
         location: &PathBuf,

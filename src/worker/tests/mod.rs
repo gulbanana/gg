@@ -321,7 +321,7 @@ async fn snapshot_respects_xdg_gitignore_colocated() -> Result<()> {
 
     let workspace_dir = tempdir()?;
     let mut session = WorkerSession::default();
-    session.init_workspace(&workspace_dir.path().to_owned(), true)?;
+    session.init_repository(&workspace_dir.path().to_owned(), true)?;
     let mut ws = session.load_directory(workspace_dir.path())?;
 
     fs::write(workspace_dir.path().join("tracked.txt"), "hello")?;
@@ -357,7 +357,7 @@ async fn snapshot_respects_xdg_gitignore_internal() -> Result<()> {
 
     let workspace_dir = tempdir()?;
     let mut session = WorkerSession::default();
-    session.init_workspace(&workspace_dir.path().to_owned(), false)?;
+    session.init_repository(&workspace_dir.path().to_owned(), false)?;
     let mut ws = session.load_directory(workspace_dir.path())?;
 
     fs::write(workspace_dir.path().join("tracked.txt"), "hello")?;

@@ -44,7 +44,7 @@ use crate::messages::{
 #[cfg(test)]
 use crate::messages::{RevHeader, RevId};
 
-use super::{WorkspaceSession, gui_util::get_git_remote_names};
+use super::{WorkspaceSession, git_util::get_git_remote_names};
 
 struct LogStem {
     source: LogCoordinates,

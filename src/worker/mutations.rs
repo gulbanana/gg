@@ -53,8 +53,8 @@ use jj_cli::{
 
 use super::{
     Mutation,
-    git_util::AuthContext,
-    gui_util::{WorkspaceSession, get_git_remote_names},
+    git_util::{AuthContext, get_git_remote_names},
+    gui_util::WorkspaceSession,
 };
 
 macro_rules! precondition {
