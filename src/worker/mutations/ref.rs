@@ -501,7 +501,7 @@ mod tests {
     async fn create_bookmark() -> Result<()> {
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let mut ws = session.load_directory(repo.path())?;
+        let mut ws = session.load_workspace(repo.path())?;
 
         let result = CreateRef {
             id: revs::main_bookmark(),
@@ -527,7 +527,7 @@ mod tests {
     async fn create_bookmark_already_exists() -> Result<()> {
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let mut ws = session.load_directory(repo.path())?;
+        let mut ws = session.load_workspace(repo.path())?;
 
         let result = CreateRef {
             id: revs::working_copy(),
@@ -545,7 +545,7 @@ mod tests {
     async fn create_remote_bookmark_fails() -> Result<()> {
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let mut ws = session.load_directory(repo.path())?;
+        let mut ws = session.load_workspace(repo.path())?;
 
         let result = CreateRef {
             id: revs::working_copy(),
@@ -563,7 +563,7 @@ mod tests {
     async fn create_tag() -> Result<()> {
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let mut ws = session.load_directory(repo.path())?;
+        let mut ws = session.load_workspace(repo.path())?;
 
         let result = CreateRef {
             id: revs::main_bookmark(),
@@ -589,7 +589,7 @@ mod tests {
     async fn create_tag_already_exists() -> Result<()> {
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let mut ws = session.load_directory(repo.path())?;
+        let mut ws = session.load_workspace(repo.path())?;
 
         // create tag first
         CreateRef {
@@ -618,7 +618,7 @@ mod tests {
     async fn delete_bookmark() -> Result<()> {
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let mut ws = session.load_directory(repo.path())?;
+        let mut ws = session.load_workspace(repo.path())?;
 
         let result = DeleteRef {
             r#ref: local_bookmark("main"),
@@ -629,7 +629,12 @@ mod tests {
         assert_matches!(result, MutationResult::Updated { .. });
 
         let matcher = StringMatcher::Exact("main".to_string());
-        assert!(ws.view().local_bookmarks_matching(&matcher).next().is_none());
+        assert!(
+            ws.view()
+                .local_bookmarks_matching(&matcher)
+                .next()
+                .is_none()
+        );
 
         Ok(())
     }
@@ -638,7 +643,7 @@ mod tests {
     async fn delete_tag() -> Result<()> {
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let mut ws = session.load_directory(repo.path())?;
+        let mut ws = session.load_workspace(repo.path())?;
 
         // create then delete
         CreateRef {
@@ -670,7 +675,7 @@ mod tests {
 
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let mut ws = session.load_directory(repo.path())?;
+        let mut ws = session.load_workspace(repo.path())?;
 
         let result = MoveRef {
             r#ref: local_bookmark("main"),
@@ -697,7 +702,7 @@ mod tests {
     async fn move_nonexistent_bookmark() -> Result<()> {
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let mut ws = session.load_directory(repo.path())?;
+        let mut ws = session.load_workspace(repo.path())?;
 
         let result = MoveRef {
             r#ref: local_bookmark("does-not-exist"),
@@ -715,7 +720,7 @@ mod tests {
     async fn move_remote_bookmark_fails() -> Result<()> {
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let mut ws = session.load_directory(repo.path())?;
+        let mut ws = session.load_workspace(repo.path())?;
 
         let result = MoveRef {
             r#ref: remote_bookmark("main", "origin"),
@@ -735,7 +740,7 @@ mod tests {
 
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let mut ws = session.load_directory(repo.path())?;
+        let mut ws = session.load_workspace(repo.path())?;
 
         CreateRef {
             id: revs::main_bookmark(),
@@ -771,7 +776,7 @@ mod tests {
     async fn rename_bookmark() -> Result<()> {
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let mut ws = session.load_directory(repo.path())?;
+        let mut ws = session.load_workspace(repo.path())?;
 
         let result = RenameBookmark {
             r#ref: local_bookmark("main"),
@@ -783,10 +788,20 @@ mod tests {
         assert_matches!(result, MutationResult::Updated { .. });
 
         let old_matcher = StringMatcher::Exact("main".to_string());
-        assert!(ws.view().local_bookmarks_matching(&old_matcher).next().is_none());
+        assert!(
+            ws.view()
+                .local_bookmarks_matching(&old_matcher)
+                .next()
+                .is_none()
+        );
 
         let new_matcher = StringMatcher::Exact("trunk".to_string());
-        assert!(ws.view().local_bookmarks_matching(&new_matcher).next().is_some());
+        assert!(
+            ws.view()
+                .local_bookmarks_matching(&new_matcher)
+                .next()
+                .is_some()
+        );
 
         Ok(())
     }
@@ -795,7 +810,7 @@ mod tests {
     async fn rename_nonexistent_bookmark() -> Result<()> {
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let mut ws = session.load_directory(repo.path())?;
+        let mut ws = session.load_workspace(repo.path())?;
 
         let result = RenameBookmark {
             r#ref: local_bookmark("ghost"),
@@ -813,7 +828,7 @@ mod tests {
     async fn rename_bookmark_to_existing_name() -> Result<()> {
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let mut ws = session.load_directory(repo.path())?;
+        let mut ws = session.load_workspace(repo.path())?;
 
         // create a second bookmark so we can try renaming to it
         CreateRef {
@@ -841,13 +856,11 @@ mod tests {
     async fn track_tag_fails() -> Result<()> {
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let mut ws = session.load_directory(repo.path())?;
+        let mut ws = session.load_workspace(repo.path())?;
 
-        let result = TrackBookmark {
-            r#ref: tag("v1.0"),
-        }
-        .execute_unboxed(&mut ws)
-        .await?;
+        let result = TrackBookmark { r#ref: tag("v1.0") }
+            .execute_unboxed(&mut ws)
+            .await?;
 
         assert_matches!(result, MutationResult::PreconditionError { .. });
 
@@ -858,7 +871,7 @@ mod tests {
     async fn track_local_bookmark_fails() -> Result<()> {
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let mut ws = session.load_directory(repo.path())?;
+        let mut ws = session.load_workspace(repo.path())?;
 
         let result = TrackBookmark {
             r#ref: local_bookmark("main"),
@@ -877,13 +890,11 @@ mod tests {
     async fn untrack_tag_fails() -> Result<()> {
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let mut ws = session.load_directory(repo.path())?;
+        let mut ws = session.load_workspace(repo.path())?;
 
-        let result = UntrackBookmark {
-            r#ref: tag("v1.0"),
-        }
-        .execute_unboxed(&mut ws)
-        .await?;
+        let result = UntrackBookmark { r#ref: tag("v1.0") }
+            .execute_unboxed(&mut ws)
+            .await?;
 
         assert_matches!(result, MutationResult::PreconditionError { .. });
 
@@ -896,7 +907,7 @@ mod tests {
     async fn track_already_tracked_fails() -> Result<()> {
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let mut ws = session.load_directory(repo.path())?;
+        let mut ws = session.load_workspace(repo.path())?;
 
         // main@origin is tracked by default in the test repo
         let result = TrackBookmark {
@@ -914,7 +925,7 @@ mod tests {
     async fn untrack_then_track_round_trip() -> Result<()> {
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let mut ws = session.load_directory(repo.path())?;
+        let mut ws = session.load_workspace(repo.path())?;
 
         // untrack main@origin
         let result = UntrackBookmark {
@@ -939,7 +950,7 @@ mod tests {
     async fn untrack_not_tracked_fails() -> Result<()> {
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let mut ws = session.load_directory(repo.path())?;
+        let mut ws = session.load_workspace(repo.path())?;
 
         // untrack main@origin first
         UntrackBookmark {

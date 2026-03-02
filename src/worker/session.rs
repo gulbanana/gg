@@ -189,7 +189,7 @@ impl Session for WorkerSession {
                         },
                     };
 
-                    let mut ws = match self.load_directory(&resolved_wd) {
+                    let mut ws = match self.load_workspace(&resolved_wd) {
                         Ok(ws) => ws,
                         Err(err) => {
                             latest_wd = None;

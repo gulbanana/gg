@@ -43,7 +43,7 @@ use serde::Serialize;
 
 use crate::messages::mutations::{MutationOptions, MutationResult};
 use git_util::AuthContext;
-use gui_util::WorkspaceSession;
+pub use gui_util::WorkspaceSession;
 pub use session::{Session, SessionEvent};
 
 /// A repository-modifying operation (e.g. abandon, rebase, bookmark create).
@@ -116,9 +116,9 @@ impl<S: EventSink + ?Sized> EventSinkExt for S {}
 /// See the [crate-level docs](crate) for a usage overview.
 pub struct WorkerSession {
     /// Override the default log page size (mainly useful in tests).
-    pub force_log_page_size: Option<usize>,
+    pub(crate) force_log_page_size: Option<usize>,
     /// Tracks the most recently evaluated revset string for paging.
-    pub latest_query: Option<String>,
+    pub(crate) latest_query: Option<String>,
     /// Working directory to open when no explicit path is given.
     pub working_directory: Option<PathBuf>,
     /// Channel for pushing events to the frontend.
@@ -155,29 +155,13 @@ impl WorkerSession {
         }
     }
 
-    /// Resolve the effective working directory.
-    ///
-    /// Checks, in order: the explicit `working_directory` field, the `$OWD`
-    /// environment variable (set by AppImage), and finally `std::env::current_dir`.
-    fn get_cwd(&self) -> Result<PathBuf> {
-        self.working_directory
-            .as_ref()
-            .map(|cwd| Ok(fs::canonicalize(cwd.clone())?))
-            .or_else(|| match env::var("OWD") {
-                Ok(var) => Some(Ok(PathBuf::from(var))),
-                Err(VarError::NotPresent) => None,
-                Err(err) => Some(Err(anyhow!(err))),
-            })
-            .unwrap_or_else(|| env::current_dir().map_err(Error::new))
-    }
-
     /// Initialize a new Jujutsu repository at `location`.
     ///
     /// When `colocated` is `true` and a `.git/` directory already exists, the
     /// new repo shares it; otherwise a fresh Git backend is created (either
     /// colocated or internal depending on the flag). Returns the canonicalized
     /// path on success.
-    fn init_repository(&self, location: &PathBuf, colocated: bool) -> Result<PathBuf> {
+    pub fn init_repository(&self, location: &PathBuf, colocated: bool) -> Result<PathBuf> {
         // precondition: not already a jj repo
         let jj_path = location.join(".jj");
         if jj_path.exists() {
@@ -209,7 +193,7 @@ impl WorkerSession {
     /// `source_url` (added as the `origin` remote), and check out the default
     /// branch. Progress events are pushed through the session's [`EventSink`].
     /// Returns the canonicalized path on success.
-    fn clone_repository(
+    pub fn clone_repository(
         &self,
         source_url: &str,
         location: &PathBuf,
@@ -363,5 +347,21 @@ impl WorkerSession {
         }
 
         None
+    }
+
+    /// Resolve the effective working directory.
+    ///
+    /// Checks, in order: the explicit `working_directory` field, the `$OWD`
+    /// environment variable (set by AppImage), and finally `std::env::current_dir`.
+    fn get_cwd(&self) -> Result<PathBuf> {
+        self.working_directory
+            .as_ref()
+            .map(|cwd| Ok(fs::canonicalize(cwd.clone())?))
+            .or_else(|| match env::var("OWD") {
+                Ok(var) => Some(Ok(PathBuf::from(var))),
+                Err(VarError::NotPresent) => None,
+                Err(err) => Some(Err(anyhow!(err))),
+            })
+            .unwrap_or_else(|| env::current_dir().map_err(Error::new))
     }
 }

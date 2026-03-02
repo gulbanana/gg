@@ -1,16 +1,19 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use anyhow::{Context, Result, anyhow};
 use async_trait::async_trait;
 use indexmap::IndexMap;
 use itertools::Itertools;
 use jj_lib::{
-    backend::BackendError,
+    backend::{BackendError, CommitId},
     commit::{Commit, conflict_label_for_commits},
     merge::Merge,
     merged_tree::MergedTree,
     object_id::ObjectId as ObjectIdTrait,
+    repo::Repo,
+    revset::{RevsetExpression, RevsetIteratorExt},
     rewrite::{self, RebaseOptions, RebasedCommit},
+    transaction::Transaction,
 };
 
 use super::precondition;
@@ -473,7 +476,7 @@ impl Mutation for InsertRevisions {
         // detach external children of any commit in the range
         let oldest = targets.last().expect("non-empty targets");
         let orphan_to = oldest.parent_ids().to_vec();
-        let rebased_children = ws.disinherit_children(&mut tx, &targets, orphan_to).await?;
+        let rebased_children = disinherit_children(ws, &mut tx, &targets, orphan_to).await?;
 
         // update after, which may have been a descendant of the range
         let after_id = rebased_children
@@ -566,7 +569,7 @@ impl Mutation for MoveRevisions {
         // detach external children of any commit in the range
         let oldest = targets.last().expect("non-empty targets");
         let orphan_to = oldest.parent_ids().to_vec();
-        let rebased_children = ws.disinherit_children(&mut tx, &targets, orphan_to).await?;
+        let rebased_children = disinherit_children(ws, &mut tx, &targets, orphan_to).await?;
 
         // update parents, which may have been descendants of the targets
         let parents = ws.resolve_multiple_changes(self.parent_ids)?;
@@ -622,7 +625,7 @@ mod tests {
         let repo = mkrepo();
 
         let mut session = WorkerSession::default();
-        let mut ws = session.load_directory(repo.path())?;
+        let mut ws = session.load_workspace(repo.path())?;
 
         let page = queries::query_log(&ws, "all()", 100)?;
         assert_eq!(24, page.rows.len());
@@ -644,7 +647,7 @@ mod tests {
         let repo = mkrepo();
 
         let mut session = WorkerSession::default();
-        let mut ws = session.load_directory(repo.path())?;
+        let mut ws = session.load_workspace(repo.path())?;
 
         let abandoned_set = RevSet::sequence(revs::conflict_bookmark(), revs::resolve_conflict());
 
@@ -683,7 +686,7 @@ mod tests {
         let repo = mkrepo();
 
         let mut session = WorkerSession::default();
-        let mut ws = session.load_directory(repo.path())?;
+        let mut ws = session.load_workspace(repo.path())?;
 
         let page = queries::query_log(&ws, "@+", 1)?;
         assert_eq!(0, page.rows.len());
@@ -705,7 +708,7 @@ mod tests {
     async fn backout_revisions() -> Result<()> {
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let mut ws = session.load_directory(repo.path())?;
+        let mut ws = session.load_workspace(repo.path())?;
 
         // update to small_child, which contains small.txt with "line1\nchanged\n"
         CheckoutRevision {
@@ -750,7 +753,7 @@ mod tests {
 
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let mut ws = session.load_directory(repo.path())?;
+        let mut ws = session.load_workspace(repo.path())?;
 
         // update to hunk_grandchild
         CheckoutRevision {
@@ -794,7 +797,7 @@ mod tests {
         let repo = mkrepo();
 
         let mut session = WorkerSession::default();
-        let mut ws = session.load_directory(repo.path())?;
+        let mut ws = session.load_workspace(repo.path())?;
 
         let head_header = queries::query_revision(&ws, &revs::working_copy())?;
         let conflict_header = queries::query_revision(&ws, &revs::conflict_bookmark())?;
@@ -824,7 +827,7 @@ mod tests {
         let repo = mkrepo();
 
         let mut session = WorkerSession::default();
-        let mut ws = session.load_directory(repo.path())?;
+        let mut ws = session.load_workspace(repo.path())?;
 
         let parent_header = queries::query_revision(&ws, &revs::working_copy())?.expect("exists");
         assert!(parent_header.is_working_copy);
@@ -858,7 +861,7 @@ mod tests {
         let repo: tempfile::TempDir = mkrepo();
 
         let mut session = WorkerSession::default();
-        let mut ws = session.load_directory(repo.path())?;
+        let mut ws = session.load_workspace(repo.path())?;
 
         // conflict_bookmark is parent of resolve_conflict, forming a linear range of 2 commits
         let result = CreateRevision {
@@ -886,7 +889,7 @@ mod tests {
         let repo = mkrepo();
 
         let mut session = WorkerSession::default();
-        let mut ws = session.load_directory(repo.path())?;
+        let mut ws = session.load_workspace(repo.path())?;
 
         let header = queries::query_revision(&ws, &revs::working_copy())?.expect("exists");
         assert!(header.description.lines[0].is_empty());
@@ -911,7 +914,7 @@ mod tests {
         let repo = mkrepo();
 
         let mut session = WorkerSession::default();
-        let mut ws = session.load_directory(repo.path())?;
+        let mut ws = session.load_workspace(repo.path())?;
 
         let rev = query_by_id(&ws, revs::working_copy()).await?;
         assert_matches!(rev, RevsResult::Detail { headers, changes, .. } if headers.last().unwrap().description.lines[0].is_empty() && changes.is_empty());
@@ -937,7 +940,7 @@ mod tests {
         let repo = mkrepo();
 
         let mut session = WorkerSession::default();
-        let mut ws = session.load_directory(repo.path())?;
+        let mut ws = session.load_workspace(repo.path())?;
 
         let mut config = ws.data.workspace_settings.config().clone();
         config.add_layer(
@@ -967,7 +970,7 @@ mod tests {
         let repo = mkrepo();
 
         let mut session = WorkerSession::default();
-        let mut ws = session.load_directory(repo.path())?;
+        let mut ws = session.load_workspace(repo.path())?;
 
         let mut config = ws.data.workspace_settings.config().clone();
         config.add_layer(
@@ -997,7 +1000,7 @@ mod tests {
         let repo = mkrepo();
 
         let mut session = WorkerSession::default();
-        let mut ws = session.load_directory(repo.path())?;
+        let mut ws = session.load_workspace(repo.path())?;
 
         let mut config = ws.data.workspace_settings.config().clone();
         config.add_layer(
@@ -1027,7 +1030,7 @@ mod tests {
         let repo = mkrepo();
 
         let mut session = WorkerSession::default();
-        let mut ws = session.load_directory(repo.path())?;
+        let mut ws = session.load_workspace(repo.path())?;
 
         let header = queries::query_revision(&ws, &revs::working_copy())?.expect("exists");
         assert!(header.description.lines[0].is_empty());
@@ -1050,7 +1053,7 @@ mod tests {
         let repo = mkrepo();
 
         let mut session = WorkerSession::default();
-        let mut ws = session.load_directory(repo.path())?;
+        let mut ws = session.load_workspace(repo.path())?;
 
         let page = queries::query_log(&ws, "all()", 100)?;
         let initial_count = page.rows.len();
@@ -1073,7 +1076,7 @@ mod tests {
         let repo = mkrepo();
 
         let mut session = WorkerSession::default();
-        let mut ws = session.load_directory(repo.path())?;
+        let mut ws = session.load_workspace(repo.path())?;
 
         let page = queries::query_log(&ws, "main::@", 4)?;
         assert_eq!(2, page.rows.len());
@@ -1097,7 +1100,7 @@ mod tests {
         let repo = mkrepo();
 
         let mut session = WorkerSession::default();
-        let mut ws = session.load_directory(repo.path())?;
+        let mut ws = session.load_workspace(repo.path())?;
 
         // before: main -> @
         let page = queries::query_log(&ws, "main::@", 5)?;
@@ -1143,7 +1146,7 @@ mod tests {
         let repo = mkrepo();
 
         let mut session = WorkerSession::default();
-        let mut ws = session.load_directory(repo.path())?;
+        let mut ws = session.load_workspace(repo.path())?;
 
         let merge_before = get_by_chid(&ws, &revs::chain_conflict())?;
         let merge_parents_before: Vec<_> = merge_before.parent_ids().to_vec();
@@ -1194,7 +1197,7 @@ mod tests {
         let repo = mkrepo();
 
         let mut session = WorkerSession::default();
-        let mut ws = session.load_directory(repo.path())?;
+        let mut ws = session.load_workspace(repo.path())?;
 
         // initially, resolve_conflict is a child of conflict_bookmark
         let before = get_by_chid(&ws, &revs::resolve_conflict())?;
@@ -1226,7 +1229,7 @@ mod tests {
         let repo = mkrepo();
 
         let mut session = WorkerSession::default();
-        let mut ws = session.load_directory(repo.path())?;
+        let mut ws = session.load_workspace(repo.path())?;
 
         // rebase conflict_bookmark::resolve_conflict onto the working copy
         let result = MoveRevisions {
@@ -1263,7 +1266,7 @@ mod tests {
         let repo = mkrepo();
 
         let mut session = WorkerSession::default();
-        let mut ws = session.load_directory(repo.path())?;
+        let mut ws = session.load_workspace(repo.path())?;
 
         // get original parent of hunk_child_single (should be hunk_base)
         let child_before = get_by_chid(&ws, &revs::hunk_child_single())?;
@@ -1317,7 +1320,7 @@ mod tests {
         let repo = mkrepo();
 
         let mut session = WorkerSession::default();
-        let mut ws = session.load_directory(repo.path())?;
+        let mut ws = session.load_workspace(repo.path())?;
 
         // Create a chain: working_copy -> A -> B -> C
         // Then move A::B somewhere else, C should be orphaned to working_copy (A's parent)
@@ -1457,7 +1460,7 @@ mod tests {
         let repo = mkrepo();
 
         let mut session = WorkerSession::default();
-        let mut ws = session.load_directory(repo.path())?;
+        let mut ws = session.load_workspace(repo.path())?;
 
         // Create commit A on working_copy
         let result = CreateRevision {
@@ -1616,7 +1619,7 @@ mod tests {
         let repo = mkrepo();
 
         let mut session = WorkerSession::default();
-        let mut ws = session.load_directory(repo.path())?;
+        let mut ws = session.load_workspace(repo.path())?;
 
         // Create commit A
         let result = CreateRevision {
@@ -1728,4 +1731,95 @@ mod tests {
 
         Ok(())
     }
+}
+
+/// Disinherit external children of a range of commits.
+/// Finds all children of any commit in the range that are not themselves in the range,
+/// and rebases them to the specified orphan parents (typically the oldest commit's parents).
+async fn disinherit_children(
+    ws: &WorkspaceSession<'_>,
+    tx: &mut Transaction,
+    range: &[Commit],
+    orphan_to: Vec<CommitId>,
+) -> Result<HashMap<CommitId, CommitId>> {
+    let range_ids: HashSet<CommitId> = range.iter().map(|c| c.id().clone()).collect();
+
+    // find all children of any commit in the range
+    let mut external_children: Vec<Commit> = Vec::new();
+    for target in range {
+        let children_expr = RevsetExpression::commit(target.id().clone()).children();
+        let children: Vec<Commit> = children_expr
+            .evaluate(ws.repo())?
+            .iter()
+            .commits(ws.repo().store())
+            .try_collect()?;
+
+        for child in children {
+            if !range_ids.contains(child.id()) {
+                external_children.push(child);
+            }
+        }
+    }
+
+    // dedupe in case a child has multiple parents in the range
+    external_children.sort_by_key(|c| c.id().clone());
+    external_children.dedup_by_key(|c| c.id().clone());
+
+    if external_children.is_empty() {
+        return Ok(HashMap::new());
+    }
+
+    // rebase each external child, replacing any parent in the range with orphan_to
+    let mut rebased_commit_ids = HashMap::new();
+    for child_commit in external_children {
+        let new_child_parent_ids: Vec<CommitId> = child_commit
+            .parent_ids()
+            .iter()
+            .flat_map(|c| {
+                if range_ids.contains(c) {
+                    orphan_to.clone()
+                } else {
+                    vec![c.clone()]
+                }
+            })
+            .collect_vec();
+
+        // some of the new parents may be ancestors of others
+        let new_child_parents_expression = RevsetExpression::commits(new_child_parent_ids.clone())
+            .minus(
+                &RevsetExpression::commits(new_child_parent_ids.clone())
+                    .parents()
+                    .ancestors(),
+            );
+        let new_child_parents: Result<Vec<CommitId>, _> = new_child_parents_expression
+            .evaluate(tx.base_repo().as_ref())?
+            .iter()
+            .collect();
+
+        rebased_commit_ids.insert(
+            child_commit.id().clone(),
+            rewrite::rebase_commit(tx.repo_mut(), child_commit, new_child_parents?)
+                .await?
+                .id()
+                .clone(),
+        );
+    }
+
+    // rebase descendants of modified commits, tracking new ids
+    let mut mapping = HashMap::new();
+    tx.repo_mut().rebase_descendants_with_options(
+        &RebaseOptions::default(),
+        |old_commit, rebased| {
+            mapping.insert(
+                old_commit.id().clone(),
+                match rebased {
+                    RebasedCommit::Rewritten(new_commit) => new_commit.id().clone(),
+                    RebasedCommit::Abandoned { parent_id } => parent_id,
+                },
+            );
+        },
+    )?;
+    rebased_commit_ids.extend(mapping);
+
+    Ok(rebased_commit_ids)
 }

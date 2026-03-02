@@ -747,7 +747,7 @@ mod tests {
         let repo = mkrepo();
 
         let mut session = WorkerSession::default();
-        let mut ws = session.load_directory(repo.path())?;
+        let mut ws = session.load_workspace(repo.path())?;
 
         let parent_header =
             queries::query_revision(&ws, &revs::conflict_bookmark())?.expect("exists");
@@ -774,7 +774,7 @@ mod tests {
         let repo = mkrepo();
 
         let mut session = WorkerSession::default();
-        let mut ws = session.load_directory(repo.path())?;
+        let mut ws = session.load_workspace(repo.path())?;
 
         let from_rev = query_by_id(&ws, revs::main_bookmark()).await?;
         let to_rev = query_by_id(&ws, revs::working_copy()).await?;
@@ -806,7 +806,7 @@ mod tests {
         let repo = mkrepo();
 
         let mut session = WorkerSession::default();
-        let mut ws = session.load_directory(repo.path())?;
+        let mut ws = session.load_workspace(repo.path())?;
 
         // commit A: adds x.txt and y.txt
         fs::write(repo.path().join("x.txt"), "x content").unwrap();
@@ -898,7 +898,7 @@ mod tests {
         let repo = mkrepo();
 
         let mut session = WorkerSession::default();
-        let mut ws = session.load_directory(repo.path())?;
+        let mut ws = session.load_workspace(repo.path())?;
 
         // commit A: add z.txt
         fs::write(repo.path().join("z.txt"), "version 1").unwrap();
@@ -1006,7 +1006,7 @@ mod tests {
         let repo = mkrepo();
 
         let mut session = WorkerSession::default();
-        let mut ws = session.load_directory(repo.path())?;
+        let mut ws = session.load_workspace(repo.path())?;
 
         let from_rev = query_by_id(&ws, revs::resolve_conflict()).await?;
         let to_rev = query_by_id(&ws, revs::working_copy()).await?;
@@ -1040,7 +1040,7 @@ mod tests {
         let repo = mkrepo();
 
         let mut session = WorkerSession::default();
-        let mut ws = session.load_directory(repo.path())?;
+        let mut ws = session.load_workspace(repo.path())?;
 
         // hunk_child_single modifies line 2 of hunk_test.txt
         // hunk_grandchild (child of hunk_child_single) modifies line 3 of hunk_test.txt
@@ -1078,7 +1078,7 @@ mod tests {
         let repo = mkrepo();
 
         let mut session = WorkerSession::default();
-        let mut ws = session.load_directory(repo.path())?;
+        let mut ws = session.load_workspace(repo.path())?;
 
         // try to restore into a range of immutable commits
         let result = CopyChanges {
@@ -1100,7 +1100,7 @@ mod tests {
 
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let mut ws = session.load_directory(repo.path())?;
+        let mut ws = session.load_workspace(repo.path())?;
 
         // Move one of two hunks from descendant (hunk_child_multi) to ancestor (hunk_base)
         // hunk_child_multi modifies lines 2 and 4: line2 -> changed2, line4 -> changed4
@@ -1178,7 +1178,7 @@ mod tests {
     async fn move_hunk_message() -> anyhow::Result<()> {
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let mut ws = session.load_directory(repo.path())?;
+        let mut ws = session.load_workspace(repo.path())?;
 
         // Move only hunk from source, abandoning it
         let hunk = ChangeHunk {
@@ -1225,7 +1225,7 @@ mod tests {
     async fn move_hunk_invalid() -> anyhow::Result<()> {
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let mut ws = session.load_directory(repo.path())?;
+        let mut ws = session.load_workspace(repo.path())?;
 
         // Invalid hunk - doesn't match the actual content of b.txt in hunk_source
         let hunk = ChangeHunk {
@@ -1260,7 +1260,7 @@ mod tests {
 
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let mut ws = session.load_directory(repo.path())?;
+        let mut ws = session.load_workspace(repo.path())?;
 
         // hunk_child_single's only change is line 2: "line2" -> "modified2"
         let hunk = ChangeHunk {
@@ -1324,7 +1324,7 @@ mod tests {
 
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let mut ws = session.load_directory(repo.path())?;
+        let mut ws = session.load_workspace(repo.path())?;
 
         // hunk_child_single modifies line 2: "line2" -> "modified2"
         // hunk_sibling extends the file with new6, new7, new8
@@ -1399,7 +1399,7 @@ mod tests {
 
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let mut ws = session.load_directory(repo.path())?;
+        let mut ws = session.load_workspace(repo.path())?;
 
         // Hunk from hunk_source that changes line 1: "1" -> "11"
         // hunk_source's parent has b.txt = "1\n" (single line)
@@ -1461,7 +1461,7 @@ mod tests {
 
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let mut ws = session.load_directory(repo.path())?;
+        let mut ws = session.load_workspace(repo.path())?;
 
         let repo_path = jj_lib::repo_path::RepoPath::from_internal_string("hunk_test.txt")?;
 
@@ -1587,7 +1587,7 @@ mod tests {
 
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let mut ws = session.load_directory(repo.path())?;
+        let mut ws = session.load_workspace(repo.path())?;
 
         // hunk_child_multi has: line1, changed2, line3, changed4, line5
         // hunk_sibling has: line1, line2, line3, line4, line5, new6, new7, new8
@@ -1669,7 +1669,7 @@ mod tests {
 
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let mut ws = session.load_directory(repo.path())?;
+        let mut ws = session.load_workspace(repo.path())?;
 
         // Get the original content of a.txt in hunk_child_multi before the move
         let child_before = get_by_chid(&ws, &revs::hunk_child_multi())?;
@@ -1782,7 +1782,7 @@ mod tests {
 
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let mut ws = session.load_directory(repo.path())?;
+        let mut ws = session.load_workspace(repo.path())?;
 
         // hunk_child_multi has two hunks: line2->changed2 and line4->changed4
         let hunk = ChangeHunk {
@@ -1860,7 +1860,7 @@ mod tests {
 
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let mut ws = session.load_directory(repo.path())?;
+        let mut ws = session.load_workspace(repo.path())?;
 
         // Copy/restore hunk from hunk_base (parent) to hunk_child_single (child)
         let hunk = ChangeHunk {
@@ -1918,7 +1918,7 @@ mod tests {
     async fn copy_hunk_to_conflict() -> anyhow::Result<()> {
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let mut ws = session.load_directory(repo.path())?;
+        let mut ws = session.load_workspace(repo.path())?;
 
         // Use the existing conflict_bookmark from test repo
         let conflict_commit = revs::conflict_bookmark();
@@ -1967,7 +1967,7 @@ mod tests {
     async fn copy_hunk_out_of_bounds() -> anyhow::Result<()> {
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let mut ws = session.load_directory(repo.path())?;
+        let mut ws = session.load_workspace(repo.path())?;
 
         // small_parent has small.txt with "line1\nline2\n"
         // small_child has small.txt with "line1\nchanged\n"
@@ -2013,7 +2013,7 @@ mod tests {
     async fn copy_hunk_unchanged() -> anyhow::Result<()> {
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let mut ws = session.load_directory(repo.path())?;
+        let mut ws = session.load_workspace(repo.path())?;
 
         // hunk_base has line1-line5, hunk_sibling has line1-line5 plus new6-new8
         let hunk = ChangeHunk {
@@ -2054,7 +2054,7 @@ mod tests {
 
         let repo = mkrepo();
         let mut session = WorkerSession::default();
-        let mut ws = session.load_directory(repo.path())?;
+        let mut ws = session.load_workspace(repo.path())?;
 
         // hunk_child_multi modifies two lines: line2->changed2 and line4->changed4
         let hunk = ChangeHunk {

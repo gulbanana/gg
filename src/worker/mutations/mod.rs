@@ -705,7 +705,7 @@ mod tests {
         let repo = mkrepo();
 
         let mut session = WorkerSession::default();
-        let mut ws = session.load_directory(repo.path())?;
+        let mut ws = session.load_workspace(repo.path())?;
 
         let immutable_matcher = StringMatcher::Exact("immutable_bookmark".to_string());
         let (_, ref_at_start) = ws
@@ -769,7 +769,7 @@ mod tests {
         let repo = mkrepo();
 
         let mut session = WorkerSession::default();
-        let mut ws = session.load_directory(repo.path())?;
+        let mut ws = session.load_workspace(repo.path())?;
 
         let immutable_matcher = StringMatcher::Exact("immutable_bookmark".to_string());
 
@@ -834,7 +834,7 @@ auto-track = "glob:*.txt"
         fs::write(&config_path, config_content).unwrap();
 
         let mut session = WorkerSession::default();
-        let mut ws = session.load_directory(repo.path())?;
+        let mut ws = session.load_workspace(repo.path())?;
 
         // Write two new files, one tracked and one untracked
         fs::write(repo.path().join("tracked.txt"), "tracked content").unwrap();

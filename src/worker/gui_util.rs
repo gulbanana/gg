@@ -3,7 +3,7 @@
 
 use std::{
     cell::OnceCell,
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     path::{Path, PathBuf},
     rc::Rc,
     slice,
@@ -41,7 +41,6 @@ use jj_lib::{
         RevsetExtensions, RevsetIteratorExt, RevsetParseContext, RevsetResolutionError,
         RevsetWorkspaceContext, SymbolResolverExtension, UserRevsetExpression,
     },
-    rewrite::{self, RebaseOptions, RebasedCommit},
     settings::{HumanByteSize, UserSettings},
     transaction::Transaction,
     view::View,
@@ -57,13 +56,19 @@ use crate::{
     messages::{self, *},
 };
 
-/// jj-dependent state, available when a workspace is open
+/// Loaded state of the worker thread, with borrowed JJ data.
+///
+/// Create one with [`WorkerSession::load_workspace()`], or use
+/// [`super::session::SessionEvent`]s in a dedicated thread to manage
+/// the state machine.
+///
+/// See the [crate-level docs](crate) for a usage overview.
 pub struct WorkspaceSession<'a> {
     pub session: &'a mut WorkerSession,
 
     // workspace-level data, initialised once
-    pub workspace: Workspace,
-    pub data: WorkspaceData,
+    pub(crate) workspace: Workspace,
+    pub(crate) data: WorkspaceData,
     is_large: bool, // this is based on the head operation and thus derived from the rest of the data
     is_colocated: bool, // theoretically operation-specific but we don't support switching horses
 
@@ -71,7 +76,7 @@ pub struct WorkspaceSession<'a> {
     operation: OperationData,
 }
 
-pub struct WorkspaceData {
+pub(crate) struct WorkspaceData {
     pub path_converter: RepoPathUiConverter,
     extensions: RevsetExtensions,
     pub workspace_settings: UserSettings,
@@ -80,7 +85,7 @@ pub struct WorkspaceData {
 }
 
 /// state derived from a specific operation
-pub struct OperationData {
+pub(crate) struct OperationData {
     pub repo: Arc<ReadonlyRepo>,
     pub wc_id: CommitId,
     ref_index: OnceCell<Rc<RefIndex>>,
@@ -89,7 +94,7 @@ pub struct OperationData {
 }
 
 #[derive(Debug, Error)]
-pub enum RevsetError {
+pub(crate) enum RevsetError {
     #[error(transparent)]
     Resolution(#[from] RevsetResolutionError),
     #[error(transparent)]
@@ -105,7 +110,7 @@ impl From<BackendError> for RevsetError {
 }
 
 impl WorkerSession {
-    pub(crate) fn load_directory(&mut self, cwd: &Path) -> Result<WorkspaceSession<'_>> {
+    pub fn load_workspace(&mut self, cwd: &Path) -> Result<WorkspaceSession<'_>> {
         let factory = DefaultWorkspaceLoaderFactory;
         let loader = factory.create(find_workspace_dir(cwd))?;
 
@@ -156,38 +161,38 @@ impl WorkerSession {
 }
 
 impl WorkspaceSession<'_> {
-    pub fn name(&self) -> &WorkspaceName {
+    pub(crate) fn name(&self) -> &WorkspaceName {
         self.workspace.workspace_name()
     }
 
-    pub fn wc_id(&self) -> &CommitId {
+    pub(crate) fn wc_id(&self) -> &CommitId {
         &self.operation.wc_id
     }
 
-    pub fn sink(&self) -> Arc<dyn super::EventSink> {
+    pub(crate) fn sink(&self) -> Arc<dyn super::EventSink> {
         self.session.sink.clone()
     }
 
     // XXX maybe: hunt down uses and make nonpub
-    pub fn repo(&self) -> &ReadonlyRepo {
+    pub(crate) fn repo(&self) -> &ReadonlyRepo {
         self.operation.repo.as_ref()
     }
 
-    pub fn view(&self) -> &View {
+    pub(crate) fn view(&self) -> &View {
         self.operation.repo.view()
     }
 
-    pub fn get_commit(&self, id: &CommitId) -> Result<Commit> {
+    pub(crate) fn get_commit(&self, id: &CommitId) -> Result<Commit> {
         Ok(self.operation.repo.store().get_commit(id)?)
     }
 
-    pub fn git_repo(&self) -> Option<gix::Repository> {
+    pub(crate) fn git_repo(&self) -> Option<gix::Repository> {
         self.operation
             .git_backend()
             .map(|backend| backend.git_repo().to_owned())
     }
 
-    pub fn load_at_head(&mut self) -> Result<bool> {
+    pub(crate) fn load_at_head(&mut self) -> Result<bool> {
         let head = load_at_head(&self.workspace, &self.data)?;
         if head.repo.op_id() != self.operation.repo.op_id() {
             self.operation = head;
@@ -202,7 +207,7 @@ impl WorkspaceSession<'_> {
     /* unfortunately parse_context and resolver are not cached */
     /***********************************************************/
 
-    pub fn evaluate_revset_expr<'op>(
+    pub(crate) fn evaluate_revset_expr<'op>(
         &'op self,
         repo: &'op dyn Repo,
         revset_expr: Arc<UserRevsetExpression>,
@@ -212,7 +217,7 @@ impl WorkspaceSession<'_> {
         Ok(revset)
     }
 
-    pub fn evaluate_revset_str<'op>(
+    pub(crate) fn evaluate_revset_str<'op>(
         &'op self,
         revset_str: &str,
     ) -> Result<Box<dyn Revset + 'op>, RevsetError> {
@@ -220,7 +225,7 @@ impl WorkspaceSession<'_> {
         self.evaluate_revset_expr(self.operation.repo.as_ref(), revset_expr)
     }
 
-    pub fn evaluate_revset_commits<'op>(
+    pub(crate) fn evaluate_revset_commits<'op>(
         &'op self,
         ids: &[messages::CommitId],
     ) -> Result<Box<dyn Revset + 'op>, RevsetError> {
@@ -232,7 +237,7 @@ impl WorkspaceSession<'_> {
         self.evaluate_revset_expr(self.operation.repo.as_ref(), expr)
     }
 
-    pub fn evaluate_revset_changes<'op>(
+    pub(crate) fn evaluate_revset_changes<'op>(
         &'op self,
         ids: &[messages::ChangeId],
     ) -> Result<Box<dyn Revset + 'op>, RevsetError> {
@@ -243,7 +248,7 @@ impl WorkspaceSession<'_> {
         self.evaluate_revset_expr(self.operation.repo.as_ref(), expr)
     }
 
-    pub fn evaluate_immutable(&self) -> Result<Box<dyn Revset + '_>> {
+    pub(crate) fn evaluate_immutable(&self) -> Result<Box<dyn Revset + '_>> {
         let mut diagnostics = RevsetDiagnostics::new(); // XXX pass this down, then include it in the Result
         let expr =
             revset_util::parse_immutable_heads_expression(&mut diagnostics, &self.parse_context())?;
@@ -291,7 +296,7 @@ impl WorkspaceSession<'_> {
     }
 
     // policy: queries operate on a precise change using offsets, with explicit not-found results
-    pub fn resolve_optional_id(&self, id: &RevId) -> Result<Option<Commit>, RevsetError> {
+    pub(crate) fn resolve_optional_id(&self, id: &RevId) -> Result<Option<Commit>, RevsetError> {
         let id_str = Self::format_id_str(id);
         let change_revset = match self.evaluate_revset_str(&id_str) {
             Ok(revset) => revset,
@@ -325,7 +330,10 @@ impl WorkspaceSession<'_> {
     }
 
     // policy: queries operate on a precise change using offsets, with explicit not-found results
-    pub fn resolve_optional_set(&self, set: &RevSet) -> Result<Option<Vec<Commit>>, RevsetError> {
+    pub(crate) fn resolve_optional_set(
+        &self,
+        set: &RevSet,
+    ) -> Result<Option<Vec<Commit>>, RevsetError> {
         let revset_str = format!(
             "{}::{}",
             Self::format_id_str(&set.from),
@@ -350,7 +358,7 @@ impl WorkspaceSession<'_> {
     // policy: most commands prefer to operate on a change and will fail if the change has been evolved
     // however, if it had a known offset they'll use that, and if it's *become* divergent,
     // they will fall back to the known commit so that divergences can be resolved
-    pub fn resolve_change_id(&self, id: &RevId) -> Result<Commit, RevsetError> {
+    pub(crate) fn resolve_change_id(&self, id: &RevId) -> Result<Commit, RevsetError> {
         let id_str = Self::format_id_str(id);
         let revset = self.evaluate_revset_str(&id_str)?;
         let mut iter = revset
@@ -385,7 +393,7 @@ impl WorkspaceSession<'_> {
     }
 
     // policy: commands operating on a revset assume it uses precise targeting, including offsets if divergent
-    pub fn resolve_change_set(
+    pub(crate) fn resolve_change_set(
         &self,
         set: &RevSet,
         check_immutable: bool,
@@ -412,7 +420,7 @@ impl WorkspaceSession<'_> {
     }
 
     // not-really-policy: sometimes we only have a commit, not a change. this is a compromise and will ideally be eliminated
-    pub fn resolve_commit_id(&self, id: &messages::CommitId) -> Result<Commit, RevsetError> {
+    pub(crate) fn resolve_commit_id(&self, id: &messages::CommitId) -> Result<Commit, RevsetError> {
         let expr = RevsetExpression::commit(
             CommitId::try_from_hex(&id.hex).expect("frontend-validated id"),
         );
@@ -420,7 +428,7 @@ impl WorkspaceSession<'_> {
         self.resolve_single(revset)
     }
 
-    pub fn resolve_multiple<'op, 'set: 'op, T: AsRef<dyn Revset + 'set>>(
+    pub(crate) fn resolve_multiple<'op, 'set: 'op, T: AsRef<dyn Revset + 'set>>(
         &'op self,
         revset: T,
     ) -> Result<Vec<Commit>, RevsetError> {
@@ -432,7 +440,7 @@ impl WorkspaceSession<'_> {
         Ok(commits)
     }
 
-    pub fn resolve_multiple_commits(
+    pub(crate) fn resolve_multiple_commits(
         &self,
         ids: &[messages::CommitId],
     ) -> Result<Vec<Commit>, RevsetError> {
@@ -442,7 +450,7 @@ impl WorkspaceSession<'_> {
     }
 
     // XXX ideally this would apply the same policy as resolve_single_change
-    pub fn resolve_multiple_changes(
+    pub(crate) fn resolve_multiple_changes(
         &self,
         ids: impl IntoIterator<Item = RevId>,
     ) -> Result<Vec<Commit>, RevsetError> {
@@ -456,7 +464,7 @@ impl WorkspaceSession<'_> {
      * Functions for creating temporary per-request derived data *
      *************************************************************/
 
-    pub fn parse_context(&self) -> RevsetParseContext<'_> {
+    fn parse_context(&self) -> RevsetParseContext<'_> {
         self.data
             .parse_context(self.workspace.workspace_name(), self.repo().store())
     }
@@ -477,7 +485,7 @@ impl WorkspaceSession<'_> {
         .with_id_prefix_context(&self.operation.prefix_context)
     }
 
-    pub fn ref_index(&self) -> &Rc<RefIndex> {
+    fn ref_index(&self) -> &Rc<RefIndex> {
         self.operation
             .ref_index
             .get_or_init(|| Rc::new(build_ref_index(self.operation.repo.as_ref())))
@@ -501,7 +509,7 @@ impl WorkspaceSession<'_> {
      * IPC-message formatting functions *
      ************************************/
 
-    pub fn format_config(&self) -> Result<messages::RepoConfig> {
+    pub(crate) fn format_config(&self) -> Result<messages::RepoConfig> {
         let absolute_path = self.workspace.workspace_root().into();
 
         let git_remotes = match self.git_repo() {
@@ -559,7 +567,7 @@ impl WorkspaceSession<'_> {
         })
     }
 
-    pub fn format_status(&self) -> messages::RepoStatus {
+    pub(crate) fn format_status(&self) -> messages::RepoStatus {
         messages::RepoStatus {
             operation_description: self
                 .operation
@@ -573,7 +581,7 @@ impl WorkspaceSession<'_> {
         }
     }
 
-    pub fn format_commit_id(&self, id: &CommitId) -> messages::CommitId {
+    pub(crate) fn format_commit_id(&self, id: &CommitId) -> messages::CommitId {
         let prefix_len = self
             .prefix_index()
             .shortest_commit_prefix_len(self.operation.repo.as_ref(), id)
@@ -585,7 +593,7 @@ impl WorkspaceSession<'_> {
         messages::CommitId { hex, prefix, rest }
     }
 
-    pub fn format_change_id(
+    pub(crate) fn format_change_id(
         &self,
         commit_id: &CommitId,
         change_id: &ChangeId,
@@ -632,14 +640,14 @@ impl WorkspaceSession<'_> {
         }
     }
 
-    pub fn format_id(&self, commit: &Commit) -> RevId {
+    pub(crate) fn format_id(&self, commit: &Commit) -> RevId {
         RevId {
             commit: self.format_commit_id(commit.id()),
             change: self.format_change_id(commit.id(), commit.change_id()),
         }
     }
 
-    pub fn format_header(
+    pub(crate) fn format_header(
         &self,
         commit: &Commit,
         known_immutable: Option<bool>,
@@ -669,7 +677,10 @@ impl WorkspaceSession<'_> {
         })
     }
 
-    pub fn format_path<T: AsRef<RepoPath>>(&self, repo_path: T) -> Result<messages::TreePath> {
+    pub(crate) fn format_path<T: AsRef<RepoPath>>(
+        &self,
+        repo_path: T,
+    ) -> Result<messages::TreePath> {
         let base_path = self.workspace.workspace_root();
         let relative_path =
             file_util::relative_path(base_path, &repo_path.as_ref().to_fs_path(base_path)?);
@@ -700,13 +711,13 @@ impl WorkspaceSession<'_> {
 
     /// checks if any commit in an iterator is immutable
     /// can be slow! this codepath is for use in one-offs where nothing is cached
-    pub fn check_immutable(&self, ids: impl IntoIterator<Item = CommitId>) -> Result<bool> {
+    pub(crate) fn check_immutable(&self, ids: impl IntoIterator<Item = CommitId>) -> Result<bool> {
         self.check_immutable_with_repo(self.operation.repo.as_ref(), ids)
     }
 
     /// checks if any commit in a revset is immutable
     /// more efficient than check_immutable thanks to cached membership tests
-    pub fn check_immutable_revset(&self, revset: &dyn Revset) -> Result<bool> {
+    pub(crate) fn check_immutable_revset(&self, revset: &dyn Revset) -> Result<bool> {
         let immutable_revset = self.evaluate_immutable()?;
         let contains = immutable_revset.containing_fn();
         for id in revset.iter() {
@@ -722,7 +733,7 @@ impl WorkspaceSession<'_> {
      * Ideally in future the code can be extracted to not depend on TUI. *
      *********************************************************************/
 
-    pub async fn start_transaction(&mut self) -> Result<Transaction> {
+    pub(crate) async fn start_transaction(&mut self) -> Result<Transaction> {
         let auto_update_stale = self
             .data
             .workspace_settings
@@ -735,7 +746,7 @@ impl WorkspaceSession<'_> {
     /// Finish a transaction, protecting against the working copy landing on an immutable commit.
     /// Most mutations should use this. Use `finish_mutation` only for explicit "edit" actions
     /// where the user has deliberately chosen to edit an immutable commit.
-    pub fn finish_transaction(
+    pub(crate) fn finish_transaction(
         &mut self,
         tx: Transaction,
         description: impl Into<String>,
@@ -748,7 +759,7 @@ impl WorkspaceSession<'_> {
     /// on an immutable commit, a new commit is created on top to prevent accidental modification.
     /// Pass `ignore_immutable: true` only for explicit "edit" gestures (double-click, Enter, Edit
     /// button) where the user has deliberately chosen to edit an immutable commit.
-    pub fn finish_transaction_for_edit(
+    pub(crate) fn finish_transaction_for_edit(
         &mut self,
         mut tx: Transaction,
         description: impl Into<String>,
@@ -803,7 +814,7 @@ impl WorkspaceSession<'_> {
         Ok(Some(self.format_status()))
     }
 
-    pub async fn import_and_snapshot(
+    pub(crate) async fn import_and_snapshot(
         &mut self,
         force: bool,
         auto_update_stale: bool,
@@ -1032,103 +1043,6 @@ impl WorkspaceSession<'_> {
 
         self.finish_transaction(tx, format!("import git refs: {:?}", stats))?;
         Ok(())
-    }
-
-    /*************************************************************************************************/
-    /* Rebase functions - the idea is to have several composable rebase ops that use these utilities */
-    /* arguably they should be in a Transaction-wrapper struct, but i'm not yet sure whether to      */
-    /* complicate the interface of trait Mutation                                                    */
-    /*************************************************************************************************/
-
-    /// Disinherit external children of a range of commits.
-    /// Finds all children of any commit in the range that are not themselves in the range,
-    /// and rebases them to the specified orphan parents (typically the oldest commit's parents).
-    pub async fn disinherit_children(
-        &self,
-        tx: &mut Transaction,
-        range: &[Commit],
-        orphan_to: Vec<CommitId>,
-    ) -> Result<HashMap<CommitId, CommitId>> {
-        let range_ids: HashSet<CommitId> = range.iter().map(|c| c.id().clone()).collect();
-
-        // find all children of any commit in the range
-        let mut external_children: Vec<Commit> = Vec::new();
-        for target in range {
-            let children_expr = RevsetExpression::commit(target.id().clone()).children();
-            let children: Vec<Commit> = children_expr
-                .evaluate(self.operation.repo.as_ref())?
-                .iter()
-                .commits(self.operation.repo.store())
-                .try_collect()?;
-
-            for child in children {
-                if !range_ids.contains(child.id()) {
-                    external_children.push(child);
-                }
-            }
-        }
-
-        // dedupe in case a child has multiple parents in the range
-        external_children.sort_by_key(|c| c.id().clone());
-        external_children.dedup_by_key(|c| c.id().clone());
-
-        if external_children.is_empty() {
-            return Ok(HashMap::new());
-        }
-
-        // rebase each external child, replacing any parent in the range with orphan_to
-        let mut rebased_commit_ids = HashMap::new();
-        for child_commit in external_children {
-            let new_child_parent_ids: Vec<CommitId> = child_commit
-                .parent_ids()
-                .iter()
-                .flat_map(|c| {
-                    if range_ids.contains(c) {
-                        orphan_to.clone()
-                    } else {
-                        vec![c.clone()]
-                    }
-                })
-                .collect_vec();
-
-            // some of the new parents may be ancestors of others
-            let new_child_parents_expression =
-                RevsetExpression::commits(new_child_parent_ids.clone()).minus(
-                    &RevsetExpression::commits(new_child_parent_ids.clone())
-                        .parents()
-                        .ancestors(),
-                );
-            let new_child_parents: Result<Vec<CommitId>, _> = new_child_parents_expression
-                .evaluate(tx.base_repo().as_ref())?
-                .iter()
-                .collect();
-
-            rebased_commit_ids.insert(
-                child_commit.id().clone(),
-                rewrite::rebase_commit(tx.repo_mut(), child_commit, new_child_parents?)
-                    .await?
-                    .id()
-                    .clone(),
-            );
-        }
-
-        // rebase descendants of modified commits, tracking new ids
-        let mut mapping = HashMap::new();
-        tx.repo_mut().rebase_descendants_with_options(
-            &RebaseOptions::default(),
-            |old_commit, rebased| {
-                mapping.insert(
-                    old_commit.id().clone(),
-                    match rebased {
-                        RebasedCommit::Rewritten(new_commit) => new_commit.id().clone(),
-                        RebasedCommit::Abandoned { parent_id } => parent_id,
-                    },
-                );
-            },
-        )?;
-        rebased_commit_ids.extend(mapping);
-
-        Ok(rebased_commit_ids)
     }
 }
 
