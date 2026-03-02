@@ -680,3 +680,188 @@ fn classify_bookmark_push(
 }
 
 pub(crate) use precondition;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        messages::{
+            RevSet, StoreRef,
+            mutations::{CreateRevision, DescribeRevision, MoveRef},
+            queries::RevsResult,
+        },
+        worker::{
+            WorkerSession, queries,
+            tests::{mkrepo, query_by_id, revs},
+        },
+    };
+    use anyhow::Result;
+    use assert_matches::assert_matches;
+    use jj_lib::str_util::StringMatcher;
+    use std::fs;
+
+    #[tokio::test]
+    async fn immutability_of_bookmark() -> Result<()> {
+        let repo = mkrepo();
+
+        let mut session = WorkerSession::default();
+        let mut ws = session.load_directory(repo.path())?;
+
+        let immutable_matcher = StringMatcher::Exact("immutable_bookmark".to_string());
+        let (_, ref_at_start) = ws
+            .view()
+            .local_bookmarks_matching(&immutable_matcher)
+            .next()
+            .unwrap();
+        let ref_at_start = ref_at_start.as_normal().unwrap().clone();
+        assert_matches!(ws.check_immutable([ref_at_start.clone()]), Ok(true));
+
+        let header = queries::query_revision(&ws, &revs::immutable_bookmark())?
+            .expect("immutable_bookmark exists");
+        let immutable_bm = header
+            .refs
+            .iter()
+            .find(|r| {
+                matches!(
+                    r,
+                    StoreRef::LocalBookmark {
+                        bookmark_name,
+                        ..
+                        } if bookmark_name == "immutable_bookmark"
+                )
+            })
+            .unwrap();
+
+        let MutationResult::Updated {
+            new_selection: Some(new_selection),
+            ..
+        } = CreateRevision {
+            set: RevSet::singleton(revs::working_copy()),
+        }
+        .execute_unboxed(&mut ws)
+        .await?
+        else {
+            panic!("Creating new revision didn't update the selection");
+        };
+
+        MoveRef {
+            r#ref: immutable_bm.clone(),
+            to_id: new_selection.id.clone(),
+        }
+        .execute_unboxed(&mut ws)
+        .await?;
+
+        let (_, after_change) = ws
+            .view()
+            .local_bookmarks_matching(&immutable_matcher)
+            .next()
+            .unwrap();
+        let after_change = after_change.as_normal().unwrap().clone();
+        assert_ne!(ref_at_start, after_change);
+
+        assert_matches!(ws.check_immutable([after_change]), Ok(true));
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn immutable_workspace_head() -> Result<()> {
+        let repo = mkrepo();
+
+        let mut session = WorkerSession::default();
+        let mut ws = session.load_directory(repo.path())?;
+
+        let immutable_matcher = StringMatcher::Exact("immutable_bookmark".to_string());
+
+        let header = queries::query_revision(&ws, &revs::immutable_bookmark())?
+            .expect("immutable_bookmark exists");
+        let immutable_bm = header
+            .refs
+            .iter()
+            .find(|r| {
+                matches!(
+                    r,
+                    StoreRef::LocalBookmark {
+                        bookmark_name,
+                        ..
+                        } if bookmark_name == "immutable_bookmark"
+                )
+            })
+            .unwrap();
+
+        let working_copy = revs::working_copy();
+        MoveRef {
+            r#ref: immutable_bm.clone(),
+            to_id: working_copy,
+        }
+        .execute_unboxed(&mut ws)
+        .await?;
+
+        let (_, after_change) = ws
+            .view()
+            .local_bookmarks_matching(&immutable_matcher)
+            .next()
+            .unwrap();
+        let after_change = after_change.as_normal().unwrap().clone();
+
+        // rev containing the bookmark is now immutable:
+        assert_matches!(ws.check_immutable([after_change]), Ok(true));
+
+        // checked-out rev is not immutable (because we made a new one):
+        let current_ws_heads: Vec<jj_lib::backend::CommitId> = ws
+            .repo()
+            .view()
+            .wc_commit_ids()
+            .iter()
+            .map(|(_, id)| id.clone())
+            .collect();
+        assert_matches!(ws.check_immutable(current_ws_heads), Ok(false));
+
+        Ok(())
+    }
+
+    // XXX possibly this should be a session test using the ExecuteSnapshot event
+    #[tokio::test]
+    async fn snapshot_respects_auto_track_config() -> Result<()> {
+        let repo = mkrepo();
+
+        // Configure snapshot.auto-track to only track .txt files
+        let config_path = repo.path().join(".jj/repo/config.toml");
+        let config_content = r#"
+[snapshot]
+auto-track = "glob:*.txt"
+"#;
+        fs::write(&config_path, config_content).unwrap();
+
+        let mut session = WorkerSession::default();
+        let mut ws = session.load_directory(repo.path())?;
+
+        // Write two new files, one tracked and one untracked
+        fs::write(repo.path().join("tracked.txt"), "tracked content").unwrap();
+        fs::write(repo.path().join("untracked.dat"), "untracked content").unwrap();
+
+        // Trigger a snapshot by describing the revision
+        DescribeRevision {
+            id: revs::working_copy(),
+            new_description: "test auto-track".to_owned(),
+            reset_author: false,
+        }
+        .execute_unboxed(&mut ws)
+        .await?;
+
+        // Verify: only the .txt file should have been tracked
+        let rev = query_by_id(&ws, revs::working_copy()).await?;
+        match rev {
+            RevsResult::Detail { changes, .. } => {
+                assert_eq!(changes.len(), 1);
+                assert_eq!(changes[0].path.repo_path, "tracked.txt");
+            }
+            _ => panic!("Expected working copy to exist"),
+        }
+
+        // Verify: the .dat file should exist, but be untracked
+        assert!(repo.path().join("untracked.dat").exists());
+
+        Ok(())
+    }
+}

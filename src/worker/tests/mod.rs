@@ -1,4 +1,3 @@
-mod mutations;
 mod queries;
 mod session;
 
@@ -53,7 +52,7 @@ impl Default for WorkerSession {
 //
 // The `revs` module provides helpers for known commits. Use `jj log` to find change/commit IDs.
 
-fn mkrepo() -> TempDir {
+pub fn mkrepo() -> TempDir {
     let repo_dir = tempdir().unwrap();
     let mut archive_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     archive_path.push("res/test-repo.zip");
@@ -65,7 +64,7 @@ fn mkrepo() -> TempDir {
     repo_dir
 }
 
-fn mkid(xid: &str, cid: &str) -> RevId {
+pub fn mkid(xid: &str, cid: &str) -> RevId {
     RevId {
         change: ChangeId {
             hex: xid.to_owned(),
@@ -84,7 +83,7 @@ fn mkid(xid: &str, cid: &str) -> RevId {
 
 /// Resolve a commit by change ID, even if it was rewritten and has a new commit ID.
 /// Use this to verify commit state after mutations that rewrite commits.
-fn get_by_chid(ws: &WorkspaceSession, rev_id: &RevId) -> Result<Commit> {
+pub fn get_by_chid(ws: &WorkspaceSession, rev_id: &RevId) -> Result<Commit> {
     use jj_lib::repo::Repo;
     use jj_lib::revset::RevsetIteratorExt;
 
@@ -96,7 +95,7 @@ fn get_by_chid(ws: &WorkspaceSession, rev_id: &RevId) -> Result<Commit> {
     }
 }
 
-async fn query_by_chid(ws: &WorkspaceSession<'_>, change_hex: &str) -> Result<RevsResult> {
+pub async fn query_by_chid(ws: &WorkspaceSession<'_>, change_hex: &str) -> Result<RevsResult> {
     let revset = ws.evaluate_revset_str(change_hex)?;
     let commits: Vec<_> = revset
         .iter()
@@ -110,14 +109,14 @@ async fn query_by_chid(ws: &WorkspaceSession<'_>, change_hex: &str) -> Result<Re
 }
 
 /// Helper to get a single revision's display details (changes, conflicts, etc.)
-async fn query_by_id(
+pub async fn query_by_id(
     ws: &crate::worker::gui_util::WorkspaceSession<'_>,
     id: RevId,
 ) -> Result<RevsResult> {
     query_revisions(ws, RevSet::singleton(id)).await
 }
 
-mod revs {
+pub mod revs {
     use crate::messages::RevId;
 
     use super::mkid;

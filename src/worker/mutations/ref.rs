@@ -446,3 +446,532 @@ fn combine_bookmarks(bookmark_names: &[impl Display]) -> String {
         bookmark_names => format!("bookmarks {}", bookmark_names.iter().join(", ")),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use anyhow::Result;
+    use assert_matches::assert_matches;
+    use jj_lib::str_util::StringMatcher;
+
+    use crate::{
+        messages::{
+            StoreRef,
+            mutations::{
+                CreateRef, DeleteRef, MoveRef, MutationResult, RenameBookmark, TrackBookmark,
+                UntrackBookmark,
+            },
+        },
+        worker::{
+            Mutation, WorkerSession,
+            tests::{mkrepo, revs},
+        },
+    };
+
+    fn local_bookmark(name: &str) -> StoreRef {
+        StoreRef::LocalBookmark {
+            bookmark_name: name.to_owned(),
+            has_conflict: false,
+            is_synced: false,
+            tracking_remotes: vec![],
+            available_remotes: 0,
+            potential_remotes: 0,
+        }
+    }
+
+    fn remote_bookmark(name: &str, remote: &str) -> StoreRef {
+        StoreRef::RemoteBookmark {
+            bookmark_name: name.to_owned(),
+            remote_name: remote.to_owned(),
+            has_conflict: false,
+            is_synced: false,
+            is_tracked: false,
+            is_absent: false,
+        }
+    }
+
+    fn tag(name: &str) -> StoreRef {
+        StoreRef::Tag {
+            tag_name: name.to_owned(),
+        }
+    }
+
+    // -- CreateRef --
+
+    #[tokio::test]
+    async fn create_bookmark() -> Result<()> {
+        let repo = mkrepo();
+        let mut session = WorkerSession::default();
+        let mut ws = session.load_directory(repo.path())?;
+
+        let result = CreateRef {
+            id: revs::main_bookmark(),
+            r#ref: local_bookmark("new-bookmark"),
+        }
+        .execute_unboxed(&mut ws)
+        .await?;
+
+        assert_matches!(result, MutationResult::Updated { .. });
+
+        let matcher = StringMatcher::Exact("new-bookmark".to_string());
+        let (_, target) = ws
+            .view()
+            .local_bookmarks_matching(&matcher)
+            .next()
+            .expect("bookmark should exist");
+        assert!(target.is_present());
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn create_bookmark_already_exists() -> Result<()> {
+        let repo = mkrepo();
+        let mut session = WorkerSession::default();
+        let mut ws = session.load_directory(repo.path())?;
+
+        let result = CreateRef {
+            id: revs::working_copy(),
+            r#ref: local_bookmark("main"),
+        }
+        .execute_unboxed(&mut ws)
+        .await?;
+
+        assert_matches!(result, MutationResult::PreconditionError { .. });
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn create_remote_bookmark_fails() -> Result<()> {
+        let repo = mkrepo();
+        let mut session = WorkerSession::default();
+        let mut ws = session.load_directory(repo.path())?;
+
+        let result = CreateRef {
+            id: revs::working_copy(),
+            r#ref: remote_bookmark("main", "origin"),
+        }
+        .execute_unboxed(&mut ws)
+        .await?;
+
+        assert_matches!(result, MutationResult::PreconditionError { .. });
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn create_tag() -> Result<()> {
+        let repo = mkrepo();
+        let mut session = WorkerSession::default();
+        let mut ws = session.load_directory(repo.path())?;
+
+        let result = CreateRef {
+            id: revs::main_bookmark(),
+            r#ref: tag("v1.0"),
+        }
+        .execute_unboxed(&mut ws)
+        .await?;
+
+        assert_matches!(result, MutationResult::Updated { .. });
+
+        let matcher = StringMatcher::Exact("v1.0".to_string());
+        let (_, target) = ws
+            .view()
+            .local_tags_matching(&matcher)
+            .next()
+            .expect("tag should exist");
+        assert!(target.is_present());
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn create_tag_already_exists() -> Result<()> {
+        let repo = mkrepo();
+        let mut session = WorkerSession::default();
+        let mut ws = session.load_directory(repo.path())?;
+
+        // create tag first
+        CreateRef {
+            id: revs::main_bookmark(),
+            r#ref: tag("v1.0"),
+        }
+        .execute_unboxed(&mut ws)
+        .await?;
+
+        // creating the same tag again should fail
+        let result = CreateRef {
+            id: revs::working_copy(),
+            r#ref: tag("v1.0"),
+        }
+        .execute_unboxed(&mut ws)
+        .await?;
+
+        assert_matches!(result, MutationResult::PreconditionError { .. });
+
+        Ok(())
+    }
+
+    // -- DeleteRef --
+
+    #[tokio::test]
+    async fn delete_bookmark() -> Result<()> {
+        let repo = mkrepo();
+        let mut session = WorkerSession::default();
+        let mut ws = session.load_directory(repo.path())?;
+
+        let result = DeleteRef {
+            r#ref: local_bookmark("main"),
+        }
+        .execute_unboxed(&mut ws)
+        .await?;
+
+        assert_matches!(result, MutationResult::Updated { .. });
+
+        let matcher = StringMatcher::Exact("main".to_string());
+        assert!(ws.view().local_bookmarks_matching(&matcher).next().is_none());
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn delete_tag() -> Result<()> {
+        let repo = mkrepo();
+        let mut session = WorkerSession::default();
+        let mut ws = session.load_directory(repo.path())?;
+
+        // create then delete
+        CreateRef {
+            id: revs::main_bookmark(),
+            r#ref: tag("ephemeral"),
+        }
+        .execute_unboxed(&mut ws)
+        .await?;
+
+        let result = DeleteRef {
+            r#ref: tag("ephemeral"),
+        }
+        .execute_unboxed(&mut ws)
+        .await?;
+
+        assert_matches!(result, MutationResult::Updated { .. });
+
+        let matcher = StringMatcher::Exact("ephemeral".to_string());
+        assert!(ws.view().local_tags_matching(&matcher).next().is_none());
+
+        Ok(())
+    }
+
+    // -- MoveRef --
+
+    #[tokio::test]
+    async fn move_bookmark() -> Result<()> {
+        use jj_lib::object_id::ObjectId;
+
+        let repo = mkrepo();
+        let mut session = WorkerSession::default();
+        let mut ws = session.load_directory(repo.path())?;
+
+        let result = MoveRef {
+            r#ref: local_bookmark("main"),
+            to_id: revs::working_copy(),
+        }
+        .execute_unboxed(&mut ws)
+        .await?;
+
+        assert_matches!(result, MutationResult::Updated { .. });
+
+        let matcher = StringMatcher::Exact("main".to_string());
+        let (_, target) = ws
+            .view()
+            .local_bookmarks_matching(&matcher)
+            .next()
+            .expect("bookmark should still exist");
+        let commit_id = target.as_normal().expect("should be a normal ref");
+        assert_eq!(commit_id.hex(), revs::working_copy().commit.hex);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn move_nonexistent_bookmark() -> Result<()> {
+        let repo = mkrepo();
+        let mut session = WorkerSession::default();
+        let mut ws = session.load_directory(repo.path())?;
+
+        let result = MoveRef {
+            r#ref: local_bookmark("does-not-exist"),
+            to_id: revs::working_copy(),
+        }
+        .execute_unboxed(&mut ws)
+        .await?;
+
+        assert_matches!(result, MutationResult::PreconditionError { .. });
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn move_remote_bookmark_fails() -> Result<()> {
+        let repo = mkrepo();
+        let mut session = WorkerSession::default();
+        let mut ws = session.load_directory(repo.path())?;
+
+        let result = MoveRef {
+            r#ref: remote_bookmark("main", "origin"),
+            to_id: revs::working_copy(),
+        }
+        .execute_unboxed(&mut ws)
+        .await?;
+
+        assert_matches!(result, MutationResult::PreconditionError { .. });
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn move_tag() -> Result<()> {
+        use jj_lib::object_id::ObjectId;
+
+        let repo = mkrepo();
+        let mut session = WorkerSession::default();
+        let mut ws = session.load_directory(repo.path())?;
+
+        CreateRef {
+            id: revs::main_bookmark(),
+            r#ref: tag("v2.0"),
+        }
+        .execute_unboxed(&mut ws)
+        .await?;
+
+        let result = MoveRef {
+            r#ref: tag("v2.0"),
+            to_id: revs::working_copy(),
+        }
+        .execute_unboxed(&mut ws)
+        .await?;
+
+        assert_matches!(result, MutationResult::Updated { .. });
+
+        let matcher = StringMatcher::Exact("v2.0".to_string());
+        let (_, target) = ws
+            .view()
+            .local_tags_matching(&matcher)
+            .next()
+            .expect("tag should still exist");
+        let commit_id = target.as_normal().expect("should be a normal ref");
+        assert_eq!(commit_id.hex(), revs::working_copy().commit.hex);
+
+        Ok(())
+    }
+
+    // -- RenameBookmark --
+
+    #[tokio::test]
+    async fn rename_bookmark() -> Result<()> {
+        let repo = mkrepo();
+        let mut session = WorkerSession::default();
+        let mut ws = session.load_directory(repo.path())?;
+
+        let result = RenameBookmark {
+            r#ref: local_bookmark("main"),
+            new_name: "trunk".to_owned(),
+        }
+        .execute_unboxed(&mut ws)
+        .await?;
+
+        assert_matches!(result, MutationResult::Updated { .. });
+
+        let old_matcher = StringMatcher::Exact("main".to_string());
+        assert!(ws.view().local_bookmarks_matching(&old_matcher).next().is_none());
+
+        let new_matcher = StringMatcher::Exact("trunk".to_string());
+        assert!(ws.view().local_bookmarks_matching(&new_matcher).next().is_some());
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn rename_nonexistent_bookmark() -> Result<()> {
+        let repo = mkrepo();
+        let mut session = WorkerSession::default();
+        let mut ws = session.load_directory(repo.path())?;
+
+        let result = RenameBookmark {
+            r#ref: local_bookmark("ghost"),
+            new_name: "something".to_owned(),
+        }
+        .execute_unboxed(&mut ws)
+        .await?;
+
+        assert_matches!(result, MutationResult::PreconditionError { .. });
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn rename_bookmark_to_existing_name() -> Result<()> {
+        let repo = mkrepo();
+        let mut session = WorkerSession::default();
+        let mut ws = session.load_directory(repo.path())?;
+
+        // create a second bookmark so we can try renaming to it
+        CreateRef {
+            id: revs::working_copy(),
+            r#ref: local_bookmark("other"),
+        }
+        .execute_unboxed(&mut ws)
+        .await?;
+
+        let result = RenameBookmark {
+            r#ref: local_bookmark("main"),
+            new_name: "other".to_owned(),
+        }
+        .execute_unboxed(&mut ws)
+        .await?;
+
+        assert_matches!(result, MutationResult::PreconditionError { .. });
+
+        Ok(())
+    }
+
+    // -- TrackBookmark --
+
+    #[tokio::test]
+    async fn track_tag_fails() -> Result<()> {
+        let repo = mkrepo();
+        let mut session = WorkerSession::default();
+        let mut ws = session.load_directory(repo.path())?;
+
+        let result = TrackBookmark {
+            r#ref: tag("v1.0"),
+        }
+        .execute_unboxed(&mut ws)
+        .await?;
+
+        assert_matches!(result, MutationResult::PreconditionError { .. });
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn track_local_bookmark_fails() -> Result<()> {
+        let repo = mkrepo();
+        let mut session = WorkerSession::default();
+        let mut ws = session.load_directory(repo.path())?;
+
+        let result = TrackBookmark {
+            r#ref: local_bookmark("main"),
+        }
+        .execute_unboxed(&mut ws)
+        .await?;
+
+        assert_matches!(result, MutationResult::PreconditionError { .. });
+
+        Ok(())
+    }
+
+    // -- UntrackBookmark --
+
+    #[tokio::test]
+    async fn untrack_tag_fails() -> Result<()> {
+        let repo = mkrepo();
+        let mut session = WorkerSession::default();
+        let mut ws = session.load_directory(repo.path())?;
+
+        let result = UntrackBookmark {
+            r#ref: tag("v1.0"),
+        }
+        .execute_unboxed(&mut ws)
+        .await?;
+
+        assert_matches!(result, MutationResult::PreconditionError { .. });
+
+        Ok(())
+    }
+
+    // -- TrackBookmark + UntrackBookmark round-trip --
+
+    #[tokio::test]
+    async fn track_already_tracked_fails() -> Result<()> {
+        let repo = mkrepo();
+        let mut session = WorkerSession::default();
+        let mut ws = session.load_directory(repo.path())?;
+
+        // main@origin is tracked by default in the test repo
+        let result = TrackBookmark {
+            r#ref: remote_bookmark("main", "origin"),
+        }
+        .execute_unboxed(&mut ws)
+        .await?;
+
+        assert_matches!(result, MutationResult::PreconditionError { .. });
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn untrack_then_track_round_trip() -> Result<()> {
+        let repo = mkrepo();
+        let mut session = WorkerSession::default();
+        let mut ws = session.load_directory(repo.path())?;
+
+        // untrack main@origin
+        let result = UntrackBookmark {
+            r#ref: remote_bookmark("main", "origin"),
+        }
+        .execute_unboxed(&mut ws)
+        .await?;
+        assert_matches!(result, MutationResult::Updated { .. });
+
+        // track it again
+        let result = TrackBookmark {
+            r#ref: remote_bookmark("main", "origin"),
+        }
+        .execute_unboxed(&mut ws)
+        .await?;
+        assert_matches!(result, MutationResult::Updated { .. });
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn untrack_not_tracked_fails() -> Result<()> {
+        let repo = mkrepo();
+        let mut session = WorkerSession::default();
+        let mut ws = session.load_directory(repo.path())?;
+
+        // untrack main@origin first
+        UntrackBookmark {
+            r#ref: remote_bookmark("main", "origin"),
+        }
+        .execute_unboxed(&mut ws)
+        .await?;
+
+        // untracking again should fail
+        let result = UntrackBookmark {
+            r#ref: remote_bookmark("main", "origin"),
+        }
+        .execute_unboxed(&mut ws)
+        .await?;
+
+        assert_matches!(result, MutationResult::PreconditionError { .. });
+
+        Ok(())
+    }
+
+    // -- combine_bookmarks --
+
+    #[test]
+    fn combine_single_bookmark() {
+        assert_eq!(super::combine_bookmarks(&["main"]), "bookmark main");
+    }
+
+    #[test]
+    fn combine_multiple_bookmarks() {
+        assert_eq!(
+            super::combine_bookmarks(&["main", "dev"]),
+            "bookmarks main, dev"
+        );
+    }
+}
