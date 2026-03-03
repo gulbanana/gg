@@ -4,6 +4,7 @@
     export let tip: string = "";
     export let onClick: (event: MouseEvent) => void;
     export let safe: boolean = false;
+    export let secondary: boolean = false;
     export let disabled: boolean = false;
 
     $: isDisabled = disabled || (!safe && $hasModal);
@@ -12,6 +13,7 @@
 <button
     disabled={isDisabled}
     class:safe
+    class:secondary
     on:click|stopPropagation={isDisabled ? undefined : onClick}
     on:dragenter={dragOverWidget}
     on:dragover={dragOverWidget}
@@ -72,6 +74,18 @@
         &:active {
             border-right-color: var(--ctp-teal);
             border-bottom-color: var(--ctp-teal);
+        }
+
+        &.secondary {
+            color: var(--ctp-text);
+            background: var(--ctp-base);
+            &:hover {
+                background: var(--ctp-overlay0);
+            }
+            &:active {
+                border-right-color: var(--ctp-overlay0);
+                border-bottom-color: var(--ctp-overlay0);
+            }
         }
     }
 
