@@ -73,7 +73,11 @@
 
 <ModalDialog {title} on:cancel={onCancel} on:default={onEnter}>
     {#if detail != ""}
-        <p>{detail}</p>
+        {#if detail.startsWith("code:")}
+            <p><code>{detail.slice(5)}</code></p>
+        {:else}
+            <p>{detail}</p>
+        {/if}
     {/if}
     {#each fields as field}
         <label for="field-{field.label}">{field.label}{field.label.endsWith(":") ? "" : ":"}</label>

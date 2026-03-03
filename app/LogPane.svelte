@@ -4,12 +4,14 @@
     import type { LogRow } from "./messages/LogRow.js";
     import type { RevHeader } from "./messages/RevHeader";
     import type { RevSet } from "./messages/RevSet";
-    import { query } from "./ipc.js";
+    import { getInput, query, trigger } from "./ipc.js";
     import { sameChange } from "./ids.js";
     import { ignoreToggled, repoStatusEvent, revisionSelectEvent } from "./stores.js";
     import RevisionMutator from "./mutators/RevisionMutator.js";
     import Pane from "./shell/Pane.svelte";
     import RevisionObject from "./objects/RevisionObject.svelte";
+    import ActionWidget from "./controls/ActionWidget.svelte";
+    import Icon from "./controls/Icon.svelte";
     import SelectWidget from "./controls/SelectWidget.svelte";
     import ListWidget, { type List, type Selection } from "./controls/ListWidget.svelte";
     import { type EnhancedRow, default as GraphLog, type EnhancedLine } from "./GraphLog.svelte";
@@ -123,7 +125,7 @@
         loadLog(true);
     });
 
-    $: if (entered_query) choices = getChoices();
+    $: choices = getChoices(entered_query, presets);
     $: if ($repoStatusEvent) reloadLog();
 
     function isInSelectedRange(row: EnhancedRow, selection: typeof $revisionSelectEvent): boolean {
@@ -208,17 +210,62 @@
         setSelection(undefined, limitIdx); // keep anchor, extend to limit
     }
 
-    function getChoices() {
-        let choices = presets;
-        for (let choice of choices) {
-            if (entered_query == choice.value) {
-                return choices;
+    function getChoices(query: string, presetList: typeof presets) {
+        for (let choice of presetList) {
+            if (query == choice.value) {
+                return presetList;
             }
         }
 
-        choices = [{ label: "Custom", value: entered_query }, ...presets];
+        return [{ label: "Custom", value: query }, ...presetList];
+    }
 
-        return choices;
+    $: isCustom = !presets.some((p) => !p.separator && p.value === entered_query);
+
+    $: isDeletable =
+        !isCustom && presets.some((p) => !p.separator && p.value === entered_query && p.label !== "Default");
+
+    function writePresets() {
+        let values: Record<string, string> = {};
+        for (let [key, value] of Object.entries(query_choices)) {
+            if (key !== "default") {
+                values[key] = value;
+            }
+        }
+        trigger("write_config_table", { scope: "repo", key: ["gg", "presets"], values });
+    }
+
+    function toKebabCase(text: string): string {
+        return text
+            .trim()
+            .toLowerCase()
+            .replace(/\s+/g, "-")
+            .replace(/[^a-z0-9-]/g, "");
+    }
+
+    async function handleSavePreset() {
+        let response = await getInput("Save Revset", "code:" + entered_query, ["Preset Name"]);
+        if (!response) return;
+
+        let name = toKebabCase(response["Preset Name"]);
+        if (!name || name === "default") return;
+
+        query_choices[name] = entered_query;
+        query_choices = query_choices;
+        writePresets();
+    }
+
+    function handleDeletePreset() {
+        let keyToDelete = Object.entries(query_choices).find(
+            ([key, value]) => key !== "default" && value === entered_query,
+        )?.[0];
+        if (!keyToDelete) return;
+
+        delete query_choices[keyToDelete];
+        query_choices = query_choices;
+        entered_query = query_choices["default"] ?? "";
+        writePresets();
+        reloadLog();
     }
 
     async function loadLog(selectFirst: boolean) {
@@ -331,11 +378,20 @@
 </script>
 
 <Pane>
-    <div slot="header" class="log-selector">
+    <div slot="header" class="log-selector" class:editable={isCustom || isDeletable}>
         <SelectWidget options={choices} bind:value={entered_query} on:change={reloadLog}>
             <svelte:fragment let:option>{option.label}</svelte:fragment>
         </SelectWidget>
         <input type="text" bind:value={entered_query} on:change={reloadLog} />
+        {#if isCustom}
+            <ActionWidget safe tip="Save revset" onClick={handleSavePreset}>
+                <Icon name="save" />
+            </ActionWidget>
+        {:else if isDeletable}
+            <ActionWidget safe tip="Delete revset" onClick={handleDeletePreset}>
+                <Icon name="x-square" />
+            </ActionWidget>
+        {/if}
     </div>
 
     <ListWidget
@@ -373,6 +429,15 @@
         display: grid;
         grid-template-columns: auto 1fr;
         gap: 3px;
+
+        &.editable {
+            grid-template-columns: auto 1fr auto;
+            & > :global(*:last-child) {
+                height: unset;
+                align-self: stretch;
+                padding: 1px 3px;
+            }
+        }
     }
 
     input {

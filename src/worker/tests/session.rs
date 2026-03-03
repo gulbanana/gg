@@ -9,7 +9,7 @@ use crate::{
 use anyhow::{Context, Result};
 use assert_matches::assert_matches;
 use jj_lib::config::ConfigSource;
-use std::{path::PathBuf, sync::mpsc::channel};
+use std::{collections::HashMap, path::PathBuf, sync::mpsc::channel};
 
 #[tokio::test]
 async fn start_and_stop() -> Result<()> {
@@ -401,6 +401,45 @@ async fn config_write() -> Result<()> {
     let result = rx_read.recv()??;
 
     assert_eq!(vec!["a".to_string(), "b".to_string()], result);
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn config_write_table() -> Result<()> {
+    let repo = mkrepo();
+
+    let (tx, rx) = channel::<SessionEvent>();
+    let (tx_load, rx_load) = channel::<Result<RepoConfig>>();
+    let (tx_reload, rx_reload) = channel::<Result<RepoConfig>>();
+
+    let mut values = HashMap::new();
+    values.insert("my-preset".to_string(), "trunk()..".to_string());
+    values.insert("wip".to_string(), "description(exact:\"\")".to_string());
+
+    tx.send(SessionEvent::OpenWorkspace {
+        tx: tx_load,
+        wd: Some(repo.path().to_owned()),
+    })?;
+    tx.send(SessionEvent::WriteConfigTable {
+        scope: ConfigSource::Repo,
+        key: vec!["gg".into(), "presets".into()],
+        values,
+    })?;
+    tx.send(SessionEvent::OpenWorkspace {
+        tx: tx_reload,
+        wd: None,
+    })?;
+    tx.send(SessionEvent::EndSession)?;
+
+    WorkerSession::default().handle_events(&rx).await?;
+
+    _ = rx_load.recv()??;
+    let config = rx_reload.recv()??;
+    assert_matches!(config, RepoConfig::Workspace { query_choices, .. } => {
+        assert_eq!(query_choices.get("my-preset").map(|s| s.as_str()), Some("trunk().."));
+        assert_eq!(query_choices.get("wip").map(|s| s.as_str()), Some("description(exact:\"\")"));
+    });
 
     Ok(())
 }

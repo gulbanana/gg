@@ -209,6 +209,7 @@ pub fn run_gui(options: super::RunOptions) -> Result<()> {
             external_diff,
             external_resolve,
             undo_operation,
+            write_config_table,
         ])
         .menu(move |handle| menu::build_main(handle, &recent_workspaces))
         .manage(AppState::new(
@@ -766,6 +767,34 @@ fn undo_operation(
     options: MutationOptions,
 ) -> Result<MutationResult, InvokeError> {
     try_mutate(window, app_state, UndoOperation, options)
+}
+
+#[tauri::command(async)]
+fn write_config_table(
+    window: Window,
+    app_state: State<AppState>,
+    scope: String,
+    key: Vec<String>,
+    values: HashMap<String, String>,
+) -> Result<(), InvokeError> {
+    let session_tx = app_state.get_session(window.label());
+    let config_scope = match scope.as_str() {
+        "user" => ConfigSource::User,
+        "repo" => ConfigSource::Repo,
+        _ => {
+            return Err(InvokeError::from_anyhow(anyhow::anyhow!(
+                "Invalid config scope"
+            )));
+        }
+    };
+    session_tx
+        .send(SessionEvent::WriteConfigTable {
+            scope: config_scope,
+            key,
+            values,
+        })
+        .map_err(InvokeError::from_error)?;
+    Ok(())
 }
 
 pub fn try_create_window(app_handle: &AppHandle, workspace: Option<PathBuf>) -> Result<()> {

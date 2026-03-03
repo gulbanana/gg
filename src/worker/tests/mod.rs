@@ -391,7 +391,11 @@ async fn add_workspace_creates_new_workspace() -> Result<()> {
         .await?;
 
     // new workspace is registered in the view
-    assert!(ws.view().get_wc_commit_id(WorkspaceName::new("second")).is_some());
+    assert!(
+        ws.view()
+            .get_wc_commit_id(WorkspaceName::new("second"))
+            .is_some()
+    );
 
     // new workspace has a .jj directory
     assert!(new_ws_path.join(".jj").exists());
@@ -400,7 +404,10 @@ async fn add_workspace_creates_new_workspace() -> Result<()> {
     assert_eq!(&original_wc, ws.wc_id());
 
     // new workspace's WC commit is different from the original
-    let new_wc_id = ws.view().get_wc_commit_id(WorkspaceName::new("second")).unwrap();
+    let new_wc_id = ws
+        .view()
+        .get_wc_commit_id(WorkspaceName::new("second"))
+        .unwrap();
     assert_ne!(new_wc_id, ws.wc_id());
 
     // new WC commit has the same parents as the original
@@ -413,10 +420,7 @@ async fn add_workspace_creates_new_workspace() -> Result<()> {
         .parents()
         .collect::<Result<Vec<_>, _>>()?;
     assert_eq!(
-        original_parents
-            .iter()
-            .map(|c| c.id())
-            .collect::<Vec<_>>(),
+        original_parents.iter().map(|c| c.id()).collect::<Vec<_>>(),
         new_parents.iter().map(|c| c.id()).collect::<Vec<_>>()
     );
 
@@ -498,12 +502,20 @@ async fn forget_workspace_removes_workspace() -> Result<()> {
     let new_ws_path = repo.path().join("to-forget");
     ws.add_workspace("to-forget".to_owned(), new_ws_path.clone())
         .await?;
-    assert!(ws.view().get_wc_commit_id(WorkspaceName::new("to-forget")).is_some());
+    assert!(
+        ws.view()
+            .get_wc_commit_id(WorkspaceName::new("to-forget"))
+            .is_some()
+    );
 
     ws.forget_workspace("to-forget".to_owned()).await?;
 
     // workspace is no longer in the view
-    assert!(ws.view().get_wc_commit_id(WorkspaceName::new("to-forget")).is_none());
+    assert!(
+        ws.view()
+            .get_wc_commit_id(WorkspaceName::new("to-forget"))
+            .is_none()
+    );
 
     // directory is NOT deleted (matches jj behavior)
     assert!(new_ws_path.exists());
@@ -519,10 +531,7 @@ async fn forget_workspace_rejects_current() -> Result<()> {
     let mut ws = session.load_workspace(repo.path())?;
     let current_name = ws.name().as_str().to_owned();
 
-    let err = ws
-        .forget_workspace(current_name)
-        .await
-        .unwrap_err();
+    let err = ws.forget_workspace(current_name).await.unwrap_err();
     assert!(
         err.to_string().contains("cannot forget the current"),
         "unexpected error: {err}"
@@ -562,8 +571,10 @@ async fn list_workspaces_returns_sorted_names() -> Result<()> {
     assert_eq!(ws.list_workspaces(), vec![current_name.clone()]);
 
     // add two more workspaces
-    ws.add_workspace("alpha".to_owned(), repo.path().join("alpha")).await?;
-    ws.add_workspace("zeta".to_owned(), repo.path().join("zeta")).await?;
+    ws.add_workspace("alpha".to_owned(), repo.path().join("alpha"))
+        .await?;
+    ws.add_workspace("zeta".to_owned(), repo.path().join("zeta"))
+        .await?;
 
     // all three names are present and sorted
     assert_eq!(
