@@ -550,6 +550,30 @@ async fn forget_workspace_rejects_nonexistent() -> Result<()> {
     Ok(())
 }
 
+#[tokio::test]
+async fn list_workspaces_returns_sorted_names() -> Result<()> {
+    let repo = mkrepo();
+
+    let mut session = WorkerSession::default();
+    let mut ws = session.load_workspace(repo.path())?;
+    let current_name = ws.name().as_symbol().to_string();
+
+    // initially only the current workspace exists
+    assert_eq!(ws.list_workspaces(), vec![current_name.clone()]);
+
+    // add two more workspaces
+    ws.add_workspace("alpha".to_owned(), repo.path().join("alpha")).await?;
+    ws.add_workspace("zeta".to_owned(), repo.path().join("zeta")).await?;
+
+    // all three names are present and sorted
+    assert_eq!(
+        ws.list_workspaces(),
+        vec!["alpha".to_owned(), current_name, "zeta".to_owned()]
+    );
+
+    Ok(())
+}
+
 /// RAII guard that removes an env var on drop
 struct SetVarGuard(&'static str);
 

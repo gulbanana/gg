@@ -1,5 +1,15 @@
 # GG Changelog
 
+## [Unreleased]
+
+### Added
+- The gg_lib crate only exposed a SessionEvent-based state machine, which is fine for operations that modify a particular workspace but doesn't cover workspace-level meta-changes. Newly public APIs:
+  * `WorkerSession::init_repository()`
+  * `WorkerSession::clone_repository()`
+  * `WorkspaceSession::add_workspace()`
+  * `WorkspaceSession::forget_workspace()`
+  * `WorkspaceSession::list_workspaces()`
+
 ## [0.38.4](releases/tag/v0.38.4)
 
 ### Added

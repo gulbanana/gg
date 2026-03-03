@@ -214,17 +214,15 @@ impl WorkspaceSession<'_> {
         let new_wc_commit = tx.repo_mut().new_commit(parent_ids, tree).write()?;
         tx.repo_mut().edit(workspace_name.clone(), &new_wc_commit)?;
 
-        tx.repo_mut().rebase_descendants()?;
-        if self.is_colocated {
-            git::export_refs(tx.repo_mut())?;
-        }
-        let repo = tx.commit(format!(
-            "create initial working-copy commit in workspace '{}'",
-            workspace_name.as_symbol()
-        ))?;
+        self.finish_transaction(
+            tx,
+            format!(
+                "create initial working-copy commit in workspace '{}'",
+                workspace_name.as_symbol()
+            ),
+        )?;
 
-        new_workspace.check_out(repo.op_id().clone(), None, &new_wc_commit)?;
-        self.operation = OperationData::new(self.name(), &self.data, repo);
+        new_workspace.check_out(self.operation.repo.op_id().clone(), None, &new_wc_commit)?;
 
         Ok(())
     }
@@ -254,6 +252,17 @@ impl WorkspaceSession<'_> {
         )?;
 
         Ok(())
+    }
+
+    pub fn list_workspaces(&self) -> Vec<String> {
+        let mut names: Vec<String> = self
+            .view()
+            .wc_commit_ids()
+            .keys()
+            .map(|name| name.as_symbol().to_string())
+            .collect();
+        names.sort();
+        names
     }
 
     pub(crate) fn sink(&self) -> Arc<dyn super::EventSink> {
