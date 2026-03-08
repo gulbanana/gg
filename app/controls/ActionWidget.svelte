@@ -75,17 +75,16 @@
             border-right-color: var(--ctp-teal);
             border-bottom-color: var(--ctp-teal);
         }
+    }
 
-        &.secondary {
-            color: var(--ctp-text);
-            background: var(--ctp-base);
-            &:hover {
-                background: var(--ctp-overlay0);
-            }
-            &:active {
-                border-right-color: var(--ctp-overlay0);
-                border-bottom-color: var(--ctp-overlay0);
-            }
+    button.secondary {
+        background: var(--ctp-surface2);
+        &:hover {
+            background: var(--ctp-overlay2);
+        }
+        &:active {
+            border-right-color: var(--ctp-overlay2);
+            border-bottom-color: var(--ctp-overlay2);
         }
     }
 

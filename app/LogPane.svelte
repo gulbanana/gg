@@ -384,11 +384,11 @@
         </SelectWidget>
         <input type="text" bind:value={entered_query} on:change={reloadLog} />
         {#if isCustom}
-            <ActionWidget safe tip="Save revset" onClick={handleSavePreset}>
+            <ActionWidget secondary tip="Save revset" onClick={handleSavePreset}>
                 <Icon name="save" />
             </ActionWidget>
         {:else if isDeletable}
-            <ActionWidget safe tip="Delete revset" onClick={handleDeletePreset}>
+            <ActionWidget secondary tip="Delete revset" onClick={handleDeletePreset}>
                 <Icon name="x-square" />
             </ActionWidget>
         {/if}

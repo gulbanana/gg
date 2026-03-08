@@ -3,7 +3,8 @@
 ## [Unreleased]
 
 ### Added
-- UI for modifying the [gg.presets] revsets in the left pane.
+- UI for modifying the [gg.presets] revsets - the left pane's top field has an add/remove button next to it when a custom revset is entered.
+- Improved the appearance of secondary action buttons to better distinguish them from disabled ones.
 - The gg_lib crate only exposed a SessionEvent-based state machine, which is fine for operations that modify a particular workspace but doesn't cover workspace-level meta-changes. Newly public APIs:
   * `WorkerSession::init_repository()`
   * `WorkerSession::clone_repository()`
