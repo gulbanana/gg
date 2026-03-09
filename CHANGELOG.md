@@ -1,6 +1,7 @@
 # GG Changelog
 
-## [Unreleased]
+## [0.39.0](releases/tag/v0.39.0)
+This release is based on Jujutsu 0.39.
 
 ### Added
 - UI for modifying the [gg.presets] revsets - the left pane's top field has an add/remove button next to it when a custom revset is entered.
