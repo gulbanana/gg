@@ -1,0 +1,21 @@
+name: 'winget'
+
+on:
+  release:
+    types: [released]
+
+jobs:
+  winget:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Derive changelog anchor
+      id: changelog
+      run: |
+        version="${GITHUB_REF_NAME#v}"
+        echo "anchor=${version//.}" >> "$GITHUB_OUTPUT"
+    - uses: vedantmgoyal9/winget-releaser@main
+      with:
+        identifier: gulbanana.gg
+        installers-regex: '\.msi$' # as opposed to '\.exe$'
+        release-notes-url: https://github.com/gulbanana/gg/blob/master/CHANGELOG.md#${{ steps.changelog.outputs.anchor }}
+        token: ${{ secrets.WINGET_TOKEN }}
