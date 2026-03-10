@@ -161,7 +161,7 @@ impl Mutation for ExternalResolve {
         )
         .context("failed to load merge editor config")?;
 
-        let (new_tree, _partial) = match merge_editor.edit_files(&ui, &tree, &[repo_path]) {
+        let (new_tree, _partial) = match merge_editor.edit_files(&ui, &tree, &[repo_path]).await {
             Ok(result) => result,
             Err(ConflictResolveError::EmptyOrUnchanged) => {
                 return Ok(MutationResult::Unchanged);
@@ -248,7 +248,7 @@ impl Mutation for GitFetch {
                 },
             )?;
 
-            let result = auth_ctx.with_callbacks(
+            let fetch_result = auth_ctx.with_callbacks(
                 Some(progress_sender.clone()),
                 ws.session.enable_askpass,
                 |cb, env| {
@@ -262,13 +262,16 @@ impl Mutation for GitFetch {
                         .fetch(RemoteName::new(remote_name), refspecs, cb, None, None)
                         .context("failed to fetch")?;
 
-                    fetcher.import_refs().context("failed to import refs")?;
-
-                    Ok(())
+                    Ok(fetcher)
                 },
             );
 
-            if let Err(err) = result {
+            let mut fetcher = match fetch_result {
+                Err(err) => return Ok(auth_ctx.into_result(err)),
+                Ok(f) => f,
+            };
+
+            if let Err(err) = fetcher.import_refs().await.context("failed to import refs") {
                 return Ok(auth_ctx.into_result(err));
             }
         }
@@ -586,7 +589,7 @@ impl Mutation for UndoOperation {
         ws: &mut WorkspaceSession,
         _options: &MutationOptions,
     ) -> Result<MutationResult> {
-        let head_op = op_walk::resolve_op_with_repo(ws.repo(), "@")?; // XXX this should be behind an abstraction, maybe reused in snapshot
+        let head_op = op_walk::resolve_op_with_repo(ws.repo(), "@").await?; // XXX this should be behind an abstraction, maybe reused in snapshot
         let mut parent_ops = head_op.parents();
 
         let Some(parent_op) = parent_ops.next().transpose()? else {

@@ -256,13 +256,13 @@ impl WorkerSession {
         let import_options = load_git_import_options(&Ui::null(), &git_settings, &remote_settings)
             .map_err(|e| Error::new(e.error))?;
 
-        // perform sync git operations in with_callbacks, return the transaction for async finalization
-        let fetch_result =
+        // perform sync git operations in with_callbacks, return the fetcher for async finalization
+        let mut tx = repo.start_transaction();
+        let mut fetch_result =
             auth_ctx.with_callbacks(Some(self.sink.clone()), self.enable_askpass, |cb, env| {
                 let mut subprocess_options = git_settings.to_subprocess_options();
                 subprocess_options.environment = env;
 
-                let mut tx = repo.start_transaction();
                 let mut fetcher =
                     GitFetch::new(tx.repo_mut(), subprocess_options, &import_options)?;
                 let refspecs = git::expand_fetch_refspecs(
@@ -277,31 +277,32 @@ impl WorkerSession {
                     .fetch(remote_name, refspecs, cb, None, None)
                     .context("Failed to fetch from remote")?;
 
-                fetcher.import_refs().context("Failed to import refs")?;
-
-                // find HEAD if at all possible
-                let workspace_name = workspace.workspace_name().to_owned();
-                let mut default_branch = None;
-                if let Some(bookmark_name) = Self::find_default_branch(tx.repo()) {
-                    let bookmark_ref = RefNameBuf::from(bookmark_name.as_str());
-                    let remote_ref = RemoteNameBuf::from("origin");
-                    let symbol = RemoteRefSymbol {
-                        name: &bookmark_ref,
-                        remote: &remote_ref,
-                    };
-                    let remote_bookmark = tx.repo().view().get_remote_bookmark(symbol);
-                    if let Some(commit_id) = remote_bookmark.target.as_normal().cloned() {
-                        let commit = tx.repo().store().get_commit(&commit_id)?;
-                        tx.repo_mut().track_remote_bookmark(symbol)?;
-                        default_branch = Some((workspace_name, commit, commit_id));
-                    }
-                }
-
-                Ok::<_, Error>((tx, default_branch))
+                Ok::<_, Error>(fetcher)
             })?;
 
-        // async finalization outside the sync closure
-        let (mut tx, default_branch) = fetch_result;
+        // async import refs and finalization outside the sync closure
+        fetch_result
+            .import_refs()
+            .await
+            .context("Failed to import refs")?;
+
+        // find HEAD if at all possible
+        let workspace_name = workspace.workspace_name().to_owned();
+        let mut default_branch = None;
+        if let Some(bookmark_name) = Self::find_default_branch(tx.repo()) {
+            let bookmark_ref = RefNameBuf::from(bookmark_name.as_str());
+            let remote_ref = RemoteNameBuf::from("origin");
+            let symbol = RemoteRefSymbol {
+                name: &bookmark_ref,
+                remote: &remote_ref,
+            };
+            let remote_bookmark = tx.repo().view().get_remote_bookmark(symbol);
+            if let Some(commit_id) = remote_bookmark.target.as_normal().cloned() {
+                let commit = tx.repo().store().get_commit(&commit_id)?;
+                tx.repo_mut().track_remote_bookmark(symbol)?;
+                default_branch = Some((workspace_name, commit, commit_id));
+            }
+        }
         let mut checkout_commit_id = None;
         if let Some((workspace_name, commit, commit_id)) = default_branch {
             tx.repo_mut().check_out(workspace_name, &commit).await?;

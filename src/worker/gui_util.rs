@@ -907,7 +907,7 @@ impl WorkspaceSession<'_> {
             .transpose()?;
         if self.is_colocated {
             if let Some(wc_commit) = &maybe_new_wc_commit {
-                git::reset_head(tx.repo_mut(), wc_commit)?;
+                git::reset_head(tx.repo_mut(), wc_commit).await?;
             }
             git::export_refs(tx.repo_mut())?;
         }
@@ -975,7 +975,9 @@ impl WorkspaceSession<'_> {
             locked_ws.locked_wc(),
             &wc_commit,
             &repo,
-        )? {
+        )
+        .await?
+        {
             WorkingCopyFreshness::Fresh => (repo, wc_commit),
             WorkingCopyFreshness::Updated(wc_operation) => {
                 let repo = repo.reload_at(&wc_operation).await?;
@@ -1071,7 +1073,9 @@ impl WorkspaceSession<'_> {
             );
         }
 
-        locked_ws.finish(self.operation.repo.op_id().clone())?;
+        locked_ws
+            .finish(self.operation.repo.op_id().clone())
+            .await?;
 
         Ok(did_anything)
     }
@@ -1096,7 +1100,9 @@ impl WorkspaceSession<'_> {
                 )
             } else {
                 let locked_ws = self.workspace.start_working_copy_mutation()?;
-                locked_ws.finish(self.operation.repo.op_id().clone())?;
+                locked_ws
+                    .finish(self.operation.repo.op_id().clone())
+                    .await?;
                 None
             },
         )
@@ -1104,7 +1110,7 @@ impl WorkspaceSession<'_> {
 
     async fn import_git_head(&mut self) -> Result<()> {
         let mut tx = self.operation.repo.start_transaction();
-        git::import_head(tx.repo_mut())?;
+        git::import_head(tx.repo_mut()).await?;
         if !tx.repo().has_changes() {
             return Ok(());
         }
@@ -1136,7 +1142,9 @@ impl WorkspaceSession<'_> {
                 tx.commit("import git head").await?,
             );
 
-            locked_ws.finish(self.operation.repo.op_id().clone())?;
+            locked_ws
+                .finish(self.operation.repo.op_id().clone())
+                .await?;
         } else {
             self.finish_transaction(tx, "import git head").await?;
         }
@@ -1150,6 +1158,7 @@ impl WorkspaceSession<'_> {
             .map_err(|e| Error::new(e.error))?;
         let mut tx = self.operation.repo.start_transaction();
         let stats = git::import_refs(tx.repo_mut(), &import_options)
+            .await
             .context("automated import failed despite reserved remote name")?;
         if !tx.repo().has_changes() {
             return Ok(());
