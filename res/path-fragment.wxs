@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+    <Fragment>
+        <DirectoryRef Id="INSTALLDIR">
+            <Component Id="PathEntry" Guid="{5b846a9c-5449-4e98-af6e-fbe0a78db254}" KeyPath="yes">
+                <Environment
+                    Id="GgPath"
+                    Name="PATH"
+                    Action="set"
+                    Part="last"
+                    System="yes"
+                    Permanent="no"
+                    Value="[INSTALLDIR]" />
+            </Component>
+        </DirectoryRef>
+    </Fragment>
+</Wix>

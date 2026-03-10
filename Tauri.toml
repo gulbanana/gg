@@ -38,4 +38,8 @@ icon = [
 [bundle.windows]
 signCommand = "trusted-signing-cli -e https://wus2.codesigning.azure.net/ -a agile-signing -c cloud-apps %1"
 
+[bundle.windows.wix]
+fragmentPaths = ["res/path-fragment.wxs"]
+componentRefs = ["PathEntry"]
+
 [plugins]
