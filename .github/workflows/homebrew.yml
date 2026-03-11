@@ -1,0 +1,51 @@
+name: 'homebrew'
+
+on:
+  release:
+    types: [released]
+
+jobs:
+  homebrew:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Update Homebrew cask
+      env:
+        GH_TOKEN: ${{ secrets.HOMEBREW_TOKEN }}
+      run: |
+        version="${GITHUB_REF_NAME#v}"
+        dmg="gg_${version}_universal.dmg"
+        url="https://github.com/gulbanana/gg/releases/download/${GITHUB_REF_NAME}/${dmg}"
+
+        sha256=$(curl -sL "$url" | sha256sum | cut -d' ' -f1)
+
+        cat > gg.rb <<CASK
+        cask "gg" do
+          version "${version}"
+          sha256 "${sha256}"
+
+          url "https://github.com/gulbanana/gg/releases/download/v#{version}/gg_#{version}_universal.dmg",
+              verified: "github.com/gulbanana/gg/"
+          name "GG"
+          desc "GG - Gui for JJ"
+          homepage "https://github.com/gulbanana/gg"
+
+          depends_on macos: ">= :ventura"
+
+          app "gg.app"
+          binary "#{appdir}/gg.app/Contents/MacOS/gg", target: "gg"
+
+          zap trash: [
+            "~/Library/Application Support/au.gulbanana.gg",
+            "~/Library/Caches/au.gulbanana.gg",
+          ]
+        end
+        CASK
+
+        # remove leading whitespace from heredoc
+        sed -i 's/^        //' gg.rb
+
+        gh api repos/gulbanana/homebrew-tap/contents/Casks/gg.rb \
+          --method PUT \
+          --field message="Update gg to ${version}" \
+          --field content="$(base64 -w0 gg.rb)" \
+          --field sha="$(gh api repos/gulbanana/homebrew-tap/contents/Casks/gg.rb --jq .sha)"
