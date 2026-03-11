@@ -1021,6 +1021,128 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn move_changes_descendant_target() -> Result<()> {
+        let repo = mkrepo();
+
+        let mut session = WorkerSession::default();
+        let mut ws = session.load_workspace(repo.path()).await?;
+
+        let base = ws.get_commit(ws.wc_id())?;
+        let base_id = ws.format_id(&base);
+
+        let result = CreateRevision {
+            set: RevSet::singleton(base_id.clone()),
+        }
+        .execute_unboxed(&mut ws)
+        .await?;
+        let source_id = match result {
+            MutationResult::Updated {
+                new_selection: Some(sel),
+                ..
+            } => sel.id,
+            _ => panic!("expected new revision"),
+        };
+        fs::write(repo.path().join("move_changes_source.txt"), "source").unwrap();
+        DescribeRevision {
+            id: source_id.clone(),
+            new_description: "source".to_owned(),
+            reset_author: false,
+        }
+        .execute_unboxed(&mut ws)
+        .await?;
+        let source = get_by_chid(&ws, &source_id)?;
+        let source_id = ws.format_id(&source);
+
+        let result = CreateRevision {
+            set: RevSet::singleton(source_id.clone()),
+        }
+        .execute_unboxed(&mut ws)
+        .await?;
+        let middle_id = match result {
+            MutationResult::Updated {
+                new_selection: Some(sel),
+                ..
+            } => sel.id,
+            _ => panic!("expected new revision"),
+        };
+        fs::write(repo.path().join("move_changes_middle.txt"), "middle").unwrap();
+        DescribeRevision {
+            id: middle_id.clone(),
+            new_description: "middle".to_owned(),
+            reset_author: false,
+        }
+        .execute_unboxed(&mut ws)
+        .await?;
+        let middle = get_by_chid(&ws, &middle_id)?;
+        let middle_id = ws.format_id(&middle);
+
+        let result = CreateRevision {
+            set: RevSet::singleton(middle_id.clone()),
+        }
+        .execute_unboxed(&mut ws)
+        .await?;
+        let target_id = match result {
+            MutationResult::Updated {
+                new_selection: Some(sel),
+                ..
+            } => sel.id,
+            _ => panic!("expected new revision"),
+        };
+        fs::write(repo.path().join("move_changes_target.txt"), "target").unwrap();
+        DescribeRevision {
+            id: target_id.clone(),
+            new_description: "target".to_owned(),
+            reset_author: false,
+        }
+        .execute_unboxed(&mut ws)
+        .await?;
+        let target = get_by_chid(&ws, &target_id)?;
+        let target_id = ws.format_id(&target);
+
+        let result = MoveChanges {
+            from: RevSet::singleton(source_id.clone()),
+            to_id: target_id.commit.clone(),
+            paths: vec![TreePath {
+                repo_path: "move_changes_source.txt".to_owned(),
+                relative_path: "".into(),
+            }],
+        }
+        .execute_unboxed(&mut ws)
+        .await?;
+        assert_matches!(result, MutationResult::Updated { .. });
+
+        let source_header = queries::query_revision(&ws, &source_id)?;
+        assert!(source_header.is_none(), "source should be abandoned");
+
+        let middle_after = get_by_chid(&ws, &middle_id)?;
+        let target_after = get_by_chid(&ws, &target_id)?;
+
+        assert_eq!(middle_after.parent_ids()[0], base.id().clone());
+        assert_eq!(target_after.parent_ids()[0], middle_after.id().clone());
+
+        for (label, commit) in [("middle", &middle_after), ("target", &target_after)] {
+            let targets = ws
+                .repo()
+                .resolve_change_id(commit.change_id())?
+                .expect("commit should resolve");
+            assert!(
+                !targets.is_divergent(),
+                "{label} should not be divergent after move"
+            );
+        }
+
+        let middle_rev = query_by_chid(&ws, &middle_id.change.hex).await?;
+        assert_matches!(&middle_rev, RevsResult::Detail { changes, .. } if changes.iter().any(|c| c.path.repo_path == "move_changes_middle.txt")
+            && !changes.iter().any(|c| c.path.repo_path == "move_changes_source.txt"));
+
+        let target_rev = query_by_chid(&ws, &target_id.change.hex).await?;
+        assert_matches!(&target_rev, RevsResult::Detail { changes, .. } if changes.iter().any(|c| c.path.repo_path == "move_changes_target.txt")
+            && changes.iter().any(|c| c.path.repo_path == "move_changes_source.txt"));
+
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn copy_changes() -> Result<()> {
         let repo = mkrepo();
 
@@ -1560,6 +1682,15 @@ mod tests {
         // Verify destination (hunk_grandchild) - should have the hunk applied correctly
         let dest_after = get_by_chid(&ws, &revs::hunk_grandchild())?;
         let dest_tree = dest_after.tree();
+
+        let dest_targets = ws
+            .repo()
+            .resolve_change_id(dest_after.change_id())?
+            .expect("destination should resolve");
+        assert!(
+            !dest_targets.is_divergent(),
+            "destination should not be divergent after move"
+        );
 
         let path_value = dest_tree.path_value(&repo_path)?;
         match path_value.into_resolved() {

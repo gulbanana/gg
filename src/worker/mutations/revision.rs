@@ -505,11 +505,20 @@ impl Mutation for InsertRevisions {
         let orphan_to = oldest.parent_ids().to_vec();
         let rebased_children = disinherit_children(ws, &mut tx, &targets, orphan_to).await?;
 
-        // update after, which may have been a descendant of the range
+        // update after/before, which may have been rebased as descendants of the range
         let after_id = rebased_children
             .get(after.id())
             .unwrap_or(after.id())
             .clone();
+        let before_id = rebased_children
+            .get(before.id())
+            .unwrap_or(before.id())
+            .clone();
+        let before = tx
+            .repo()
+            .store()
+            .get_commit(&before_id)
+            .context("resolve rebased before_id")?;
 
         // rebase the oldest onto after; the rest of the range follows
         let transaction_description = if targets.len() == 1 {
@@ -1215,6 +1224,147 @@ mod tests {
             assert!(
                 merge_parents_after.contains(&preserved_parent_id),
                 "merge child should keep non-target parents"
+            );
+        }
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn insert_revisions_descendant_edge() -> Result<()> {
+        let repo = mkrepo();
+
+        let mut session = WorkerSession::default();
+        let mut ws = session.load_workspace(repo.path()).await?;
+
+        let base = ws.get_commit(ws.wc_id())?;
+        let base_id = ws.format_id(&base);
+
+        let result = CreateRevision {
+            set: RevSet::singleton(base_id.clone()),
+        }
+        .execute_unboxed(&mut ws)
+        .await?;
+        let source_id = match result {
+            MutationResult::Updated {
+                new_selection: Some(sel),
+                ..
+            } => sel.id,
+            _ => panic!("expected new revision"),
+        };
+        fs::write(repo.path().join("insert_desc_source.txt"), "source").unwrap();
+        DescribeRevision {
+            id: source_id.clone(),
+            new_description: "source".to_owned(),
+            reset_author: false,
+        }
+        .execute_unboxed(&mut ws)
+        .await?;
+        let source = get_by_chid(&ws, &source_id)?;
+        let source_id = ws.format_id(&source);
+
+        let result = CreateRevision {
+            set: RevSet::singleton(source_id.clone()),
+        }
+        .execute_unboxed(&mut ws)
+        .await?;
+        let after_id = match result {
+            MutationResult::Updated {
+                new_selection: Some(sel),
+                ..
+            } => sel.id,
+            _ => panic!("expected new revision"),
+        };
+        fs::write(repo.path().join("insert_desc_after.txt"), "after").unwrap();
+        DescribeRevision {
+            id: after_id.clone(),
+            new_description: "after".to_owned(),
+            reset_author: false,
+        }
+        .execute_unboxed(&mut ws)
+        .await?;
+        let after = get_by_chid(&ws, &after_id)?;
+        let after_id = ws.format_id(&after);
+
+        let result = CreateRevision {
+            set: RevSet::singleton(after_id.clone()),
+        }
+        .execute_unboxed(&mut ws)
+        .await?;
+        let before_id = match result {
+            MutationResult::Updated {
+                new_selection: Some(sel),
+                ..
+            } => sel.id,
+            _ => panic!("expected new revision"),
+        };
+        fs::write(repo.path().join("insert_desc_before.txt"), "before").unwrap();
+        DescribeRevision {
+            id: before_id.clone(),
+            new_description: "before".to_owned(),
+            reset_author: false,
+        }
+        .execute_unboxed(&mut ws)
+        .await?;
+        let before = get_by_chid(&ws, &before_id)?;
+        let before_id = ws.format_id(&before);
+
+        let result = CreateRevision {
+            set: RevSet::singleton(before_id.clone()),
+        }
+        .execute_unboxed(&mut ws)
+        .await?;
+        let tip_id = match result {
+            MutationResult::Updated {
+                new_selection: Some(sel),
+                ..
+            } => sel.id,
+            _ => panic!("expected new revision"),
+        };
+        fs::write(repo.path().join("insert_desc_tip.txt"), "tip").unwrap();
+        DescribeRevision {
+            id: tip_id.clone(),
+            new_description: "tip".to_owned(),
+            reset_author: false,
+        }
+        .execute_unboxed(&mut ws)
+        .await?;
+        let tip = get_by_chid(&ws, &tip_id)?;
+        let tip_id = ws.format_id(&tip);
+
+        let result = InsertRevisions {
+            set: RevSet::singleton(source_id.clone()),
+            after_id: after_id.clone(),
+            before_id: before_id.clone(),
+        }
+        .execute_unboxed(&mut ws)
+        .await?;
+        assert_matches!(result, MutationResult::Updated { .. });
+
+        let after_after = get_by_chid(&ws, &after_id)?;
+        let source_after = get_by_chid(&ws, &source_id)?;
+        let before_after = get_by_chid(&ws, &before_id)?;
+        let tip_after = get_by_chid(&ws, &tip_id)?;
+
+        assert_eq!(after_after.parent_ids()[0], base.id().clone());
+        assert_eq!(source_after.parent_ids()[0], after_after.id().clone());
+        assert_eq!(before_after.parent_ids()[0], source_after.id().clone());
+        assert_eq!(tip_after.parent_ids()[0], before_after.id().clone());
+        assert_eq!(tip_after.id(), ws.wc_id());
+
+        for (label, commit) in [
+            ("after", &after_after),
+            ("source", &source_after),
+            ("before", &before_after),
+            ("tip", &tip_after),
+        ] {
+            let targets = ws
+                .repo()
+                .resolve_change_id(commit.change_id())?
+                .expect("commit should resolve");
+            assert!(
+                !targets.is_divergent(),
+                "{label} should not be divergent after insert"
             );
         }
 
