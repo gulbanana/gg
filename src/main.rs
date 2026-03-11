@@ -60,7 +60,6 @@ struct Args {
     #[arg(long, global = true)]
     ignore_immutable: bool,
 
-    #[cfg(not(feature = "app"))]
     #[arg(
         long,
         global = true,
@@ -133,21 +132,34 @@ fn main() -> Result<()> {
 
     let args = Args::parse();
 
-    // cargo run/install: act like a CLI that spawns a GUI in the background
-    #[cfg(not(feature = "app"))]
-    if !args.foreground {
+    if !args.foreground && should_spawn() {
         spawn_app()
     } else {
         run_app(args)
     }
-
-    #[cfg(feature = "app")]
-    {
-        run_app(args)
-    }
 }
 
-#[cfg(not(feature = "app"))]
+/// whether to fork a background process and return the shell to the user
+fn should_spawn() -> bool {
+    // crate builds always fork - they act as a CLI that spawns the GUI
+    #[cfg(not(feature = "app"))]
+    return true;
+
+    // app builds on macOS fork when launched from a terminal, so that
+    // running `gg` from a shell prompt returns control to the user.
+    // when launched from Finder/Dock/Spotlight there's no terminal.
+    #[cfg(all(feature = "app", target_os = "macos"))]
+    {
+        use std::io::IsTerminal;
+        return std::io::stderr().is_terminal();
+    }
+
+    // windows app builds don't need to fork - windows_subsystem = "windows"
+    // already detaches from the console
+    #[cfg(all(feature = "app", not(target_os = "macos")))]
+    return false;
+}
+
 fn spawn_app() -> Result<()> {
     use std::io::{BufRead, BufReader};
     use std::process::{Command, Stdio, exit};
@@ -157,6 +169,7 @@ fn spawn_app() -> Result<()> {
 
     cmd.args(std::env::args().skip(1)); // forward all original arguments
     cmd.arg("--foreground");
+    cmd.env("GG_SPAWNED", "1");
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::inherit()); // forward logs until startup is complete
 
@@ -195,11 +208,7 @@ fn run_app(args: Args) -> Result<()> {
     let mode = args.mode().unwrap_or_else(|| default_mode(&settings));
     let context = tauri::generate_context!();
 
-    // When spawned as a child process, foreground flag is set by the parent
-    #[cfg(not(feature = "app"))]
-    let is_child = args.foreground;
-    #[cfg(feature = "app")]
-    let is_child = false;
+    let is_child = std::env::var_os("GG_SPAWNED").is_some();
 
     let options = RunOptions {
         context,
