@@ -5,16 +5,23 @@
 GG is a GUI for the version control system [Jujutsu](https://github.com/jj-vcs/jj). It takes advantage of Jujutsu's composable primitives to present an interactive view of your repository. The big idea: what if you were always in the middle of an interactive rebase, but this was actually a good thing?
 
 ## Installation
-GG is a desktop or web application with a keyboard & mouse interface, written in [Tauri](https://tauri.app/). Binaries are available for several platforms on the [releases page](https://github.com/gulbanana/gg/releases). Use the `.dmg` or `.app.tar.gz` on MacOS, and the `.msi` or `.exe` on Windows. (GG does work on Linux, but isn't as well-tested.)
+GG is a desktop or web application with a keyboard & mouse interface, written in. It may be available in your favourite package manager, including...
+```
+# MacOS
+brew install --cask gg
+# Windows
+winget install --id gulbanana.gg
+# Any platform supported by [Tauri](https://tauri.app/)
+cargo install --locked gg-cli
+```
 
-You can also build from source using `cargo install --locked gg-cli`. This non-app build doesn't support as many OS integration features, but it's easier to package and detaches from your shell by default.
+Binaries are published for several platforms on the [releases page](https://github.com/gulbanana/gg/releases). Use the `.dmg` or `.app.tar.gz` on MacOS, and the `.msi` or `.exe` on Windows. We have `.appimage`, `.deb` and `.rpm` for some Linux platforms, but they aren't as well-tested.
 
 ### Setup 
-Put `gg` on your path and run it from a Jujutsu workspace, pass the workspace directory as an argument or launch it from a GUI and use the Repository->Open menu item. Tips:
+Run `gg` in a Jujutsu workspace, pass the workspace directory as an argument or launch it from a GUI and use the Repository->Open menu item. Tips:
 - `gg` or `gg gui` will launch a native application, `gg web` will open a web browser.
-- On MacOS, try adding `/Applications/gg.app/Contents/MacOS/` to your PATH environment variable. On Windows, add `C:\Program Files\gg\`.
-- When using the app build, `gg &` on MacOS/Linux or `start gg` on Windows will run in the background without blocking your shell.
-- `gg --help` will display some possible command-line arguments.
+- If you downloaded a release yourself, `gg` won't be on your PATH - try adding `/Applications/gg.app/Contents/MacOS/` or `C:\Program Files\gg\`.
+- When using a POSIX shell on Windows, `start gg` can be used to run in the background.
 
 ### Configuration
 GG uses `jj config`; `revset-aliases.immutable_heads()` is particularly important, as it determines how much history you can edit. GG has some additional settings of its own, with defaults and documentation [here](src/config/gg.toml).

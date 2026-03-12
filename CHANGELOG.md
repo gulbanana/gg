@@ -4,6 +4,7 @@
 
 ### Added
 - The MacOS app build will now detect when it's run from a terminal like the CLI build does, spawning in the background by default (--foreground to block the shell). (Windows already had behaviour similar to this.)
+- GG is now available on Homebrew and Winget.
 
 ## [0.39.0](releases/tag/v0.39.0)
 This release is based on Jujutsu 0.39.
