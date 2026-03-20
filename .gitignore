@@ -22,7 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
-.claude/settings.local.json
 
 # Rust
 /target/
@@ -32,3 +31,7 @@ dist-ssr
 
 # Playwright
 /e2e/results
+
+# Agent config
+.claude/settings.local.json
+.mcp.json
