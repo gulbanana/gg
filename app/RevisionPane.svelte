@@ -1,6 +1,8 @@
 <script lang="ts">
     import type { RevsResult } from "./messages/RevsResult";
-    import { ignoreToggled, changeSelectEvent, dragOverWidget } from "./stores";
+    import { ignoreToggled, changeSelectEvent, dragOverWidget, fileFilter } from "./stores";
+    import type { FileContent } from "./messages/FileContent";
+    import { onEvent, query } from "./ipc";
     import ChangeObject from "./objects/ChangeObject.svelte";
     import HunkObject from "./objects/HunkObject.svelte";
     import RevisionObject from "./objects/RevisionObject.svelte";
@@ -11,7 +13,6 @@
     import Pane from "./shell/Pane.svelte";
     import ToggleWidget from "./controls/ToggleWidget.svelte";
     import Zone from "./objects/Zone.svelte";
-    import { onEvent } from "./ipc";
     import AuthorSpan from "./controls/AuthorSpan.svelte";
     import ListWidget, { type List } from "./controls/ListWidget.svelte";
     import SetSpan from "./controls/SetSpan.svelte";
@@ -123,6 +124,36 @@
         } else {
             return null;
         }
+    }
+
+    let showContentFor: string | null = null;
+    let fileContent: FileContent | null = null;
+    let fileContentLoading = false;
+
+    async function toggleFileContent(change: RevChange) {
+        let key = change.path.repo_path;
+        if (showContentFor === key) {
+            showContentFor = null;
+            fileContent = null;
+            return;
+        }
+        showContentFor = key;
+        fileContent = null;
+        fileContentLoading = true;
+        let result = await query<FileContent>("query_file_content", {
+            id: newest.id,
+            path: change.path.repo_path,
+        });
+        fileContentLoading = false;
+        if (result.type === "data" && showContentFor === key) {
+            fileContent = result.value;
+        } else {
+            console.error("query_file_content failed:", result);
+        }
+    }
+
+    function onShowFileHistory(change: RevChange) {
+        fileFilter.set(change.path);
     }
 </script>
 
@@ -258,16 +289,44 @@
                             headers={revs.headers}
                             selected={$changeSelectEvent?.path?.repo_path === change.path.repo_path} />
                         {#if $changeSelectEvent?.path?.repo_path === change.path.repo_path}
-                            <div class="change" style="--lines: {minLines(change)}" tabindex="-1">
-                                {#each change.hunks as hunk}
-                                    <div class="hunk">
-                                        <HunkObject header={singleton ? newest : null} path={change.path} {hunk} />
-                                    </div>
-                                    <pre class="diff">{#each hunk.lines.lines as line}<span class={lineColour(line)}
-                                                >{line}</span
-                                            >{/each}</pre>
-                                {/each}
+                            <div class="change-actions">
+                                <ActionWidget
+                                    secondary
+                                    tip={showContentFor === change.path.repo_path ? "Show diff" : "Show full content"}
+                                    onClick={() => toggleFileContent(change)}>
+                                    <Icon name={showContentFor === change.path.repo_path ? "git-commit" : "file-text"} />
+                                    {showContentFor === change.path.repo_path ? "Diff" : "Content"}
+                                </ActionWidget>
+                                <ActionWidget
+                                    secondary
+                                    tip="Show file history in log"
+                                    onClick={() => onShowFileHistory(change)}>
+                                    <Icon name="clock" /> History
+                                </ActionWidget>
                             </div>
+                            {#if showContentFor === change.path.repo_path}
+                                <div class="change file-change" tabindex="-1">
+                                    {#if fileContentLoading}
+                                        <pre class="diff">Loading...</pre>
+                                    {:else if fileContent?.is_binary}
+                                        <pre class="diff">(binary file)</pre>
+                                    {:else if fileContent}
+                                        <pre class="diff file-content">{#each fileContent.content.lines as line}<span>{line}
+</span>{/each}</pre>
+                                    {/if}
+                                </div>
+                            {:else}
+                                <div class="change" style="--lines: {minLines(change)}" tabindex="-1">
+                                    {#each change.hunks as hunk}
+                                        <div class="hunk">
+                                            <HunkObject header={singleton ? newest : null} path={change.path} {hunk} />
+                                        </div>
+                                        <pre class="diff">{#each hunk.lines.lines as line}<span class={lineColour(line)}
+                                                    >{line}</span
+                                                >{/each}</pre>
+                                    {/each}
+                                </div>
+                            {/if}
                         {/if}
                     {/each}
                 </div>
@@ -455,6 +514,21 @@
 
     .remove {
         color: var(--ctp-red);
+    }
+
+    .change-actions {
+        display: flex;
+        gap: 6px;
+        padding: 2px 3px;
+        background: var(--ctp-mantle);
+    }
+
+    .file-content {
+        white-space: pre;
+    }
+
+    .file-change {
+        min-height: 100px;
     }
 
     .target {

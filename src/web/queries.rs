@@ -7,8 +7,8 @@ use axum::{Json, Router, extract::State, routing::post};
 use serde::Deserialize;
 
 use crate::messages::{
-    RepoConfig, RepoStatus, RevSet,
-    queries::{LogPage, RevsResult},
+    RepoConfig, RepoStatus, RevId, RevSet,
+    queries::{FileContent, LogPage, OpLog, RevsResult},
 };
 use crate::worker::SessionEvent;
 
@@ -22,6 +22,8 @@ pub fn router() -> Router<AppState> {
         .route("/query_log_next_page", post(query_log_next_page))
         .route("/query_revisions", post(query_revisions))
         .route("/query_remotes", post(query_remotes))
+        .route("/query_file_content", post(query_file_content))
+        .route("/query_op_log", post(query_op_log))
         .route("/query_recent_workspaces", post(query_recent_workspaces))
         .route("/query_snapshot", post(query_snapshot))
 }
@@ -116,6 +118,45 @@ async fn query_remotes(
     state.worker_tx.send(SessionEvent::QueryRemotes {
         tx,
         tracking_bookmark: req.tracking_bookmark,
+    })?;
+    let result = rx.recv()??;
+    Ok(Json(result))
+}
+
+#[derive(Deserialize)]
+pub struct QueryFileContent {
+    id: RevId,
+    path: String,
+}
+
+async fn query_file_content(
+    State(state): State<AppState>,
+    Json(req): Json<QueryFileContent>,
+) -> Result<Json<FileContent>, ApiError> {
+    let (tx, rx) = channel();
+    state.worker_tx.send(SessionEvent::QueryFileContent {
+        tx,
+        id: req.id,
+        path: req.path,
+    })?;
+    let result = rx.recv()??;
+    Ok(Json(result))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QueryOpLogReq {
+    max_count: usize,
+}
+
+async fn query_op_log(
+    State(state): State<AppState>,
+    Json(req): Json<QueryOpLogReq>,
+) -> Result<Json<OpLog>, ApiError> {
+    let (tx, rx) = channel();
+    state.worker_tx.send(SessionEvent::QueryOpLog {
+        tx,
+        max_count: req.max_count,
     })?;
     let result = rx.recv()??;
     Ok(Json(result))

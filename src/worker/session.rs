@@ -101,6 +101,17 @@ pub enum SessionEvent {
         mutation: Box<dyn Mutation + Send + Sync>,
         options: messages::mutations::MutationOptions,
     },
+    /// Return full content of a file at a specific revision.
+    QueryFileContent {
+        tx: Sender<Result<messages::queries::FileContent>>,
+        id: messages::RevId,
+        path: String,
+    },
+    /// Return the operation log.
+    QueryOpLog {
+        tx: Sender<Result<messages::queries::OpLog>>,
+        max_count: usize,
+    },
     /// Read an array-valued key from jj config.
     ReadConfigArray {
         tx: Sender<Result<Vec<String>>>,
@@ -278,6 +289,12 @@ impl Session for WorkspaceSession<'_> {
                     tx,
                     tracking_bookmark,
                 } => tx.send(queries::query_remotes(&self, tracking_bookmark))?,
+                SessionEvent::QueryFileContent { tx, id, path } => {
+                    tx.send(queries::query_file_content(&self, &id, &path).await)?
+                }
+                SessionEvent::QueryOpLog { tx, max_count } => {
+                    tx.send(queries::query_op_log(&self, max_count))?
+                }
                 SessionEvent::QueryLog {
                     tx,
                     query: revset_string,
