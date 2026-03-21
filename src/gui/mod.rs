@@ -184,6 +184,8 @@ pub fn run_gui(options: super::RunOptions) -> Result<()> {
             query_log_next_page,
             query_revisions,
             query_remotes,
+            query_file_content,
+            query_op_log,
             query_snapshot,
             abandon_revisions,
             backout_revisions,
@@ -501,6 +503,50 @@ fn query_remotes(
         .send(SessionEvent::QueryRemotes {
             tx: call_tx,
             tracking_bookmark,
+        })
+        .map_err(InvokeError::from_error)?;
+    call_rx
+        .recv()
+        .map_err(InvokeError::from_error)?
+        .map_err(InvokeError::from_anyhow)
+}
+
+#[tauri::command(async)]
+fn query_file_content(
+    window: Window,
+    app_state: State<AppState>,
+    id: messages::RevId,
+    path: String,
+) -> Result<messages::queries::FileContent, InvokeError> {
+    let session_tx: Sender<SessionEvent> = app_state.get_session(window.label());
+    let (call_tx, call_rx) = channel();
+
+    session_tx
+        .send(SessionEvent::QueryFileContent {
+            tx: call_tx,
+            id,
+            path,
+        })
+        .map_err(InvokeError::from_error)?;
+    call_rx
+        .recv()
+        .map_err(InvokeError::from_error)?
+        .map_err(InvokeError::from_anyhow)
+}
+
+#[tauri::command(async)]
+fn query_op_log(
+    window: Window,
+    app_state: State<AppState>,
+    max_count: usize,
+) -> Result<messages::queries::OpLog, InvokeError> {
+    let session_tx: Sender<SessionEvent> = app_state.get_session(window.label());
+    let (call_tx, call_rx) = channel();
+
+    session_tx
+        .send(SessionEvent::QueryOpLog {
+            tx: call_tx,
+            max_count,
         })
         .map_err(InvokeError::from_error)?;
     call_rx

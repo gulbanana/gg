@@ -8,6 +8,7 @@
     import ChangeMutator from "../mutators/ChangeMutator";
     import RefMutator from "../mutators/RefMutator";
     import WorkspaceMutator from "../mutators/WorkspaceMutator";
+    import { fileFilter } from "../stores";
 
     export let operand: Operand;
     export let x: number;
@@ -144,6 +145,8 @@
     {:else if operand.type === "Change" && changeEnabled}
         <button disabled={!changeEnabled.squash} on:click={() => onClick("squash")}>Squash into parent</button>
         <button disabled={!changeEnabled.restore} on:click={() => onClick("restore")}>Restore from parent</button>
+        <hr />
+        <button on:click={() => { fileFilter.set(operand.type === "Change" ? operand.path : null); onClose(); }}>Show file history</button>
     {:else if operand.type === "Ref" && refEnabled}
         <button disabled={!refEnabled.track} on:click={() => onClick("track")}>Track</button>
         <button disabled={!refEnabled.untrack} on:click={() => onClick("untrack")}>Untrack</button>

@@ -5,6 +5,7 @@ import type { RepoStatus } from "./messages/RepoStatus";
 import type { RevHeader } from "./messages/RevHeader";
 import type { RevSet } from "./messages/RevSet";
 import type { Operand } from "./messages/Operand";
+import type { TreePath } from "./messages/TreePath";
 import { writable } from "svelte/store";
 import { event, type Query } from "./events";
 import type { InputRequest } from "./messages/InputRequest";
@@ -27,6 +28,7 @@ export const hasModal = writable<boolean>(false);
 export const hasMenu = writable<{ x: number; y: number } | null>(null);
 export const lastFocus = writable<number>(Date.now());
 export const ignoreToggled = writable<boolean>(false);
+export const fileFilter = writable<TreePath | null>(null);
 
 export const selectionHeaders = writable<RevHeader[]>([]);
 

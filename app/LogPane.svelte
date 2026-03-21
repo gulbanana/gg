@@ -6,7 +6,7 @@
     import type { RevSet } from "./messages/RevSet";
     import { getInput, query, trigger } from "./ipc.js";
     import { sameChange } from "./ids.js";
-    import { ignoreToggled, repoStatusEvent, revisionSelectEvent } from "./stores.js";
+    import { ignoreToggled, repoStatusEvent, revisionSelectEvent, fileFilter } from "./stores.js";
     import RevisionMutator from "./mutators/RevisionMutator.js";
     import Pane from "./shell/Pane.svelte";
     import RevisionObject from "./objects/RevisionObject.svelte";
@@ -127,6 +127,7 @@
 
     $: choices = getChoices(entered_query, presets);
     $: if ($repoStatusEvent) reloadLog();
+    $: if ($fileFilter !== undefined) reloadLog();
 
     function isInSelectedRange(row: EnhancedRow, selection: typeof $revisionSelectEvent): boolean {
         if (!selection || !graphRows) return false;
@@ -268,11 +269,21 @@
         reloadLog();
     }
 
+    function effectiveRevset(): string {
+        let base = entered_query == "" ? "all()" : entered_query;
+        if ($fileFilter) {
+            let revset = `(${base}) & files("${$fileFilter.repo_path}")`;
+            console.log("effectiveRevset with file filter:", revset);
+            return revset;
+        }
+        return base;
+    }
+
     async function loadLog(selectFirst: boolean) {
         let page = await query<LogPage>(
             "query_log",
             {
-                revset: entered_query == "" ? "all()" : entered_query,
+                revset: effectiveRevset(),
             },
             () => (graphRows = undefined),
         );
@@ -383,6 +394,11 @@
             <svelte:fragment let:option>{option.label}</svelte:fragment>
         </SelectWidget>
         <input type="text" bind:value={entered_query} on:change={reloadLog} />
+        {#if $fileFilter}
+            <button class="file-filter" on:click={() => fileFilter.set(null)} title="Clear file filter">
+                <Icon name="file" /> {$fileFilter.relative_path} <Icon name="x" />
+            </button>
+        {/if}
         {#if isCustom}
             <ActionWidget secondary tip="Save revset" onClick={handleSavePreset}>
                 <Icon name="save" />
@@ -426,22 +442,41 @@
 <style>
     .log-selector {
         height: 100%;
-        display: grid;
-        grid-template-columns: auto 1fr;
+        display: flex;
+        align-items: center;
         gap: 3px;
 
-        &.editable {
-            grid-template-columns: auto 1fr auto;
-            & > :global(*:last-child) {
-                height: unset;
-                align-self: stretch;
-                padding: 1px 3px;
-            }
+        &.editable > :global(*:last-child) {
+            height: unset;
+            align-self: stretch;
+            padding: 1px 3px;
         }
     }
 
     input {
         font-family: var(--stack-code);
         font-size: 14px;
+        flex: 1;
+        min-width: 0;
+    }
+
+    .file-filter {
+        display: flex;
+        align-items: center;
+        gap: 3px;
+        border: 1px solid var(--ctp-overlay1);
+        border-radius: 12px;
+        padding: 0 6px;
+        height: 24px;
+        background: var(--ctp-mantle);
+        color: var(--ctp-text);
+        font-family: var(--stack-code);
+        font-size: smaller;
+        white-space: nowrap;
+        cursor: pointer;
+
+        &:hover {
+            border-color: var(--ctp-flamingo);
+        }
     }
 </style>
