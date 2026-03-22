@@ -508,7 +508,7 @@ async fn get_value_hunks(
     }
 }
 
-async fn get_value_contents(path: &RepoPath, value: MaterializedTreeValue) -> Result<Vec<u8>> {
+pub(crate) async fn get_value_contents(path: &RepoPath, value: MaterializedTreeValue) -> Result<Vec<u8>> {
     use tokio::io::AsyncReadExt;
 
     match value {
@@ -554,7 +554,7 @@ async fn get_value_contents(path: &RepoPath, value: MaterializedTreeValue) -> Re
     }
 }
 
-fn get_unified_hunks(
+pub(crate) fn get_unified_hunks(
     num_context_lines: usize,
     left_content: &[u8],
     right_content: &[u8],
@@ -885,4 +885,100 @@ pub fn query_op_log(ws: &WorkspaceSession, max_count: usize) -> Result<OpLog> {
     }
 
     Ok(OpLog { entries })
+}
+
+/// Returns the full content of a file at the working copy as of a given operation.
+pub async fn query_file_content_at_op(
+    ws: &WorkspaceSession<'_>,
+    op_id: &str,
+    path: &str,
+) -> Result<FileContent> {
+    let op = op_walk::resolve_op_with_repo(ws.repo(), op_id)?;
+    let repo_at_op = ws.repo().loader().load_at(&op).await?;
+
+    let wc_commit_id = repo_at_op
+        .view()
+        .get_wc_commit_id(ws.name())
+        .ok_or_else(|| anyhow!("no working copy for this workspace at operation {op_id}"))?;
+
+    let commit = repo_at_op.store().get_commit(wc_commit_id)?;
+    let tree = commit.tree();
+    let repo_path = RepoPath::from_internal_string(path)?;
+    let value = tree.path_value(repo_path)?;
+
+    if value.is_absent() {
+        return Ok(FileContent {
+            content: "".into(),
+            is_binary: false,
+        });
+    }
+
+    let materialized =
+        conflicts::materialize_tree_value(repo_at_op.store(), repo_path, value, tree.labels())
+            .await?;
+    let contents = get_value_contents(repo_path, materialized).await?;
+
+    let start = &contents[..8000.min(contents.len())];
+    let is_binary = start.contains(&b'\0');
+
+    let text = if is_binary {
+        "(binary)".to_owned()
+    } else {
+        String::from_utf8_lossy(&contents).into_owned()
+    };
+
+    Ok(FileContent {
+        content: text.as_str().into(),
+        is_binary,
+    })
+}
+
+/// Returns a unified diff between the working copy at a given operation (old) and the
+/// working copy at `current_id` (new).
+pub async fn query_file_diff_at_op(
+    ws: &WorkspaceSession<'_>,
+    op_id: &str,
+    path: &str,
+    current_id: &crate::messages::RevId,
+) -> Result<Vec<ChangeHunk>> {
+    let repo_path = RepoPath::from_internal_string(path)?;
+
+    // old side: file at op's working copy
+    let op = op_walk::resolve_op_with_repo(ws.repo(), op_id)?;
+    let repo_at_op = ws.repo().loader().load_at(&op).await?;
+    let op_bytes = match repo_at_op.view().get_wc_commit_id(ws.name()) {
+        None => vec![],
+        Some(wc_commit_id) => {
+            let commit = repo_at_op.store().get_commit(wc_commit_id)?;
+            let tree = commit.tree();
+            let value = tree.path_value(repo_path)?;
+            if value.is_absent() {
+                vec![]
+            } else {
+                let materialized = conflicts::materialize_tree_value(
+                    repo_at_op.store(),
+                    repo_path,
+                    value,
+                    tree.labels(),
+                )
+                .await?;
+                get_value_contents(repo_path, materialized).await?
+            }
+        }
+    };
+
+    // new side: file at current_id
+    let commit = ws.resolve_commit_id(&current_id.commit)?;
+    let tree = commit.tree();
+    let value = tree.path_value(repo_path)?;
+    let current_bytes = if value.is_absent() {
+        vec![]
+    } else {
+        let materialized =
+            conflicts::materialize_tree_value(ws.repo().store(), repo_path, value, tree.labels())
+                .await?;
+        get_value_contents(repo_path, materialized).await?
+    };
+
+    get_unified_hunks(3, &op_bytes, &current_bytes)
 }

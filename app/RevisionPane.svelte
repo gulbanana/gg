@@ -1,7 +1,9 @@
 <script lang="ts">
     import type { RevsResult } from "./messages/RevsResult";
-    import { ignoreToggled, changeSelectEvent, dragOverWidget, fileFilter } from "./stores";
+    import { ignoreToggled, changeSelectEvent, dragOverWidget, selectedOpId, changeViewRequest } from "./stores";
+    import { onDestroy } from "svelte";
     import type { FileContent } from "./messages/FileContent";
+    import type { ChangeHunk } from "./messages/ChangeHunk";
     import { onEvent, query } from "./ipc";
     import ChangeObject from "./objects/ChangeObject.svelte";
     import HunkObject from "./objects/HunkObject.svelte";
@@ -104,11 +106,6 @@
     onEvent<string>("gg://menu/revision", (event) => mutator.handle(event));
 
     function minLines(change: RevChange): number {
-        // let total = 0;
-        // for (let hunk of change.hunks) {
-        //     total += Math.min(hunk.lines.lines.length, CONTEXT * 2 + 1) + 1;
-        // }
-        // return total;
         let max = 0;
         for (let hunk of change.hunks) {
             max = Math.max(hunk.lines.lines.length, max);
@@ -130,20 +127,20 @@
     let fileContent: FileContent | null = null;
     let fileContentLoading = false;
 
-    async function toggleFileContent(change: RevChange) {
+    async function loadFileContent(change: RevChange) {
         let key = change.path.repo_path;
-        if (showContentFor === key) {
-            showContentFor = null;
-            fileContent = null;
-            return;
-        }
         showContentFor = key;
         fileContent = null;
         fileContentLoading = true;
-        let result = await query<FileContent>("query_file_content", {
-            id: newest.id,
-            path: change.path.repo_path,
-        });
+        let result = $selectedOpId
+            ? await query<FileContent>("query_file_content_at_op", {
+                  opId: $selectedOpId,
+                  path: change.path.repo_path,
+              })
+            : await query<FileContent>("query_file_content", {
+                  id: newest.id,
+                  path: change.path.repo_path,
+              });
         fileContentLoading = false;
         if (result.type === "data" && showContentFor === key) {
             fileContent = result.value;
@@ -152,9 +149,65 @@
         }
     }
 
-    function onShowFileHistory(change: RevChange) {
-        fileFilter.set(change.path);
+    let unsubViewRequest = changeViewRequest.subscribe((req) => {
+        if (!req) return;
+        changeViewRequest.set(null);
+        let change = $changeSelectEvent;
+        if (!change) return;
+        if (req === "content") {
+            loadFileContent(change);
+        } else {
+            showContentFor = null;
+            fileContent = null;
+        }
+    });
+    onDestroy(unsubViewRequest);
+
+    // op diff: auto-fetched when op or file selection changes
+    let opDiffHunks: ChangeHunk[] | null = null;
+    let opDiffLoading = false;
+    let opDiffForKey: string | null = null;
+
+    async function fetchOpDiff(change: RevChange, opId: string) {
+        let key = `${opId}::${change.path.repo_path}`;
+        opDiffForKey = key;
+        opDiffHunks = null;
+        opDiffLoading = true;
+        let result = await query<ChangeHunk[]>("query_file_diff_at_op", {
+            opId,
+            path: change.path.repo_path,
+            currentId: newest.id,
+        });
+        opDiffLoading = false;
+        if (result.type === "data" && opDiffForKey === key) {
+            opDiffHunks = result.value;
+        } else if (result.type !== "data") {
+            console.error("query_file_diff_at_op failed:", result);
+        }
     }
+
+    // clear content view when op changes so the op diff shows immediately
+    let lastOpId: string | null = null;
+    $: if ($selectedOpId !== lastOpId) {
+        lastOpId = $selectedOpId;
+        showContentFor = null;
+        fileContent = null;
+    }
+
+    // auto-fetch op diff when op or file selection changes
+    $: {
+        let opId = $selectedOpId;
+        let change = $changeSelectEvent;
+        if (opId && change) {
+            let key = `${opId}::${change.path.repo_path}`;
+            if (key !== opDiffForKey) fetchOpDiff(change, opId);
+        } else {
+            opDiffHunks = null;
+            opDiffForKey = null;
+            opDiffLoading = false;
+        }
+    }
+
 </script>
 
 <Pane>
@@ -280,6 +333,9 @@
                 {/if}
             </div>
 
+            {#if $selectedOpId}
+                <div class="op-context">op {$selectedOpId.slice(0, 8)}</div>
+            {/if}
             <ListWidget {list} type="Change" descendant={$changeSelectEvent?.path.repo_path}>
                 <div class="changes">
                     {#each syntheticChanges as change}
@@ -289,21 +345,6 @@
                             headers={revs.headers}
                             selected={$changeSelectEvent?.path?.repo_path === change.path.repo_path} />
                         {#if $changeSelectEvent?.path?.repo_path === change.path.repo_path}
-                            <div class="change-actions">
-                                <ActionWidget
-                                    secondary
-                                    tip={showContentFor === change.path.repo_path ? "Show diff" : "Show full content"}
-                                    onClick={() => toggleFileContent(change)}>
-                                    <Icon name={showContentFor === change.path.repo_path ? "git-commit" : "file-text"} />
-                                    {showContentFor === change.path.repo_path ? "Diff" : "Content"}
-                                </ActionWidget>
-                                <ActionWidget
-                                    secondary
-                                    tip="Show file history in log"
-                                    onClick={() => onShowFileHistory(change)}>
-                                    <Icon name="clock" /> History
-                                </ActionWidget>
-                            </div>
                             {#if showContentFor === change.path.repo_path}
                                 <div class="change file-change" tabindex="-1">
                                     {#if fileContentLoading}
@@ -313,6 +354,20 @@
                                     {:else if fileContent}
                                         <pre class="diff file-content">{#each fileContent.content.lines as line}<span>{line}
 </span>{/each}</pre>
+                                    {/if}
+                                </div>
+                            {:else if $selectedOpId}
+                                <div class="change" tabindex="-1">
+                                    {#if opDiffLoading}
+                                        <pre class="diff">Loading...</pre>
+                                    {:else if opDiffHunks && opDiffHunks.length > 0}
+                                        {#each opDiffHunks as hunk}
+                                            <pre class="diff">{#each hunk.lines.lines as line}<span class={lineColour(line)}
+                                                        >{line}</span
+                                                    >{/each}</pre>
+                                        {/each}
+                                    {:else if opDiffHunks}
+                                        <pre class="diff">(no changes)</pre>
                                     {/if}
                                 </div>
                             {:else}
@@ -516,11 +571,13 @@
         color: var(--ctp-red);
     }
 
-    .change-actions {
-        display: flex;
-        gap: 6px;
-        padding: 2px 3px;
-        background: var(--ctp-mantle);
+    .op-context {
+        font-size: 11px;
+        padding: 2px 6px;
+        background: color-mix(in srgb, var(--ctp-blue) 15%, var(--ctp-mantle));
+        color: var(--ctp-blue);
+        font-family: var(--stack-code);
+        border-bottom: 1px solid color-mix(in srgb, var(--ctp-blue) 30%, transparent);
     }
 
     .file-content {
@@ -528,7 +585,8 @@
     }
 
     .file-change {
-        min-height: 100px;
+        min-height: 400px;
+        height: 100%;
     }
 
     .target {

@@ -3,7 +3,7 @@
     import type { OpLog } from "./messages/OpLog";
     import type { OpLogEntry } from "./messages/OpLogEntry";
     import { query } from "./ipc";
-    import { repoStatusEvent } from "./stores";
+    import { repoStatusEvent, revisionSelectEvent, selectedOpId } from "./stores";
     import Icon from "./controls/Icon.svelte";
     import ActionWidget from "./controls/ActionWidget.svelte";
 
@@ -20,6 +20,7 @@
 
     onMount(loadOpLog);
     $: if ($repoStatusEvent) loadOpLog();
+    $: if ($revisionSelectEvent) $selectedOpId = null;
 
     function formatTime(timestamp: string): string {
         let date = new Date(timestamp);
@@ -43,11 +44,16 @@
     {#if expanded}
         <div class="op-log-body">
             {#each entries as entry}
-                <div class="op-entry" class:head={entry.is_head}>
+                <button
+                    class="op-entry"
+                    class:head={entry.is_head}
+                    class:selected={$selectedOpId === entry.id}
+                    on:click={() => $selectedOpId = $selectedOpId === entry.id ? null : entry.id}
+                >
                     <span class="op-time" title={entry.timestamp}>{formatTime(entry.timestamp)}</span>
                     <span class="op-desc">{entry.description || "(no description)"}</span>
                     <span class="op-id" title={entry.id}>{entry.id.slice(0, 8)}</span>
-                </div>
+                </button>
             {/each}
         </div>
     {/if}
@@ -90,10 +96,23 @@
         gap: 6px;
         padding: 2px 6px;
         font-size: 12px;
+        border: none;
         border-bottom: 1px solid var(--ctp-surface0);
+        background: none;
+        color: var(--ctp-text);
+        font-family: var(--stack-industrial);
+        text-align: left;
+        width: 100%;
+        cursor: pointer;
 
         &.head {
             background: var(--ctp-base);
+        }
+
+        &.selected {
+            background: var(--ctp-surface1);
+            outline: 1px solid var(--ctp-blue);
+            outline-offset: -1px;
         }
 
         &:hover {

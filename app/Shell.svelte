@@ -16,6 +16,8 @@
         progressEvent,
         lastFocus,
         ignoreToggled,
+        fileFilter,
+        changeViewRequest,
     } from "./stores.js";
     import ContextMenu from "./controls/ContextMenu.svelte";
     import RefMutator from "./mutators/RefMutator";
@@ -239,12 +241,18 @@
 
     function mutateTree(event: string) {
         if ($currentContext?.type == "Change") {
-            new ChangeMutator(
-                $currentContext.headers,
-                $currentContext.path,
-                $currentContext.hunk,
-                $ignoreToggled,
-            ).handle(event);
+            if (event === "history") {
+                fileFilter.set($currentContext.path);
+            } else if (event === "content" || event === "diff") {
+                changeViewRequest.set(event);
+            } else {
+                new ChangeMutator(
+                    $currentContext.headers,
+                    $currentContext.path,
+                    $currentContext.hunk,
+                    $ignoreToggled,
+                ).handle(event);
+            }
         }
         $currentContext = null;
     }

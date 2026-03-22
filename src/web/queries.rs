@@ -7,7 +7,7 @@ use axum::{Json, Router, extract::State, routing::post};
 use serde::Deserialize;
 
 use crate::messages::{
-    RepoConfig, RepoStatus, RevId, RevSet,
+    ChangeHunk, RepoConfig, RepoStatus, RevId, RevSet,
     queries::{FileContent, LogPage, OpLog, RevsResult},
 };
 use crate::worker::SessionEvent;
@@ -23,6 +23,8 @@ pub fn router() -> Router<AppState> {
         .route("/query_revisions", post(query_revisions))
         .route("/query_remotes", post(query_remotes))
         .route("/query_file_content", post(query_file_content))
+        .route("/query_file_content_at_op", post(query_file_content_at_op))
+        .route("/query_file_diff_at_op", post(query_file_diff_at_op))
         .route("/query_op_log", post(query_op_log))
         .route("/query_recent_workspaces", post(query_recent_workspaces))
         .route("/query_snapshot", post(query_snapshot))
@@ -138,6 +140,50 @@ async fn query_file_content(
         tx,
         id: req.id,
         path: req.path,
+    })?;
+    let result = rx.recv()??;
+    Ok(Json(result))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QueryFileContentAtOp {
+    op_id: String,
+    path: String,
+}
+
+async fn query_file_content_at_op(
+    State(state): State<AppState>,
+    Json(req): Json<QueryFileContentAtOp>,
+) -> Result<Json<FileContent>, ApiError> {
+    let (tx, rx) = channel();
+    state.worker_tx.send(SessionEvent::QueryFileContentAtOp {
+        tx,
+        op_id: req.op_id,
+        path: req.path,
+    })?;
+    let result = rx.recv()??;
+    Ok(Json(result))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QueryFileDiffAtOp {
+    op_id: String,
+    path: String,
+    current_id: RevId,
+}
+
+async fn query_file_diff_at_op(
+    State(state): State<AppState>,
+    Json(req): Json<QueryFileDiffAtOp>,
+) -> Result<Json<Vec<ChangeHunk>>, ApiError> {
+    let (tx, rx) = channel();
+    state.worker_tx.send(SessionEvent::QueryFileDiffAtOp {
+        tx,
+        op_id: req.op_id,
+        path: req.path,
+        current_id: req.current_id,
     })?;
     let result = rx.recv()??;
     Ok(Json(result))

@@ -107,6 +107,19 @@ pub enum SessionEvent {
         id: messages::RevId,
         path: String,
     },
+    /// Return the full content of a file at the working copy as of a given operation.
+    QueryFileContentAtOp {
+        tx: Sender<Result<messages::queries::FileContent>>,
+        op_id: String,
+        path: String,
+    },
+    /// Return a unified diff between a file at a given operation and a current commit.
+    QueryFileDiffAtOp {
+        tx: Sender<Result<Vec<messages::ChangeHunk>>>,
+        op_id: String,
+        path: String,
+        current_id: messages::RevId,
+    },
     /// Return the operation log.
     QueryOpLog {
         tx: Sender<Result<messages::queries::OpLog>>,
@@ -291,6 +304,19 @@ impl Session for WorkspaceSession<'_> {
                 } => tx.send(queries::query_remotes(&self, tracking_bookmark))?,
                 SessionEvent::QueryFileContent { tx, id, path } => {
                     tx.send(queries::query_file_content(&self, &id, &path).await)?
+                }
+                SessionEvent::QueryFileContentAtOp { tx, op_id, path } => {
+                    tx.send(queries::query_file_content_at_op(&self, &op_id, &path).await)?
+                }
+                SessionEvent::QueryFileDiffAtOp {
+                    tx,
+                    op_id,
+                    path,
+                    current_id,
+                } => {
+                    tx.send(
+                        queries::query_file_diff_at_op(&self, &op_id, &path, &current_id).await,
+                    )?
                 }
                 SessionEvent::QueryOpLog { tx, max_count } => {
                     tx.send(queries::query_op_log(&self, max_count))?

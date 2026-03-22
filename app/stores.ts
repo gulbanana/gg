@@ -31,6 +31,8 @@ export const ignoreToggled = writable<boolean>(false);
 export const fileFilter = writable<TreePath | null>(null);
 
 export const selectionHeaders = writable<RevHeader[]>([]);
+export const selectedOpId = writable<string | null>(null);
+export const changeViewRequest = writable<"content" | "diff" | null>(null);
 
 export function dragOverWidget(event: DragEvent) {
     event.stopPropagation();

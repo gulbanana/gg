@@ -185,6 +185,8 @@ pub fn run_gui(options: super::RunOptions) -> Result<()> {
             query_revisions,
             query_remotes,
             query_file_content,
+            query_file_content_at_op,
+            query_file_diff_at_op,
             query_op_log,
             query_snapshot,
             abandon_revisions,
@@ -526,6 +528,54 @@ fn query_file_content(
             tx: call_tx,
             id,
             path,
+        })
+        .map_err(InvokeError::from_error)?;
+    call_rx
+        .recv()
+        .map_err(InvokeError::from_error)?
+        .map_err(InvokeError::from_anyhow)
+}
+
+#[tauri::command(async)]
+fn query_file_content_at_op(
+    window: Window,
+    app_state: State<AppState>,
+    op_id: String,
+    path: String,
+) -> Result<messages::queries::FileContent, InvokeError> {
+    let session_tx: Sender<SessionEvent> = app_state.get_session(window.label());
+    let (call_tx, call_rx) = channel();
+
+    session_tx
+        .send(SessionEvent::QueryFileContentAtOp {
+            tx: call_tx,
+            op_id,
+            path,
+        })
+        .map_err(InvokeError::from_error)?;
+    call_rx
+        .recv()
+        .map_err(InvokeError::from_error)?
+        .map_err(InvokeError::from_anyhow)
+}
+
+#[tauri::command(async)]
+fn query_file_diff_at_op(
+    window: Window,
+    app_state: State<AppState>,
+    op_id: String,
+    path: String,
+    current_id: messages::RevId,
+) -> Result<Vec<messages::ChangeHunk>, InvokeError> {
+    let session_tx: Sender<SessionEvent> = app_state.get_session(window.label());
+    let (call_tx, call_rx) = channel();
+
+    session_tx
+        .send(SessionEvent::QueryFileDiffAtOp {
+            tx: call_tx,
+            op_id,
+            path,
+            current_id,
         })
         .map_err(InvokeError::from_error)?;
     call_rx
