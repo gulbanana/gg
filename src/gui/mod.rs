@@ -588,7 +588,8 @@ fn query_file_diff_at_op(
 fn query_op_log(
     window: Window,
     app_state: State<AppState>,
-    max_count: usize,
+    filter_snapshots: bool,
+    after_id: Option<String>,
 ) -> Result<messages::queries::OpLog, InvokeError> {
     let session_tx: Sender<SessionEvent> = app_state.get_session(window.label());
     let (call_tx, call_rx) = channel();
@@ -596,7 +597,8 @@ fn query_op_log(
     session_tx
         .send(SessionEvent::QueryOpLog {
             tx: call_tx,
-            max_count,
+            filter_snapshots,
+            after_id,
         })
         .map_err(InvokeError::from_error)?;
     call_rx

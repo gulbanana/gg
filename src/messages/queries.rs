@@ -128,4 +128,5 @@ pub struct OpLogEntry {
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
 pub struct OpLog {
     pub entries: Vec<OpLogEntry>,
+    pub has_more: bool,
 }

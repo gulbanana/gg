@@ -858,33 +858,51 @@ pub async fn query_file_content(
     })
 }
 
-/// Returns the operation log, walking parents from HEAD.
-pub fn query_op_log(ws: &WorkspaceSession, max_count: usize) -> Result<OpLog> {
-    let head_op = op_walk::resolve_op_with_repo(ws.repo(), "@")?;
+/// Returns the operation log, walking parents from HEAD or from after a cursor op.
+pub fn query_op_log(
+    ws: &WorkspaceSession,
+    page_size: usize,
+    filter_snapshots: bool,
+    after_id: Option<String>,
+) -> Result<OpLog> {
+    let start_op = if let Some(ref id) = after_id {
+        let cursor_op = op_walk::resolve_op_with_repo(ws.repo(), id)?;
+        cursor_op.parents().next().transpose()?
+    } else {
+        Some(op_walk::resolve_op_with_repo(ws.repo(), "@")?)
+    };
+
     let mut entries = Vec::new();
-    let mut current = Some(head_op);
+    let mut current = start_op;
+    // walk up to 20x page size to fill quota after filtering snapshots
+    let walk_limit = page_size * 20;
+    let mut walked = 0;
 
     while let Some(op) = current {
-        if entries.len() >= max_count {
+        if entries.len() >= page_size || walked >= walk_limit {
             break;
         }
+        walked += 1;
 
         let metadata = op.store_operation().metadata.clone();
-        let timestamp =
-            crate::messages::format_timestamp(&metadata.time.start)?.with_timezone(&chrono::Local);
 
-        entries.push(OpLogEntry {
-            id: op.id().hex(),
-            description: metadata.description,
-            timestamp,
-            tags: metadata.tags.into_iter().collect(),
-            is_head: entries.is_empty(),
-        });
+        if !filter_snapshots || metadata.description != "snapshot working copy" {
+            let timestamp = crate::messages::format_timestamp(&metadata.time.start)?
+                .with_timezone(&chrono::Local);
+            entries.push(OpLogEntry {
+                id: op.id().hex(),
+                description: metadata.description,
+                timestamp,
+                tags: metadata.tags.into_iter().collect(),
+                is_head: after_id.is_none() && entries.is_empty(),
+            });
+        }
 
         current = op.parents().next().transpose()?;
     }
 
-    Ok(OpLog { entries })
+    let has_more = entries.len() >= page_size;
+    Ok(OpLog { entries, has_more })
 }
 
 /// Returns the full content of a file at the working copy as of a given operation.

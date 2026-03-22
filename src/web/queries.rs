@@ -192,7 +192,8 @@ async fn query_file_diff_at_op(
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct QueryOpLogReq {
-    max_count: usize,
+    filter_snapshots: bool,
+    after_id: Option<String>,
 }
 
 async fn query_op_log(
@@ -202,7 +203,8 @@ async fn query_op_log(
     let (tx, rx) = channel();
     state.worker_tx.send(SessionEvent::QueryOpLog {
         tx,
-        max_count: req.max_count,
+        filter_snapshots: req.filter_snapshots,
+        after_id: req.after_id,
     })?;
     let result = rx.recv()??;
     Ok(Json(result))
