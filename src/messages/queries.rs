@@ -120,7 +120,6 @@ pub struct OpLogEntry {
     pub description: String,
     pub timestamp: chrono::DateTime<chrono::Local>,
     pub tags: std::collections::HashMap<String, String>,
-    pub is_head: bool,
 }
 
 /// Response to an operation log query.
@@ -128,4 +127,7 @@ pub struct OpLogEntry {
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
 pub struct OpLog {
     pub entries: Vec<OpLogEntry>,
+    pub has_more: bool,
+    /// The id of the current HEAD operation.
+    pub head_id: String,
 }

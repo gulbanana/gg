@@ -123,7 +123,8 @@ pub enum SessionEvent {
     /// Return the operation log.
     QueryOpLog {
         tx: Sender<Result<messages::queries::OpLog>>,
-        max_count: usize,
+        filter_snapshots: bool,
+        after_id: Option<String>,
     },
     /// Read an array-valued key from jj config.
     ReadConfigArray {
@@ -318,8 +319,9 @@ impl Session for WorkspaceSession<'_> {
                         queries::query_file_diff_at_op(&self, &op_id, &path, &current_id).await,
                     )?
                 }
-                SessionEvent::QueryOpLog { tx, max_count } => {
-                    tx.send(queries::query_op_log(&self, max_count))?
+                SessionEvent::QueryOpLog { tx, filter_snapshots, after_id } => {
+                    let page_size = self.data.workspace_settings.query_op_log_page_size();
+                    tx.send(queries::query_op_log(&self, page_size, filter_snapshots, after_id))?
                 }
                 SessionEvent::QueryLog {
                     tx,

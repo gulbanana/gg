@@ -846,6 +846,19 @@ fn commit_id_identity(commit_id: &CommitId) -> &CommitId {
     commit_id
 }
 
+fn file_content_from_bytes(bytes: Vec<u8>) -> FileContent {
+    let is_binary = bytes[..8000.min(bytes.len())].contains(&b'\0');
+    let text = if is_binary {
+        "(binary)".to_owned()
+    } else {
+        String::from_utf8_lossy(&bytes).into_owned()
+    };
+    FileContent {
+        content: text.as_str().into(),
+        is_binary,
+    }
+}
+
 /// Returns the full content of a file at a specific revision.
 pub async fn query_file_content(
     ws: &WorkspaceSession<'_>,
@@ -867,51 +880,62 @@ pub async fn query_file_content(
     let materialized =
         conflicts::materialize_tree_value(ws.repo().store(), repo_path, value, tree.labels())
             .await?;
-
-    let contents = get_value_contents(repo_path, materialized).await?;
-
-    let start = &contents[..8000.min(contents.len())];
-    let is_binary = start.contains(&b'\0');
-
-    let text = if is_binary {
-        "(binary)".to_owned()
-    } else {
-        String::from_utf8_lossy(&contents).into_owned()
-    };
-
-    Ok(FileContent {
-        content: text.as_str().into(),
-        is_binary,
-    })
+    let bytes = get_value_contents(repo_path, materialized).await?;
+    Ok(file_content_from_bytes(bytes))
 }
 
-/// Returns the operation log, walking parents from HEAD.
-pub fn query_op_log(ws: &WorkspaceSession, max_count: usize) -> Result<OpLog> {
+/// Returns the operation log, walking parents from HEAD or from after a cursor op.
+pub fn query_op_log(
+    ws: &WorkspaceSession,
+    page_size: usize,
+    filter_snapshots: bool,
+    after_id: Option<String>,
+) -> Result<OpLog> {
     let head_op = op_walk::resolve_op_with_repo(ws.repo(), "@")?;
+    let head_id = head_op.id().hex();
+
+    let start_op = if let Some(ref id) = after_id {
+        let cursor_op = op_walk::resolve_op_with_repo(ws.repo(), id)?;
+        cursor_op.parents().next().transpose()?
+    } else {
+        Some(head_op)
+    };
+
     let mut entries = Vec::new();
-    let mut current = Some(head_op);
+    let mut current = start_op;
+    // walk up to 20x page size to fill quota after filtering snapshots
+    let walk_limit = page_size * 20;
+    let mut walked = 0;
+    let mut hit_limit = false;
 
     while let Some(op) = current {
-        if entries.len() >= max_count {
+        if entries.len() >= page_size || walked >= walk_limit {
+            hit_limit = true;
             break;
         }
+        walked += 1;
 
         let metadata = op.store_operation().metadata.clone();
-        let timestamp =
-            crate::messages::format_timestamp(&metadata.time.start)?.with_timezone(&chrono::Local);
 
-        entries.push(OpLogEntry {
-            id: op.id().hex(),
-            description: metadata.description,
-            timestamp,
-            tags: metadata.tags.into_iter().collect(),
-            is_head: entries.is_empty(),
-        });
+        if !filter_snapshots || metadata.description != "snapshot working copy" {
+            let timestamp = crate::messages::format_timestamp(&metadata.time.start)?
+                .with_timezone(&chrono::Local);
+            entries.push(OpLogEntry {
+                id: op.id().hex(),
+                description: metadata.description,
+                timestamp,
+                tags: metadata.tags.into_iter().collect(),
+            });
+        }
 
         current = op.parents().next().transpose()?;
     }
 
-    Ok(OpLog { entries })
+    Ok(OpLog {
+        entries,
+        has_more: hit_limit,
+        head_id,
+    })
 }
 
 /// Returns the full content of a file at the working copy as of a given operation.
@@ -943,21 +967,8 @@ pub async fn query_file_content_at_op(
     let materialized =
         conflicts::materialize_tree_value(repo_at_op.store(), repo_path, value, tree.labels())
             .await?;
-    let contents = get_value_contents(repo_path, materialized).await?;
-
-    let start = &contents[..8000.min(contents.len())];
-    let is_binary = start.contains(&b'\0');
-
-    let text = if is_binary {
-        "(binary)".to_owned()
-    } else {
-        String::from_utf8_lossy(&contents).into_owned()
-    };
-
-    Ok(FileContent {
-        content: text.as_str().into(),
-        is_binary,
-    })
+    let bytes = get_value_contents(repo_path, materialized).await?;
+    Ok(file_content_from_bytes(bytes))
 }
 
 /// Returns a unified diff between the working copy at a given operation (old) and the
