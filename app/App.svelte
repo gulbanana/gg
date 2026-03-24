@@ -40,10 +40,13 @@
         </BoundQuery>
     {:else}
         <div class="two-pane">
-            {#key workspace.absolute_path}
-                <LogPane query_choices={workspace.query_choices}
-                         latest_query={workspace.latest_query} />
-            {/key}
+            <div class="left-pane">
+                {#key workspace.absolute_path}
+                    <LogPane query_choices={workspace.query_choices}
+                             latest_query={workspace.latest_query} />
+                {/key}
+                <OpLogPane />
+            </div>
 
             <div class="separator"></div>
 
@@ -69,7 +72,6 @@
                         </Pane>
                     </BoundQuery>
                 </div>
-                <OpLogPane />
             </div>
         </div>
     {/if}
@@ -81,6 +83,17 @@
         grid-template-columns: 1fr 3px 1fr;
         height: 100%;
         overflow: hidden;
+    }
+
+    .left-pane {
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+    }
+
+    .left-pane > :global(:first-child) {
+        flex: 1;
+        min-height: 0;
     }
 
     .right-pane {
