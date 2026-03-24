@@ -443,7 +443,7 @@
     .log-selector {
         height: 100%;
         display: flex;
-        align-items: center;
+        align-items: stretch;
         gap: 3px;
 
         &.editable > :global(*:last-child) {
@@ -465,9 +465,8 @@
         align-items: center;
         gap: 3px;
         border: 1px solid var(--ctp-overlay1);
-        border-radius: 12px;
+        border-radius: 3px;
         padding: 0 6px;
-        height: 24px;
         background: var(--ctp-mantle);
         color: var(--ctp-text);
         font-family: var(--stack-code);

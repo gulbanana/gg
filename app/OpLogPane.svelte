@@ -209,7 +209,6 @@
         border-bottom: 1px solid var(--ctp-surface0);
         background: none;
         color: var(--ctp-text);
-        font-family: var(--stack-industrial);
         text-align: left;
         cursor: pointer;
 
@@ -242,7 +241,7 @@
     }
 
     .op-id {
-        color: var(--ctp-overlay1);
+        color: var(--ctp-blue);
         font-family: var(--stack-code);
         font-size: 11px;
         align-self: center;
