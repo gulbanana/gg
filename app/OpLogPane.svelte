@@ -2,8 +2,8 @@
     import { onMount } from "svelte";
     import type { OpLog } from "./messages/OpLog";
     import type { OpLogEntry } from "./messages/OpLogEntry";
-    import { query } from "./ipc";
-    import { repoStatusEvent, revisionSelectEvent, selectedOpId } from "./stores";
+    import { query, isTauri, trigger } from "./ipc";
+    import { repoStatusEvent, revisionSelectEvent, selectedOpId, currentContext, hasMenu } from "./stores";
     import Icon from "./controls/Icon.svelte";
 
     const ROW_HEIGHT = 26;
@@ -62,6 +62,17 @@
     $: if ($revisionSelectEvent) $selectedOpId = null;
     $: filterSnapshots, loadOpLog();
 
+    function onContextMenu(event: MouseEvent, entry: OpLogEntry) {
+        event.preventDefault();
+        let operand = { type: "Operation" as const, id: entry.id, is_head: entry.is_head };
+        currentContext.set(operand);
+        if (isTauri()) {
+            trigger("forward_context_menu", { context: operand });
+        } else {
+            hasMenu.set({ x: event.clientX, y: event.clientY });
+        }
+    }
+
     function formatTime(timestamp: string): string {
         let date = new Date(timestamp);
         let now = new Date();
@@ -78,7 +89,7 @@
 
 <div class="op-log">
     <div class="op-log-header">
-        <button class="op-log-expand" on:click={() => (expanded = !expanded)}>
+        <button class="op-log-expand" on:click={() => { if (expanded) $selectedOpId = null; expanded = !expanded; }}>
             <Icon name={expanded ? "chevron-down" : "chevron-right"} />
             <span>Operations ({entries.length}{hasMore ? "+" : ""})</span>
         </button>
@@ -106,6 +117,7 @@
                         class:selected={$selectedOpId === entry.id}
                         style="top: {(startIndex + i) * ROW_HEIGHT}px"
                         on:click={() => $selectedOpId = $selectedOpId === entry.id ? null : entry.id}
+                        on:contextmenu={(e) => onContextMenu(e, entry)}
                     >
                         <span class="op-time" title={entry.timestamp}>{formatTime(entry.timestamp)}</span>
                         <span class="op-desc">{entry.description || "(no description)"}</span>
@@ -142,7 +154,6 @@
         background: none;
         color: var(--ctp-text);
         cursor: pointer;
-        font-family: var(--stack-industrial);
         font-size: 13px;
         text-align: left;
 

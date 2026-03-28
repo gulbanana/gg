@@ -3,12 +3,13 @@
     import type { Operand } from "../messages/Operand";
     import type { RevHeader } from "../messages/RevHeader";
     import type { StoreRef } from "../messages/StoreRef";
-    import { ignoreToggled } from "../stores";
+    import type { RestoreOperation } from "../messages/RestoreOperation";
+    import { changeViewRequest, fileFilter, ignoreToggled } from "../stores";
     import RevisionMutator from "../mutators/RevisionMutator";
     import ChangeMutator from "../mutators/ChangeMutator";
     import RefMutator from "../mutators/RefMutator";
     import WorkspaceMutator from "../mutators/WorkspaceMutator";
-    import { fileFilter, changeViewRequest } from "../stores";
+    import { mutate } from "../ipc";
 
     export let operand: Operand;
     export let x: number;
@@ -34,6 +35,8 @@
             new RefMutator(operand.ref, ignoreImmutable).handle(action);
         } else if (operand.type === "Workspace") {
             new WorkspaceMutator(operand.name).handle(action);
+        } else if (operand.type === "Operation" && action === "restore") {
+            mutate<RestoreOperation>("restore_operation", { id: operand.id });
         }
         onClose();
     }
@@ -150,6 +153,8 @@
         <button on:click={() => { changeViewRequest.set("diff"); onClose(); }}>Show diff</button>
         <hr />
         <button on:click={() => { fileFilter.set(operand.type === "Change" ? operand.path : null); onClose(); }}>Show file history</button>
+    {:else if operand.type === "Operation"}
+        <button disabled={operand.is_head} on:click={() => onClick("restore")}>Restore to here</button>
     {:else if operand.type === "Ref" && refEnabled}
         <button disabled={!refEnabled.track} on:click={() => onClick("track")}>Track</button>
         <button disabled={!refEnabled.untrack} on:click={() => onClick("untrack")}>Untrack</button>

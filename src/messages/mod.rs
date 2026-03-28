@@ -329,6 +329,10 @@ pub enum Operand {
     Workspace {
         name: String,
     },
+    Operation {
+        id: String,
+        is_head: bool,
+    },
 }
 
 /// A prompt for user input (e.g. credentials for git operations).
