@@ -2,16 +2,18 @@
     import { onMount } from "svelte";
     import type { OpLog } from "./messages/OpLog";
     import type { OpLogEntry } from "./messages/OpLogEntry";
-    import { query } from "./ipc";
-    import { repoStatusEvent, revisionSelectEvent, selectedOpId } from "./stores";
+    import { query, isTauri, trigger } from "./ipc";
+    import { repoStatusEvent, revisionSelectEvent, selectedOpId, currentContext, hasMenu } from "./stores";
     import Icon from "./controls/Icon.svelte";
 
     const ROW_HEIGHT = 26;
     const LOAD_THRESHOLD = ROW_HEIGHT * 5; // load more when within 5 rows of bottom
 
     let entries: OpLogEntry[] = [];
+    let headId: string | null = null;
     let hasMore = false;
     let loading = false;
+    let generation = 0;
     let expanded = false;
     let filterSnapshots = true;
 
@@ -26,15 +28,19 @@
     $: totalHeight = entries.length * ROW_HEIGHT;
 
     async function loadOpLog(afterId?: string) {
-        if (loading) return;
+        if (afterId && loading) return; // don't stack pagination loads
+        if (!afterId) generation++;
+        let myGen = generation;
         loading = true;
         let result = await query<OpLog>("query_op_log", { filterSnapshots, afterId });
         loading = false;
+        if (myGen !== generation) return; // superseded by a newer full reload
         if (result.type === "data") {
             if (afterId) {
                 entries = [...entries, ...result.value.entries];
             } else {
                 entries = result.value.entries;
+                headId = result.value.head_id;
             }
             hasMore = result.value.has_more;
         } else {
@@ -88,7 +94,7 @@
 
 <div class="op-log">
     <div class="op-log-header">
-        <button class="op-log-expand" on:click={() => (expanded = !expanded)}>
+        <button class="op-log-expand" on:click={() => { if (expanded) $selectedOpId = null; expanded = !expanded; }}>
             <Icon name={expanded ? "chevron-down" : "chevron-right"} />
             <span>Operations ({entries.length}{hasMore ? "+" : ""})</span>
         </button>
@@ -112,10 +118,11 @@
                 {#each visibleSlice as entry, i (i)}
                     <button
                         class="op-entry"
-                        class:head={entry.is_head}
+                        class:head={entry.id === headId}
                         class:selected={$selectedOpId === entry.id}
                         style="top: {(startIndex + i) * ROW_HEIGHT}px"
                         on:click={() => $selectedOpId = $selectedOpId === entry.id ? null : entry.id}
+                        on:contextmenu={(e) => onContextMenu(e, entry)}
                     >
                         <span class="op-time" title={entry.timestamp}>{formatTime(entry.timestamp)}</span>
                         <span class="op-desc">{entry.description || "(no description)"}</span>
@@ -152,7 +159,6 @@
         background: none;
         color: var(--ctp-text);
         cursor: pointer;
-        font-family: var(--stack-industrial);
         font-size: 13px;
         text-align: left;
 

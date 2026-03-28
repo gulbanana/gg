@@ -271,6 +271,13 @@ pub struct RenameWorkspace {
     pub new_name: String,
 }
 
+/// Restores the repo to the state at a given operation.
+#[derive(Deserialize, Debug)]
+#[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
+pub struct RestoreOperation {
+    pub id: String,
+}
+
 /// Opens a file's diff in the user's configured external diff tool
 #[derive(Deserialize, Debug)]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]

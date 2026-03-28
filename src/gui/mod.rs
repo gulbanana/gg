@@ -31,7 +31,7 @@ use gg_lib::messages::{
         DescribeRevision, DuplicateRevisions, ExternalDiff, ExternalResolve, ForgetWorkspace,
         GitFetch, GitPush, InitRepository, InsertRevisions, MoveChanges, MoveHunk, MoveRef,
         MoveRevisions, MutationOptions, MutationResult, RenameBookmark, RenameWorkspace,
-        TrackBookmark, UndoOperation, UntrackBookmark,
+        RestoreOperation, TrackBookmark, UndoOperation, UntrackBookmark,
     },
 };
 use gg_lib::worker::{Mutation, Session, SessionEvent, WorkerSession};
@@ -62,6 +62,7 @@ struct WindowState {
     tree_menu: Menu<Wry>,
     ref_menu: Menu<Wry>,
     workspace_menu: Menu<Wry>,
+    operation_menu: Menu<Wry>,
     selection: Option<messages::RevSet>,
     has_workspace: bool,
     ignore_immutable: bool,
@@ -216,6 +217,7 @@ pub fn run_gui(options: super::RunOptions) -> Result<()> {
             forget_workspace,
             rename_workspace,
             undo_operation,
+            restore_operation,
             write_config_table,
         ])
         .menu(move |handle| menu::build_main(handle, &recent_workspaces))
@@ -891,6 +893,16 @@ fn undo_operation(
 }
 
 #[tauri::command(async)]
+fn restore_operation(
+    window: Window,
+    app_state: State<AppState>,
+    mutation: RestoreOperation,
+    options: MutationOptions,
+) -> Result<MutationResult, InvokeError> {
+    try_mutate(window, app_state, mutation, options)
+}
+
+#[tauri::command(async)]
 fn write_config_table(
     window: Window,
     app_state: State<AppState>,
@@ -962,7 +974,7 @@ pub fn try_create_window(app_handle: &AppHandle, workspace: Option<PathBuf>) -> 
     });
 
     // setup command dependencies
-    let (revision_menu, tree_menu, ref_menu, workspace_menu) = menu::build_context(app_handle)?;
+    let (revision_menu, tree_menu, ref_menu, workspace_menu, operation_menu) = menu::build_context(app_handle)?;
     let windows = app_state.windows.clone();
     windows.lock().unwrap().insert(
         window.label().to_owned(),
@@ -973,6 +985,7 @@ pub fn try_create_window(app_handle: &AppHandle, workspace: Option<PathBuf>) -> 
             tree_menu,
             ref_menu,
             workspace_menu,
+            operation_menu,
             selection: None,
             has_workspace: false,
             ignore_immutable: initial_ignore_immutable,
