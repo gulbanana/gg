@@ -25,6 +25,7 @@ use jj_lib::{
     merged_tree::MergedTree,
     object_id::ObjectId as ObjectIdTrait,
     op_walk,
+    ref_name::WorkspaceNameBuf,
     ref_name::{GitRefNameBuf, RefNameBuf, RemoteName, RemoteNameBuf, RemoteRefSymbol},
     refs::{self, BookmarkPushAction, BookmarkPushUpdate, LocalAndRemoteRef},
     repo::Repo,
@@ -34,6 +35,7 @@ use jj_lib::{
     store::Store,
     str_util::StringExpression,
     tree_merge::MergeOptions,
+    workspace_store::{SimpleWorkspaceStore, WorkspaceStore as _},
 };
 use tokio::io::AsyncReadExt;
 
@@ -44,8 +46,8 @@ use super::{
 };
 
 use crate::messages::mutations::{
-    ExternalDiff, ExternalResolve, GitFetch, GitPush, GitRefspec, MutationOptions, MutationResult,
-    UndoOperation,
+    ExternalDiff, ExternalResolve, ForgetWorkspace, GitFetch, GitPush, GitRefspec, MutationOptions,
+    MutationResult, UndoOperation,
 };
 
 macro_rules! precondition {
@@ -622,6 +624,54 @@ impl Mutation for UndoOperation {
     }
 }
 
+#[async_trait(?Send)]
+impl Mutation for ForgetWorkspace {
+    async fn execute(
+        self: Box<Self>,
+        ws: &mut WorkspaceSession,
+        _options: &MutationOptions,
+    ) -> Result<MutationResult> {
+        let workspace_name: WorkspaceNameBuf = self.name.into();
+
+        let Some(wc_id) = ws.view().get_wc_commit_id(&workspace_name) else {
+            precondition!("Workspace '{}' not found", workspace_name.as_symbol());
+        };
+        if *workspace_name == *ws.name() {
+            precondition!("Cannot forget the current workspace");
+        }
+
+        let wc_commit = ws.get_commit(wc_id)?;
+
+        let mut tx = ws.start_transaction().await?;
+        tx.repo_mut().remove_wc_commit(&workspace_name).await?;
+
+        // abandon the old WC commit if it's empty (same tree as parent merge)
+        let parents = wc_commit.parents().await?;
+        let parent_tree = rewrite::merge_commit_trees(tx.repo(), &parents).await?;
+        if wc_commit.tree().tree_ids() == parent_tree.tree_ids() {
+            tx.repo_mut().record_abandoned_commit(&wc_commit);
+            tx.repo_mut().rebase_descendants().await?;
+        }
+
+        let workspace_store = SimpleWorkspaceStore::load(ws.workspace.repo_path())?;
+        workspace_store.forget(&[&*workspace_name])?;
+
+        match ws
+            .finish_transaction(
+                tx,
+                format!("forget workspace '{}'", workspace_name.as_symbol()),
+            )
+            .await?
+        {
+            Some(new_status) => Ok(MutationResult::Updated {
+                new_status,
+                new_selection: None,
+            }),
+            None => Ok(MutationResult::Unchanged),
+        }
+    }
+}
+
 async fn read_file_content(
     store: &Arc<Store>,
     tree: &MergedTree,
@@ -711,6 +761,7 @@ mod tests {
     };
     use anyhow::Result;
     use assert_matches::assert_matches;
+    use jj_lib::ref_name::WorkspaceName;
     use jj_lib::str_util::StringMatcher;
     use std::fs;
 
@@ -875,6 +926,101 @@ auto-track = "glob:*.txt"
 
         // Verify: the .dat file should exist, but be untracked
         assert!(repo.path().join("untracked.dat").exists());
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn forget_workspace_via_mutation() -> Result<()> {
+        let repo = mkrepo();
+
+        let mut session = WorkerSession::default();
+        let mut ws = session.load_workspace(repo.path()).await?;
+
+        ws.add_workspace("second".to_owned(), repo.path().join("second-workspace"))
+            .await?;
+        assert!(
+            ws.view()
+                .get_wc_commit_id(WorkspaceName::new("second"))
+                .is_some()
+        );
+
+        let result = ForgetWorkspace {
+            name: "second".to_owned(),
+        }
+        .execute_unboxed(&mut ws)
+        .await?;
+
+        assert_matches!(result, MutationResult::Updated { .. });
+        assert!(
+            ws.view()
+                .get_wc_commit_id(WorkspaceName::new("second"))
+                .is_none()
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn forget_workspace_abandons_empty_wc() -> Result<()> {
+        let repo = mkrepo();
+
+        let mut session = WorkerSession::default();
+        let mut ws = session.load_workspace(repo.path()).await?;
+
+        ws.add_workspace("second".to_owned(), repo.path().join("second-workspace"))
+            .await?;
+
+        let count_before = queries::query_log(&ws, "all()", 100)?.rows.len();
+
+        ForgetWorkspace {
+            name: "second".to_owned(),
+        }
+        .execute_unboxed(&mut ws)
+        .await?;
+
+        let count_after = queries::query_log(&ws, "all()", 100)?.rows.len();
+        assert_eq!(
+            count_before - 1,
+            count_after,
+            "empty WC commit should be abandoned"
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn forget_workspace_rejects_current() -> Result<()> {
+        let repo = mkrepo();
+
+        let mut session = WorkerSession::default();
+        let mut ws = session.load_workspace(repo.path()).await?;
+
+        let result = ForgetWorkspace {
+            name: ws.name().as_str().to_owned(),
+        }
+        .execute_unboxed(&mut ws)
+        .await?;
+
+        assert_matches!(result, MutationResult::PreconditionError { message } if message.contains("current workspace"));
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn forget_workspace_rejects_nonexistent() -> Result<()> {
+        let repo = mkrepo();
+
+        let mut session = WorkerSession::default();
+        let mut ws = session.load_workspace(repo.path()).await?;
+
+        let result = ForgetWorkspace {
+            name: "nonexistent".to_owned(),
+        }
+        .execute_unboxed(&mut ws)
+        .await?;
+
+        assert_matches!(result, MutationResult::PreconditionError { message } if message.contains("not found"));
 
         Ok(())
     }

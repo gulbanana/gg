@@ -255,6 +255,14 @@ pub struct GitFetch {
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
 pub struct UndoOperation;
 
+/// Forgets a workspace, removing it from the repository.
+/// If the workspace's working copy commit is empty, it is abandoned.
+#[derive(Deserialize, Debug)]
+#[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
+pub struct ForgetWorkspace {
+    pub name: String,
+}
+
 /// Opens a file's diff in the user's configured external diff tool
 #[derive(Deserialize, Debug)]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]

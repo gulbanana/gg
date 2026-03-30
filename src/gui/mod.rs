@@ -28,10 +28,10 @@ use gg_lib::messages::{
     mutations::{
         AbandonRevisions, AdoptRevision, BackoutRevisions, CheckoutRevision, CloneRepository,
         CopyChanges, CopyHunk, CreateRef, CreateRevision, CreateRevisionBetween, DeleteRef,
-        DescribeRevision, DuplicateRevisions, ExternalDiff, ExternalResolve, GitFetch, GitPush,
-        InitRepository, InsertRevisions, MoveChanges, MoveHunk, MoveRef, MoveRevisions,
-        MutationOptions, MutationResult, RenameBookmark, TrackBookmark, UndoOperation,
-        UntrackBookmark,
+        DescribeRevision, DuplicateRevisions, ExternalDiff, ExternalResolve, ForgetWorkspace,
+        GitFetch, GitPush, InitRepository, InsertRevisions, MoveChanges, MoveHunk, MoveRef,
+        MoveRevisions, MutationOptions, MutationResult, RenameBookmark, TrackBookmark,
+        UndoOperation, UntrackBookmark,
     },
 };
 use gg_lib::worker::{Mutation, Session, SessionEvent, WorkerSession};
@@ -208,6 +208,7 @@ pub fn run_gui(options: super::RunOptions) -> Result<()> {
             git_fetch,
             external_diff,
             external_resolve,
+            forget_workspace,
             undo_operation,
             write_config_table,
         ])
@@ -755,6 +756,16 @@ fn external_resolve(
     window: Window,
     app_state: State<AppState>,
     mutation: ExternalResolve,
+    options: MutationOptions,
+) -> Result<MutationResult, InvokeError> {
+    try_mutate(window, app_state, mutation, options)
+}
+
+#[tauri::command(async)]
+fn forget_workspace(
+    window: Window,
+    app_state: State<AppState>,
+    mutation: ForgetWorkspace,
     options: MutationOptions,
 ) -> Result<MutationResult, InvokeError> {
     try_mutate(window, app_state, mutation, options)
