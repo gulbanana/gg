@@ -265,6 +265,45 @@ impl WorkspaceSession<'_> {
         Ok(())
     }
 
+    pub async fn rename_workspace(
+        &mut self,
+        old_name: WorkspaceNameBuf,
+        new_name: WorkspaceNameBuf,
+    ) -> Result<Option<messages::RepoStatus>> {
+        let mut tx = self.start_transaction().await?;
+
+        // capture before locking the working copy
+        let repo_path = self.workspace.repo_path().to_owned();
+        let is_colocated = self.is_colocated;
+
+        let mut locked_ws = self.workspace.start_working_copy_mutation()?;
+
+        locked_ws.locked_wc().rename_workspace(new_name.clone());
+        tx.repo_mut()
+            .rename_workspace(&old_name, new_name.clone())?;
+
+        let workspace_store = SimpleWorkspaceStore::load(&repo_path)?;
+        workspace_store.rename(&old_name, &new_name)?;
+
+        if is_colocated {
+            git::export_refs(tx.repo_mut())?;
+        }
+
+        self.operation = OperationData::new(
+            &new_name,
+            &self.data,
+            tx.commit(format!(
+                "rename workspace '{}' to '{}'",
+                old_name.as_symbol(),
+                new_name.as_symbol()
+            ))
+            .await?,
+        );
+        locked_ws.finish(self.operation.repo.op_id().clone())?;
+
+        Ok(Some(self.format_status()))
+    }
+
     pub fn list_workspaces(&self) -> Vec<String> {
         let mut names: Vec<String> = self
             .view()

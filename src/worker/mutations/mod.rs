@@ -47,7 +47,7 @@ use super::{
 
 use crate::messages::mutations::{
     ExternalDiff, ExternalResolve, ForgetWorkspace, GitFetch, GitPush, GitRefspec, MutationOptions,
-    MutationResult, UndoOperation,
+    MutationResult, RenameWorkspace, UndoOperation,
 };
 
 macro_rules! precondition {
@@ -672,6 +672,44 @@ impl Mutation for ForgetWorkspace {
     }
 }
 
+#[async_trait(?Send)]
+impl Mutation for RenameWorkspace {
+    async fn execute(
+        self: Box<Self>,
+        ws: &mut WorkspaceSession,
+        _options: &MutationOptions,
+    ) -> Result<MutationResult> {
+        if self.new_name.is_empty() {
+            precondition!("New workspace name cannot be empty");
+        }
+
+        let old_name: WorkspaceNameBuf = self.name.into();
+        let new_name: WorkspaceNameBuf = self.new_name.into();
+
+        if *old_name == *new_name {
+            return Ok(MutationResult::Unchanged);
+        }
+
+        if ws.view().get_wc_commit_id(&old_name).is_none() {
+            precondition!("Workspace '{}' not found", old_name.as_symbol());
+        }
+        if ws.view().get_wc_commit_id(&new_name).is_some() {
+            precondition!("Workspace '{}' already exists", new_name.as_symbol());
+        }
+        if *old_name != *ws.name() {
+            precondition!("Can only rename the current workspace");
+        }
+
+        match ws.rename_workspace(old_name, new_name).await? {
+            Some(new_status) => Ok(MutationResult::Updated {
+                new_status,
+                new_selection: None,
+            }),
+            None => Ok(MutationResult::Unchanged),
+        }
+    }
+}
+
 async fn read_file_content(
     store: &Arc<Store>,
     tree: &MergedTree,
@@ -1021,6 +1059,122 @@ auto-track = "glob:*.txt"
         .await?;
 
         assert_matches!(result, MutationResult::PreconditionError { message } if message.contains("not found"));
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn rename_workspace_via_mutation() -> Result<()> {
+        let repo = mkrepo();
+
+        let mut session = WorkerSession::default();
+        let mut ws = session.load_workspace(repo.path()).await?;
+
+        let old_name = ws.name().as_str().to_owned();
+
+        let result = RenameWorkspace {
+            name: old_name.clone(),
+            new_name: "renamed".to_owned(),
+        }
+        .execute_unboxed(&mut ws)
+        .await?;
+
+        assert_matches!(result, MutationResult::Updated { .. });
+        assert_eq!(ws.name().as_str(), "renamed");
+        assert!(
+            ws.view()
+                .get_wc_commit_id(WorkspaceName::new(&old_name))
+                .is_none()
+        );
+        assert!(
+            ws.view()
+                .get_wc_commit_id(WorkspaceName::new("renamed"))
+                .is_some()
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn rename_workspace_same_name_is_unchanged() -> Result<()> {
+        let repo = mkrepo();
+
+        let mut session = WorkerSession::default();
+        let mut ws = session.load_workspace(repo.path()).await?;
+
+        let name = ws.name().as_str().to_owned();
+
+        let result = RenameWorkspace {
+            name: name.clone(),
+            new_name: name,
+        }
+        .execute_unboxed(&mut ws)
+        .await?;
+
+        assert_matches!(result, MutationResult::Unchanged);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn rename_workspace_rejects_empty_name() -> Result<()> {
+        let repo = mkrepo();
+
+        let mut session = WorkerSession::default();
+        let mut ws = session.load_workspace(repo.path()).await?;
+
+        let result = RenameWorkspace {
+            name: ws.name().as_str().to_owned(),
+            new_name: "".to_owned(),
+        }
+        .execute_unboxed(&mut ws)
+        .await?;
+
+        assert_matches!(result, MutationResult::PreconditionError { message } if message.contains("cannot be empty"));
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn rename_workspace_rejects_duplicate_name() -> Result<()> {
+        let repo = mkrepo();
+
+        let mut session = WorkerSession::default();
+        let mut ws = session.load_workspace(repo.path()).await?;
+
+        ws.add_workspace("other".to_owned(), repo.path().join("other-workspace"))
+            .await?;
+
+        let result = RenameWorkspace {
+            name: ws.name().as_str().to_owned(),
+            new_name: "other".to_owned(),
+        }
+        .execute_unboxed(&mut ws)
+        .await?;
+
+        assert_matches!(result, MutationResult::PreconditionError { message } if message.contains("already exists"));
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn rename_workspace_rejects_non_current() -> Result<()> {
+        let repo = mkrepo();
+
+        let mut session = WorkerSession::default();
+        let mut ws = session.load_workspace(repo.path()).await?;
+
+        ws.add_workspace("other".to_owned(), repo.path().join("other-workspace"))
+            .await?;
+
+        let result = RenameWorkspace {
+            name: "other".to_owned(),
+            new_name: "renamed".to_owned(),
+        }
+        .execute_unboxed(&mut ws)
+        .await?;
+
+        assert_matches!(result, MutationResult::PreconditionError { message } if message.contains("current workspace"));
 
         Ok(())
     }

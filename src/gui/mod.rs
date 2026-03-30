@@ -30,8 +30,8 @@ use gg_lib::messages::{
         CopyChanges, CopyHunk, CreateRef, CreateRevision, CreateRevisionBetween, DeleteRef,
         DescribeRevision, DuplicateRevisions, ExternalDiff, ExternalResolve, ForgetWorkspace,
         GitFetch, GitPush, InitRepository, InsertRevisions, MoveChanges, MoveHunk, MoveRef,
-        MoveRevisions, MutationOptions, MutationResult, RenameBookmark, TrackBookmark,
-        UndoOperation, UntrackBookmark,
+        MoveRevisions, MutationOptions, MutationResult, RenameBookmark, RenameWorkspace,
+        TrackBookmark, UndoOperation, UntrackBookmark,
     },
 };
 use gg_lib::worker::{Mutation, Session, SessionEvent, WorkerSession};
@@ -209,6 +209,7 @@ pub fn run_gui(options: super::RunOptions) -> Result<()> {
             external_diff,
             external_resolve,
             forget_workspace,
+            rename_workspace,
             undo_operation,
             write_config_table,
         ])
@@ -766,6 +767,16 @@ fn forget_workspace(
     window: Window,
     app_state: State<AppState>,
     mutation: ForgetWorkspace,
+    options: MutationOptions,
+) -> Result<MutationResult, InvokeError> {
+    try_mutate(window, app_state, mutation, options)
+}
+
+#[tauri::command(async)]
+fn rename_workspace(
+    window: Window,
+    app_state: State<AppState>,
+    mutation: RenameWorkspace,
     options: MutationOptions,
 ) -> Result<MutationResult, InvokeError> {
     try_mutate(window, app_state, mutation, options)

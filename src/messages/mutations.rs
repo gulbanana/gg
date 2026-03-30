@@ -263,6 +263,14 @@ pub struct ForgetWorkspace {
     pub name: String,
 }
 
+/// Renames a workspace.
+#[derive(Deserialize, Debug)]
+#[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
+pub struct RenameWorkspace {
+    pub name: String,
+    pub new_name: String,
+}
+
 /// Opens a file's diff in the user's configured external diff tool
 #[derive(Deserialize, Debug)]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
