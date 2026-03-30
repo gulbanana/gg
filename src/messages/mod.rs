@@ -326,6 +326,9 @@ pub enum Operand {
         header: RevHeader,
         r#ref: StoreRef,
     },
+    Workspace {
+        name: String,
+    },
 }
 
 /// A prompt for user input (e.g. credentials for git operations).
