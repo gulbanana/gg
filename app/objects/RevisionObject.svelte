@@ -8,9 +8,8 @@
     import Zone from "./Zone.svelte";
     import RevisionMutator from "../mutators/RevisionMutator";
     import TagObject from "./TagObject.svelte";
-    import Chip from "../controls/Chip.svelte";
     import AuthorSpan from "../controls/AuthorSpan.svelte";
-    import Icon from "../controls/Icon.svelte";
+    import WorkspaceObject from "./WorkspaceObject.svelte";
 
     export let header: RevHeader;
     export let child: RevHeader | null = null;
@@ -85,10 +84,8 @@
                     {/if}
                 {/each}
                 {#if header.working_copy_of}
-                    <div class="workspace-chip">
-                        <Chip context={false} target={false} immobile tip="workspace: {header.working_copy_of}">
-                            <span>{header.working_copy_of}@</span>
-                        </Chip>
+                    <div>
+                        <WorkspaceObject name={header.working_copy_of} />
                     </div>
                 {/if}
             </span>
@@ -122,10 +119,7 @@
                     {/each}
                     {#if header.working_copy_of}
                         <div>
-                            <Chip context={false} target={false} immobile tip="workspace: {header.working_copy_of}">
-                                <Icon name="at-sign" state="change" />
-                                <span>{header.working_copy_of}</span>
-                            </Chip>
+                            <WorkspaceObject name={header.working_copy_of} />
                         </div>
                     {/if}
                 </span>
