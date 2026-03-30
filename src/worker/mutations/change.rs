@@ -742,7 +742,7 @@ async fn update_tree_entry(
     Ok(new_tree)
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(feature = "ts-rs")))]
 mod tests {
     use super::*;
     use crate::{

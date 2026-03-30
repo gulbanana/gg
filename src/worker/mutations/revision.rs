@@ -637,7 +637,7 @@ impl Mutation for MoveRevisions {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(feature = "ts-rs")))]
 mod tests {
     use std::fs;
 

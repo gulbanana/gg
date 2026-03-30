@@ -477,7 +477,7 @@ fn combine_bookmarks(bookmark_names: &[impl Display]) -> String {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(feature = "ts-rs")))]
 mod tests {
     use anyhow::Result;
     use assert_matches::assert_matches;
