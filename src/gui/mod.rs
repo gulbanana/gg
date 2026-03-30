@@ -61,6 +61,7 @@ struct WindowState {
     revision_menu: Menu<Wry>,
     tree_menu: Menu<Wry>,
     ref_menu: Menu<Wry>,
+    workspace_menu: Menu<Wry>,
     selection: Option<messages::RevSet>,
     has_workspace: bool,
     ignore_immutable: bool,
@@ -863,7 +864,7 @@ pub fn try_create_window(app_handle: &AppHandle, workspace: Option<PathBuf>) -> 
     });
 
     // setup command dependencies
-    let (revision_menu, tree_menu, ref_menu) = menu::build_context(app_handle)?;
+    let (revision_menu, tree_menu, ref_menu, workspace_menu) = menu::build_context(app_handle)?;
     let windows = app_state.windows.clone();
     windows.lock().unwrap().insert(
         window.label().to_owned(),
@@ -873,6 +874,7 @@ pub fn try_create_window(app_handle: &AppHandle, workspace: Option<PathBuf>) -> 
             revision_menu,
             tree_menu,
             ref_menu,
+            workspace_menu,
             selection: None,
             has_workspace: false,
             ignore_immutable: initial_ignore_immutable,

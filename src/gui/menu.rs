@@ -206,7 +206,7 @@ pub fn rebuild_main(app_handle: &AppHandle, recent_items: Vec<String>) -> Result
 #[allow(clippy::type_complexity)]
 pub fn build_context(
     app_handle: &AppHandle<Wry>,
-) -> Result<(Menu<Wry>, Menu<Wry>, Menu<Wry>), tauri::Error> {
+) -> Result<(Menu<Wry>, Menu<Wry>, Menu<Wry>, Menu<Wry>), tauri::Error> {
     let revision_menu = Menu::with_items(
         app_handle,
         &[
@@ -345,7 +345,21 @@ pub fn build_context(
         ],
     )?;
 
-    Ok((revision_menu, tree_menu, ref_menu))
+    let workspace_menu = Menu::with_items(
+        app_handle,
+        &[
+            &MenuItem::with_id(
+                app_handle,
+                "workspace_rename",
+                "Rename...",
+                true,
+                None::<&str>,
+            )?,
+            &MenuItem::with_id(app_handle, "workspace_forget", "Forget", true, None::<&str>)?,
+        ],
+    )?;
+
+    Ok((revision_menu, tree_menu, ref_menu, workspace_menu))
 }
 
 /// Computed enablement state for revision menu items
@@ -572,6 +586,14 @@ pub fn handle_context(window: Window, ctx: Operand, ignore_immutable: bool) -> R
 
             window.popup_menu(context_menu)?;
         }
+        Operand::Workspace { .. } => {
+            let context_menu = &guard
+                .get(window.label())
+                .expect("session not found")
+                .workspace_menu;
+
+            window.popup_menu(context_menu)?;
+        }
         _ => (), // no popup required
     };
 
@@ -622,6 +644,8 @@ pub fn handle_event(window: &Window, event: MenuEvent) -> Result<()> {
         }
         "bookmark_rename" => window.emit_to(target, "gg://context/bookmark", "rename")?,
         "bookmark_delete" => window.emit_to(target, "gg://context/bookmark", "delete")?,
+        "workspace_rename" => window.emit_to(target, "gg://context/workspace", "rename")?,
+        "workspace_forget" => window.emit_to(target, "gg://context/workspace", "forget")?,
         recent_id if recent_id.starts_with("recent:") => {
             let path = PathBuf::from(&recent_id["recent:".len()..]);
             let app_handle = window.app_handle().clone();

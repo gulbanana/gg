@@ -7,6 +7,7 @@
     import RevisionMutator from "../mutators/RevisionMutator";
     import ChangeMutator from "../mutators/ChangeMutator";
     import RefMutator from "../mutators/RefMutator";
+    import WorkspaceMutator from "../mutators/WorkspaceMutator";
 
     export let operand: Operand;
     export let x: number;
@@ -30,6 +31,8 @@
             new ChangeMutator(operand.headers, operand.path, operand.hunk, ignoreImmutable).handle(action);
         } else if (operand.type === "Ref") {
             new RefMutator(operand.ref, ignoreImmutable).handle(action);
+        } else if (operand.type === "Workspace") {
+            new WorkspaceMutator(operand.name).handle(action);
         }
         onClose();
     }
@@ -153,6 +156,9 @@
         <hr />
         <button disabled={!refEnabled.rename} on:click={() => onClick("rename")}>Rename...</button>
         <button disabled={!refEnabled.delete} on:click={() => onClick("delete")}>Delete</button>
+    {:else if operand.type === "Workspace"}
+        <button on:click={() => onClick("rename")}>Rename...</button>
+        <button on:click={() => onClick("forget")}>Forget</button>
     {/if}
 </div>
 

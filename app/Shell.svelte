@@ -21,6 +21,7 @@
     import RefMutator from "./mutators/RefMutator";
     import ChangeMutator from "./mutators/ChangeMutator";
     import RevisionMutator from "./mutators/RevisionMutator";
+    import WorkspaceMutator from "./mutators/WorkspaceMutator";
     import Pane from "./shell/Pane.svelte";
     import Zone from "./objects/Zone.svelte";
     import StatusBar from "./shell/StatusBar.svelte";
@@ -127,6 +128,7 @@
         onEvent("gg://context/revision", mutateRevision);
         onEvent("gg://context/tree", mutateTree);
         onEvent("gg://context/bookmark", mutateRef);
+        onEvent("gg://context/workspace", mutateWorkspace);
         onEvent("gg://menu/repo", mutateRepository);
         // gui mode: snapshot when window gains focus
         onEvent("gg://focus", handleFocus);
@@ -250,6 +252,13 @@
     function mutateRef(event: string) {
         if ($currentContext?.type == "Ref") {
             new RefMutator($currentContext.ref, $ignoreToggled).handle(event);
+        }
+        $currentContext = null;
+    }
+
+    function mutateWorkspace(event: string) {
+        if ($currentContext?.type == "Workspace") {
+            new WorkspaceMutator($currentContext.name).handle(event);
         }
         $currentContext = null;
     }
