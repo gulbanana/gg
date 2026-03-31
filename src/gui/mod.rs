@@ -31,7 +31,7 @@ use gg_lib::messages::{
         DescribeRevision, DuplicateRevisions, ExternalDiff, ExternalResolve, ForgetWorkspace,
         GitFetch, GitPush, InitRepository, InsertRevisions, MoveChanges, MoveHunk, MoveRef,
         MoveRevisions, MutationOptions, MutationResult, RenameBookmark, RenameWorkspace,
-        TrackBookmark, UndoOperation, UntrackBookmark,
+        RestoreOperation, TrackBookmark, UndoOperation, UntrackBookmark,
     },
 };
 use gg_lib::worker::{Mutation, Session, SessionEvent, WorkerSession};
@@ -62,6 +62,7 @@ struct WindowState {
     tree_menu: Menu<Wry>,
     ref_menu: Menu<Wry>,
     workspace_menu: Menu<Wry>,
+    operation_menu: Menu<Wry>,
     selection: Option<messages::RevSet>,
     has_workspace: bool,
     ignore_immutable: bool,
@@ -184,6 +185,10 @@ pub fn run_gui(options: super::RunOptions) -> Result<()> {
             query_log_next_page,
             query_revisions,
             query_remotes,
+            query_file_content,
+            query_file_content_at_op,
+            query_file_diff_at_op,
+            query_op_log,
             query_snapshot,
             abandon_revisions,
             backout_revisions,
@@ -212,6 +217,7 @@ pub fn run_gui(options: super::RunOptions) -> Result<()> {
             forget_workspace,
             rename_workspace,
             undo_operation,
+            restore_operation,
             write_config_table,
         ])
         .menu(move |handle| menu::build_main(handle, &recent_workspaces))
@@ -510,6 +516,100 @@ fn query_remotes(
 }
 
 #[tauri::command(async)]
+fn query_file_content(
+    window: Window,
+    app_state: State<AppState>,
+    id: messages::RevId,
+    path: String,
+) -> Result<messages::queries::FileContent, InvokeError> {
+    let session_tx: Sender<SessionEvent> = app_state.get_session(window.label());
+    let (call_tx, call_rx) = channel();
+
+    session_tx
+        .send(SessionEvent::QueryFileContent {
+            tx: call_tx,
+            id,
+            path,
+        })
+        .map_err(InvokeError::from_error)?;
+    call_rx
+        .recv()
+        .map_err(InvokeError::from_error)?
+        .map_err(InvokeError::from_anyhow)
+}
+
+#[tauri::command(async)]
+fn query_file_content_at_op(
+    window: Window,
+    app_state: State<AppState>,
+    op_id: String,
+    path: String,
+) -> Result<messages::queries::FileContent, InvokeError> {
+    let session_tx: Sender<SessionEvent> = app_state.get_session(window.label());
+    let (call_tx, call_rx) = channel();
+
+    session_tx
+        .send(SessionEvent::QueryFileContentAtOp {
+            tx: call_tx,
+            op_id,
+            path,
+        })
+        .map_err(InvokeError::from_error)?;
+    call_rx
+        .recv()
+        .map_err(InvokeError::from_error)?
+        .map_err(InvokeError::from_anyhow)
+}
+
+#[tauri::command(async)]
+fn query_file_diff_at_op(
+    window: Window,
+    app_state: State<AppState>,
+    op_id: String,
+    path: String,
+    current_id: messages::RevId,
+) -> Result<Vec<messages::ChangeHunk>, InvokeError> {
+    let session_tx: Sender<SessionEvent> = app_state.get_session(window.label());
+    let (call_tx, call_rx) = channel();
+
+    session_tx
+        .send(SessionEvent::QueryFileDiffAtOp {
+            tx: call_tx,
+            op_id,
+            path,
+            current_id,
+        })
+        .map_err(InvokeError::from_error)?;
+    call_rx
+        .recv()
+        .map_err(InvokeError::from_error)?
+        .map_err(InvokeError::from_anyhow)
+}
+
+#[tauri::command(async)]
+fn query_op_log(
+    window: Window,
+    app_state: State<AppState>,
+    filter_snapshots: bool,
+    after_id: Option<String>,
+) -> Result<messages::queries::OpLog, InvokeError> {
+    let session_tx: Sender<SessionEvent> = app_state.get_session(window.label());
+    let (call_tx, call_rx) = channel();
+
+    session_tx
+        .send(SessionEvent::QueryOpLog {
+            tx: call_tx,
+            filter_snapshots,
+            after_id,
+        })
+        .map_err(InvokeError::from_error)?;
+    call_rx
+        .recv()
+        .map_err(InvokeError::from_error)?
+        .map_err(InvokeError::from_anyhow)
+}
+
+#[tauri::command(async)]
 fn query_snapshot(
     window: Window,
     app_state: State<AppState>,
@@ -793,6 +893,16 @@ fn undo_operation(
 }
 
 #[tauri::command(async)]
+fn restore_operation(
+    window: Window,
+    app_state: State<AppState>,
+    mutation: RestoreOperation,
+    options: MutationOptions,
+) -> Result<MutationResult, InvokeError> {
+    try_mutate(window, app_state, mutation, options)
+}
+
+#[tauri::command(async)]
 fn write_config_table(
     window: Window,
     app_state: State<AppState>,
@@ -864,7 +974,7 @@ pub fn try_create_window(app_handle: &AppHandle, workspace: Option<PathBuf>) -> 
     });
 
     // setup command dependencies
-    let (revision_menu, tree_menu, ref_menu, workspace_menu) = menu::build_context(app_handle)?;
+    let (revision_menu, tree_menu, ref_menu, workspace_menu, operation_menu) = menu::build_context(app_handle)?;
     let windows = app_state.windows.clone();
     windows.lock().unwrap().insert(
         window.label().to_owned(),
@@ -875,6 +985,7 @@ pub fn try_create_window(app_handle: &AppHandle, workspace: Option<PathBuf>) -> 
             tree_menu,
             ref_menu,
             workspace_menu,
+            operation_menu,
             selection: None,
             has_workspace: false,
             ignore_immutable: initial_ignore_immutable,

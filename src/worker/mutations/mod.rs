@@ -47,7 +47,7 @@ use super::{
 
 use crate::messages::mutations::{
     ExternalDiff, ExternalResolve, ForgetWorkspace, GitFetch, GitPush, GitRefspec, MutationOptions,
-    MutationResult, RenameWorkspace, UndoOperation,
+    MutationResult, RenameWorkspace, RestoreOperation, UndoOperation,
 };
 
 macro_rules! precondition {
@@ -705,6 +705,36 @@ impl Mutation for RenameWorkspace {
                 new_status,
                 new_selection: None,
             }),
+            None => Ok(MutationResult::Unchanged),
+        }
+    }
+}
+
+#[async_trait(?Send)]
+impl Mutation for RestoreOperation {
+    async fn execute(
+        self: Box<Self>,
+        ws: &mut WorkspaceSession,
+        _options: &MutationOptions,
+    ) -> Result<MutationResult> {
+        let target_op = op_walk::resolve_op_with_repo(ws.repo(), &self.id)?;
+        let mut tx = ws.start_transaction().await?;
+        let repo_loader = tx.base_repo().loader();
+        let target_repo = repo_loader.load_at(&target_op).await?;
+        tx.repo_mut()
+            .set_view(target_repo.view().store_view().clone());
+        match ws
+            .finish_transaction(tx, format!("restore to operation {}", target_op.id().hex()))
+            .await?
+        {
+            Some(new_status) => {
+                let working_copy = ws.get_commit(ws.wc_id())?;
+                let new_selection = Some(ws.format_header(&working_copy, None)?);
+                Ok(MutationResult::Updated {
+                    new_status,
+                    new_selection,
+                })
+            }
             None => Ok(MutationResult::Unchanged),
         }
     }

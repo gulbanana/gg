@@ -3,6 +3,7 @@
     import type { RevsResult } from "./messages/RevsResult";
     import type { RepoConfig } from "./messages/RepoConfig";
     import type { RepoStatus } from "./messages/RepoStatus";
+    import type { RestoreOperation } from "./messages/RestoreOperation";
     import { type Query, query, mutate, trigger, onEvent, isTauri, getInput } from "./ipc.js";
     import {
         currentMutation,
@@ -16,6 +17,8 @@
         progressEvent,
         lastFocus,
         ignoreToggled,
+        fileFilter,
+        changeViewRequest,
     } from "./stores.js";
     import ContextMenu from "./controls/ContextMenu.svelte";
     import RefMutator from "./mutators/RefMutator";
@@ -129,6 +132,7 @@
         onEvent("gg://context/tree", mutateTree);
         onEvent("gg://context/bookmark", mutateRef);
         onEvent("gg://context/workspace", mutateWorkspace);
+        onEvent("gg://context/operation", mutateOperation);
         onEvent("gg://menu/repo", mutateRepository);
         // gui mode: snapshot when window gains focus
         onEvent("gg://focus", handleFocus);
@@ -239,12 +243,18 @@
 
     function mutateTree(event: string) {
         if ($currentContext?.type == "Change") {
-            new ChangeMutator(
-                $currentContext.headers,
-                $currentContext.path,
-                $currentContext.hunk,
-                $ignoreToggled,
-            ).handle(event);
+            if (event === "history") {
+                fileFilter.set($currentContext.path);
+            } else if (event === "content" || event === "diff") {
+                changeViewRequest.set(event);
+            } else {
+                new ChangeMutator(
+                    $currentContext.headers,
+                    $currentContext.path,
+                    $currentContext.hunk,
+                    $ignoreToggled,
+                ).handle(event);
+            }
         }
         $currentContext = null;
     }
@@ -259,6 +269,13 @@
     function mutateWorkspace(event: string) {
         if ($currentContext?.type == "Workspace") {
             new WorkspaceMutator($currentContext.name).handle(event);
+        }
+        $currentContext = null;
+    }
+    
+    function mutateOperation(event: string) {
+        if ($currentContext?.type == "Operation" && event === "restore") {
+            mutate<RestoreOperation>("restore_operation", { id: $currentContext.id });
         }
         $currentContext = null;
     }

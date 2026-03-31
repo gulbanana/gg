@@ -206,7 +206,7 @@ pub fn rebuild_main(app_handle: &AppHandle, recent_items: Vec<String>) -> Result
 #[allow(clippy::type_complexity)]
 pub fn build_context(
     app_handle: &AppHandle<Wry>,
-) -> Result<(Menu<Wry>, Menu<Wry>, Menu<Wry>, Menu<Wry>), tauri::Error> {
+) -> Result<(Menu<Wry>, Menu<Wry>, Menu<Wry>, Menu<Wry>, Menu<Wry>), tauri::Error> {
     let revision_menu = Menu::with_items(
         app_handle,
         &[
@@ -296,6 +296,29 @@ pub fn build_context(
                 true,
                 None::<&str>,
             )?,
+            &PredefinedMenuItem::separator(app_handle)?,
+            &MenuItem::with_id(
+                app_handle,
+                "tree_content",
+                "Show full content",
+                true,
+                None::<&str>,
+            )?,
+            &MenuItem::with_id(
+                app_handle,
+                "tree_diff",
+                "Show diff",
+                true,
+                None::<&str>,
+            )?,
+            &PredefinedMenuItem::separator(app_handle)?,
+            &MenuItem::with_id(
+                app_handle,
+                "tree_history",
+                "Show file history",
+                true,
+                None::<&str>,
+            )?,
         ],
     )?;
 
@@ -359,7 +382,18 @@ pub fn build_context(
         ],
     )?;
 
-    Ok((revision_menu, tree_menu, ref_menu, workspace_menu))
+    let operation_menu = Menu::with_items(
+        app_handle,
+        &[&MenuItem::with_id(
+            app_handle,
+            "op_restore",
+            "Restore to here",
+            true,
+            None::<&str>,
+        )?],
+    )?;
+
+    Ok((revision_menu, tree_menu, ref_menu, workspace_menu, operation_menu))
 }
 
 /// Computed enablement state for revision menu items
@@ -594,6 +628,15 @@ pub fn handle_context(window: Window, ctx: Operand, ignore_immutable: bool) -> R
 
             window.popup_menu(context_menu)?;
         }
+        Operand::Operation { is_head, .. } => {
+            let context_menu = &guard
+                .get(window.label())
+                .expect("session not found")
+                .operation_menu;
+
+            context_menu.enable("op_restore", !is_head)?;
+            window.popup_menu(context_menu)?;
+        }
         _ => (), // no popup required
     };
 
@@ -634,6 +677,9 @@ pub fn handle_event(window: &Window, event: MenuEvent) -> Result<()> {
         "revision_bookmark" => window.emit_to(target, "gg://context/revision", "bookmark")?,
         "tree_squash" => window.emit_to(target, "gg://context/tree", "squash")?,
         "tree_restore" => window.emit_to(target, "gg://context/tree", "restore")?,
+        "tree_content" => window.emit_to(target, "gg://context/tree", "content")?,
+        "tree_diff" => window.emit_to(target, "gg://context/tree", "diff")?,
+        "tree_history" => window.emit_to(target, "gg://context/tree", "history")?,
         "bookmark_track" => window.emit_to(target, "gg://context/bookmark", "track")?,
         "bookmark_untrack" => window.emit_to(target, "gg://context/bookmark", "untrack")?,
         "bookmark_push_all" => window.emit_to(target, "gg://context/bookmark", "push-all")?,
@@ -646,6 +692,7 @@ pub fn handle_event(window: &Window, event: MenuEvent) -> Result<()> {
         "bookmark_delete" => window.emit_to(target, "gg://context/bookmark", "delete")?,
         "workspace_rename" => window.emit_to(target, "gg://context/workspace", "rename")?,
         "workspace_forget" => window.emit_to(target, "gg://context/workspace", "forget")?,
+        "op_restore" => window.emit_to(target, "gg://context/operation", "restore")?,
         recent_id if recent_id.starts_with("recent:") => {
             let path = PathBuf::from(&recent_id["recent:".len()..]);
             let app_handle = window.app_handle().clone();

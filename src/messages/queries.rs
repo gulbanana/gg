@@ -103,3 +103,30 @@ pub struct LogPage {
     pub rows: Vec<LogRow>,
     pub has_more: bool,
 }
+
+/// Response to a file content query: the full text of a file at a revision.
+#[derive(Serialize)]
+#[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
+pub struct FileContent {
+    pub content: MultilineString,
+    pub is_binary: bool,
+}
+
+/// A single entry in the operation log.
+#[derive(Serialize)]
+#[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
+pub struct OpLogEntry {
+    pub id: String,
+    pub description: String,
+    pub timestamp: chrono::DateTime<chrono::Local>,
+    pub tags: std::collections::HashMap<String, String>,
+    pub is_head: bool,
+}
+
+/// Response to an operation log query.
+#[derive(Serialize)]
+#[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
+pub struct OpLog {
+    pub entries: Vec<OpLogEntry>,
+    pub has_more: bool,
+}

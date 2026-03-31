@@ -101,6 +101,31 @@ pub enum SessionEvent {
         mutation: Box<dyn Mutation + Send + Sync>,
         options: messages::mutations::MutationOptions,
     },
+    /// Return full content of a file at a specific revision.
+    QueryFileContent {
+        tx: Sender<Result<messages::queries::FileContent>>,
+        id: messages::RevId,
+        path: String,
+    },
+    /// Return the full content of a file at the working copy as of a given operation.
+    QueryFileContentAtOp {
+        tx: Sender<Result<messages::queries::FileContent>>,
+        op_id: String,
+        path: String,
+    },
+    /// Return a unified diff between a file at a given operation and a current commit.
+    QueryFileDiffAtOp {
+        tx: Sender<Result<Vec<messages::ChangeHunk>>>,
+        op_id: String,
+        path: String,
+        current_id: messages::RevId,
+    },
+    /// Return the operation log.
+    QueryOpLog {
+        tx: Sender<Result<messages::queries::OpLog>>,
+        filter_snapshots: bool,
+        after_id: Option<String>,
+    },
     /// Read an array-valued key from jj config.
     ReadConfigArray {
         tx: Sender<Result<Vec<String>>>,
@@ -278,6 +303,26 @@ impl Session for WorkspaceSession<'_> {
                     tx,
                     tracking_bookmark,
                 } => tx.send(queries::query_remotes(&self, tracking_bookmark))?,
+                SessionEvent::QueryFileContent { tx, id, path } => {
+                    tx.send(queries::query_file_content(&self, &id, &path).await)?
+                }
+                SessionEvent::QueryFileContentAtOp { tx, op_id, path } => {
+                    tx.send(queries::query_file_content_at_op(&self, &op_id, &path).await)?
+                }
+                SessionEvent::QueryFileDiffAtOp {
+                    tx,
+                    op_id,
+                    path,
+                    current_id,
+                } => {
+                    tx.send(
+                        queries::query_file_diff_at_op(&self, &op_id, &path, &current_id).await,
+                    )?
+                }
+                SessionEvent::QueryOpLog { tx, filter_snapshots, after_id } => {
+                    let page_size = self.data.workspace_settings.query_op_log_page_size();
+                    tx.send(queries::query_op_log(&self, page_size, filter_snapshots, after_id))?
+                }
                 SessionEvent::QueryLog {
                     tx,
                     query: revset_string,

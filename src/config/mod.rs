@@ -32,6 +32,7 @@ use jj_lib::{
 /// keys and their defaults.
 pub trait GGSettings {
     fn query_log_page_size(&self) -> usize;
+    fn query_op_log_page_size(&self) -> usize;
     fn query_large_repo_heuristic(&self) -> i64;
     fn query_auto_snapshot(&self) -> Option<bool>;
     fn ui_theme_override(&self) -> Option<String>;
@@ -47,6 +48,10 @@ pub trait GGSettings {
 impl GGSettings for UserSettings {
     fn query_log_page_size(&self) -> usize {
         self.get_int("gg.queries.log-page-size").unwrap_or(1000) as usize
+    }
+
+    fn query_op_log_page_size(&self) -> usize {
+        self.get_int("gg.queries.op-log-page-size").unwrap_or(100) as usize
     }
 
     fn query_large_repo_heuristic(&self) -> i64 {
