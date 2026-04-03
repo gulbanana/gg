@@ -1,0 +1,275 @@
+# GG Material Theme — Material Design 3 inspired
+
+[light.colors]
+background = "#ffffff"
+surfaceDeep = "#e7e0ec"
+surface = "#fef7ff"
+surfaceAlt = "#f3edf7"
+surfaceStrong = "#e7e0ec"
+
+foreground = "#1d1b20"
+foregroundMuted = "#625b71"
+foregroundSubtle = "#79747e"
+foregroundFaint = "#aba4b2"
+
+outline = "#cac4d0"
+outlineMuted = "#e7e0ec"
+outlineStrong = "#79747e"
+
+primary = "#6750A4"
+primaryHover = "#4F378B"
+primaryContent = "#ffffff"
+secondary = "#1b72c0"
+secondaryHover = "#1565B0"
+success = "#146C2E"
+successContent = "#ffffff"
+warning = "#E8A317"
+warningContent = "#1d1b20"
+error = "#B3261E"
+errorContent = "#ffffff"
+destructive = "#B3261E"
+destructiveContent = "#ffffff"
+
+added = "#146C2E"
+removed = "#B3261E"
+modified = "#1b72c0"
+conflict = "#E8731A"
+addedAlt = "#A8FFB4"
+removedAlt = "#FFA8A3"
+modifiedAlt = "#ffffff"
+conflictAlt = "#FFD480"
+
+immutableStroke = "#1b72c0"
+immutableFill = "#1b72c0"
+mutableStroke = "#1b72c0"
+mutableFill = "transparent"
+workingCopyStroke = "#1b72c0"
+workingCopyFill = "#146C2E"
+conflictStroke = "#E8A317"
+conflictFill = "#E8731A"
+
+accent = "#6750A4"
+accentHover = "#4F378B"
+accentMuted = "#7e5dc7"
+accentSubtle = "#0288D1"
+highlight = "#E8731A"
+
+selectionBackground = "#6750A4"
+selectionForeground = "#ffffff"
+focusRing = "#6750A4"
+
+overlayBackground = "rgba(171, 164, 178, 0.4)"
+overlayBackdropBlur = "0px"
+
+[light.text]
+familyUi = "'Roboto', 'Google Sans', system-ui, sans-serif"
+familyCode = "ui-monospace, 'Roboto Mono', 'Cascadia Code', monospace"
+familyDisplay = "'Google Sans', 'Roboto', system-ui, sans-serif"
+sizeXs = "10px"
+sizeSm = "11px"
+sizeMd = "13px"
+sizeLg = "16px"
+sizeXl = "20px"
+weightLight = "300"
+weightRegular = "400"
+weightMedium = "500"
+weightHeavy = "700"
+lineHeightTight = "1.2"
+lineHeightNormal = "1.4"
+lineHeightRelaxed = "1.6"
+
+[light.shadows]
+shadowSm = "0 1px 2px rgba(0, 0, 0, 0.1)"
+shadowMd = "0 2px 6px rgba(0, 0, 0, 0.12)"
+shadowLg = "0 8px 16px rgba(0, 0, 0, 0.15)"
+
+[light.components]
+buttonBackground = "$colors.primary"
+buttonForeground = "$colors.primaryContent"
+buttonHoverBackground = "$colors.primaryHover"
+buttonBorder = "transparent"
+buttonRadius = "20px"
+buttonHeight = "36px"
+buttonPadding = "0 16px"
+buttonShadow = "$shadows.shadowSm"
+buttonFont = "$text.familyUi"
+buttonFontSize = "$text.sizeMd"
+buttonFontWeight = "$text.weightMedium"
+
+buttonSecondaryBackground = "$colors.surfaceAlt"
+buttonSecondaryForeground = "$colors.foreground"
+buttonSecondaryHoverBackground = "$colors.surfaceStrong"
+
+buttonDisabledBackground = "rgba(0, 0, 0, 0.04)"
+buttonDisabledForeground = "$colors.foregroundFaint"
+
+buttonActiveTransform = "scale(0.98)"
+buttonActiveShadow = "0 1px 1px rgba(0, 0, 0, 0.08)"
+
+inputBackground = "$colors.background"
+inputForeground = "$colors.foreground"
+inputBorder = "$colors.outline"
+inputFocusBorder = "$colors.focusRing"
+inputRadius = "4px"
+inputPadding = "6px"
+
+radiusSm = "4px"
+radiusMd = "8px"
+radiusLg = "16px"
+
+transitionFast = "100ms ease"
+transitionNormal = "200ms ease"
+
+borderSubtle = "1px solid $colors.outline"
+borderDialog = "none"
+separatorWidth = "1px"
+
+headerHeight = "48px"
+toolbarHeight = "38px"
+
+surfacePadding = "8px"
+surfacePaddingLg = "16px"
+modalPadding = "24px"
+
+dialogBackground = "$colors.background"
+dialogBorder = "none"
+dialogRadius = "16px"
+dialogShadow = "$shadows.shadowLg"
+
+# ─── Dark ────────────────────────────────────────────────────────
+
+[dark.colors]
+background = "#2b2930"
+surfaceDeep = "#141218"
+surface = "#322f37"
+surfaceAlt = "#36343b"
+surfaceStrong = "#49454f"
+
+foreground = "#e6e0e9"
+foregroundMuted = "#cac4d0"
+foregroundSubtle = "#938f99"
+foregroundFaint = "#6f6b78"
+
+outline = "#5c5868"
+outlineMuted = "#49454f"
+outlineStrong = "#938f99"
+
+primary = "#D0BCFF"
+primaryHover = "#9a82db"
+primaryContent = "#381e72"
+secondary = "#8ab4f8"
+secondaryHover = "#6a9de8"
+success = "#81c995"
+successContent = "#141218"
+warning = "#fdd663"
+warningContent = "#141218"
+error = "#f28b82"
+errorContent = "#141218"
+destructive = "#f28b82"
+destructiveContent = "#141218"
+
+added = "#81c995"
+removed = "#f28b82"
+modified = "#8ab4f8"
+conflict = "#fcad70"
+addedAlt = "#1a6b28"
+removedAlt = "#b3261e"
+modifiedAlt = "#381e72"
+conflictAlt = "#9a5000"
+
+immutableStroke = "#8ab4f8"
+immutableFill = "#8ab4f8"
+mutableStroke = "#8ab4f8"
+mutableFill = "transparent"
+workingCopyStroke = "#8ab4f8"
+workingCopyFill = "#81c995"
+conflictStroke = "#fdd663"
+conflictFill = "#fcad70"
+
+accent = "#D0BCFF"
+accentHover = "#9a82db"
+accentMuted = "#D0BCFF"
+accentSubtle = "#4fc3f7"
+highlight = "#fcad70"
+
+selectionBackground = "#D0BCFF"
+selectionForeground = "#381e72"
+focusRing = "#D0BCFF"
+
+overlayBackground = "rgba(20, 18, 24, 0.6)"
+overlayBackdropBlur = "0px"
+
+[dark.text]
+familyUi = "'Roboto', 'Google Sans', system-ui, sans-serif"
+familyCode = "ui-monospace, 'Roboto Mono', 'Cascadia Code', monospace"
+familyDisplay = "'Google Sans', 'Roboto', system-ui, sans-serif"
+sizeXs = "10px"
+sizeSm = "11px"
+sizeMd = "13px"
+sizeLg = "16px"
+sizeXl = "20px"
+weightLight = "300"
+weightRegular = "400"
+weightMedium = "500"
+weightHeavy = "700"
+lineHeightTight = "1.2"
+lineHeightNormal = "1.4"
+lineHeightRelaxed = "1.6"
+
+[dark.shadows]
+shadowSm = "0 1px 2px rgba(0, 0, 0, 0.25)"
+shadowMd = "0 2px 6px rgba(0, 0, 0, 0.3)"
+shadowLg = "0 8px 16px rgba(0, 0, 0, 0.35)"
+
+[dark.components]
+buttonBackground = "$colors.primary"
+buttonForeground = "$colors.primaryContent"
+buttonHoverBackground = "$colors.primaryHover"
+buttonBorder = "transparent"
+buttonRadius = "20px"
+buttonHeight = "36px"
+buttonPadding = "0 16px"
+buttonShadow = "$shadows.shadowSm"
+buttonFont = "$text.familyUi"
+buttonFontSize = "$text.sizeMd"
+buttonFontWeight = "$text.weightMedium"
+
+buttonSecondaryBackground = "$colors.surfaceAlt"
+buttonSecondaryForeground = "$colors.foreground"
+buttonSecondaryHoverBackground = "$colors.surfaceStrong"
+
+buttonDisabledBackground = "rgba(255, 255, 255, 0.06)"
+buttonDisabledForeground = "$colors.foregroundFaint"
+
+buttonActiveTransform = "scale(0.98)"
+buttonActiveShadow = "0 1px 1px rgba(0, 0, 0, 0.2)"
+
+inputBackground = "$colors.background"
+inputForeground = "$colors.foreground"
+inputBorder = "$colors.outline"
+inputFocusBorder = "$colors.focusRing"
+inputRadius = "4px"
+inputPadding = "6px"
+
+radiusSm = "4px"
+radiusMd = "8px"
+radiusLg = "16px"
+
+transitionFast = "100ms ease"
+transitionNormal = "200ms ease"
+
+borderSubtle = "1px solid $colors.outline"
+borderDialog = "none"
+separatorWidth = "1px"
+
+headerHeight = "48px"
+toolbarHeight = "38px"
+
+surfacePadding = "8px"
+surfacePaddingLg = "16px"
+modalPadding = "24px"
+
+dialogBackground = "$colors.background"
+dialogBorder = "none"
+dialogRadius = "16px"
+dialogShadow = "$shadows.shadowLg"

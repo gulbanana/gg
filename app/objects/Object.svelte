@@ -166,7 +166,21 @@ Core component for direct-manipulation objects. A drag&drop source.
     }
 
     .selected {
-        background: var(--ctp-base);
+        background: var(--gg-colors-selectionBackground);
+        color: var(--gg-colors-selectionForeground);
+    }
+
+    .selected :global(.id) {
+        color: var(--gg-colors-selectionForeground);
+    }
+
+    .selected :global(.prefix) {
+        color: var(--gg-colors-highlight);
+    }
+
+    .selected :global(.chip) {
+        background: var(--gg-colors-selectionBackground);
+        color: var(--gg-colors-selectionForeground);
     }
 
     .conflict {
@@ -174,26 +188,55 @@ Core component for direct-manipulation objects. A drag&drop source.
             120deg,
             transparent 0px,
             transparent 12px,
-            var(--ctp-surface0) 12px,
-            var(--ctp-surface0) 15px
+            color-mix(in srgb, var(--gg-colors-conflictStroke) 40%, var(--gg-colors-background)) 12px,
+            color-mix(in srgb, var(--gg-colors-conflictStroke) 40%, var(--gg-colors-background)) 15px
         );
+    }
+
+    .conflict :global(.feather) {
+        color: var(--gg-colors-conflict);
     }
 
     .selected.conflict {
         background: repeating-linear-gradient(
             120deg,
-            var(--ctp-surface0) 0px,
-            var(--ctp-surface0) 12px,
-            var(--ctp-base) 12px,
-            var(--ctp-base) 15px
+            var(--gg-colors-conflictStroke) 0px,
+            var(--gg-colors-conflictStroke) 12px,
+            color-mix(in srgb, var(--gg-colors-conflictStroke) 80%, var(--gg-colors-background)) 12px,
+            color-mix(in srgb, var(--gg-colors-conflictStroke) 80%, var(--gg-colors-background)) 15px
         );
+        color: var(--gg-colors-warningContent);
+    }
+
+    .selected.conflict :global(.id) {
+        color: var(--gg-colors-foreground);
+    }
+
+    .selected.conflict :global(.prefix) {
+        color: var(--gg-colors-accent);
+    }
+
+    .selected.conflict :global(.feather) {
+        color: var(--gg-colors-conflictAlt);
     }
 
     .context {
-        color: var(--ctp-rosewater);
+        color: var(--gg-colors-background);
     }
 
     .hint {
-        color: var(--ctp-peach);
+        color: var(--gg-colors-highlight);
+    }
+
+    .selected :global(.feather.remove) {
+        stroke: var(--gg-colors-removedAlt);
+    }
+
+    .selected :global(.feather.add) {
+        stroke: var(--gg-colors-addedAlt);
+    }
+
+    .selected :global(.feather.change) {
+        stroke: var(--gg-colors-modifiedAlt);
     }
 </style>

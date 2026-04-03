@@ -35,6 +35,7 @@ pub trait GGSettings {
     fn query_large_repo_heuristic(&self) -> i64;
     fn query_auto_snapshot(&self) -> Option<bool>;
     fn ui_theme_override(&self) -> Option<String>;
+    fn ui_theme_file(&self) -> Option<String>;
     fn ui_mark_unpushed_bookmarks(&self) -> bool;
     fn ui_track_recent_workspaces(&self) -> bool;
     #[allow(dead_code)]
@@ -60,6 +61,12 @@ impl GGSettings for UserSettings {
 
     fn ui_theme_override(&self) -> Option<String> {
         self.get_string("gg.ui.theme-override")
+            .ok()
+            .filter(|s| !s.is_empty())
+    }
+
+    fn ui_theme_file(&self) -> Option<String> {
+        self.get_string("gg.ui.theme-file")
             .ok()
             .filter(|s| !s.is_empty())
     }

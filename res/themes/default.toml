@@ -1,0 +1,298 @@
+# GG Default Theme
+# Both light and dark variants in one file.
+
+# ─── Light variant ───────────────────────────────────────────────
+
+[light.colors]
+# surfaces (5 tiers: background < surfaceDeep < surface < surfaceAlt < surfaceStrong)
+background = "#ffffff"
+surfaceDeep = "#e8e8ed"
+surface = "#f5f5f7"
+surfaceAlt = "#e8e8ed"
+surfaceStrong = "#d2d2d7"
+
+# foreground / text
+foreground = "#1d1d1f"
+foregroundMuted = "#6e6e73"
+foregroundSubtle = "#8e8e93"
+foregroundFaint = "#aeaeb2"
+
+# borders & dividers
+outline = "#c6c6cb"
+outlineMuted = "#d2d2d7"
+outlineStrong = "#aeaeb2"
+
+# semantic status
+primary = "#007AFF"
+primaryHover = "#0056CC"
+primaryContent = "#ffffff"
+secondary = "#6750A4"
+secondaryHover = "#5740A0"
+success = "#34C759"
+successContent = "#ffffff"
+warning = "#FFCC00"
+warningContent = "#1d1d1f"
+error = "#FF3B30"
+errorContent = "#ffffff"
+destructive = "#FF3B30"
+destructiveContent = "#ffffff"
+
+# diff / change indicators
+added = "#34C759"
+removed = "#FF3B30"
+modified = "#007AFF"
+conflict = "#FF9500"
+addedAlt = "#A8FFB4"
+removedAlt = "#FFA8A3"
+modifiedAlt = "#ffffff"
+conflictAlt = "#FFD480"
+
+# graph node palette (semantic)
+immutableStroke = "#007AFF"
+immutableFill = "#007AFF"
+mutableStroke = "#007AFF"
+mutableFill = "transparent"
+workingCopyStroke = "#007AFF"
+workingCopyFill = "#34C759"
+conflictStroke = "#FFCC00"
+conflictFill = "#FF9500"
+
+# accents
+accent = "#007AFF"
+accentHover = "#0056CC"
+accentMuted = "#AF52DE"
+accentSubtle = "#5AC8FA"
+highlight = "#FF9500"
+
+# selection / focus
+selectionBackground = "#007AFF"
+selectionForeground = "#ffffff"
+focusRing = "#007AFF"
+
+# overlay
+overlayBackground = "rgba(174, 174, 178, 0.4)"
+overlayBackdropBlur = "0px"
+
+[light.text]
+familyUi = "Bahnschrift, 'DIN Alternate', 'Franklin Gothic Medium', 'Roboto', 'Nimbus Sans', sans-serif-condensed, sans-serif"
+familyCode = "ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, Consolas, 'DejaVu Sans Mono', monospace"
+familyDisplay = "Bahnschrift, 'DIN Alternate', 'Franklin Gothic Medium', sans-serif"
+sizeXs = "10px"
+sizeSm = "11px"
+sizeMd = "13px"
+sizeLg = "16px"
+sizeXl = "20px"
+weightLight = "300"
+weightRegular = "400"
+weightMedium = "500"
+weightHeavy = "700"
+lineHeightTight = "1.2"
+lineHeightNormal = "1.4"
+lineHeightRelaxed = "1.6"
+
+[light.shadows]
+shadowSm = "0 1px 2px rgba(0, 0, 0, 0.06)"
+shadowMd = "0 2px 6px rgba(0, 0, 0, 0.08)"
+shadowLg = "0 4px 12px rgba(0, 0, 0, 0.1)"
+
+[light.components]
+# buttons — primary
+buttonBackground = "$colors.primary"
+buttonForeground = "$colors.primaryContent"
+buttonHoverBackground = "$colors.primaryHover"
+buttonBorder = "transparent"
+buttonRadius = "4px"
+buttonHeight = "28px"
+buttonPadding = "2px 8px"
+buttonShadow = "$shadows.shadowSm"
+buttonFont = "$text.familyUi"
+buttonFontSize = "$text.sizeMd"
+buttonFontWeight = "$text.weightMedium"
+
+# buttons — secondary
+buttonSecondaryBackground = "$colors.secondary"
+buttonSecondaryForeground = "$colors.foreground"
+buttonSecondaryHoverBackground = "$colors.secondaryHover"
+
+# buttons — disabled
+buttonDisabledBackground = "rgba(0, 0, 0, 0.04)"
+buttonDisabledForeground = "$colors.foregroundFaint"
+
+# buttons — active (pressed)
+buttonActiveTransform = "scale(0.98)"
+buttonActiveShadow = "0 1px 1px rgba(0, 0, 0, 0.04)"
+
+# inputs
+inputBackground = "$colors.background"
+inputForeground = "$colors.foreground"
+inputBorder = "$colors.outlineMuted"
+inputFocusBorder = "$colors.focusRing"
+inputRadius = "3px"
+inputPadding = "6px"
+
+# border radii
+radiusSm = "3px"
+radiusMd = "4px"
+radiusLg = "6px"
+
+# transitions
+transitionFast = "100ms ease"
+transitionNormal = "180ms ease"
+
+# borders
+borderSubtle = "1px solid $colors.outlineMuted"
+borderDialog = "1px solid $colors.surfaceStrong"
+separatorWidth = "1px"
+
+# layout
+headerHeight = "36px"
+toolbarHeight = "38px"
+
+# surfaces
+surfacePadding = "8px"
+surfacePaddingLg = "16px"
+modalPadding = "20px"
+
+# dialogs
+dialogBackground = "$colors.background"
+dialogBorder = "1px solid $colors.surfaceStrong"
+dialogRadius = "6px"
+dialogShadow = "$shadows.shadowLg"
+
+# ─── Dark variant ────────────────────────────────────────────────
+
+[dark.colors]
+background = "#24273a"
+surfaceDeep = "#1e2030"
+surface = "#363a4f"
+surfaceAlt = "#494d64"
+surfaceStrong = "#5b6078"
+
+foreground = "#cad3f5"
+foregroundMuted = "#a5adcb"
+foregroundSubtle = "#8087a2"
+foregroundFaint = "#6e738d"
+
+outline = "#6e738d"
+outlineMuted = "#5b6078"
+outlineStrong = "#8087a2"
+
+primary = "#8aadf4"
+primaryHover = "#7dc4e4"
+primaryContent = "#24273a"
+secondary = "#c6a0f6"
+secondaryHover = "#b7bdf8"
+success = "#a6da95"
+successContent = "#24273a"
+warning = "#eed49f"
+warningContent = "#24273a"
+error = "#ed8796"
+errorContent = "#24273a"
+destructive = "#ed8796"
+destructiveContent = "#24273a"
+
+added = "#a6da95"
+removed = "#ed8796"
+modified = "#8aadf4"
+conflict = "#f5a97f"
+addedAlt = "#1f6f32"
+removedAlt = "#c43030"
+modifiedAlt = "#24273a"
+conflictAlt = "#b86215"
+
+immutableStroke = "#8aadf4"
+immutableFill = "#8aadf4"
+mutableStroke = "#8aadf4"
+mutableFill = "transparent"
+workingCopyStroke = "#8aadf4"
+workingCopyFill = "#a6da95"
+conflictStroke = "#eed49f"
+conflictFill = "#f5a97f"
+
+accent = "#8aadf4"
+accentHover = "#7dc4e4"
+accentMuted = "#c6a0f6"
+accentSubtle = "#91d7e3"
+highlight = "#f5a97f"
+
+selectionBackground = "#8aadf4"
+selectionForeground = "#24273a"
+focusRing = "#8aadf4"
+
+overlayBackground = "rgba(30, 32, 48, 0.6)"
+overlayBackdropBlur = "0px"
+
+[dark.text]
+familyUi = "Bahnschrift, 'DIN Alternate', 'Franklin Gothic Medium', 'Roboto', 'Nimbus Sans', sans-serif-condensed, sans-serif"
+familyCode = "ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, Consolas, 'DejaVu Sans Mono', monospace"
+familyDisplay = "Bahnschrift, 'DIN Alternate', 'Franklin Gothic Medium', sans-serif"
+sizeXs = "10px"
+sizeSm = "11px"
+sizeMd = "13px"
+sizeLg = "16px"
+sizeXl = "20px"
+weightLight = "300"
+weightRegular = "400"
+weightMedium = "500"
+weightHeavy = "700"
+lineHeightTight = "1.2"
+lineHeightNormal = "1.4"
+lineHeightRelaxed = "1.6"
+
+[dark.shadows]
+shadowSm = "0 1px 2px rgba(0, 0, 0, 0.2)"
+shadowMd = "0 2px 6px rgba(0, 0, 0, 0.25)"
+shadowLg = "0 4px 12px rgba(0, 0, 0, 0.3)"
+
+[dark.components]
+buttonBackground = "$colors.primary"
+buttonForeground = "$colors.primaryContent"
+buttonHoverBackground = "$colors.primaryHover"
+buttonBorder = "transparent"
+buttonRadius = "4px"
+buttonHeight = "28px"
+buttonPadding = "2px 8px"
+buttonShadow = "$shadows.shadowSm"
+buttonFont = "$text.familyUi"
+buttonFontSize = "$text.sizeMd"
+buttonFontWeight = "$text.weightMedium"
+
+buttonSecondaryBackground = "$colors.secondary"
+buttonSecondaryForeground = "$colors.foreground"
+buttonSecondaryHoverBackground = "$colors.secondaryHover"
+
+buttonDisabledBackground = "rgba(255, 255, 255, 0.06)"
+buttonDisabledForeground = "$colors.foregroundFaint"
+
+buttonActiveTransform = "scale(0.98)"
+buttonActiveShadow = "0 1px 1px rgba(0, 0, 0, 0.15)"
+
+inputBackground = "$colors.background"
+inputForeground = "$colors.foreground"
+inputBorder = "$colors.outlineMuted"
+inputFocusBorder = "$colors.focusRing"
+inputRadius = "3px"
+inputPadding = "6px"
+
+radiusSm = "3px"
+radiusMd = "4px"
+radiusLg = "6px"
+
+transitionFast = "100ms ease"
+transitionNormal = "180ms ease"
+
+borderSubtle = "1px solid $colors.outlineMuted"
+borderDialog = "1px solid $colors.surfaceStrong"
+separatorWidth = "1px"
+
+headerHeight = "36px"
+toolbarHeight = "38px"
+
+surfacePadding = "8px"
+surfacePaddingLg = "16px"
+modalPadding = "20px"
+
+dialogBackground = "$colors.background"
+dialogBorder = "1px solid $colors.surfaceStrong"
+dialogRadius = "6px"
+dialogShadow = "$shadows.shadowLg"

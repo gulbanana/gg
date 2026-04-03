@@ -9,7 +9,6 @@
     import Icon from "./controls/Icon.svelte";
     import IdSpan from "./controls/IdSpan.svelte";
     import Pane from "./shell/Pane.svelte";
-    import ToggleWidget from "./controls/ToggleWidget.svelte";
     import Zone from "./objects/Zone.svelte";
     import { onEvent } from "./ipc";
     import AuthorSpan from "./controls/AuthorSpan.svelte";
@@ -127,37 +126,44 @@
 </script>
 
 <Pane>
-    <h2 slot="header" class="header">
-        <span class="title">
-            {#if singleton}
-                <IdSpan selectable id={newest.id.change} /> | <IdSpan selectable id={newest.id.commit} />
-                {#if newest.is_working_copy}
-                    | Working copy
-                {/if}
-            {:else}
-                <SetSpan selectable set={revs.set} /> | {revs.headers.length} revisions
+    <div slot="header" class="metadata">
+        {#if singleton}
+            <span class="meta-item">
+                <span class="meta-label">Change</span> <IdSpan selectable id={newest.id.change} />
+            </span>
+            <span class="meta-sep">&middot;</span>
+            <span class="meta-item">
+                <span class="meta-label">Commit</span> <IdSpan selectable id={newest.id.commit} />
+            </span>
+            <span class="meta-sep">&middot;</span>
+            <span class="meta-item meta-inline">
+                <AuthorSpan author={newest.author} />
+            </span>
+            <span class="meta-sep">&middot;</span>
+            <span class="meta-item"><TimestampSpan timestamp={newest.author.timestamp} /></span>
+            {#if newest.is_working_copy}
+                <span class="meta-sep">&middot;</span>
+                <span class="meta-item meta-flag">Working copy</span>
             {/if}
-            {#if revs.headers.some((header) => header.is_immutable)}
-                | Immutable
+            {#if newest.is_immutable}
+                <span class="meta-sep">&middot;</span>
+                <span class="meta-item meta-flag">Immutable</span>
             {/if}
-        </span>
-
-        <div class="checkout-commands">
-            {#if singleton}
-                <ActionWidget
-                    tip="make working copy"
-                    onClick={mutator.onEdit}
-                    disabled={newestImmutable || newest.is_working_copy}>
-                    <Icon name="edit-2" /> Edit
-                </ActionWidget>
-            {/if}
-
-            <ActionWidget tip="create a child" onClick={mutator.onNewChild}>
-                <Icon name="edit" /> New
-            </ActionWidget>
-        </div>
-    </h2>
-
+        {:else}
+            <span class="meta-item">
+                <SetSpan selectable set={revs.set} /> &middot; {revs.headers.length} revisions
+            </span>
+            <span class="meta-sep">&middot;</span>
+            <span class="meta-item">
+                {#each authors as author, ix}
+                    <!-- prettier-ignore -->
+                    <AuthorSpan {author} />{#if ix < authors.length - 1},&nbsp;{/if}
+                {/each}
+            </span>
+            <span class="meta-sep">&middot;</span>
+            <span class="meta-item"><TimestampRangeSpan from={firstTimestamp} to={lastTimestamp} /></span>
+        {/if}
+    </div>
     <div slot="body" class="body">
         {#if !singleton}
             <!-- prettier-ignore -->
@@ -177,41 +183,18 @@
                 }}></textarea>
         {/if}
 
-        <div class="signature-commands">
+        <div class="describe-commands">
             {#if singleton}
-                <span>Author:</span>
-                <AuthorSpan author={newest.author} />
-                <TimestampSpan timestamp={newest.author.timestamp} />
-
-                <ToggleWidget
-                    safe
-                    secondary
-                    tip="reset author"
-                    bind:checked={resetAuthor}
-                    disabled={newestImmutable}
-                    on="unlock"
-                    off="lock" />
-                <span></span>
+                <label class="reset-author-label">
+                    <input type="checkbox" bind:checked={resetAuthor} disabled={newestImmutable} />
+                    Reset author
+                </label>
                 <ActionWidget
                     tip="set commit message"
                     onClick={() => mutator.onDescribe(editableDescription, resetAuthor)}
                     disabled={newestImmutable || !descriptionChanged}>
-                    <Icon name="file-text" /> Describe
+                    Describe
                 </ActionWidget>
-            {:else}
-                {#if authors.length > 1}
-                    <span>Authors:</span>
-                {:else}
-                    <span>Author:</span>
-                {/if}
-                <span>
-                    {#each authors as author, ix}
-                        <!-- prettier-ignore -->
-                        <AuthorSpan {author} />{#if ix < authors.length - 1},&nbsp;
-                        {/if}
-                    {/each}
-                </span>
-                <TimestampRangeSpan from={firstTimestamp} to={lastTimestamp} />
             {/if}
         </div>
 
@@ -229,24 +212,8 @@
         {/if}
 
         {#if syntheticChanges.length > 0}
-            <div class="move-commands">
-                <span>Changes:</span>
-
-                <ActionWidget
-                    tip="move all changes to parent"
-                    onClick={mutator.onSquash}
-                    disabled={oldestImmutable || oldest.parent_ids.length != 1}>
-                    <Icon name="upload" /> Squash
-                </ActionWidget>
-
-                {#if singleton}
-                    <ActionWidget
-                        tip="copy all changes from parent"
-                        onClick={mutator.onRestore}
-                        disabled={newestImmutable || newest.parent_ids.length != 1}>
-                        <Icon name="download" /> Restore
-                    </ActionWidget>
-                {/if}
+            <div class="changes-header">
+                <span>Changes ({syntheticChanges.length})</span>
             </div>
 
             <ListWidget {list} type="Change" descendant={$changeSelectEvent?.path.repo_path}>
@@ -273,7 +240,7 @@
                 </div>
             </ListWidget>
         {:else}
-            <div class="move-commands">
+            <div class="changes-header">
                 <span>Changes: <span class="no-changes">(empty)</span></span>
             </div>
         {/if}
@@ -281,29 +248,6 @@
 </Pane>
 
 <style>
-    .header {
-        display: grid;
-        grid-template-columns: minmax(0, 1fr) auto;
-        align-items: center;
-        text-wrap: nowrap;
-        font-weight: normal;
-    }
-
-    .title {
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-    }
-
-    .checkout-commands {
-        height: 30px;
-        padding: 0 3px;
-        display: flex;
-        align-items: center;
-        justify-content: end;
-        gap: 6px;
-    }
-
     .body {
         height: 100%;
         overflow: hidden;
@@ -314,25 +258,65 @@
         gap: 0;
     }
 
+    .metadata {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 0 6px;
+        font-size: 13px;
+        font-family: var(--gg-text-familyUi);
+        line-height: 1.8;
+        background: var(--gg-colors-background);
+        margin: 0;
+        padding: 3px;
+    }
+
+    .meta-item {
+        pointer-events: auto;
+        user-select: text;
+        white-space: nowrap;
+    }
+
+    .meta-inline {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+    }
+
+    .meta-label {
+        color: var(--gg-colors-foregroundMuted);
+    }
+
+    .meta-sep {
+        color: var(--gg-colors-outlineStrong);
+    }
+
+    .meta-flag {
+        color: var(--gg-colors-foregroundMuted);
+        font-style: italic;
+    }
+
     .description {
         resize: vertical;
-        min-height: 90px;
+        min-height: 100px;
         overflow: auto;
+        font-size: var(--gg-text-sizeMd);
     }
 
     .description-list {
-        min-height: 90px;
+        min-height: 100px;
         overflow: auto;
         pointer-events: auto;
 
         border: 1px solid transparent;
         border-radius: 4px;
-        padding: 1px;
+        padding: 4px;
 
         white-space: pre-wrap;
         user-select: text;
+        font-size: var(--gg-text-sizeMd);
 
-        color: var(--ctp-subtext0);
+        color: var(--gg-colors-foregroundMuted);
     }
 
     .description-row {
@@ -341,24 +325,43 @@
 
     .description-divider {
         border: none;
-        border-top: 1px dashed var(--ctp-overlay0);
+        border-top: 1px dashed var(--gg-colors-outline);
         margin: 4px 1px;
     }
 
-    .signature-commands {
-        height: 30px;
-        width: 100%;
-        display: grid;
-        grid-template-columns: 63px auto auto auto 1fr auto;
+    .describe-commands {
+        display: flex;
         align-items: center;
+        justify-content: end;
         gap: 6px;
-        padding: 0 3px;
+        padding: 4px 0;
         flex-shrink: 0;
     }
 
+    .reset-author-label {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        font-family: var(--gg-text-familyUi);
+        font-size: 13px;
+        color: var(--gg-colors-foregroundMuted);
+        cursor: pointer;
+        user-select: none;
+    }
+
+    .reset-author-label input[type="checkbox"]:disabled {
+        cursor: default;
+    }
+
+    .reset-author-label:has(input:disabled) {
+        cursor: default;
+        opacity: 0.5;
+    }
+
     .parents {
-        border-top: 1px solid var(--ctp-overlay0);
+        border-top: 1px solid var(--gg-colors-outline);
         padding: 0 3px;
+        font-size: 0.9em;
     }
 
     .parent {
@@ -368,34 +371,31 @@
         gap: 6px;
     }
 
-    .move-commands {
-        border-top: 1px solid var(--ctp-overlay0);
+    .changes-header {
+        border-top: 1px solid var(--gg-colors-outline);
         height: 30px;
         min-height: 30px;
         width: 100%;
         padding: 0 3px;
-        display: grid;
-        grid-template-columns: 1fr auto auto;
+        display: flex;
         align-items: center;
         gap: 6px;
-    }
-
-    .move-commands > :global(button) {
-        margin-top: -1px;
+        color: var(--gg-colors-foregroundMuted);
+        font-size: 13px;
     }
 
     .no-changes {
-        color: var(--ctp-subtext0);
+        color: var(--gg-colors-foregroundMuted);
     }
 
     .changes {
-        border-top: 1px solid var(--ctp-overlay0);
+        border-top: 1px solid var(--gg-colors-outline);
         display: flex;
         flex-direction: column;
         pointer-events: auto;
         overflow-x: hidden;
         overflow-y: auto;
-        scrollbar-color: var(--ctp-text) var(--ctp-crust);
+        scrollbar-color: var(--gg-colors-foreground) var(--gg-colors-surfaceDeep);
         flex: 1;
         min-height: 0;
     }
@@ -405,12 +405,12 @@
     }
 
     .changes::-webkit-scrollbar-thumb {
-        background-color: var(--ctp-text);
+        background-color: var(--gg-colors-foreground);
         border-radius: 6px;
     }
 
     .changes::-webkit-scrollbar-track {
-        background-color: var(--ctp-crust);
+        background-color: var(--gg-colors-surfaceDeep);
     }
 
     .change {
@@ -419,8 +419,9 @@
         pointer-events: auto;
         overflow-x: auto;
         overflow-y: scroll;
-        scrollbar-color: var(--ctp-text) var(--ctp-base);
+        scrollbar-color: var(--gg-colors-foreground) var(--gg-colors-background);
         min-height: calc(var(--lines) * 1em);
+        border-bottom: var(--gg-components-borderSubtle);
     }
 
     .change::-webkit-scrollbar {
@@ -429,36 +430,38 @@
     }
 
     .change::-webkit-scrollbar-thumb {
-        background-color: var(--ctp-text);
+        background-color: var(--gg-colors-foreground);
         border-radius: 6px;
     }
 
     .change::-webkit-scrollbar-track {
-        background-color: var(--ctp-base);
+        background-color: var(--gg-colors-background);
     }
 
     .hunk {
         margin: 0;
         text-align: center;
-        background: var(--ctp-mantle);
+        background: var(--gg-colors-surface);
     }
 
     .diff {
         margin: 0;
-        background: var(--ctp-base);
+        background: var(--gg-colors-background);
+        font-family: var(--gg-text-familyCode);
+        font-size: var(--gg-text-sizeMd);
         user-select: text;
     }
 
     .add {
-        color: var(--ctp-green);
+        color: var(--gg-colors-success);
     }
 
     .remove {
-        color: var(--ctp-red);
+        color: var(--gg-colors-error);
     }
 
     .target {
-        color: black;
-        background: var(--ctp-flamingo);
+        color: var(--gg-colors-primaryContent);
+        background: var(--gg-colors-primary);
     }
 </style>

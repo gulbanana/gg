@@ -25,6 +25,12 @@ mark-unpushed-bookmarks = true
 # "light" or "dark". If empty, your OS settings will be used.
 theme-override = ""
 
+# Path to a custom theme TOML file. If empty, the bundled default theme
+# is used.
+# The theme file contains [light.*] and [dark.*]
+# sections with colors, text, shadows, and components tokens.
+theme-file = ""
+
 [gg.web]
 default-port = 0       # Port to bind to in web mode (0 = random)
 client-timeout = "10m" # Disconnect clients after this duration of inactivity

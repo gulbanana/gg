@@ -171,6 +171,8 @@ pub fn create_app(
     options: super::RunOptions,
     client_timeout: Option<Duration>,
 ) -> Result<(Router, oneshot::Receiver<()>)> {
+    let theme_style = crate::theme::generate_style_element(&options.settings);
+
     let (shutdown_tx, shutdown_rx) = oneshot::channel(); // this one needs async
     let (worker_tx, worker_rx) = channel();
     let (progress_tx, _progress_rx) = broadcast::channel::<SseEvent>(16);
@@ -200,6 +202,7 @@ pub fn create_app(
         progress_tx,
         shutdown_tx,
         client_timeout,
+        theme_style,
     );
 
     let app = Router::new()
@@ -241,7 +244,10 @@ async fn serve_index(State(state): State<AppState>) -> Result<impl IntoResponse,
     let client_id = uuid::Uuid::new_v4().to_string();
     let injected_script = format!(r#"<script>window.__GG_CLIENT_ID__="{client_id}";</script>"#);
     let asset_html = String::from_utf8_lossy(asset.data());
-    let modified_html = asset_html.replace("</head>", &format!("{injected_script}</head>"));
+    let modified_html = asset_html.replace(
+        "</head>",
+        &format!("{}{injected_script}</head>", state.theme_style),
+    );
 
     Ok((
         [(axum::http::header::CONTENT_TYPE, "text/html")],

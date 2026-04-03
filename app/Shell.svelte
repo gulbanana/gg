@@ -25,6 +25,7 @@
     import Pane from "./shell/Pane.svelte";
     import Zone from "./objects/Zone.svelte";
     import StatusBar from "./shell/StatusBar.svelte";
+    import Toolbar from "./shell/Toolbar.svelte";
     import ModalOverlay from "./shell/ModalOverlay.svelte";
     import ErrorDialog from "./shell/ErrorDialog.svelte";
     import ProgressDialog from "./shell/ProgressDialog.svelte";
@@ -269,7 +270,9 @@
 </script>
 
 <Zone operand={{ type: "Repository" }} alwaysTarget let:target>
-    <div id="shell" class={$repoConfigEvent?.type == "Workspace" ? $repoConfigEvent.theme_override : ""}>
+    <div id="shell">
+        <Toolbar config={$repoConfigEvent} />
+
         {#if $repoConfigEvent.type == "Initial"}
             <Pane>
                 <h2 slot="header">Loading...</h2>
@@ -303,7 +306,7 @@
             </ModalOverlay>
         {/if}
 
-        <div class="separator" style="grid-row: 2"></div>
+        <div class="separator" style="grid-row: 3"></div>
 
         <StatusBar {target} />
 
@@ -359,20 +362,21 @@
 
         display: grid;
         grid-template-columns: 1fr;
-        grid-template-rows: 1fr 3px 30px;
+        grid-template-rows: var(--gg-components-toolbarHeight) 1fr var(--gg-components-separatorWidth) 30px;
         grid-template-areas:
+            "toolbar"
             "content"
             "."
             "footer";
 
-        background: var(--ctp-crust);
-        color: var(--ctp-text);
+        background: var(--gg-colors-surfaceDeep);
+        color: var(--gg-colors-foreground);
 
         user-select: none;
     }
 
     .separator {
-        background: var(--ctp-overlay0);
+        background: var(--gg-colors-surfaceAlt);
     }
 
     p {

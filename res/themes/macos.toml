@@ -1,0 +1,275 @@
+# GG macOS Theme — Apple HIG-inspired
+
+[light.colors]
+background = "#ffffff"
+surfaceDeep = "#e8e8ed"
+surface = "#f5f5f7"
+surfaceAlt = "#e8e8ed"
+surfaceStrong = "#d2d2d7"
+
+foreground = "#1d1d1f"
+foregroundMuted = "#6e6e73"
+foregroundSubtle = "#8e8e93"
+foregroundFaint = "#aeaeb2"
+
+outline = "#c6c6cb"
+outlineMuted = "#d2d2d7"
+outlineStrong = "#aeaeb2"
+
+primary = "#007AFF"
+primaryHover = "#0056CC"
+primaryContent = "#ffffff"
+secondary = "#5856D6"
+secondaryHover = "#4240B0"
+success = "#34C759"
+successContent = "#ffffff"
+warning = "#FFCC00"
+warningContent = "#1d1d1f"
+error = "#FF3B30"
+errorContent = "#ffffff"
+destructive = "#FF3B30"
+destructiveContent = "#ffffff"
+
+added = "#34C759"
+removed = "#FF3B30"
+modified = "#007AFF"
+conflict = "#FF9500"
+addedAlt = "#A8FFB4"
+removedAlt = "#FFA8A3"
+modifiedAlt = "#ffffff"
+conflictAlt = "#FFD480"
+
+immutableStroke = "#007AFF"
+immutableFill = "#007AFF"
+mutableStroke = "#007AFF"
+mutableFill = "transparent"
+workingCopyStroke = "#007AFF"
+workingCopyFill = "#34C759"
+conflictStroke = "#FFCC00"
+conflictFill = "#FF9500"
+
+accent = "#007AFF"
+accentHover = "#0056CC"
+accentMuted = "#AF52DE"
+accentSubtle = "#5AC8FA"
+highlight = "#FF9500"
+
+selectionBackground = "#007AFF"
+selectionForeground = "#ffffff"
+focusRing = "#007AFF"
+
+overlayBackground = "rgba(198, 198, 203, 0.5)"
+overlayBackdropBlur = "8px"
+
+[light.text]
+familyUi = "-apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif"
+familyCode = "ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, monospace"
+familyDisplay = "-apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif"
+sizeXs = "10px"
+sizeSm = "11px"
+sizeMd = "13px"
+sizeLg = "16px"
+sizeXl = "20px"
+weightLight = "300"
+weightRegular = "400"
+weightMedium = "500"
+weightHeavy = "700"
+lineHeightTight = "1.2"
+lineHeightNormal = "1.4"
+lineHeightRelaxed = "1.6"
+
+[light.shadows]
+shadowSm = "0 1px 3px rgba(0, 0, 0, 0.08)"
+shadowMd = "0 2px 8px rgba(0, 0, 0, 0.1)"
+shadowLg = "0 8px 24px rgba(0, 0, 0, 0.14)"
+
+[light.components]
+buttonBackground = "$colors.primary"
+buttonForeground = "$colors.primaryContent"
+buttonHoverBackground = "$colors.primaryHover"
+buttonBorder = "transparent"
+buttonRadius = "20px"
+buttonHeight = "28px"
+buttonPadding = "2px 10px"
+buttonShadow = "0 0 0 0 transparent"
+buttonFont = "$text.familyUi"
+buttonFontSize = "$text.sizeMd"
+buttonFontWeight = "$text.weightMedium"
+
+buttonSecondaryBackground = "rgba(0, 0, 0, 0.06)"
+buttonSecondaryForeground = "$colors.foreground"
+buttonSecondaryHoverBackground = "rgba(0, 0, 0, 0.1)"
+
+buttonDisabledBackground = "rgba(0, 0, 0, 0.04)"
+buttonDisabledForeground = "rgba(0, 0, 0, 0.25)"
+
+buttonActiveTransform = "scale(0.97)"
+buttonActiveShadow = "0 1px 1px rgba(0, 0, 0, 0.06)"
+
+inputBackground = "$colors.background"
+inputForeground = "$colors.foreground"
+inputBorder = "$colors.outlineMuted"
+inputFocusBorder = "$colors.focusRing"
+inputRadius = "6px"
+inputPadding = "6px"
+
+radiusSm = "6px"
+radiusMd = "8px"
+radiusLg = "12px"
+
+transitionFast = "120ms ease"
+transitionNormal = "200ms ease"
+
+borderSubtle = "1px solid rgba(198, 198, 203, 0.5)"
+borderDialog = "1px solid $colors.surfaceStrong"
+separatorWidth = "1px"
+
+headerHeight = "44px"
+toolbarHeight = "38px"
+
+surfacePadding = "8px"
+surfacePaddingLg = "16px"
+modalPadding = "20px"
+
+dialogBackground = "$colors.background"
+dialogBorder = "1px solid $colors.surfaceStrong"
+dialogRadius = "12px"
+dialogShadow = "$shadows.shadowLg"
+
+# ─── Dark ────────────────────────────────────────────────────────
+
+[dark.colors]
+background = "#2c2c2e"
+surfaceDeep = "#1d1d1f"
+surface = "#38383a"
+surfaceAlt = "#3a3a3c"
+surfaceStrong = "#48484a"
+
+foreground = "#f5f5f7"
+foregroundMuted = "#aeaeb2"
+foregroundSubtle = "#8e8e93"
+foregroundFaint = "#636366"
+
+outline = "#545456"
+outlineMuted = "#48484a"
+outlineStrong = "#636366"
+
+primary = "#0A84FF"
+primaryHover = "#409CFF"
+primaryContent = "#ffffff"
+secondary = "#5E5CE6"
+secondaryHover = "#7D7AFF"
+success = "#30D158"
+successContent = "#ffffff"
+warning = "#FFD60A"
+warningContent = "#1d1d1f"
+error = "#FF453A"
+errorContent = "#ffffff"
+destructive = "#FF453A"
+destructiveContent = "#ffffff"
+
+added = "#30D158"
+removed = "#FF453A"
+modified = "#0A84FF"
+conflict = "#FF9F0A"
+addedAlt = "#A8FFB4"
+removedAlt = "#FFA8A3"
+modifiedAlt = "#ffffff"
+conflictAlt = "#FFD480"
+
+immutableStroke = "#0A84FF"
+immutableFill = "#0A84FF"
+mutableStroke = "#0A84FF"
+mutableFill = "transparent"
+workingCopyStroke = "#0A84FF"
+workingCopyFill = "#30D158"
+conflictStroke = "#FFD60A"
+conflictFill = "#FF9F0A"
+
+accent = "#0A84FF"
+accentHover = "#409CFF"
+accentMuted = "#BF5AF2"
+accentSubtle = "#64D2FF"
+highlight = "#FF9F0A"
+
+selectionBackground = "#0A84FF"
+selectionForeground = "#ffffff"
+focusRing = "#0A84FF"
+
+overlayBackground = "rgba(29, 29, 31, 0.6)"
+overlayBackdropBlur = "8px"
+
+[dark.text]
+familyUi = "-apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif"
+familyCode = "ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, monospace"
+familyDisplay = "-apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif"
+sizeXs = "10px"
+sizeSm = "11px"
+sizeMd = "13px"
+sizeLg = "16px"
+sizeXl = "20px"
+weightLight = "300"
+weightRegular = "400"
+weightMedium = "500"
+weightHeavy = "700"
+lineHeightTight = "1.2"
+lineHeightNormal = "1.4"
+lineHeightRelaxed = "1.6"
+
+[dark.shadows]
+shadowSm = "0 1px 3px rgba(0, 0, 0, 0.2)"
+shadowMd = "0 2px 8px rgba(0, 0, 0, 0.25)"
+shadowLg = "0 8px 24px rgba(0, 0, 0, 0.35)"
+
+[dark.components]
+buttonBackground = "$colors.primary"
+buttonForeground = "$colors.primaryContent"
+buttonHoverBackground = "$colors.primaryHover"
+buttonBorder = "transparent"
+buttonRadius = "20px"
+buttonHeight = "28px"
+buttonPadding = "2px 10px"
+buttonShadow = "0 0 0 0 transparent"
+buttonFont = "$text.familyUi"
+buttonFontSize = "$text.sizeMd"
+buttonFontWeight = "$text.weightMedium"
+
+buttonSecondaryBackground = "rgba(255, 255, 255, 0.08)"
+buttonSecondaryForeground = "$colors.foreground"
+buttonSecondaryHoverBackground = "rgba(255, 255, 255, 0.12)"
+
+buttonDisabledBackground = "rgba(255, 255, 255, 0.04)"
+buttonDisabledForeground = "rgba(255, 255, 255, 0.25)"
+
+buttonActiveTransform = "scale(0.97)"
+buttonActiveShadow = "0 1px 1px rgba(0, 0, 0, 0.15)"
+
+inputBackground = "$colors.background"
+inputForeground = "$colors.foreground"
+inputBorder = "$colors.outlineMuted"
+inputFocusBorder = "$colors.focusRing"
+inputRadius = "6px"
+inputPadding = "6px"
+
+radiusSm = "6px"
+radiusMd = "8px"
+radiusLg = "12px"
+
+transitionFast = "120ms ease"
+transitionNormal = "200ms ease"
+
+borderSubtle = "1px solid rgba(84, 84, 86, 0.5)"
+borderDialog = "1px solid $colors.surfaceStrong"
+separatorWidth = "1px"
+
+headerHeight = "44px"
+toolbarHeight = "38px"
+
+surfacePadding = "8px"
+surfacePaddingLg = "16px"
+modalPadding = "20px"
+
+dialogBackground = "$colors.background"
+dialogBorder = "1px solid $colors.surfaceStrong"
+dialogRadius = "12px"
+dialogShadow = "$shadows.shadowLg"
