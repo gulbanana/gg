@@ -24,7 +24,14 @@ Run `gg` in a Jujutsu workspace, pass the workspace directory as an argument or 
 - When using a POSIX shell on Windows, `start gg` can be used to run in the background.
 
 ### Configuration
-GG uses `jj config`; `revset-aliases.immutable_heads()` is particularly important, as it determines how much history you can edit. GG has some additional settings of its own, with defaults and documentation [here](src/config/gg.toml).
+GG uses `jj config`; `revset-aliases.immutable_heads()` is particularly important, as it determines how much history you can edit. GG has some additional settings of its own, with defaults and documentation [here](src/config/gg.toml). They can be set in your JJ `config.toml` like this:
+```
+[gg]
+default-mode = "gui"
+
+[gg.web]
+default-port = 0
+```
 
 ## Features
 GG doesn't require [JJ](https://jj-vcs.github.io/jj/latest/install-and-setup/) installed, but you'll want it for tasks GG doesn't cover. What it *does* cover:
