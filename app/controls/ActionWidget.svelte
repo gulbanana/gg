@@ -31,10 +31,8 @@
 
         outline: none;
         margin: 0;
-        border-width: 1px;
-        border-style: solid;
+        border: var(--gg-components-buttonBorder);
         border-radius: var(--gg-components-buttonRadius);
-        border-color: var(--gg-components-buttonBorder);
         box-shadow: var(--gg-components-buttonShadow);
 
         font-family: var(--gg-text-familyUi);
@@ -71,7 +69,7 @@
     }
 
     button.primary {
-        color: var(--gg-components-primaryContent);
+        color: var(--gg-colors-primaryContent);
         background: var(--gg-colors-primary);
         &:hover {
             background: var(--gg-components-buttonHoverBackground);

@@ -99,6 +99,7 @@
         grid-area: footer;
         padding: 0 6px;
         font-family: var(--gg-text-familyUi);
+        font-size: var(--gg-text-sizeMd);
         gap: 6px;
         align-items: center;
     }
@@ -121,10 +122,6 @@
         white-space: nowrap;
     }
 
-    .substatus > span {
-        height: 21px;
-    }
-
     #status-operation {
         height: 100%;
         padding: 0 3px;
@@ -141,10 +138,6 @@
 
     #status-workspace {
         white-space: nowrap;
-        direction: rtl;
-        text-align: left;
-        overflow: hidden;
-        text-overflow: ellipsis;
     }
 
     .target {

@@ -239,4 +239,12 @@ Core component for direct-manipulation objects. A drag&drop source.
     .selected :global(.feather.change) {
         stroke: var(--gg-colors-modifiedAlt);
     }
+
+    .selected :global(.desc.indescribable) {
+        color: var(--gg-colors-selectionForegroundMuted);
+    }
+
+    .selected :global(.author) {
+        color: var(--gg-colors-selectionForegroundMuted);
+    }
 </style>

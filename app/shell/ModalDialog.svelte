@@ -45,7 +45,7 @@
 
         grid-area: 2/2/2/2;
 
-        background: var(--gg-colors-surface);
+        background: var(--gg-colors-background);
         border-radius: var(--gg-components-radiusLg);
         border: var(--gg-components-borderDialog);
         box-shadow: var(--gg-shadows-shadowLg);

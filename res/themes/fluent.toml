@@ -56,6 +56,7 @@ highlight = "#FF8C00"
 
 selectionBackground = "#0078D4"
 selectionForeground = "#ffffff"
+selectionForegroundMuted = "#e0e0e0"
 focusRing = "#0078D4"
 
 overlayBackground = "rgba(209, 209, 209, 0.4)"
@@ -194,6 +195,7 @@ highlight = "#FFAA44"
 
 selectionBackground = "#4CC2FF"
 selectionForeground = "#ffffff"
+selectionForegroundMuted = "#474747"
 focusRing = "#4CC2FF"
 
 overlayBackground = "rgba(26, 26, 26, 0.6)"

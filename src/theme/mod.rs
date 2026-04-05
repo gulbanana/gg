@@ -74,7 +74,7 @@ pub fn load_from_settings(settings: &dyn crate::config::GGSettings) -> Theme {
     default_theme()
 }
 
-/// Generate CSS rules that set `--gg-*` custom properties on `#shell` for
+/// Generate CSS rules that set `--gg-*` custom properties for
 /// both light and dark variants (using `prefers-color-scheme`).
 /// When `theme_override` is set, only that variant is emitted.
 pub fn generate_css(settings: &dyn crate::config::GGSettings) -> String {

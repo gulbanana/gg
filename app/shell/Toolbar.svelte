@@ -6,8 +6,9 @@
     import type { GitPush } from "../messages/GitPush";
     import type { UndoOperation } from "../messages/UndoOperation";
     import type { RepoConfig } from "../messages/RepoConfig";
-    import { ignoreToggled, hasModal, selectionHeaders } from "../stores";
+    import { ignoreToggled, hasModal, selectionHeaders, currentMutation, progressEvent } from "../stores";
     import RevisionMutator from "../mutators/RevisionMutator";
+    import ToolbarProgress from "./ToolbarProgress.svelte";
 
     export let config: RepoConfig;
 
@@ -149,6 +150,10 @@
                 <Icon name="rotate-ccw" />
             </ActionWidget>
         </div>
+
+        {#if $currentMutation?.type === "wait" && $progressEvent !== undefined}
+            <ToolbarProgress progress={$progressEvent} />
+        {/if}
     {/if}
 </div>
 
@@ -214,11 +219,11 @@
         cursor: pointer;
     }
 
-    .split-chevron {
+    .split-button .split-chevron {
         pointer-events: auto;
         cursor: pointer;
-        width: 16px !important;
-        padding: 4px 0 !important;
+        width: 16px;
+        padding: 4px 0;
     }
 
     .split-chevron :global(svg) {
@@ -241,16 +246,16 @@
     }
 
     .split-dropdown button {
-        width: 100% !important;
-        height: auto !important;
-        padding: 6px 12px !important;
+        width: 100%;
+        height: auto;
+        padding: 6px 12px;
         font-size: 13px;
         text-align: left;
-        justify-content: start !important;
+        justify-content: start;
         white-space: nowrap;
     }
 
     .split-dropdown button:hover {
-        background: var(--gg-colors-surface) !important;
+        background: var(--gg-colors-surface);
     }
 </style>
