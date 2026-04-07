@@ -190,7 +190,7 @@
     @media (width >= 1680px) {
         .layout {
             grid-template-areas: ". desc refs email";
-            grid-template-columns: auto auto 1fr auto;
+            grid-template-columns: auto 1fr auto auto;
             gap: 9px;
         }
 
