@@ -27,6 +27,7 @@ export const hasModal = writable<boolean>(false);
 export const hasMenu = writable<{ x: number; y: number } | null>(null);
 export const lastFocus = writable<number>(Date.now());
 export const ignoreToggled = writable<boolean>(false);
+export const showRevisionNumbers = writable<boolean>(true);
 
 export const selectionHeaders = writable<RevHeader[]>([]);
 

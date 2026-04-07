@@ -25,6 +25,9 @@ mark-unpushed-bookmarks = true
 # When set, the diff pane will be expanded by default showing full diffs.
 expand-diffs = true
 
+# Show revision numbers (change IDs and commit IDs) in the log pane.
+show-revision-numbers = true
+
 # "light" or "dark". If empty, your OS settings will be used.
 theme-override = ""
 
