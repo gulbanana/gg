@@ -16,6 +16,7 @@
         progressEvent,
         lastFocus,
         ignoreToggled,
+        showRevisionNumbers,
     } from "./stores.js";
     import ContextMenu from "./controls/ContextMenu.svelte";
     import RefMutator from "./mutators/RefMutator";
@@ -175,6 +176,7 @@
         $revisionSelectEvent = undefined;
         if (config.type == "Workspace") {
             settings.markUnpushedBookmarks = config.mark_unpushed_bookmarks;
+            showRevisionNumbers.set(config.show_revision_numbers);
             ignoreToggled.set(config.ignore_immutable);
             $repoStatusEvent = config.status;
         }
