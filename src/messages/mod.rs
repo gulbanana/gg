@@ -222,6 +222,7 @@ pub enum RepoConfig {
         status: RepoStatus,
         theme_override: Option<String>,
         mark_unpushed_bookmarks: bool,
+        show_revision_numbers: bool,
         track_recent_workspaces: bool,
         ignore_immutable: bool,
         has_external_diff_tool: bool,

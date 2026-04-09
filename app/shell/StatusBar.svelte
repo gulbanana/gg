@@ -9,7 +9,7 @@
     import type { UndoOperation } from "../messages/UndoOperation";
     import type { RichHint } from "../mutators/BinaryMutator";
     import BinaryMutator from "../mutators/BinaryMutator";
-    import { ignoreToggled, currentSource, currentTarget, hasModal, repoConfigEvent, repoStatusEvent } from "../stores";
+    import { ignoreToggled, currentSource, currentTarget, hasModal, repoConfigEvent, repoStatusEvent, showRevisionNumbers } from "../stores";
     import { isTauri, trigger } from "../ipc";
     import ToggleWidget from "../controls/ToggleWidget.svelte";
     import BookmarkSpan from "../controls/BookmarkSpan.svelte";
@@ -73,6 +73,7 @@
     <div id="status-bar" class="repo-bar" inert={$hasModal}>
         <div class="substatus">
             <ToggleWidget tip="ignore immutability" bind:checked={$ignoreToggled} safe on="shield-off" off="shield" />
+            <ToggleWidget tip="show revision numbers" bind:checked={$showRevisionNumbers} on="eye-off" off="eye" />
             <span id="status-workspace">
                 {$repoConfigEvent?.type == "Workspace" ? $repoConfigEvent.absolute_path : "No workspace"}
             </span>
