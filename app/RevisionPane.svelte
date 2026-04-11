@@ -1,5 +1,6 @@
 <script lang="ts">
     import type { RevsResult } from "./messages/RevsResult";
+    import type { RepoConfig } from "./messages/RepoConfig";
     import { ignoreToggled, changeSelectEvent, dragOverWidget } from "./stores";
     import ChangeObject from "./objects/ChangeObject.svelte";
     import HunkObject from "./objects/HunkObject.svelte";
@@ -20,6 +21,7 @@
     import TimestampRangeSpan from "./controls/TimestampRangeSpan.svelte";
 
     export let revs: Extract<RevsResult, { type: "Detail" }>;
+    export let workspace: Extract<RepoConfig, { type: "Workspace" }>;
 
     const CONTEXT = 3;
 
@@ -78,7 +80,8 @@
             unset = false;
         }
     }
-    if (unset) {
+    if (unset && syntheticChanges.length > 0) {
+        // Always auto-select first change (shows its diff when expand_diffs is false)
         changeSelectEvent.set(syntheticChanges[0]);
     }
 
@@ -257,7 +260,7 @@
                             {change}
                             headers={revs.headers}
                             selected={$changeSelectEvent?.path?.repo_path === change.path.repo_path} />
-                        {#if $changeSelectEvent?.path?.repo_path === change.path.repo_path}
+                        {#if $changeSelectEvent?.path?.repo_path === change.path.repo_path || workspace.expand_diffs}
                             <div class="change" style="--lines: {minLines(change)}" tabindex="-1">
                                 {#each change.hunks as hunk}
                                     <div class="hunk">
@@ -417,24 +420,7 @@
         font-size: small;
         margin: 0;
         pointer-events: auto;
-        overflow-x: auto;
-        overflow-y: scroll;
-        scrollbar-color: var(--ctp-text) var(--ctp-base);
-        min-height: calc(var(--lines) * 1em);
-    }
-
-    .change::-webkit-scrollbar {
-        width: 6px;
-        height: 6px;
-    }
-
-    .change::-webkit-scrollbar-thumb {
-        background-color: var(--ctp-text);
-        border-radius: 6px;
-    }
-
-    .change::-webkit-scrollbar-track {
-        background-color: var(--ctp-base);
+        overflow: visible;
     }
 
     .hunk {
