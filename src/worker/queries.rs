@@ -368,7 +368,7 @@ pub async fn query_revisions(ws: &WorkspaceSession<'_>, set: RevSet) -> Result<R
                             same_change: SameChange::Accept,
                         },
                     );
-                    let hunk = format_conflict_hunks(merge_result, &file.labels);
+                    let hunk = format_conflict_hunks(merge_result, &file.labels)?;
                     if !hunk.lines.lines.is_empty() {
                         conflicts.push(RevConflict {
                             path: formatted_path,
@@ -483,7 +483,7 @@ async fn format_tree_changes(
                             same_change: SameChange::Accept,
                         },
                     );
-                    vec![format_conflict_hunks(merge_result, &file.labels)]
+                    vec![format_conflict_hunks(merge_result, &file.labels)?]
                 }
                 other => {
                     let before_value = conflicts::materialize_tree_value(
@@ -590,7 +590,7 @@ async fn get_value_contents(path: &RepoPath, value: MaterializedTreeValue) -> Re
 
 /// render a conflict as a diff: base content as deletions, sides as additions,
 /// resolved hunks as context. each section is labeled with the conflict label.
-fn format_conflict_hunks(merge_result: MergeResult, labels: &ConflictLabels) -> ChangeHunk {
+fn format_conflict_hunks(merge_result: MergeResult, labels: &ConflictLabels) -> Result<ChangeHunk> {
     let mut lines = Vec::new();
 
     let hunks = match merge_result {
@@ -599,13 +599,13 @@ fn format_conflict_hunks(merge_result: MergeResult, labels: &ConflictLabels) -> 
                 lines.push(format!(" {line}\n"));
             }
             let len = lines.len();
-            return ChangeHunk {
+            return Ok(ChangeHunk {
                 location: ChangeLocation {
                     from_file: ChangeRange { start: 0, len },
                     to_file: ChangeRange { start: 0, len },
                 },
                 lines: MultilineString { lines },
-            };
+            });
         }
         MergeResult::Conflict(hunks) => hunks,
     };
@@ -623,6 +623,61 @@ fn format_conflict_hunks(merge_result: MergeResult, labels: &ConflictLabels) -> 
             }
         } else {
             conflict_idx += 1;
+
+            // when one side is empty (edit-vs-delete), show a diff between
+            // base and the non-empty side instead of the raw merge output
+            let adds: Vec<_> = hunk.adds().collect();
+            let removes: Vec<_> = hunk.removes().collect();
+            if removes.len() == 1 && adds.len() == 2 {
+                let empty_idx = adds.iter().position(|s| s.is_empty());
+                if let Some(empty_idx) = empty_idx {
+                    let other_idx = 1 - empty_idx;
+                    let deleted_label = labels.get_add(empty_idx).map_or_else(
+                        || format!("side {}", empty_idx + 1),
+                        |l| format!("side {} ({l})", empty_idx + 1),
+                    );
+                    let kept_label = labels.get_add(other_idx).map_or_else(
+                        || format!("side {}", other_idx + 1),
+                        |l| format!("side {} ({l})", other_idx + 1),
+                    );
+                    lines.push(format!(
+                        " <<<<<<< conflict {conflict_idx} of {num_conflicts} \
+                         — deleted by {deleted_label}\n"
+                    ));
+                    let base_content = removes[0];
+                    let side_content = adds[other_idx];
+                    let diff_hunks = get_unified_hunks(3, base_content.as_ref(), side_content.as_ref())?;
+                    if diff_hunks.is_empty() {
+                        // base and kept side are identical
+                        lines.push(format!(" +++++++ {kept_label} (unchanged)\n"));
+                        for line in String::from_utf8_lossy(side_content).lines() {
+                            lines.push(format!(" {line}\n"));
+                            from_len += 1;
+                            to_len += 1;
+                        }
+                    } else {
+                        lines.push(format!(" +++++++ {kept_label}\n"));
+                        for diff_hunk in &diff_hunks {
+                            for line in &diff_hunk.lines.lines {
+                                lines.push(line.clone());
+                                if line.starts_with('-') {
+                                    from_len += 1;
+                                } else if line.starts_with('+') {
+                                    to_len += 1;
+                                } else {
+                                    from_len += 1;
+                                    to_len += 1;
+                                }
+                            }
+                        }
+                    }
+                    lines.push(format!(
+                        " >>>>>>> conflict {conflict_idx} of {num_conflicts}\n"
+                    ));
+                    continue;
+                }
+            }
+
             lines.push(format!(" <<<<<<< conflict {conflict_idx} of {num_conflicts}\n"));
             for base in hunk.removes() {
                 for line in String::from_utf8_lossy(base).lines() {
@@ -645,7 +700,7 @@ fn format_conflict_hunks(merge_result: MergeResult, labels: &ConflictLabels) -> 
         }
     }
 
-    ChangeHunk {
+    Ok(ChangeHunk {
         location: ChangeLocation {
             from_file: ChangeRange {
                 start: 0,
@@ -657,7 +712,7 @@ fn format_conflict_hunks(merge_result: MergeResult, labels: &ConflictLabels) -> 
             },
         },
         lines: MultilineString { lines },
-    }
+    })
 }
 
 fn get_unified_hunks(
