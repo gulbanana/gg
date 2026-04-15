@@ -124,6 +124,39 @@
             return null;
         }
     }
+
+    interface DiffSegment {
+        conflict: boolean;
+        lines: string[];
+    }
+
+    function segmentHunk(hunkLines: string[]): DiffSegment[] {
+        let segments: DiffSegment[] = [];
+        let current: DiffSegment = { conflict: false, lines: [] };
+
+        for (let line of hunkLines) {
+            if (line.startsWith(" <<<<<<< ")) {
+                if (current.lines.length > 0) segments.push(current);
+                current = { conflict: true, lines: [line] };
+            } else if (line.startsWith(" >>>>>>> ")) {
+                current.lines.push(line);
+                segments.push(current);
+                current = { conflict: false, lines: [] };
+            } else {
+                current.lines.push(line);
+            }
+        }
+        if (current.lines.length > 0) segments.push(current);
+        return segments;
+    }
+
+    function isConflictMarker(line: string): boolean {
+        return (
+            line.startsWith(" <<<<<<< ") ||
+            line.startsWith(" >>>>>>> ") ||
+            line.startsWith(" +++++++ ")
+        );
+    }
 </script>
 
 <Pane>
@@ -260,12 +293,16 @@
                         {#if $changeSelectEvent?.path?.repo_path === change.path.repo_path}
                             <div class="change" style="--lines: {minLines(change)}" tabindex="-1">
                                 {#each change.hunks as hunk}
+                                    {#if !change.has_conflict}
                                     <div class="hunk">
                                         <HunkObject header={singleton ? newest : null} path={change.path} {hunk} />
                                     </div>
-                                    <pre class="diff">{#each hunk.lines.lines as line}<span class={lineColour(line)}
+                                    {/if}
+                                    <pre class="diff">{#each segmentHunk(hunk.lines.lines) as segment}{#if segment.conflict}<span class="conflict-region">{#each segment.lines as line}{#if isConflictMarker(line)}<span class="conflict-marker">{line}</span>{:else}<span class={lineColour(line)}
                                                 >{line}</span
-                                            >{/each}</pre>
+                                            >{/if}{/each}</span>{:else}{#each segment.lines as line}<span class={lineColour(line)}
+                                                >{line}</span
+                                            >{/each}{/if}{/each}</pre>
                                 {/each}
                             </div>
                         {/if}
@@ -455,6 +492,21 @@
 
     .remove {
         color: var(--ctp-red);
+    }
+
+    .conflict-region {
+        display: block;
+        background: repeating-linear-gradient(
+            120deg,
+            transparent 0px,
+            transparent 12px,
+            var(--ctp-surface0) 12px,
+            var(--ctp-surface0) 15px
+        );
+    }
+
+    .conflict-marker {
+        color: var(--ctp-overlay0);
     }
 
     .target {
