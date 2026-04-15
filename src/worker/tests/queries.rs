@@ -137,17 +137,18 @@ async fn revision_with_conflict() -> Result<()> {
     // The conflicts field should contain the conflict info from the final tree
     assert!(!conflicts.is_empty(), "Expected conflicts to be non-empty");
 
-    // The conflict hunks should contain conflict markers (<<<<<<< and >>>>>>>)
-    let conflict_lines: String = conflicts
+    // The conflict hunks should show base as deletions and sides as additions
+    let conflict_lines: Vec<&str> = conflicts
         .iter()
         .flat_map(|c| &c.hunk.lines.lines)
-        .cloned()
-        .collect::<Vec<_>>()
-        .join("\n");
+        .map(|l| l.as_str())
+        .collect();
 
+    let has_removals = conflict_lines.iter().any(|l| l.starts_with('-'));
+    let has_additions = conflict_lines.iter().any(|l| l.starts_with('+'));
     assert!(
-        conflict_lines.contains("<<<<<<<") && conflict_lines.contains(">>>>>>>"),
-        "Expected conflict markers in conflict hunks, got: {conflict_lines}"
+        has_removals && has_additions,
+        "Expected base deletions and side additions in conflict hunks, got: {conflict_lines:?}"
     );
 
     Ok(())
@@ -468,17 +469,18 @@ async fn inherited_conflict_persists() -> Result<()> {
         "Expected conflicts to be non-empty for inherited conflict"
     );
 
-    // The conflict markers should still be present
-    let conflict_lines: String = conflicts
+    // The conflict hunks should show base as deletions and sides as additions
+    let conflict_lines: Vec<&str> = conflicts
         .iter()
         .flat_map(|c| &c.hunk.lines.lines)
-        .cloned()
-        .collect::<Vec<_>>()
-        .join("\n");
+        .map(|l| l.as_str())
+        .collect();
 
+    let has_removals = conflict_lines.iter().any(|l| l.starts_with('-'));
+    let has_additions = conflict_lines.iter().any(|l| l.starts_with('+'));
     assert!(
-        conflict_lines.contains("<<<<<<<") && conflict_lines.contains(">>>>>>>"),
-        "Expected conflict markers in inherited conflict, got: {conflict_lines}"
+        has_removals && has_additions,
+        "Expected base deletions and side additions in inherited conflict, got: {conflict_lines:?}"
     );
 
     // There should be a change for the unrelated.txt file that was added
@@ -542,7 +544,7 @@ async fn range_through_inherited_conflict() -> Result<()> {
 mod conflict_chain_ranges {
     use super::*;
 
-    /// Range ending in a conflicted commit should show conflicts
+    /// Range ending in a conflicted commit should show the conflict in changes
     #[tokio::test]
     async fn range_ends_in_conflict() -> Result<()> {
         let repo = mkrepo();
@@ -561,7 +563,7 @@ mod conflict_chain_ranges {
         .await?;
 
         let RevsResult::Detail {
-            headers, conflicts, ..
+            headers, changes, ..
         } = result
         else {
             panic!("Expected RevsResult::Detail");
@@ -574,18 +576,18 @@ mod conflict_chain_ranges {
             "Final commit in range should have conflict"
         );
 
-        // Conflicts field reflects final tree state
+        // Conflict introduced within the range appears in changes with has_conflict flag
+        let conflict_change = changes
+            .iter()
+            .find(|c| c.path.repo_path.contains("conflict_chain"));
         assert!(
-            !conflicts.is_empty(),
-            "Range ending in conflicted commit should have non-empty conflicts"
+            conflict_change.is_some(),
+            "Expected change for conflict_chain.txt, got: {:?}",
+            changes.iter().map(|c| &c.path.repo_path).collect::<Vec<_>>()
         );
-
-        // Verify it's the conflict_chain.txt conflict
-        let conflict_paths: Vec<_> = conflicts.iter().map(|c| &c.path.repo_path).collect();
         assert!(
-            conflict_paths.iter().any(|p| p.contains("conflict_chain")),
-            "Expected conflict in conflict_chain.txt, got: {:?}",
-            conflict_paths
+            conflict_change.unwrap().has_conflict,
+            "Change for conflict_chain.txt should be marked as conflicted"
         );
 
         Ok(())

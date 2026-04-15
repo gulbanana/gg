@@ -25,7 +25,7 @@ use jj_lib::{
         ContentDiff, DiffHunk, DiffHunkKind, find_line_ranges,
     },
     diff_presentation::LineCompareMode,
-    files::FileMergeHunkLevel,
+    files::{self, FileMergeHunkLevel, MergeResult},
     graph::{GraphEdge, GraphEdgeType, TopoGroupedGraphIterator},
     matchers::EverythingMatcher,
     merge::{Diff, SameChange},
@@ -337,11 +337,21 @@ pub async fn query_revisions(ws: &WorkspaceSession<'_>, set: RevSet) -> Result<R
     let conflict_labels = Diff::new(parent_tree.labels(), final_tree.labels());
     format_tree_changes(ws, &mut changes, tree_diff, conflict_labels).await?;
 
+    // find inherited conflicts: files conflicted in final_tree but unchanged relative to parent.
+    // conflicted changes with empty hunks (tree value differs but materialized content is identical)
+    // are also handled here, since they have nothing useful to display as a diff.
+    changes.retain(|c| !c.has_conflict || !c.hunks.is_empty());
+    let changed_paths: HashSet<&str> = changes.iter().map(|c| c.path.repo_path.as_str()).collect();
     let mut conflicts = Vec::new();
     for (path, entry) in final_tree.entries() {
         if let Ok(entry) = entry
             && !entry.is_resolved()
         {
+            let formatted_path = ws.format_path(path.clone())?;
+            if changed_paths.contains(formatted_path.repo_path.as_str()) {
+                continue;
+            }
+
             match conflicts::materialize_tree_value(
                 ws.repo().store(),
                 &path,
@@ -351,24 +361,17 @@ pub async fn query_revisions(ws: &WorkspaceSession<'_>, set: RevSet) -> Result<R
             .await?
             {
                 MaterializedTreeValue::FileConflict(file) => {
-                    let mut hunk_content = vec![];
-                    conflicts::materialize_merge_result(
+                    let merge_result = files::merge_hunks(
                         &file.contents,
-                        &file.labels,
-                        &mut hunk_content,
-                        &ConflictMaterializeOptions {
-                            marker_style: ConflictMarkerStyle::Git,
-                            marker_len: None,
-                            merge: MergeOptions {
-                                hunk_level: FileMergeHunkLevel::Line,
-                                same_change: SameChange::Accept,
-                            },
+                        &MergeOptions {
+                            hunk_level: FileMergeHunkLevel::Line,
+                            same_change: SameChange::Accept,
                         },
-                    )?;
-                    let mut hunks = get_unified_hunks(3, &hunk_content, &[])?;
-                    if let Some(hunk) = hunks.pop() {
+                    );
+                    let hunk = format_conflict_hunks(merge_result, &file.labels);
+                    if !hunk.lines.lines.is_empty() {
                         conflicts.push(RevConflict {
-                            path: ws.format_path(path)?,
+                            path: formatted_path,
                             hunk,
                         });
                     }
@@ -379,12 +382,6 @@ pub async fn query_revisions(ws: &WorkspaceSession<'_>, set: RevSet) -> Result<R
             }
         }
     }
-
-    let conflicted_paths: HashSet<String> = conflicts
-        .iter()
-        .map(|conflict| conflict.path.repo_path.clone())
-        .collect();
-    changes.retain(|change| !conflicted_paths.contains(&change.path.repo_path));
 
     // details for each revision in the set
     let mut headers = Vec::new();
@@ -469,13 +466,52 @@ async fn format_tree_changes(
 
         let has_conflict = !after.is_resolved();
 
-        let before_future =
-            conflicts::materialize_tree_value(store, &path, before.clone(), conflict_labels.before);
-        let after_future =
-            conflicts::materialize_tree_value(store, &path, after.clone(), conflict_labels.after);
-        let (before_value, after_value) = try_join!(before_future, after_future)?;
-
-        let hunks = get_value_hunks(3, &path, before_value, after_value).await?;
+        let hunks = if has_conflict {
+            let after_value = conflicts::materialize_tree_value(
+                store,
+                &path,
+                after.clone(),
+                conflict_labels.after,
+            )
+            .await?;
+            match after_value {
+                MaterializedTreeValue::FileConflict(file) => {
+                    let merge_result = files::merge_hunks(
+                        &file.contents,
+                        &MergeOptions {
+                            hunk_level: FileMergeHunkLevel::Line,
+                            same_change: SameChange::Accept,
+                        },
+                    );
+                    vec![format_conflict_hunks(merge_result, &file.labels)]
+                }
+                other => {
+                    let before_value = conflicts::materialize_tree_value(
+                        store,
+                        &path,
+                        before.clone(),
+                        conflict_labels.before,
+                    )
+                    .await?;
+                    get_value_hunks(3, &path, before_value, other).await?
+                }
+            }
+        } else {
+            let before_future = conflicts::materialize_tree_value(
+                store,
+                &path,
+                before.clone(),
+                conflict_labels.before,
+            );
+            let after_future = conflicts::materialize_tree_value(
+                store,
+                &path,
+                after.clone(),
+                conflict_labels.after,
+            );
+            let (before_value, after_value) = try_join!(before_future, after_future)?;
+            get_value_hunks(3, &path, before_value, after_value).await?
+        };
 
         changes.push(RevChange {
             path: ws.format_path(path)?,
@@ -549,6 +585,78 @@ async fn get_value_contents(path: &RepoPath, value: MaterializedTreeValue) -> Re
         }
         MaterializedTreeValue::Tree(_) => Err(anyhow!("Unexpected tree in diff at path {path:?}")),
         MaterializedTreeValue::AccessDenied(error) => Err(anyhow!(error)),
+    }
+}
+
+/// render a conflict as a diff: base content as deletions, sides as additions,
+/// resolved hunks as context. each section is labeled with the conflict label.
+fn format_conflict_hunks(merge_result: MergeResult, labels: &ConflictLabels) -> ChangeHunk {
+    let mut lines = Vec::new();
+
+    let hunks = match merge_result {
+        MergeResult::Resolved(content) => {
+            for line in String::from_utf8_lossy(&content).lines() {
+                lines.push(format!(" {line}\n"));
+            }
+            let len = lines.len();
+            return ChangeHunk {
+                location: ChangeLocation {
+                    from_file: ChangeRange { start: 0, len },
+                    to_file: ChangeRange { start: 0, len },
+                },
+                lines: MultilineString { lines },
+            };
+        }
+        MergeResult::Conflict(hunks) => hunks,
+    };
+
+    let num_conflicts = hunks.iter().filter(|h| !h.is_resolved()).count();
+    let mut conflict_idx = 0;
+    let mut from_len = 0;
+    let mut to_len = 0;
+    for hunk in &hunks {
+        if let Some(content) = hunk.resolve_trivial(SameChange::Accept) {
+            for line in String::from_utf8_lossy(content).lines() {
+                lines.push(format!(" {line}\n"));
+                from_len += 1;
+                to_len += 1;
+            }
+        } else {
+            conflict_idx += 1;
+            lines.push(format!(" <<<<<<< conflict {conflict_idx} of {num_conflicts}\n"));
+            for base in hunk.removes() {
+                for line in String::from_utf8_lossy(base).lines() {
+                    lines.push(format!("-{line}\n"));
+                    from_len += 1;
+                }
+            }
+            for (i, side) in hunk.adds().enumerate() {
+                let label = labels.get_add(i).map_or_else(
+                    || format!(" +++++++ side {}\n", i + 1),
+                    |l| format!(" +++++++ side {} ({l})\n", i + 1),
+                );
+                lines.push(label);
+                for line in String::from_utf8_lossy(side).lines() {
+                    lines.push(format!("+{line}\n"));
+                    to_len += 1;
+                }
+            }
+            lines.push(format!(" >>>>>>> conflict {conflict_idx} of {num_conflicts}\n"));
+        }
+    }
+
+    ChangeHunk {
+        location: ChangeLocation {
+            from_file: ChangeRange {
+                start: 0,
+                len: from_len,
+            },
+            to_file: ChangeRange {
+                start: 0,
+                len: to_len,
+            },
+        },
+        lines: MultilineString { lines },
     }
 }
 
