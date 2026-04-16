@@ -85,6 +85,9 @@
         changeSelectEvent.set(syntheticChanges[0]);
     }
 
+    // Track explicitly collapsed files when expand_diffs is true
+    let collapsedPaths = new Set<string>();
+
     let list: List = {
         getSize() {
             return syntheticChanges.length;
@@ -259,8 +262,16 @@
                         <ChangeObject
                             {change}
                             headers={revs.headers}
-                            selected={$changeSelectEvent?.path?.repo_path === change.path.repo_path} />
-                        {#if $changeSelectEvent?.path?.repo_path === change.path.repo_path || workspace.expand_diffs}
+                            selected={$changeSelectEvent?.path?.repo_path === change.path.repo_path}
+                            on:toggleCollapse={() => {
+                                if (collapsedPaths.has(change.path.repo_path)) {
+                                    collapsedPaths.delete(change.path.repo_path);
+                                } else {
+                                    collapsedPaths.add(change.path.repo_path);
+                                }
+                                collapsedPaths = collapsedPaths;
+                            }} />
+                        {#if ($changeSelectEvent?.path?.repo_path === change.path.repo_path || workspace.expand_diffs) && !collapsedPaths.has(change.path.repo_path)}
                             <div class="change" style="--lines: {minLines(change)}" tabindex="-1">
                                 {#each change.hunks as hunk}
                                     <div class="hunk">
