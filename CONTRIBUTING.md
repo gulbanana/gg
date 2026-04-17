@@ -7,7 +7,7 @@ We have high standards for maintainability; don't submit AI-generated code witho
 Contributors should sign the Google CLA so that GG code can be reused in JJ. This isn't a hard requirement, but if you haven't signed then your code may be replaced or removed. 
 
 ## Initial Setup
-1. Run the first frontend build: `npm install && npm run build`. Future builds will be done automatically by `cargo tauri` or `cargo publish`.
+1. Generate types and build the frontend: `npm install && mkdir -p dist && cargo gen && npm run build`. Future builds will be done automatically by `cargo tauri` or `cargo publish`.
 2. (Optional) Install the Tauri CLI: `cargo install tauri-cli --version "^2.0.0" --locked`. This allows you to use `cargo tauri` instead of `npm run tauri`.
 3. (Linux) Install system dependencies (on Debian-likes, `apt install libpango1.0-dev libatk1.0-dev libgdk-pixbuf2.0-dev libgtk-3-dev libjavascriptcoregtk-4.1-dev libwebkit2gtk-4.1-dev`).
 
