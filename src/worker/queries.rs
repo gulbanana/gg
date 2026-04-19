@@ -535,7 +535,10 @@ async fn get_value_hunks(
     }
 }
 
-pub(crate) async fn get_value_contents(path: &RepoPath, value: MaterializedTreeValue) -> Result<Vec<u8>> {
+pub(crate) async fn get_value_contents(
+    path: &RepoPath,
+    value: MaterializedTreeValue,
+) -> Result<Vec<u8>> {
     use tokio::io::AsyncReadExt;
 
     match value {

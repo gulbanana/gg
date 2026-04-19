@@ -304,13 +304,7 @@ pub fn build_context(
                 true,
                 None::<&str>,
             )?,
-            &MenuItem::with_id(
-                app_handle,
-                "tree_diff",
-                "Show diff",
-                true,
-                None::<&str>,
-            )?,
+            &MenuItem::with_id(app_handle, "tree_diff", "Show diff", true, None::<&str>)?,
             &PredefinedMenuItem::separator(app_handle)?,
             &MenuItem::with_id(
                 app_handle,
@@ -393,7 +387,13 @@ pub fn build_context(
         )?],
     )?;
 
-    Ok((revision_menu, tree_menu, ref_menu, workspace_menu, operation_menu))
+    Ok((
+        revision_menu,
+        tree_menu,
+        ref_menu,
+        workspace_menu,
+        operation_menu,
+    ))
 }
 
 /// Computed enablement state for revision menu items

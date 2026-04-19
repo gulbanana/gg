@@ -143,7 +143,7 @@
         fileContentLoading = false;
         if (result.type === "data" && showContentFor === key) {
             fileContent = result.value;
-        } else {
+        } else if (result.type !== "data") {
             console.error("query_file_content failed:", result);
         }
     }

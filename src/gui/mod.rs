@@ -974,7 +974,8 @@ pub fn try_create_window(app_handle: &AppHandle, workspace: Option<PathBuf>) -> 
     });
 
     // setup command dependencies
-    let (revision_menu, tree_menu, ref_menu, workspace_menu, operation_menu) = menu::build_context(app_handle)?;
+    let (revision_menu, tree_menu, ref_menu, workspace_menu, operation_menu) =
+        menu::build_context(app_handle)?;
     let windows = app_state.windows.clone();
     windows.lock().unwrap().insert(
         window.label().to_owned(),

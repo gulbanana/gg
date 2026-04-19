@@ -314,14 +314,21 @@ impl Session for WorkspaceSession<'_> {
                     op_id,
                     path,
                     current_id,
+                } => tx.send(
+                    queries::query_file_diff_at_op(&self, &op_id, &path, &current_id).await,
+                )?,
+                SessionEvent::QueryOpLog {
+                    tx,
+                    filter_snapshots,
+                    after_id,
                 } => {
-                    tx.send(
-                        queries::query_file_diff_at_op(&self, &op_id, &path, &current_id).await,
-                    )?
-                }
-                SessionEvent::QueryOpLog { tx, filter_snapshots, after_id } => {
                     let page_size = self.data.workspace_settings.query_op_log_page_size();
-                    tx.send(queries::query_op_log(&self, page_size, filter_snapshots, after_id))?
+                    tx.send(queries::query_op_log(
+                        &self,
+                        page_size,
+                        filter_snapshots,
+                        after_id,
+                    ))?
                 }
                 SessionEvent::QueryLog {
                     tx,
