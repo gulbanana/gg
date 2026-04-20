@@ -1,12 +1,9 @@
 <script lang="ts">
-    import ActionWidget from "../controls/ActionWidget.svelte";
-    import Icon from "../controls/Icon.svelte";
     import IdSpan from "../controls/IdSpan.svelte";
     import { mutate } from "../ipc";
     import type { Operand } from "../messages/Operand";
     import type { GitFetch } from "../messages/GitFetch";
     import type { GitPush } from "../messages/GitPush";
-    import type { UndoOperation } from "../messages/UndoOperation";
     import type { RichHint } from "../mutators/BinaryMutator";
     import BinaryMutator from "../mutators/BinaryMutator";
     import { ignoreToggled, currentSource, currentTarget, hasModal, repoConfigEvent, repoStatusEvent } from "../stores";
@@ -48,10 +45,6 @@
         dropHint = null;
     }
 
-    function onUndo() {
-        mutate<UndoOperation>("undo_operation", null);
-    }
-
     function onPush(remote_name: string) {
         mutate<GitPush>(
             "git_push",
@@ -77,30 +70,12 @@
                 {$repoConfigEvent?.type == "Workspace" ? $repoConfigEvent.absolute_path : "No workspace"}
             </span>
         </div>
-        <div id="status-remotes" class="substatus">
-            {#if $repoConfigEvent?.type == "Workspace"}
-                {#each $repoConfigEvent.git_remotes as remote}
-                    <div class="substatus">
-                        <ActionWidget tip="git push (all bookmarks)" onClick={() => onPush(remote)}>
-                            <Icon name="upload-cloud" />
-                        </ActionWidget>
-                        <span>{remote}</span>
-                        <ActionWidget tip="git fetch" onClick={() => onFetch(remote)}>
-                            <Icon name="download-cloud" />
-                        </ActionWidget>
-                    </div>
-                {/each}
-            {/if}
-        </div>
         <div id="status-operation" class="substatus">
             <span>
                 {$repoConfigEvent?.type != "Workspace"
                     ? ""
-                    : ($repoStatusEvent?.operation_description ?? "no operation")}
+                    : "Last operation: " + ($repoStatusEvent?.operation_description ?? "none")}
             </span>
-            <ActionWidget tip="undo latest operation" onClick={onUndo} disabled={$repoConfigEvent?.type != "Workspace"}>
-                <Icon name="rotate-ccw" /> Undo
-            </ActionWidget>
         </div>
     </div>
 {:else}
@@ -123,13 +98,15 @@
     #status-bar {
         grid-area: footer;
         padding: 0 6px;
+        font-family: var(--gg-text-familyUi);
+        font-size: var(--gg-text-sizeMd);
         gap: 6px;
         align-items: center;
     }
 
     .repo-bar {
         display: grid;
-        grid-template-columns: minmax(auto, 40%) 1fr minmax(auto, 40%);
+        grid-template-columns: 1fr auto;
     }
 
     .drag-bar {
@@ -145,14 +122,6 @@
         white-space: nowrap;
     }
 
-    .substatus > span {
-        height: 21px;
-    }
-
-    #status-remotes {
-        justify-content: space-evenly;
-    }
-
     #status-operation {
         height: 100%;
         padding: 0 3px;
@@ -164,23 +133,20 @@
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+        max-width: 40vw;
     }
 
     #status-workspace {
         white-space: nowrap;
-        direction: rtl;
-        text-align: left;
-        overflow: hidden;
-        text-overflow: ellipsis;
     }
 
     .target {
-        background: var(--ctp-flamingo);
+        background: var(--gg-colors-accent);
         color: black;
     }
 
     .maybe {
         background: transparent;
-        color: var(--ctp-peach);
+        color: var(--gg-colors-highlight);
     }
 </style>

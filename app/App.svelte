@@ -72,12 +72,12 @@
 <style>
     .two-pane {
         display: grid;
-        grid-template-columns: 1fr 3px 1fr;
+        grid-template-columns: 1fr var(--gg-components-separatorWidth) 1fr;
         height: 100%;
         overflow: hidden;
     }
 
     .separator {
-        background: var(--ctp-overlay0);
+        background: var(--gg-colors-surfaceAlt);
     }
 </style>

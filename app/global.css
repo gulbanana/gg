@@ -1,5 +1,4 @@
 @import "modern-normalize";
-@import "@catppuccin/palette/css/catppuccin.css";
 
 :root {
   overscroll-behavior: none;
@@ -8,151 +7,33 @@
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   -webkit-text-size-adjust: 100%;
-
-  /* system fonts */
-  --stack-code: ui-monospace,
-    'Cascadia Code',
-    'Source Code Pro',
-    Menlo,
-    Consolas,
-    'DejaVu Sans Mono',
-    monospace;
-  --stack-industrial: Bahnschrift,
-    "DIN Alternate",
-    "Franklin Gothic Medium",
-    "Roboto",
-    "Nimbus Sans",
-    sans-serif-condensed,
-    sans-serif;
-}
-
-#shell,
-#shell.light {
-  color-scheme: light;
-  /* catppuccin latte */
-  --ctp-crust: var(--ctp-latte-crust);
-  --ctp-mantle: var(--ctp-latte-mantle);
-  --ctp-base: var(--ctp-latte-base);
-  --ctp-surface0: var(--ctp-latte-surface0);
-  --ctp-surface1: var(--ctp-latte-surface1);
-  --ctp-surface2: var(--ctp-latte-surface2);
-  --ctp-overlay0: var(--ctp-latte-overlay0);
-  --ctp-overlay0-rgb: var(--ctp-latte-overlay0-rgb);
-  --ctp-overlay1: var(--ctp-latte-overlay1);
-  --ctp-overlay1-rgb: var(--ctp-latte-overlay1-rgb);
-  --ctp-overlay2: var(--ctp-latte-overlay2);
-  --ctp-overlay2-rgb: var(--ctp-latte-overlay2-rgb);
-  --ctp-subtext0: var(--ctp-latte-subtext0);
-  --ctp-subtext1: var(--ctp-latte-subtext1);
-  --ctp-text: var(--ctp-latte-text);
-  --ctp-lavender: var(--ctp-latte-lavender);
-  --ctp-blue: var(--ctp-latte-blue);
-  --ctp-sapphire: var(--ctp-latte-sapphire);
-  --ctp-sky: var(--ctp-latte-sky);
-  --ctp-teal: var(--ctp-latte-teal);
-  --ctp-green: var(--ctp-latte-green);
-  --ctp-yellow: var(--ctp-latte-yellow);
-  --ctp-peach: var(--ctp-latte-peach);
-  --ctp-maroon: var(--ctp-latte-maroon);
-  --ctp-red: var(--ctp-latte-red);
-  --ctp-mauve: var(--ctp-latte-mauve);
-  --ctp-pink: var(--ctp-latte-pink);
-  --ctp-flamingo: var(--ctp-latte-flamingo);
-  --ctp-rosewater: var(--ctp-latte-rosewater);
-}
-
-#shell.dark {
-  color-scheme: dark;
-  --ctp-crust: var(--ctp-macchiato-crust);
-  --ctp-mantle: var(--ctp-macchiato-mantle);
-  --ctp-base: var(--ctp-macchiato-base);
-  --ctp-surface0: var(--ctp-macchiato-surface0);
-  --ctp-surface1: var(--ctp-macchiato-surface1);
-  --ctp-surface2: var(--ctp-macchiato-surface2);
-  --ctp-overlay0: var(--ctp-macchiato-overlay0);
-  --ctp-overlay0-rgb: var(--ctp-latte-overlay0-rgb);
-  --ctp-overlay1: var(--ctp-macchiato-overlay1);
-  --ctp-overlay1-rgb: var(--ctp-latte-overlay1-rgb);
-  --ctp-overlay2: var(--ctp-macchiato-overlay2);
-  --ctp-overlay2-rgb: var(--ctp-latte-overlay2-rgb);
-  --ctp-subtext0: var(--ctp-macchiato-subtext0);
-  --ctp-subtext1: var(--ctp-macchiato-subtext1);
-  --ctp-text: var(--ctp-macchiato-text);
-  --ctp-lavender: var(--ctp-macchiato-lavender);
-  --ctp-blue: var(--ctp-macchiato-blue);
-  --ctp-sapphire: var(--ctp-macchiato-sapphire);
-  --ctp-sky: var(--ctp-macchiato-sky);
-  --ctp-teal: var(--ctp-macchiato-teal);
-  --ctp-green: var(--ctp-macchiato-green);
-  --ctp-yellow: var(--ctp-macchiato-yellow);
-  --ctp-peach: var(--ctp-macchiato-peach);
-  --ctp-maroon: var(--ctp-macchiato-maroon);
-  --ctp-red: var(--ctp-macchiato-red);
-  --ctp-mauve: var(--ctp-macchiato-mauve);
-  --ctp-pink: var(--ctp-macchiato-pink);
-  --ctp-flamingo: var(--ctp-macchiato-flamingo);
-  --ctp-rosewater: var(--ctp-macchiato-rosewater);
-}
-
-@media (prefers-color-scheme: dark) {
-  #shell {
-    color-scheme: dark;
-    --ctp-crust: var(--ctp-macchiato-crust);
-    --ctp-mantle: var(--ctp-macchiato-mantle);
-    --ctp-base: var(--ctp-macchiato-base);
-    --ctp-surface0: var(--ctp-macchiato-surface0);
-    --ctp-surface1: var(--ctp-macchiato-surface1);
-    --ctp-surface2: var(--ctp-macchiato-surface2);
-    --ctp-overlay0: var(--ctp-macchiato-overlay0);
-    --ctp-overlay0-rgb: var(--ctp-latte-overlay0-rgb);
-    --ctp-overlay1: var(--ctp-macchiato-overlay1);
-    --ctp-overlay1-rgb: var(--ctp-latte-overlay1-rgb);
-    --ctp-overlay2: var(--ctp-macchiato-overlay2);
-    --ctp-overlay2-rgb: var(--ctp-latte-overlay2-rgb);
-    --ctp-subtext0: var(--ctp-macchiato-subtext0);
-    --ctp-subtext1: var(--ctp-macchiato-subtext1);
-    --ctp-text: var(--ctp-macchiato-text);
-    --ctp-lavender: var(--ctp-macchiato-lavender);
-    --ctp-blue: var(--ctp-macchiato-blue);
-    --ctp-sapphire: var(--ctp-macchiato-sapphire);
-    --ctp-sky: var(--ctp-macchiato-sky);
-    --ctp-teal: var(--ctp-macchiato-teal);
-    --ctp-green: var(--ctp-macchiato-green);
-    --ctp-yellow: var(--ctp-macchiato-yellow);
-    --ctp-peach: var(--ctp-macchiato-peach);
-    --ctp-maroon: var(--ctp-macchiato-maroon);
-    --ctp-red: var(--ctp-macchiato-red);
-    --ctp-mauve: var(--ctp-macchiato-mauve);
-    --ctp-pink: var(--ctp-macchiato-pink);
-    --ctp-flamingo: var(--ctp-macchiato-flamingo);
-    --ctp-rosewater: var(--ctp-macchiato-rosewater);
-  }
 }
 
 ::selection {
-  background-color: transparent;
-  color: var(--ctp-rosewater);
+  background-color: var(--gg-colors-selectionBackground);
+  color: var(--gg-colors-selectionForeground);
 }
 
 textarea,
 select,
 input {
   outline: none;
-  border: 1px solid var(--ctp-overlay0);
-  border-radius: 3px;
-  padding: 1px;
+  border: var(--gg-components-borderSubtle);
+  border-radius: var(--gg-components-inputRadius);
+  padding: var(--gg-components-inputPadding);
+  transition: border-color var(--gg-components-transitionFast), box-shadow var(--gg-components-transitionFast);
 
   &:focus-visible {
-    border-color: var(--ctp-lavender);
+    border-color: var(--gg-colors-focusRing);
     border-width: 2px;
-    padding: 0;
+    padding: calc(var(--gg-components-inputPadding) - 1px);
   }
 
-  caret-color: var(--ctp-rosewater);
+  caret-color: var(--gg-colors-focusRing);
 
-  background-color: var(--ctp-base);
-  color: var(--ctp-text);
-  scrollbar-color: var(--ctp-text) var(--ctp-base);
+  background-color: var(--gg-colors-background);
+  color: var(--gg-colors-foreground);
+  scrollbar-color: var(--gg-colors-foreground) var(--gg-colors-background);
 
   &:disabled {
     background-color: transparent;
@@ -163,24 +44,33 @@ input {
   }
 
   &::-webkit-scrollbar-thumb {
-    background-color: var(--ctp-text);
+    background-color: var(--gg-colors-foreground);
     border-radius: 6px;
   }
 
   &::-webkit-scrollbar-track {
-    background-color: var(--ctp-base);
+    background-color: var(--gg-colors-background);
   }
+}
+
+textarea {
+  font-family: var(--gg-text-familyCode);
+}
+
+pre, code {
+  font-family: var(--gg-text-familyCode);
+  font-size: var(--gg-text-sizeMd);
 }
 
 @supports (appearance: base-select) {
   ::picker(select) {
     outline: none;
-    border: 1px solid var(--ctp-overlay0);
-    border-radius: 3px;
+    border: var(--gg-components-borderSubtle);
+    border-radius: var(--gg-components-inputRadius);
     padding: 1px;
 
-    background-color: var(--ctp-base);
-    color: var(--ctp-text);
+    background-color: var(--gg-colors-background);
+    color: var(--gg-colors-foreground);
   }
 }
 

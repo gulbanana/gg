@@ -1,0 +1,277 @@
+# GG Fluent Theme — Microsoft Fluent Design 2 inspired
+
+[light.colors]
+background = "#ffffff"
+surfaceDeep = "#e0e0e0"
+surface = "#fafafa"
+surfaceAlt = "#f0f0f0"
+surfaceStrong = "#e0e0e0"
+
+foreground = "#242424"
+foregroundMuted = "#424242"
+foregroundSubtle = "#707070"
+foregroundFaint = "#8a8a8a"
+
+outline = "#d1d1d1"
+outlineMuted = "#e0e0e0"
+outlineStrong = "#8a8a8a"
+
+primary = "#0078D4"
+primaryHover = "#106EBE"
+primaryContent = "#ffffff"
+secondary = "#5C2D91"
+secondaryHover = "#4B2380"
+success = "#107C10"
+successContent = "#ffffff"
+warning = "#FCE100"
+warningContent = "#242424"
+error = "#D13438"
+errorContent = "#ffffff"
+destructive = "#D13438"
+destructiveContent = "#ffffff"
+
+added = "#107C10"
+removed = "#D13438"
+modified = "#0078D4"
+conflict = "#FF8C00"
+addedAlt = "#A8FFB4"
+removedAlt = "#FFA8A3"
+modifiedAlt = "#ffffff"
+conflictAlt = "#FFD480"
+
+immutableStroke = "#0078D4"
+immutableFill = "#0078D4"
+mutableStroke = "#0078D4"
+mutableFill = "transparent"
+workingCopyStroke = "#0078D4"
+workingCopyFill = "#107C10"
+conflictStroke = "#FCE100"
+conflictFill = "#FF8C00"
+
+accent = "#0078D4"
+accentHover = "#106EBE"
+accentMuted = "#5C2D91"
+accentSubtle = "#0099BC"
+highlight = "#FF8C00"
+
+selectionBackground = "#0078D4"
+selectionForeground = "#ffffff"
+selectionForegroundMuted = "#e0e0e0"
+focusRing = "#0078D4"
+
+overlayBackground = "rgba(209, 209, 209, 0.4)"
+overlayBackdropBlur = "4px"
+
+[light.text]
+familyUi = "'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif"
+familyCode = "ui-monospace, 'Cascadia Code', Consolas, monospace"
+familyDisplay = "'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif"
+sizeXs = "10px"
+sizeSm = "11px"
+sizeMd = "13px"
+sizeLg = "16px"
+sizeXl = "20px"
+weightLight = "300"
+weightRegular = "400"
+weightMedium = "500"
+weightHeavy = "700"
+lineHeightTight = "1.2"
+lineHeightNormal = "1.4"
+lineHeightRelaxed = "1.6"
+
+[light.shadows]
+shadowSm = "0 2px 4px rgba(0, 0, 0, 0.06)"
+shadowMd = "0 4px 8px rgba(0, 0, 0, 0.08)"
+shadowLg = "0 8px 16px rgba(0, 0, 0, 0.1)"
+
+[light.components]
+buttonBackground = "$colors.primary"
+buttonForeground = "$colors.primaryContent"
+buttonHoverBackground = "$colors.primaryHover"
+buttonBorder = "transparent"
+buttonRadius = "4px"
+buttonHeight = "32px"
+buttonPadding = "0 12px"
+buttonShadow = "$shadows.shadowSm"
+buttonFont = "$text.familyUi"
+buttonFontSize = "$text.sizeMd"
+buttonFontWeight = "$text.weightMedium"
+
+buttonSecondaryBackground = "$colors.surfaceAlt"
+buttonSecondaryForeground = "$colors.foreground"
+buttonSecondaryHoverBackground = "$colors.surfaceStrong"
+
+buttonDisabledBackground = "rgba(0, 0, 0, 0.04)"
+buttonDisabledForeground = "$colors.foregroundFaint"
+
+buttonActiveTransform = "scale(0.98)"
+buttonActiveShadow = "0 1px 2px rgba(0, 0, 0, 0.04)"
+
+inputBackground = "$colors.background"
+inputForeground = "$colors.foreground"
+inputBorder = "$colors.outlineMuted"
+inputFocusBorder = "$colors.focusRing"
+inputRadius = "4px"
+inputPadding = "6px"
+
+radiusSm = "4px"
+radiusMd = "6px"
+radiusLg = "8px"
+
+transitionFast = "167ms cubic-bezier(0.1, 0.9, 0.2, 1)"
+transitionNormal = "250ms cubic-bezier(0.1, 0.9, 0.2, 1)"
+
+borderSubtle = "1px solid rgba(209, 209, 209, 0.6)"
+borderDialog = "1px solid $colors.surfaceAlt"
+separatorWidth = "1px"
+
+headerHeight = "40px"
+toolbarHeight = "38px"
+
+surfacePadding = "8px"
+surfacePaddingLg = "16px"
+modalPadding = "20px"
+
+dialogBackground = "$colors.background"
+dialogBorder = "1px solid $colors.surfaceAlt"
+dialogRadius = "8px"
+dialogShadow = "$shadows.shadowLg"
+
+# ─── Dark ────────────────────────────────────────────────────────
+
+[dark.colors]
+background = "#292929"
+surfaceDeep = "#1a1a1a"
+surface = "#333333"
+surfaceAlt = "#3d3d3d"
+surfaceStrong = "#474747"
+
+foreground = "#ffffff"
+foregroundMuted = "#c8c8c8"
+foregroundSubtle = "#a0a0a0"
+foregroundFaint = "#858585"
+
+outline = "#525252"
+outlineMuted = "#474747"
+outlineStrong = "#858585"
+
+primary = "#4CC2FF"
+primaryHover = "#62B5F8"
+primaryContent = "#ffffff"
+secondary = "#B4A0FF"
+secondaryHover = "#C4B4FF"
+success = "#6CCB5F"
+successContent = "#ffffff"
+warning = "#FCE100"
+warningContent = "#242424"
+error = "#FF6767"
+errorContent = "#ffffff"
+destructive = "#FF6767"
+destructiveContent = "#ffffff"
+
+added = "#6CCB5F"
+removed = "#FF6767"
+modified = "#4CC2FF"
+conflict = "#FFAA44"
+addedAlt = "#0a5c0a"
+removedAlt = "#a82020"
+modifiedAlt = "#003a60"
+conflictAlt = "#8a4800"
+
+immutableStroke = "#4CC2FF"
+immutableFill = "#4CC2FF"
+mutableStroke = "#4CC2FF"
+mutableFill = "transparent"
+workingCopyStroke = "#4CC2FF"
+workingCopyFill = "#6CCB5F"
+conflictStroke = "#FCE100"
+conflictFill = "#FFAA44"
+
+accent = "#4CC2FF"
+accentHover = "#62B5F8"
+accentMuted = "#B4A0FF"
+accentSubtle = "#60CDFF"
+highlight = "#FFAA44"
+
+selectionBackground = "#4CC2FF"
+selectionForeground = "#ffffff"
+selectionForegroundMuted = "#474747"
+focusRing = "#4CC2FF"
+
+overlayBackground = "rgba(26, 26, 26, 0.6)"
+overlayBackdropBlur = "4px"
+
+[dark.text]
+familyUi = "'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif"
+familyCode = "ui-monospace, 'Cascadia Code', Consolas, monospace"
+familyDisplay = "'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif"
+sizeXs = "10px"
+sizeSm = "11px"
+sizeMd = "13px"
+sizeLg = "16px"
+sizeXl = "20px"
+weightLight = "300"
+weightRegular = "400"
+weightMedium = "500"
+weightHeavy = "700"
+lineHeightTight = "1.2"
+lineHeightNormal = "1.4"
+lineHeightRelaxed = "1.6"
+
+[dark.shadows]
+shadowSm = "0 2px 4px rgba(0, 0, 0, 0.2)"
+shadowMd = "0 4px 8px rgba(0, 0, 0, 0.25)"
+shadowLg = "0 8px 16px rgba(0, 0, 0, 0.3)"
+
+[dark.components]
+buttonBackground = "$colors.primary"
+buttonForeground = "$colors.primaryContent"
+buttonHoverBackground = "$colors.primaryHover"
+buttonBorder = "transparent"
+buttonRadius = "4px"
+buttonHeight = "32px"
+buttonPadding = "0 12px"
+buttonShadow = "$shadows.shadowSm"
+buttonFont = "$text.familyUi"
+buttonFontSize = "$text.sizeMd"
+buttonFontWeight = "$text.weightMedium"
+
+buttonSecondaryBackground = "$colors.surfaceAlt"
+buttonSecondaryForeground = "$colors.foreground"
+buttonSecondaryHoverBackground = "$colors.surfaceStrong"
+
+buttonDisabledBackground = "rgba(255, 255, 255, 0.06)"
+buttonDisabledForeground = "$colors.foregroundFaint"
+
+buttonActiveTransform = "scale(0.98)"
+buttonActiveShadow = "0 1px 2px rgba(0, 0, 0, 0.15)"
+
+inputBackground = "$colors.background"
+inputForeground = "$colors.foreground"
+inputBorder = "$colors.outlineMuted"
+inputFocusBorder = "$colors.focusRing"
+inputRadius = "4px"
+inputPadding = "6px"
+
+radiusSm = "4px"
+radiusMd = "6px"
+radiusLg = "8px"
+
+transitionFast = "167ms cubic-bezier(0.1, 0.9, 0.2, 1)"
+transitionNormal = "250ms cubic-bezier(0.1, 0.9, 0.2, 1)"
+
+borderSubtle = "1px solid rgba(82, 82, 82, 0.6)"
+borderDialog = "1px solid $colors.surfaceAlt"
+separatorWidth = "1px"
+
+headerHeight = "40px"
+toolbarHeight = "38px"
+
+surfacePadding = "8px"
+surfacePaddingLg = "16px"
+modalPadding = "20px"
+
+dialogBackground = "$colors.background"
+dialogBorder = "1px solid $colors.surfaceAlt"
+dialogRadius = "8px"
+dialogShadow = "$shadows.shadowLg"

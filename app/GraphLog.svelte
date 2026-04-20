@@ -93,7 +93,7 @@
                 class:placeholder={row === null}
                 height={rowHeight}
                 width={containerWidth - (row?.location[0] ?? 0) * columnWidth}
-                style="--leftpad: {(row?.padding ?? 0) * columnWidth + columnWidth + 6}px;">
+                style="--leftpad: {(row?.padding ?? 0) * columnWidth + columnWidth - 12}px;">
                 <slot {row} />
             </foreignObject>
 
@@ -110,8 +110,8 @@
 
 <style>
     svg {
-        stroke: var(--ctp-text);
-        fill: var(--ctp-text);
+        stroke: var(--gg-colors-foreground);
+        fill: var(--gg-colors-foreground);
         overflow: hidden;
     }
 
