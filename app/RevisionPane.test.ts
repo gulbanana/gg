@@ -63,9 +63,26 @@ describe("RevisionPane", () => {
         const { default: RevisionPane } = await import("./RevisionPane.svelte");
 
         let mockRevs = createMockRevs();
+        let mockWorkspace = {
+            type: "Workspace" as const,
+            absolute_path: "/test",
+            git_remotes: [],
+            query_choices: {},
+            latest_query: "@",
+            status: { operation_description: "", working_copy: mockRevs.headers[0].id.commit },
+            theme_override: null,
+            mark_unpushed_bookmarks: false,
+            show_revision_numbers: true,
+            expand_diffs: false,
+            track_recent_workspaces: true,
+            ignore_immutable: false,
+            has_external_diff_tool: false,
+            has_external_merge_tool: false,
+        };
         const { container } = render(RevisionPane, {
             props: {
                 revs: mockRevs,
+                workspace: mockWorkspace,
             },
         });
 
