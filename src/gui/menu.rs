@@ -12,7 +12,11 @@ use tauri_plugin_dialog::{DialogExt, FilePath};
 use super::{AppState, handler};
 use gg_lib::messages::{Operand, RepoEvent, RevHeader, StoreRef};
 
-pub fn build_main(app_handle: &AppHandle, recent_items: &[String]) -> tauri::Result<Menu<Wry>> {
+pub fn build_main(
+    app_handle: &AppHandle,
+    recent_items: &[String],
+    open_windows: &[(String, String)],
+) -> tauri::Result<Menu<Wry>> {
     #[cfg(target_os = "macos")]
     let pkg_info = app_handle.package_info();
     #[cfg(target_os = "macos")]
@@ -169,6 +173,24 @@ pub fn build_main(app_handle: &AppHandle, recent_items: &[String]) -> tauri::Res
         ],
     )?;
 
+    #[cfg(target_os = "macos")]
+    let window_submenu = {
+        let submenu = Submenu::new(app_handle, "Window", true)?;
+        submenu.append(&PredefinedMenuItem::minimize(app_handle, None)?)?;
+        if !open_windows.is_empty() {
+            submenu.append(&PredefinedMenuItem::separator(app_handle)?)?;
+            for (label, display_name) in open_windows {
+                let id = format!("window:{label}");
+                if let Ok(item) =
+                    MenuItem::with_id(app_handle, id, display_name, true, None::<&str>)
+                {
+                    submenu.append(&item)?;
+                }
+            }
+        }
+        submenu
+    };
+
     let menu = Menu::with_items(
         app_handle,
         &[
@@ -191,14 +213,20 @@ pub fn build_main(app_handle: &AppHandle, recent_items: &[String]) -> tauri::Res
             &repo_menu,
             &revision_menu,
             &edit_menu,
+            #[cfg(target_os = "macos")]
+            &window_submenu,
         ],
     )?;
 
     Ok(menu)
 }
 
-pub fn rebuild_main(app_handle: &AppHandle, recent_items: Vec<String>) -> Result<()> {
-    let menu = build_main(app_handle, &recent_items)?;
+pub fn rebuild_main(
+    app_handle: &AppHandle,
+    recent_items: Vec<String>,
+    open_windows: &[(String, String)],
+) -> Result<()> {
+    let menu = build_main(app_handle, &recent_items, open_windows)?;
     app_handle.set_menu(menu)?;
     Ok(())
 }
@@ -602,14 +630,21 @@ pub fn handle_context(window: Window, ctx: Operand, ignore_immutable: bool) -> R
 
 pub fn handle_event(window: &Window, event: MenuEvent) -> Result<()> {
     log::debug!("handling event {event:?}");
+    let event_id = event.id.0.as_str();
 
     // we use a shared menu due to cleanup issues
     if !window.is_focused()? {
+        if let Some(window_id) = event_id.strip_prefix("window:") {
+            if let Some(w) = window.app_handle().get_webview_window(window_id) {
+                let _ = w.show();
+                let _ = w.set_focus();
+            }
+        }
         return Ok(());
     }
 
     let target = EventTarget::window(window.label());
-    match event.id.0.as_str() {
+    match event_id {
         "menu_repo_init" => repo_init(window),
         "menu_repo_clone" => repo_clone(window),
         "menu_repo_open" => repo_open(window),
