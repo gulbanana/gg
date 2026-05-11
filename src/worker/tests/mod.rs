@@ -2,10 +2,12 @@ mod queries;
 mod session;
 
 use anyhow::Result;
+use futures_util::TryStreamExt;
 use jj_lib::{
     backend::TreeValue, commit::Commit, ref_name::WorkspaceName, repo::Repo as _,
-    repo_path::RepoPath, revset::RevsetIteratorExt,
+    repo_path::RepoPath, revset::RevsetStreamExt,
 };
+use pollster::FutureExt as _;
 use std::{
     fs::{self, File},
     path::PathBuf,
@@ -85,22 +87,20 @@ pub fn mkid(xid: &str, cid: &str) -> RevId {
 /// Use this to verify commit state after mutations that rewrite commits.
 pub fn get_by_chid(ws: &WorkspaceSession, rev_id: &RevId) -> Result<Commit> {
     use jj_lib::repo::Repo;
-    use jj_lib::revset::RevsetIteratorExt;
 
     let revset = ws.evaluate_revset_str(&rev_id.change.hex)?;
-    let mut iter = revset.as_ref().iter().commits(ws.repo().store()).fuse();
-    match iter.next() {
-        Some(commit) => Ok(commit?),
+    let store = ws.repo().store();
+    let mut stream = revset.as_ref().stream().commits(store);
+    match stream.try_next().block_on()? {
+        Some(commit) => Ok(commit),
         None => anyhow::bail!("Change {} not found", rev_id.change.hex),
     }
 }
 
 pub async fn query_by_chid(ws: &WorkspaceSession<'_>, change_hex: &str) -> Result<RevsResult> {
     let revset = ws.evaluate_revset_str(change_hex)?;
-    let commits: Vec<_> = revset
-        .iter()
-        .commits(ws.repo().store())
-        .collect::<Result<Vec<_>, _>>()?;
+    let store = ws.repo().store();
+    let commits: Vec<_> = revset.stream().commits(store).try_collect().await?;
     let commit = commits
         .first()
         .ok_or_else(|| anyhow::anyhow!("not found"))?;
@@ -225,7 +225,8 @@ async fn wc_path_is_visible() -> Result<()> {
     let commit = ws.get_commit(ws.wc_id())?;
     let value = commit
         .tree()
-        .path_value(RepoPath::from_internal_string("a.txt")?)?;
+        .path_value(RepoPath::from_internal_string("a.txt")?)
+        .await?;
 
     assert!(value.is_resolved());
     assert!(
@@ -290,7 +291,8 @@ async fn transaction_snapshot_path_is_visible() -> Result<()> {
     let commit = ws.get_commit(ws.wc_id())?;
     let value = commit
         .tree()
-        .path_value(RepoPath::from_internal_string("new.txt")?)?;
+        .path_value(RepoPath::from_internal_string("new.txt")?)
+        .await?;
 
     assert!(value.is_resolved());
     assert!(
@@ -333,10 +335,12 @@ async fn snapshot_respects_xdg_gitignore_colocated() -> Result<()> {
     let commit = ws.get_commit(ws.wc_id())?;
     let tracked = commit
         .tree()
-        .path_value(RepoPath::from_internal_string("tracked.txt")?)?;
+        .path_value(RepoPath::from_internal_string("tracked.txt")?)
+        .await?;
     let ignored = commit
         .tree()
-        .path_value(RepoPath::from_internal_string("should_be.ignored")?)?;
+        .path_value(RepoPath::from_internal_string("should_be.ignored")?)
+        .await?;
 
     assert!(tracked.is_resolved() && tracked.first().as_ref().is_some());
     assert!(ignored.is_absent());
@@ -371,10 +375,12 @@ async fn snapshot_respects_xdg_gitignore_internal() -> Result<()> {
     let commit = ws.get_commit(ws.wc_id())?;
     let tracked = commit
         .tree()
-        .path_value(RepoPath::from_internal_string("tracked.txt")?)?;
+        .path_value(RepoPath::from_internal_string("tracked.txt")?)
+        .await?;
     let ignored = commit
         .tree()
-        .path_value(RepoPath::from_internal_string("should_be.ignored")?)?;
+        .path_value(RepoPath::from_internal_string("should_be.ignored")?)
+        .await?;
 
     assert!(tracked.is_resolved() && tracked.first().as_ref().is_some());
     assert!(ignored.is_absent());

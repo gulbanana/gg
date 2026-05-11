@@ -2,6 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use anyhow::{Context, Result, anyhow};
 use async_trait::async_trait;
+use futures_util::TryStreamExt;
 use indexmap::IndexMap;
 use itertools::Itertools;
 use jj_lib::{
@@ -11,10 +12,11 @@ use jj_lib::{
     merged_tree::MergedTree,
     object_id::ObjectId as ObjectIdTrait,
     repo::Repo,
-    revset::{RevsetExpression, RevsetIteratorExt},
+    revset::{RevsetExpression, RevsetStreamExt},
     rewrite::{self, RebaseOptions, RebasedCommit},
     transaction::Transaction,
 };
+use pollster::FutureExt as _;
 
 use super::precondition;
 
@@ -768,7 +770,7 @@ mod tests {
         let tree = wc.tree();
         let repo_path = jj_lib::repo_path::RepoPath::from_internal_string("small.txt")?;
 
-        match tree.path_value(&repo_path)?.into_resolved() {
+        match tree.path_value(&repo_path).await?.into_resolved() {
             Ok(Some(jj_lib::backend::TreeValue::File { id, .. })) => {
                 let mut reader = ws.repo().store().read_file(&repo_path, &id).await?;
                 let mut content = Vec::new();
@@ -813,7 +815,7 @@ mod tests {
         let tree = wc.tree();
         let repo_path = jj_lib::repo_path::RepoPath::from_internal_string("hunk_test.txt")?;
 
-        match tree.path_value(&repo_path)?.into_resolved() {
+        match tree.path_value(&repo_path).await?.into_resolved() {
             Ok(Some(jj_lib::backend::TreeValue::File { id, .. })) => {
                 let mut reader = ws.repo().store().read_file(&repo_path, &id).await?;
                 let mut content = Vec::new();
@@ -1927,11 +1929,13 @@ async fn disinherit_children(
     let mut external_children: Vec<Commit> = Vec::new();
     for target in range {
         let children_expr = RevsetExpression::commit(target.id().clone()).children();
+        let store = ws.repo().store().clone();
         let children: Vec<Commit> = children_expr
             .evaluate(ws.repo())?
-            .iter()
-            .commits(ws.repo().store())
-            .try_collect()?;
+            .stream()
+            .commits(&store)
+            .try_collect()
+            .block_on()?;
 
         for child in children {
             if !range_ids.contains(child.id()) {
@@ -1972,8 +1976,9 @@ async fn disinherit_children(
             );
         let new_child_parents: Result<Vec<CommitId>, _> = new_child_parents_expression
             .evaluate(tx.base_repo().as_ref())?
-            .iter()
-            .collect();
+            .stream()
+            .try_collect()
+            .block_on();
 
         rebased_commit_ids.insert(
             child_commit.id().clone(),
