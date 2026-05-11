@@ -234,7 +234,6 @@ impl WorkerSession {
                 source_url,
                 None, // push_url = fetch_url
                 gix::remote::fetch::Tags::Included,
-                &StringExpression::all(),
             )
             .context("add_remote(origin)")?;
             tx.commit("add git remote origin").await?;
@@ -277,7 +276,7 @@ impl WorkerSession {
                     .fetch(remote_name, refspecs, cb, None, None)
                     .context("Failed to fetch from remote")?;
 
-                fetcher.import_refs().context("Failed to import refs")?;
+                pollster::block_on(fetcher.import_refs()).context("Failed to import refs")?;
 
                 // find HEAD if at all possible
                 let workspace_name = workspace.workspace_name().to_owned();

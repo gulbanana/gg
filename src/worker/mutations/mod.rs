@@ -7,6 +7,7 @@ use std::sync::Arc;
 
 use anyhow::{Context, Error, Result};
 use async_trait::async_trait;
+use futures_util::TryStreamExt;
 use itertools::Itertools;
 use jj_cli::{
     git_util::load_git_import_options,
@@ -14,29 +15,30 @@ use jj_cli::{
     ui::Ui,
 };
 use jj_lib::{
-    backend::TreeValue,
+    backend::{CommitId, TreeValue},
     conflicts::{self, ConflictMarkerStyle, ConflictMaterializeOptions, MaterializedTreeValue},
     files::FileMergeHunkLevel,
     git::{
-        self, GitBranchPushTargets, GitFetchRefExpression, GitPushOptions, GitSettings,
+        self, GitFetchRefExpression, GitPushOptions, GitPushRefTargets, GitSettings,
         GitSubprocessOptions, REMOTE_NAME_FOR_LOCAL_GIT_REPO,
     },
-    merge::SameChange,
+    merge::{Diff, SameChange},
     merged_tree::MergedTree,
     object_id::ObjectId as ObjectIdTrait,
     op_walk,
     ref_name::WorkspaceNameBuf,
     ref_name::{GitRefNameBuf, RefNameBuf, RemoteName, RemoteNameBuf, RemoteRefSymbol},
-    refs::{self, BookmarkPushAction, BookmarkPushUpdate, LocalAndRemoteRef},
+    refs::{self, LocalAndRemoteRef, RefPushAction},
     repo::Repo,
     repo_path::RepoPath,
-    revset::{self, RevsetIteratorExt},
+    revset::{self, RevsetStreamExt},
     rewrite::{self},
     store::Store,
     str_util::StringExpression,
     tree_merge::MergeOptions,
     workspace_store::{SimpleWorkspaceStore, WorkspaceStore as _},
 };
+use pollster::FutureExt as _;
 use tokio::io::AsyncReadExt;
 
 use super::{
@@ -163,7 +165,7 @@ impl Mutation for ExternalResolve {
         )
         .context("failed to load merge editor config")?;
 
-        let (new_tree, _partial) = match merge_editor.edit_files(&ui, &tree, &[repo_path]) {
+        let (new_tree, _partial) = match merge_editor.edit_files(&ui, &tree, &[repo_path]).await {
             Ok(result) => result,
             Err(ConflictResolveError::EmptyOrUnchanged) => {
                 return Ok(MutationResult::Unchanged);
@@ -264,7 +266,7 @@ impl Mutation for GitFetch {
                         .fetch(RemoteName::new(remote_name), refspecs, cb, None, None)
                         .context("failed to fetch")?;
 
-                    fetcher.import_refs().context("failed to import refs")?;
+                    pollster::block_on(fetcher.import_refs()).context("failed to import refs")?;
 
                     Ok(())
                 },
@@ -298,7 +300,7 @@ impl Mutation for GitPush {
         let mut tx = ws.start_transaction().await?;
 
         // determine bookmarks to push, recording the old and new commits
-        let mut remote_bookmark_updates: Vec<(&str, Vec<(RefNameBuf, refs::BookmarkPushUpdate)>)> =
+        let mut remote_bookmark_updates: Vec<(&str, Vec<(RefNameBuf, Diff<Option<CommitId>>)>)> =
             Vec::new();
         let remote_bookmark_refs: Vec<_> = match &self.refspec {
             GitRefspec::AllBookmarks { remote_name } => {
@@ -408,7 +410,7 @@ impl Mutation for GitPush {
         let mut new_heads = vec![];
         for (_, bookmark_updates) in &mut remote_bookmark_updates {
             for (_, update) in bookmark_updates {
-                if let Some(new_target) = &update.new_target {
+                if let Some(new_target) = &update.after {
                     new_heads.push(new_target.clone());
                 }
             }
@@ -423,11 +425,13 @@ impl Mutation for GitPush {
             old_heads.push(ws.repo().store().root_commit_id().clone());
         }
 
-        for commit in revset::walk_revs(ws.repo(), &new_heads, &old_heads)?
-            .iter()
-            .commits(ws.repo().store())
-        {
-            let commit = commit?;
+        let store = ws.repo().store().clone();
+        let commits: Vec<_> = revset::walk_revs(ws.repo(), &new_heads, &old_heads)?
+            .stream()
+            .commits(&store)
+            .try_collect()
+            .block_on()?;
+        for commit in commits {
             let mut reasons = vec![];
             if commit.description().is_empty() {
                 reasons.push("it has no description");
@@ -485,7 +489,10 @@ impl Mutation for GitPush {
 
         // push to each remote
         for (remote_name, branch_updates) in remote_bookmark_updates.into_iter() {
-            let targets = GitBranchPushTargets { branch_updates };
+            let targets = GitPushRefTargets {
+                bookmarks: branch_updates,
+                tags: Vec::new(),
+            };
 
             let result = auth_ctx.with_callbacks(
                 Some(event_sink.clone()),
@@ -494,7 +501,7 @@ impl Mutation for GitPush {
                     let mut subprocess_options = subprocess_options.clone();
                     subprocess_options.environment = env;
 
-                    git::push_branches(
+                    git::push_refs(
                         tx.repo_mut(),
                         subprocess_options,
                         RemoteName::new(remote_name),
@@ -588,10 +595,10 @@ impl Mutation for UndoOperation {
         ws: &mut WorkspaceSession,
         _options: &MutationOptions,
     ) -> Result<MutationResult> {
-        let head_op = op_walk::resolve_op_with_repo(ws.repo(), "@")?; // XXX this should be behind an abstraction, maybe reused in snapshot
-        let mut parent_ops = head_op.parents();
+        let head_op = op_walk::resolve_op_with_repo(ws.repo(), "@").await?; // XXX this should be behind an abstraction, maybe reused in snapshot
+        let mut parent_ops = head_op.parents().await?.into_iter();
 
-        let Some(parent_op) = parent_ops.next().transpose()? else {
+        let Some(parent_op) = parent_ops.next() else {
             precondition!("Cannot undo repo initialization");
         };
 
@@ -715,7 +722,7 @@ async fn read_file_content(
     tree: &MergedTree,
     path: &RepoPath,
 ) -> Result<Vec<u8>> {
-    let entry = tree.path_value(path)?;
+    let entry = tree.path_value(path).await?;
     match entry.into_resolved() {
         Ok(Some(TreeValue::File { id, .. })) => {
             let mut reader = store.read_file(path, &id).await?;
@@ -730,7 +737,7 @@ async fn read_file_content(
             match conflicts::materialize_tree_value(
                 store,
                 path,
-                tree.path_value(path)?,
+                tree.path_value(path).await?,
                 tree.labels(),
             )
             .await?
@@ -762,19 +769,17 @@ fn classify_bookmark_push(
     bookmark_name: &str,
     remote_name: &str,
     targets: LocalAndRemoteRef,
-) -> Result<Option<BookmarkPushUpdate>, String> {
-    let push_action = refs::classify_bookmark_push_action(targets);
+) -> Result<Option<Diff<Option<CommitId>>>, String> {
+    let push_action = refs::classify_ref_push_action(targets);
     match push_action {
-        BookmarkPushAction::AlreadyMatches => Ok(None),
-        BookmarkPushAction::Update(update) => Ok(Some(update)),
-        BookmarkPushAction::LocalConflicted => {
-            Err(format!("Bookmark {} is conflicted.", bookmark_name))
-        }
-        BookmarkPushAction::RemoteConflicted => Err(format!(
+        RefPushAction::AlreadyMatches => Ok(None),
+        RefPushAction::Update(update) => Ok(Some(update)),
+        RefPushAction::LocalConflicted => Err(format!("Bookmark {} is conflicted.", bookmark_name)),
+        RefPushAction::RemoteConflicted => Err(format!(
             "Bookmark {}@{} is conflicted. Try fetching first.",
             bookmark_name, remote_name
         )),
-        BookmarkPushAction::RemoteUntracked => Err(format!(
+        RefPushAction::RemoteUntracked => Err(format!(
             "Non-tracking remote bookmark {}@{} exists. Try tracking it first.",
             bookmark_name, remote_name
         )),
