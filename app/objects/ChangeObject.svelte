@@ -12,9 +12,13 @@
     import { mutate } from "../ipc";
     import ActionLink from "../controls/ActionLink.svelte";
 
+    import { createEventDispatcher } from "svelte";
+
     export let headers: RevHeader[] | null;
     export let change: RevChange;
     export let selected: boolean;
+
+    let dispatch = createEventDispatcher<{ toggleCollapse: void }>();
 
     let operand: Operand | null = headers ? { type: "Change", headers, path: change.path, hunk: null } : null;
 
@@ -40,6 +44,10 @@
 
     function onSelect() {
         changeSelectEvent.set(change);
+        // When expand_diffs is on, toggle collapse state on every click
+        if ($repoConfigEvent.type === "Workspace" && $repoConfigEvent.expand_diffs) {
+            dispatch("toggleCollapse");
+        }
     }
 
     function onExternalDiff() {

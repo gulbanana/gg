@@ -22,6 +22,9 @@ track-recent-workspaces = true
 # When set, bookmarks that are local-only or remote-only will be visually indicated.
 mark-unpushed-bookmarks = true
 
+# When set, the diff pane will be expanded by default showing full diffs.
+expand-diffs = false
+
 # "light" or "dark". If empty, your OS settings will be used.
 theme-override = ""
 
