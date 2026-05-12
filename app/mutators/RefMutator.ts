@@ -74,7 +74,8 @@ export default class RefMutator {
     };
 
     onRename = async (options?: MutationOptions) => {
-        let response = await getInput("Rename Bookmark", "", ["Bookmark Name"]);
+        let currentName = this.#ref.type === "Tag" ? this.#ref.tag_name : this.#ref.bookmark_name;
+        let response = await getInput("Rename Bookmark", "", [{ label: "Bookmark Name", choices: [currentName || ""] }]);
         if (response) {
             let new_name = response["Bookmark Name"];
             mutate<RenameBookmark>("rename_bookmark", {
