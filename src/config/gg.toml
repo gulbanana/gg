@@ -22,6 +22,9 @@ track-recent-workspaces = true
 # When set, bookmarks that are local-only or remote-only will be visually indicated.
 mark-unpushed-bookmarks = true
 
+# Show revision numbers (change IDs and commit IDs) in the log pane.
+show-revision-numbers = true
+
 # "light" or "dark". If empty, your OS settings will be used.
 theme-override = ""
 

@@ -706,6 +706,7 @@ impl WorkspaceSession<'_> {
             status: self.format_status(),
             theme_override: self.data.workspace_settings.ui_theme_override(),
             mark_unpushed_bookmarks: self.data.workspace_settings.ui_mark_unpushed_bookmarks(),
+            show_revision_numbers: self.data.workspace_settings.ui_show_revision_numbers(),
             track_recent_workspaces: self.data.workspace_settings.ui_track_recent_workspaces(),
             ignore_immutable: self.session.ignore_immutable,
             has_external_diff_tool,

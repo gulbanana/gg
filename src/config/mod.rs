@@ -36,6 +36,7 @@ pub trait GGSettings {
     fn query_auto_snapshot(&self) -> Option<bool>;
     fn ui_theme_override(&self) -> Option<String>;
     fn ui_mark_unpushed_bookmarks(&self) -> bool;
+    fn ui_show_revision_numbers(&self) -> bool;
     fn ui_track_recent_workspaces(&self) -> bool;
     #[allow(dead_code)]
     fn ui_recent_workspaces(&self) -> Vec<String>;
@@ -69,6 +70,10 @@ impl GGSettings for UserSettings {
             self.get_bool("gg.ui.mark-unpushed-branches")
                 .unwrap_or(true),
         )
+    }
+
+    fn ui_show_revision_numbers(&self) -> bool {
+        self.get_bool("gg.ui.show-revision-numbers").unwrap_or(true)
     }
 
     fn ui_track_recent_workspaces(&self) -> bool {

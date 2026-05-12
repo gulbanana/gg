@@ -130,7 +130,7 @@
     <h2 slot="header" class="header">
         <span class="title">
             {#if singleton}
-                <IdSpan selectable id={newest.id.change} /> | <IdSpan selectable id={newest.id.commit} />
+                <IdSpan ignoreSetting selectable id={newest.id.change} /> | <IdSpan ignoreSetting selectable id={newest.id.commit} />
                 {#if newest.is_working_copy}
                     | Working copy
                 {/if}
