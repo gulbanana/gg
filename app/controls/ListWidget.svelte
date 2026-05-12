@@ -178,13 +178,13 @@
     .listbox {
         overflow-x: hidden;
         overflow-y: auto;
-        scrollbar-color: var(--ctp-text) var(--ctp-crust);
+        scrollbar-color: var(--gg-colors-foreground) var(--gg-colors-surfaceDeep);
         display: grid;
         outline: none;
     }
 
     .listbox:focus-visible {
-        outline: 2px solid var(--ctp-lavender);
+        outline: 2px solid var(--gg-colors-focusRing);
         border-radius: 3px;
     }
 
@@ -193,11 +193,11 @@
     }
 
     .listbox::-webkit-scrollbar-thumb {
-        background-color: var(--ctp-text);
+        background-color: var(--gg-colors-foreground);
         border-radius: 6px;
     }
 
     .listbox::-webkit-scrollbar-track {
-        background-color: var(--ctp-crust);
+        background-color: var(--gg-colors-surfaceDeep);
     }
 </style>

@@ -50,6 +50,11 @@
         });
     }
 
+    function splitPath(p: string): [string, string] {
+        let sep = Math.max(p.lastIndexOf("/"), p.lastIndexOf("\\"));
+        return sep >= 0 ? [p.slice(0, sep), p.slice(sep)] : ["", p];
+    }
+
     function onExternalResolve() {
         if (!headers) return;
         mutate<ExternalResolve>("external_resolve", {
@@ -70,8 +75,11 @@
     let:hint>
     <Zone {operand} let:target>
         <div class="layout" class:target>
+            <span class="chevron" class:expanded={selected}>
+                <Icon name="chevron-right" />
+            </span>
             <Icon name={icon} state={context ? null : state} />
-            <span>{hint ?? change.path.relative_path}</span>
+            <span class="path-prefix">{splitPath(hint ?? change.path.relative_path)[0]}</span><span class="path-suffix">{splitPath(hint ?? change.path.relative_path)[1]}</span>
             {#if hasMergeTool && change.has_conflict && operand}
                 <ActionWidget tip="resolve in merge tool" onClick={onExternalResolve}>
                     <Icon name="external-link" /> Resolve
@@ -90,16 +98,42 @@
         height: 30px;
         display: flex;
         align-items: center;
-        gap: 6px;
+        gap: 3px;
         padding-left: 3px;
+        border-bottom: 1px solid var(--gg-colors-surface);
     }
 
-    .layout span {
-        flex: 1;
+    .path-prefix {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        flex-shrink: 1;
+        min-width: 0;
+    }
+
+    .path-suffix {
+        white-space: nowrap;
+        flex-shrink: 0;
+    }
+
+    .chevron {
+        display: flex;
+        align-items: center;
+        flex: none;
+        transition: transform 150ms ease;
+        color: var(--gg-colors-foregroundSubtle);
+    }
+
+    :global(.selected) .chevron {
+        color: var(--gg-colors-selectionForeground);
+    }
+
+    .chevron.expanded {
+        transform: rotate(90deg);
     }
 
     .layout.target {
-        background: var(--ctp-flamingo);
-        color: black;
+        background: var(--gg-colors-accent);
+        color: var(--gg-colors-foreground);
     }
 </style>

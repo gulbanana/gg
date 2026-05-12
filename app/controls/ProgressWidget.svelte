@@ -35,12 +35,12 @@
         height: 24px;
         appearance: none;
 
-        background: var(--ctp-flamingo);
+        background: var(--gg-colors-selectionBackground);
 
         border-width: 1px;
         border-radius: 3px;
-        border-color: var(--ctp-overlay0);
-        box-shadow: 2px 2px var(--ctp-text);
+        border-color: var(--gg-colors-outline);
+        box-shadow: 2px 2px var(--gg-colors-foreground);
     }
 
     progress::-webkit-progress-bar {
@@ -50,17 +50,17 @@
 
     progress:indeterminate {
         animation: progress-indeterminate 2s infinite linear;
-        background: linear-gradient(90deg, var(--ctp-flamingo) 25%, var(--ctp-maroon) 50%, var(--ctp-flamingo) 75%);
+        background: linear-gradient(90deg, var(--gg-colors-primary) 25%, var(--gg-colors-primaryHover) 50%, var(--gg-colors-primary) 75%);
         background-size: 200% 100%;
     }
 
     progress::-webkit-progress-value {
-        background: var(--ctp-maroon);
+        background: var(--gg-colors-primaryHover);
         border-radius: 3px;
     }
 
     progress::-moz-progress-bar {
-        background: var(--ctp-maroon);
+        background: var(--gg-colors-primaryHover);
         border-radius: 3px;
     }
 

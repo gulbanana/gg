@@ -25,6 +25,7 @@ pub struct AppState {
     http_client: reqwest::Client,
     pub worker_tx: Sender<SessionEvent>,
     pub progress_tx: broadcast::Sender<SseEvent>,
+    pub theme_style: String,
     shutdown_tx: Arc<Mutex<Option<oneshot::Sender<()>>>>,
     clients: Arc<Mutex<HashMap<String, Instant>>>,
     has_ever_connected: Arc<Mutex<bool>>,
@@ -39,12 +40,14 @@ impl AppState {
         progress_tx: broadcast::Sender<SseEvent>,
         shutdown_tx: oneshot::Sender<()>,
         client_timeout: Option<Duration>,
+        theme_style: String,
     ) -> Self {
         Self {
             context: Arc::new(context),
             http_client: reqwest::Client::new(),
             worker_tx,
             progress_tx,
+            theme_style,
             shutdown_tx: Arc::new(Mutex::new(Some(shutdown_tx))),
             clients: Arc::new(Mutex::new(HashMap::new())),
             has_ever_connected: Arc::new(Mutex::new(false)),

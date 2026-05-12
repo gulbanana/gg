@@ -18,6 +18,7 @@
         pointer-events: none;
         height: 16px;
         width: 16px;
+        min-width: 16px;
         fill: none;
         stroke: currentColor;
         stroke-linecap: round;
@@ -26,14 +27,14 @@
     }
 
     .add {
-        stroke: var(--ctp-green);
+        stroke: var(--gg-colors-added);
     }
 
     .change {
-        color: var(--ctp-blue);
+        stroke: var(--gg-colors-modified);
     }
 
     .remove {
-        color: var(--ctp-red);
+        stroke: var(--gg-colors-removed);
     }
 </style>

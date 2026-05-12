@@ -23,6 +23,7 @@
 pub mod askpass;
 pub mod config;
 pub mod messages;
+pub mod theme;
 pub mod web;
 pub mod worker;
 

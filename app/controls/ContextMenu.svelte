@@ -166,15 +166,15 @@
     .context-menu {
         position: fixed;
         z-index: 1000;
-        background: var(--ctp-surface0);
-        border: 1px solid var(--ctp-overlay0);
+        background: var(--gg-colors-surface);
+        border: 1px solid var(--gg-colors-outline);
         border-radius: 3px;
-        box-shadow: 2px 2px var(--ctp-text);
+        box-shadow: 2px 2px var(--gg-colors-foreground);
     }
 
     hr {
         border: none;
-        border-top: 1px solid var(--ctp-overlay0);
+        border-top: 1px solid var(--gg-colors-outline);
         margin: 2px 0;
     }
 
@@ -186,18 +186,18 @@
 
         text-align: left;
         background: none;
-        color: var(--ctp-text);
-        font-family: var(--stack-industrial);
+        color: var(--gg-colors-foreground);
+        font-family: var(--gg-text-familyDisplay);
 
         &:disabled {
-            color: var(--ctp-overlay0);
+            color: var(--gg-colors-outline);
         }
 
         &:not(:disabled) {
             cursor: pointer;
             &:hover {
-                background: var(--ctp-flamingo);
-                color: black;
+                background: var(--gg-colors-selectionBackground);
+                color: var(--gg-colors-selectionForeground);
             }
         }
     }

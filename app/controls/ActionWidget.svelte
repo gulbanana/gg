@@ -5,6 +5,7 @@
     export let onClick: (event: MouseEvent) => void;
     export let safe: boolean = false;
     export let secondary: boolean = false;
+    export let primary: boolean = false;
     export let disabled: boolean = false;
 
     $: isDisabled = disabled || (!safe && $hasModal);
@@ -14,6 +15,7 @@
     disabled={isDisabled}
     class:safe
     class:secondary
+    class:primary
     on:click|stopPropagation={isDisabled ? undefined : onClick}
     on:dragenter={dragOverWidget}
     on:dragover={dragOverWidget}
@@ -23,73 +25,67 @@
 
 <style>
     button {
-        height: 24px;
-        font-size: 16px;
-        padding: 1px 6px;
+        height: var(--gg-components-buttonHeight);
+        font-size: 14px;
+        padding: var(--gg-components-buttonPadding);
 
         outline: none;
         margin: 0;
-        border-width: 1px;
-        border-radius: 3px;
-        border-color: var(--ctp-overlay0);
-        box-shadow: 2px 2px var(--ctp-overlay0);
+        border: var(--gg-components-buttonBorder);
+        border-radius: var(--gg-components-buttonRadius);
+        box-shadow: var(--gg-components-buttonShadow);
 
-        font-family: var(--stack-industrial);
+        font-family: var(--gg-text-familyUi);
         display: flex;
         align-items: center;
         gap: 3px;
 
         cursor: pointer;
+        transition: background var(--gg-components-transitionFast), box-shadow var(--gg-components-transitionFast), transform var(--gg-components-transitionFast);
 
-        /* unthemed, but it looks good in practice and people are used to it */
-        color: black;
-        background: var(--ctp-flamingo);
+        color: var(--gg-components-buttonForeground);
+        background: var(--gg-components-buttonBackground);
     }
 
     button:not(:disabled) {
         &:hover {
-            background: var(--ctp-maroon);
+            background: var(--gg-components-buttonHoverBackground);
+            box-shadow: var(--gg-shadows-shadowMd);
         }
         &:focus-visible {
-            border-color: var(--ctp-lavender);
+            border-color: var(--gg-colors-focusRing);
             border-width: 2px;
             padding: 0px 5px;
             text-decoration: underline;
         }
         &:active {
-            margin: 1px 0px 0px 1px;
-            padding: 1px 5px 0px 6px;
-            box-shadow: 1px 1px var(--ctp-overlay0);
+            margin: var(--active-margin);
+            transform: var(--gg-components-buttonActiveTransform);
+            box-shadow: var(--gg-components-buttonActiveShadow);
             &:focus-visible {
                 padding: 1px 4px 0px 5px;
             }
         }
     }
 
-    button.safe {
-        background: var(--ctp-sapphire);
+    button.primary {
+        color: var(--gg-colors-primaryContent);
+        background: var(--gg-colors-primary);
         &:hover {
-            background: var(--ctp-teal);
-        }
-        &:active {
-            border-right-color: var(--ctp-teal);
-            border-bottom-color: var(--ctp-teal);
+            background: var(--gg-components-buttonHoverBackground);
         }
     }
 
     button.secondary {
-        background: var(--ctp-surface2);
+        color: var(--gg-components-buttonSecondaryForeground);
+        background: var(--gg-components-buttonSecondaryBackground);
         &:hover {
-            background: var(--ctp-overlay2);
-        }
-        &:active {
-            border-right-color: var(--ctp-overlay2);
-            border-bottom-color: var(--ctp-overlay2);
+            background: var(--gg-components-buttonSecondaryHoverBackground);
         }
     }
 
     button:disabled {
-        background: var(--ctp-mantle);
-        color: var(--ctp-overlay2);
+        background: var(--gg-components-buttonDisabledBackground);
+        color: var(--gg-components-buttonDisabledForeground);
     }
 </style>

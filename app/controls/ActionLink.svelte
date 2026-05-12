@@ -19,9 +19,9 @@
         background: none;
         border: none;
 
-        color: var(--ctp-sapphire);
-        font-family: var(--stack-industrial);
-        font-size: 16px;
+        color: var(--gg-colors-success);
+        font-family: var(--gg-text-familyDisplay);
+        font-size: var(--gg-text-sizeLg);
 
         display: flex;
         align-items: center;
@@ -30,11 +30,11 @@
 
     button:not(:disabled) {
         &:hover {
-            color: var(--ctp-teal);
+            color: var(--gg-colors-success);
         }
         &:focus-visible {
             text-decoration: underline;
-            outline: solid 2px var(--ctp-lavender);
+            outline: solid 2px var(--gg-colors-focusRing);
             border-radius: 3px;
         }
         &:active {
@@ -43,7 +43,7 @@
     }
 
     button:disabled {
-        background: var(--ctp-mantle);
-        color: var(--ctp-overlay2);
+        background: var(--gg-colors-surface);
+        color: var(--gg-colors-foregroundSubtle);
     }
 </style>

@@ -8,7 +8,9 @@
 </script>
 
 <ModalDialog {title} error={severe} on:cancel={() => onClose?.()}>
-    <slot />
+    <div class="error-content">
+        <slot />
+    </div>
 
     <svelte:fragment slot="commands">
         {#if onClose}
@@ -16,3 +18,9 @@
         {/if}
     </svelte:fragment>
 </ModalDialog>
+
+<style>
+    .error-content {
+        grid-column: 1/3;
+    }
+</style>

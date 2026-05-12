@@ -108,10 +108,9 @@
             <span><CheckWidget id="field-{field.label}" checked={field.choices[0] == "true"} /></span>
         {/if}
     {/each}
-    <div class="separator"></div>
     <svelte:fragment slot="commands">
-        <ActionWidget safe onClick={onEnter}>Enter</ActionWidget>
-        <ActionWidget safe onClick={onCancel}>Cancel</ActionWidget>
+        <ActionWidget safe secondary onClick={onCancel}>Cancel</ActionWidget>
+        <ActionWidget safe primary onClick={onEnter}>Enter</ActionWidget>
     </svelte:fragment>
 </ModalDialog>
 
@@ -122,10 +121,6 @@
     }
 
     label:first-child {
-        margin-top: 1em;
-    }
-
-    .separator {
-        height: 1em;
+        align-self: center;
     }
 </style>

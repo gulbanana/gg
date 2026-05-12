@@ -34,8 +34,11 @@
 
 <style>
     select {
-        padding-left: 3px;
+        padding-left: 6px;
         cursor: pointer;
+        width: 100%;
+        height: var(--gg-components-buttonHeight);
+        font-size: 14px;
 
         &:focus-visible {
             padding-left: 2px;
@@ -50,8 +53,8 @@
 
     .wrapper > :global(:last-child) {
         position: absolute;
-        right: 3px;
-        height: 32px;
+        right: 6px;
+        height: var(--gg-components-buttonHeight);
     }
 
     select {
@@ -70,7 +73,7 @@
         }
 
         select {
-            height: 30px;
+            height: 28px;
             min-width: 150px;
             padding-right: 3px;
 
@@ -105,7 +108,7 @@
         }
 
         .separator {
-            border-color: var(--ctp-overlay0);
+            border-color: var(--gg-colors-outline);
             margin: 6px 0;
         }
     }

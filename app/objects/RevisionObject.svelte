@@ -139,13 +139,14 @@
         grid-template-columns: auto 1fr auto;
         align-items: baseline;
         gap: 6px;
+        border-bottom: 1px solid var(--gg-colors-surface);
 
         /* skip past svg lines when used in a graph */
         padding-left: var(--leftpad);
     }
 
     .layout.target {
-        background: var(--ctp-flamingo);
+        background: var(--gg-colors-accent);
         color: black;
     }
 
@@ -155,16 +156,18 @@
 
     .desc {
         grid-area: desc;
+        font-family: var(--gg-text-familyUi);
     }
 
     .desc.indescribable {
-        color: var(--ctp-subtext0);
+        color: var(--gg-colors-foregroundMuted);
     }
 
     .email {
         display: none;
         grid-area: email;
         text-align: right;
+        font-family: var(--gg-text-familyUi);
     }
 
     .refs {
@@ -173,7 +176,7 @@
         display: flex;
         justify-content: end;
         gap: 3px;
-        color: var(--ctp-text);
+        color: var(--gg-colors-foreground);
     }
 
     /* multiple elements can have these */

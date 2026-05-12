@@ -378,20 +378,23 @@
 </script>
 
 <Pane>
-    <div slot="header" class="log-selector" class:editable={isCustom || isDeletable}>
-        <SelectWidget options={choices} bind:value={entered_query} on:change={reloadLog}>
-            <svelte:fragment let:option>{option.label}</svelte:fragment>
-        </SelectWidget>
+    <div slot="header" class="log-selector">
+        <div class="title">Revset</div>
+        <div class="selector-row">
+            <SelectWidget options={choices} bind:value={entered_query} on:change={reloadLog}>
+                <svelte:fragment let:option>{option.label}</svelte:fragment>
+            </SelectWidget>
+            {#if isCustom}
+                <ActionWidget secondary tip="Save revset" onClick={handleSavePreset}>
+                    <Icon name="save" /> Save
+                </ActionWidget>
+            {:else if isDeletable}
+                <ActionWidget secondary tip="Delete revset" onClick={handleDeletePreset}>
+                    <Icon name="trash-2" state="remove" /> <span class="delete">Delete</span>
+                </ActionWidget>
+            {/if}
+        </div>
         <input type="text" bind:value={entered_query} on:change={reloadLog} />
-        {#if isCustom}
-            <ActionWidget secondary tip="Save revset" onClick={handleSavePreset}>
-                <Icon name="save" />
-            </ActionWidget>
-        {:else if isDeletable}
-            <ActionWidget secondary tip="Delete revset" onClick={handleDeletePreset}>
-                <Icon name="x-square" />
-            </ActionWidget>
-        {/if}
     </div>
 
     <ListWidget
@@ -410,11 +413,13 @@
                 rows={graphRows}
                 let:row>
                 {#if row}
-                    <RevisionObject
-                        header={row.revision}
-                        selected={isInSelectedRange(row, $revisionSelectEvent)}
-                        onClick={handleClick}
-                        onShiftClick={handleShiftClick} />
+                    <div class="log-entry">
+                        <RevisionObject
+                            header={row.revision}
+                            selected={isInSelectedRange(row, $revisionSelectEvent)}
+                            onClick={handleClick}
+                            onShiftClick={handleShiftClick} />
+                    </div>
                 {/if}
             </GraphLog>
         {:else}
@@ -425,23 +430,43 @@
 
 <style>
     .log-selector {
-        height: 100%;
-        display: grid;
-        grid-template-columns: auto 1fr;
-        gap: 3px;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
 
-        &.editable {
-            grid-template-columns: auto 1fr auto;
-            & > :global(*:last-child) {
-                height: unset;
-                align-self: stretch;
-                padding: 1px 3px;
-            }
+    .selector-row {
+        display: flex;
+        gap: 4px;
+
+        & :global(.wrapper) {
+            flex: 1;
         }
     }
 
+    .delete {
+        color: var(--gg-colors-error);
+    }
+
+     /* override some ListWidget styles */
+    .title {
+        font-family: var(--gg-text-familyUi);
+        font-size: 0.8em;
+        font-weight: 600;
+        text-transform: uppercase;
+        color: var(--gg-colors-foregroundSubtle);
+        padding: 2px 3px;
+    }
+
     input {
-        font-family: var(--stack-code);
+        font-family: var(--gg-text-familyCode);
         font-size: 14px;
+        width: 100%;
+        box-sizing: border-box;
+        margin: 3px 0;
+    }
+
+    .log-entry {
+        padding-left: 24px;
     }
 </style>

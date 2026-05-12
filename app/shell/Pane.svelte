@@ -13,15 +13,18 @@
 
 <style>
     section {
-        display: grid;
-        grid-template-rows: 40px 1fr;
-        grid-template-columns: 100%;
+        display: flex;
+        flex-direction: column;
+        height: 100%;
         overflow: hidden;
+        background: var(--gg-colors-background);
     }
 
     .header {
-        border-bottom: 1px solid var(--ctp-overlay0);
+        border-bottom: var(--gg-components-borderSubtle);
+        font-family: var(--gg-text-familyUi);
         padding: 6px 6px 3px 6px;
+        background: var(--gg-colors-background);
     }
 
     .body {

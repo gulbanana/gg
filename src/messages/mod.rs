@@ -220,7 +220,6 @@ pub enum RepoConfig {
         query_choices: HashMap<String, String>,
         latest_query: String,
         status: RepoStatus,
-        theme_override: Option<String>,
         mark_unpushed_bookmarks: bool,
         track_recent_workspaces: bool,
         ignore_immutable: bool,

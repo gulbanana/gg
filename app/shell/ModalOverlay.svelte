@@ -23,11 +23,12 @@
         bottom: 33px;
         left: 0;
 
-        background: rgb(var(--ctp-overlay1-rgb) / 40%);
+        background: var(--gg-colors-overlayBackground);
+        backdrop-filter: blur(var(--gg-colors-overlayBackdropBlur));
         pointer-events: auto;
 
         display: grid;
         grid-template-columns: minmax(16.6%, 1fr) auto minmax(16.6%, 1fr);
-        grid-template-rows: 1fr auto 2fr;
+        grid-template-rows: 1fr auto 1fr;
     }
 </style>

@@ -9,7 +9,7 @@
 
 <style>
     input:focus-visible {
-        outline: 1px solid var(--ctp-lavender);
+        outline: 1px solid var(--gg-colors-focusRing);
         outline-offset: 0;
     }
 </style>

@@ -41,32 +41,40 @@
 
 <style>
     #dialog-chrome {
+        --modal-padding: 12px;
+
         grid-area: 2/2/2/2;
 
-        background: var(--ctp-mantle);
-        border-radius: 9px;
-        border: 3px solid var(--ctp-overlay1);
+        background: var(--gg-colors-background);
+        border-radius: var(--gg-components-radiusLg);
+        border: var(--gg-components-borderDialog);
+        box-shadow: var(--gg-shadows-shadowLg);
+        padding: var(--modal-padding);
 
         display: grid;
-        grid-template-columns: 30px 1fr 33px;
+        grid-template-columns: 1fr;
         grid-template-rows: 30px auto 30px;
+        grid-template-areas: 
+            "header"
+            "content"
+            "commands";
     }
 
     #dialog-header {
-        margin-top: 6px;
-        padding: 0 15px;
-        grid-area: 1/2/2/2;
+        font-family: var(--gg-text-familyUi);
+        grid-area: header;
         display: flex;
         align-items: center;
         justify-content: center;
     }
 
     #dialog-content {
-        grid-area: 2/2/2/2;
+        grid-area: content;
+        padding: 6px 0;
         display: grid;
+        gap: 6px;
         grid-template-columns: auto 1fr;
-        align-items: baseline;
-        gap: 3px 6px;
+        align-items: center;
     }
 
     #dialog-content > :global(:nth-child(even)) {
@@ -78,7 +86,7 @@
         height: 30px;
         min-width: 30px;
 
-        font-family: var(--stack-code);
+        font-family: var(--gg-text-familyUi);
         font-size: 14px;
     }
     #dialog-content :global(select),
@@ -94,15 +102,14 @@
     }
 
     #dialog-commands {
-        margin-right: 3px;
-        grid-area: 3/1/3/4;
+        grid-area: commands;
         display: flex;
-        align-items: center;
+        align-items: end;
         justify-content: end;
         gap: 6px;
     }
 
     .error {
-        color: var(--ctp-red);
+        color: var(--gg-colors-error);
     }
 </style>

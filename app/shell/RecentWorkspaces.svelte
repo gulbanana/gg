@@ -51,15 +51,15 @@
     button {
         background: none;
         border: none;
-        color: var(--ctp-blue);
+        color: var(--gg-colors-primary);
         cursor: pointer;
         text-decoration: none;
-        font-family: var(--stack-code);
+        font-family: var(--gg-text-familyCode);
         font-size: 18px;
         padding: 0;
 
         &:hover {
-            color: var(--ctp-sky);
+            color: var(--gg-colors-primaryHover);
             text-decoration: underline;
         }
     }

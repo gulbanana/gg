@@ -16,8 +16,8 @@
     }
 
     .separator {
-        color: var(--ctp-subtext1);
-        font-family: var(--stack-code);
+        color: var(--gg-colors-foregroundMuted);
+        font-family: var(--gg-text-familyCode);
     }
 
     .pronoun {
