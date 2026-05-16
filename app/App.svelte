@@ -3,6 +3,7 @@
     import Shell from "./Shell.svelte";
     import LogPane from "./LogPane.svelte";
     import RevisionPane from "./RevisionPane.svelte";
+    import OpLogPane from "./OpLogPane.svelte";
     import BoundQuery from "./controls/BoundQuery.svelte";
     import Pane from "./shell/Pane.svelte";
     import SetSpan from "./controls/SetSpan.svelte";
@@ -39,32 +40,39 @@
         </BoundQuery>
     {:else}
         <div class="two-pane">
-            {#key workspace.absolute_path}
-                <LogPane query_choices={workspace.query_choices}
-                         latest_query={workspace.latest_query} />
-            {/key}
+            <div class="left-pane">
+                {#key workspace.absolute_path}
+                    <LogPane query_choices={workspace.query_choices}
+                             latest_query={workspace.latest_query} />
+                {/key}
+                <OpLogPane />
+            </div>
 
             <div class="separator"></div>
 
-            <BoundQuery query={selection} let:data>
-                {#if data.type == "Detail"}
-                    <RevisionPane revs={data} />
-                {:else}
-                    <Pane>
-                        <h2 slot="header">Not Found</h2>
-                        <p slot="body">
-                            Empty revision set <SetSpan set={data.set} />.
-                        </p>
-                    </Pane>
-                {/if}
-                <Pane slot="error" let:message>
-                    <h2 slot="header">Error</h2>
-                    <p slot="body">{message}</p>
-                </Pane>
-                <Pane slot="wait">
-                    <h2 slot="header">Loading...</h2>
-                </Pane>
-            </BoundQuery>
+            <div class="right-pane">
+                <div class="right-pane-content">
+                    <BoundQuery query={selection} let:data>
+                        {#if data.type == "Detail"}
+                            <RevisionPane revs={data} />
+                        {:else}
+                            <Pane>
+                                <h2 slot="header">Not Found</h2>
+                                <p slot="body">
+                                    Empty revision set <SetSpan set={data.set} />.
+                                </p>
+                            </Pane>
+                        {/if}
+                        <Pane slot="error" let:message>
+                            <h2 slot="header">Error</h2>
+                            <p slot="body">{message}</p>
+                        </Pane>
+                        <Pane slot="wait">
+                            <h2 slot="header">Loading...</h2>
+                        </Pane>
+                    </BoundQuery>
+                </div>
+            </div>
         </div>
     {/if}
 </Shell>
@@ -75,6 +83,30 @@
         grid-template-columns: 1fr 3px 1fr;
         height: 100%;
         overflow: hidden;
+    }
+
+    .left-pane {
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+    }
+
+    .left-pane > :global(:first-child) {
+        flex: 1;
+        min-height: 0;
+    }
+
+    .right-pane {
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+    }
+
+    .right-pane-content {
+        flex: 1;
+        min-height: 0;
+        overflow: hidden;
+        display: grid;
     }
 
     .separator {

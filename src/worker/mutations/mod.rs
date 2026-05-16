@@ -25,7 +25,7 @@ use jj_lib::{
     merge::{Diff, SameChange},
     merged_tree::MergedTree,
     object_id::ObjectId as ObjectIdTrait,
-    op_walk,
+    op_store, op_walk,
     ref_name::WorkspaceNameBuf,
     ref_name::{GitRefNameBuf, RefNameBuf, RemoteName, RemoteNameBuf, RemoteRefSymbol},
     refs::{self, LocalAndRemoteRef, RefPushAction},
@@ -49,7 +49,7 @@ use super::{
 
 use crate::messages::mutations::{
     ExternalDiff, ExternalResolve, ForgetWorkspace, GitFetch, GitPush, GitRefspec, MutationOptions,
-    MutationResult, RenameWorkspace, UndoOperation,
+    MutationResult, RenameWorkspace, RestoreOperation, UndoOperation,
 };
 
 macro_rules! precondition {
@@ -712,6 +712,53 @@ impl Mutation for RenameWorkspace {
                 new_status,
                 new_selection: None,
             }),
+            None => Ok(MutationResult::Unchanged),
+        }
+    }
+}
+
+#[async_trait(?Send)]
+impl Mutation for RestoreOperation {
+    async fn execute(
+        self: Box<Self>,
+        ws: &mut WorkspaceSession,
+        _options: &MutationOptions,
+    ) -> Result<MutationResult> {
+        let target_op = op_walk::resolve_op_with_repo(ws.repo(), &self.id)?;
+        let mut tx = ws.start_transaction().await?;
+        let repo_loader = tx.base_repo().loader();
+        let target_repo = repo_loader.load_at(&target_op).await?;
+
+        let target_view = target_repo.view().store_view();
+        if target_view.wc_commit_ids.get(ws.name()).is_none() {
+            precondition!("Operation predates workspace '{}'", ws.name().as_symbol());
+        }
+
+        // match jj CLI: restore repo state but keep current git_refs/git_head
+        let current_view = tx.base_repo().view().store_view();
+        let new_view = op_store::View {
+            head_ids: target_view.head_ids.clone(),
+            local_bookmarks: target_view.local_bookmarks.clone(),
+            local_tags: target_view.local_tags.clone(),
+            remote_views: target_view.remote_views.clone(),
+            git_refs: current_view.git_refs.clone(),
+            git_head: current_view.git_head.clone(),
+            wc_commit_ids: target_view.wc_commit_ids.clone(),
+        };
+        tx.repo_mut().set_view(new_view);
+
+        match ws
+            .finish_transaction(tx, format!("restore to operation {}", target_op.id().hex()))
+            .await?
+        {
+            Some(new_status) => {
+                let working_copy = ws.get_commit(ws.wc_id())?;
+                let new_selection = Some(ws.format_header(&working_copy, None)?);
+                Ok(MutationResult::Updated {
+                    new_status,
+                    new_selection,
+                })
+            }
             None => Ok(MutationResult::Unchanged),
         }
     }
