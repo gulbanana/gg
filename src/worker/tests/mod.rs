@@ -320,6 +320,16 @@ async fn snapshot_respects_xdg_gitignore_colocated() -> Result<()> {
     unsafe { std::env::set_var("XDG_CONFIG_HOME", xdg_dir.path()) };
     let _guard = SetVarGuard("XDG_CONFIG_HOME");
 
+    // isolate from the developer's real global git config (core.excludesFile)
+    let empty_config = xdg_dir.path().join("empty.gitconfig");
+    fs::write(&empty_config, "")?;
+    unsafe {
+        std::env::set_var("GIT_CONFIG_GLOBAL", &empty_config);
+        std::env::set_var("GIT_CONFIG_SYSTEM", &empty_config);
+    }
+    let _global_guard = SetVarGuard("GIT_CONFIG_GLOBAL");
+    let _system_guard = SetVarGuard("GIT_CONFIG_SYSTEM");
+
     let workspace_dir = tempdir()?;
     let mut session = WorkerSession::default();
     session
@@ -359,6 +369,16 @@ async fn snapshot_respects_xdg_gitignore_internal() -> Result<()> {
 
     unsafe { std::env::set_var("XDG_CONFIG_HOME", xdg_dir.path()) };
     let _guard = SetVarGuard("XDG_CONFIG_HOME");
+
+    // isolate from the developer's real global git config (core.excludesFile)
+    let empty_config = xdg_dir.path().join("empty.gitconfig");
+    fs::write(&empty_config, "")?;
+    unsafe {
+        std::env::set_var("GIT_CONFIG_GLOBAL", &empty_config);
+        std::env::set_var("GIT_CONFIG_SYSTEM", &empty_config);
+    }
+    let _global_guard = SetVarGuard("GIT_CONFIG_GLOBAL");
+    let _system_guard = SetVarGuard("GIT_CONFIG_SYSTEM");
 
     let workspace_dir = tempdir()?;
     let mut session = WorkerSession::default();
