@@ -329,6 +329,10 @@ pub enum Operand {
     Workspace {
         name: String,
     },
+    Operation {
+        id: String,
+        is_head: bool,
+    },
 }
 
 /// A prompt for user input (e.g. credentials for git operations).
@@ -374,7 +378,7 @@ pub enum ProgressEvent {
 }
 
 // similar to time_util::datetime_from_timestamp, which is not pub
-fn format_timestamp(context: &Timestamp) -> Result<DateTime<FixedOffset>> {
+pub(crate) fn format_timestamp(context: &Timestamp) -> Result<DateTime<FixedOffset>> {
     let utc = match Utc.timestamp_opt(
         context.timestamp.0.div_euclid(1000),
         (context.timestamp.0.rem_euclid(1000)) as u32 * 1000000,

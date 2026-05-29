@@ -5,6 +5,9 @@ default-mode = "gui" # "gui" or "web"
 # Number of commits to load per call
 log-page-size = 1000
 
+# Number of operations to load per page in the op log pane
+op-log-page-size = 100
+
 # Some query settings will default to false instead of true if a repo has this many commits.
 large-repo-heuristic = 100000
 
