@@ -871,7 +871,7 @@ pub async fn query_file_content(
     let commit = ws.resolve_commit_id(&id.commit)?;
     let tree = commit.tree();
     let repo_path = RepoPath::from_internal_string(path)?;
-    let value = tree.path_value(repo_path)?;
+    let value = tree.path_value(repo_path).await?;
 
     if value.is_absent() {
         return Ok(FileContent {
@@ -888,18 +888,18 @@ pub async fn query_file_content(
 }
 
 /// Returns the operation log, walking parents from HEAD or from after a cursor op.
-pub fn query_op_log(
-    ws: &WorkspaceSession,
+pub async fn query_op_log(
+    ws: &WorkspaceSession<'_>,
     page_size: usize,
     filter_snapshots: bool,
     after_id: Option<String>,
 ) -> Result<OpLog> {
-    let head_op = op_walk::resolve_op_with_repo(ws.repo(), "@")?;
+    let head_op = op_walk::resolve_op_with_repo(ws.repo(), "@").await?;
     let head_id = head_op.id().hex();
 
     let start_op = if let Some(ref id) = after_id {
-        let cursor_op = op_walk::resolve_op_with_repo(ws.repo(), id)?;
-        cursor_op.parents().next().transpose()?
+        let cursor_op = op_walk::resolve_op_with_repo(ws.repo(), id).await?;
+        cursor_op.parents().await?.into_iter().next()
     } else {
         Some(head_op)
     };
@@ -927,11 +927,11 @@ pub fn query_op_log(
                 id: op.id().hex(),
                 description: metadata.description,
                 timestamp,
-                tags: metadata.tags.into_iter().collect(),
+                tags: metadata.attributes.into_iter().collect(),
             });
         }
 
-        current = op.parents().next().transpose()?;
+        current = op.parents().await?.into_iter().next();
     }
 
     Ok(OpLog {
@@ -947,7 +947,7 @@ pub async fn query_file_content_at_op(
     op_id: &str,
     path: &str,
 ) -> Result<FileContent> {
-    let op = op_walk::resolve_op_with_repo(ws.repo(), op_id)?;
+    let op = op_walk::resolve_op_with_repo(ws.repo(), op_id).await?;
     let repo_at_op = ws.repo().loader().load_at(&op).await?;
 
     let wc_commit_id = repo_at_op
@@ -958,7 +958,7 @@ pub async fn query_file_content_at_op(
     let commit = repo_at_op.store().get_commit(wc_commit_id)?;
     let tree = commit.tree();
     let repo_path = RepoPath::from_internal_string(path)?;
-    let value = tree.path_value(repo_path)?;
+    let value = tree.path_value(repo_path).await?;
 
     if value.is_absent() {
         return Ok(FileContent {
@@ -985,14 +985,14 @@ pub async fn query_file_diff_at_op(
     let repo_path = RepoPath::from_internal_string(path)?;
 
     // old side: file at op's working copy
-    let op = op_walk::resolve_op_with_repo(ws.repo(), op_id)?;
+    let op = op_walk::resolve_op_with_repo(ws.repo(), op_id).await?;
     let repo_at_op = ws.repo().loader().load_at(&op).await?;
     let op_bytes = match repo_at_op.view().get_wc_commit_id(ws.name()) {
         None => vec![],
         Some(wc_commit_id) => {
             let commit = repo_at_op.store().get_commit(wc_commit_id)?;
             let tree = commit.tree();
-            let value = tree.path_value(repo_path)?;
+            let value = tree.path_value(repo_path).await?;
             if value.is_absent() {
                 vec![]
             } else {
@@ -1011,7 +1011,7 @@ pub async fn query_file_diff_at_op(
     // new side: file at current_id
     let commit = ws.resolve_commit_id(&current_id.commit)?;
     let tree = commit.tree();
-    let value = tree.path_value(repo_path)?;
+    let value = tree.path_value(repo_path).await?;
     let current_bytes = if value.is_absent() {
         vec![]
     } else {

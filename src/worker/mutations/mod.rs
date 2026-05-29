@@ -724,7 +724,7 @@ impl Mutation for RestoreOperation {
         ws: &mut WorkspaceSession,
         _options: &MutationOptions,
     ) -> Result<MutationResult> {
-        let target_op = op_walk::resolve_op_with_repo(ws.repo(), &self.id)?;
+        let target_op = op_walk::resolve_op_with_repo(ws.repo(), &self.id).await?;
         let mut tx = ws.start_transaction().await?;
         let repo_loader = tx.base_repo().loader();
         let target_repo = repo_loader.load_at(&target_op).await?;

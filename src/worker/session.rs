@@ -323,12 +323,9 @@ impl Session for WorkspaceSession<'_> {
                     after_id,
                 } => {
                     let page_size = self.data.workspace_settings.query_op_log_page_size();
-                    tx.send(queries::query_op_log(
-                        &self,
-                        page_size,
-                        filter_snapshots,
-                        after_id,
-                    ))?
+                    tx.send(
+                        queries::query_op_log(&self, page_size, filter_snapshots, after_id).await,
+                    )?
                 }
                 SessionEvent::QueryLog {
                     tx,
