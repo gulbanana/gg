@@ -206,9 +206,17 @@ fn spawn_app() -> Result<()> {
 fn run_app(args: Args) -> Result<()> {
     let (settings, _, _, _) = read_config(args.workspace().as_deref())?;
     let mode = args.mode().unwrap_or_else(|| default_mode(&settings));
-    let context = tauri::generate_context!();
 
     let is_child = std::env::var_os("GG_SPAWNED").is_some();
+
+    if matches!(mode, LaunchMode::Gui) && gui::try_forward_to_instance(args.workspace().as_ref()) {
+        if is_child {
+            println!("Startup complete.");
+        }
+        return Ok(());
+    }
+
+    let context = tauri::generate_context!();
 
     let options = RunOptions {
         context,

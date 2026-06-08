@@ -1,5 +1,7 @@
 use objc2::{AllocAnyThread, MainThreadMarker};
-use objc2_app_kit::{NSApplication, NSDocumentController, NSImage};
+use objc2_app_kit::{
+    NSApplication, NSDocumentController, NSImage, NSWindow, NSWindowCollectionBehavior,
+};
 use objc2_foundation::{NSData, NSString, NSURL};
 
 /// Used when run without an .app bundle.
@@ -25,6 +27,33 @@ pub fn set_dock_icon() {
     unsafe {
         app.setApplicationIconImage(Some(&icon));
     }
+}
+
+/// Ensure a newly created window appears on the active Space rather than
+/// switching to whichever Space GG was previously on.
+pub fn set_move_to_active_space(window: &tauri::WebviewWindow) {
+    let Ok(ptr) = window.ns_window() else { return };
+    let ns_win = unsafe { &*(ptr as *const NSWindow) };
+    let behavior = ns_win.collectionBehavior();
+    ns_win.setCollectionBehavior(behavior | NSWindowCollectionBehavior::MoveToActiveSpace);
+}
+
+pub fn remove_move_to_active_space(window: &tauri::Window) {
+    let Ok(ptr) = window.ns_window() else { return };
+    let ns_win = unsafe { &*(ptr as *const NSWindow) };
+    let behavior = ns_win.collectionBehavior();
+    ns_win.setCollectionBehavior(behavior & !NSWindowCollectionBehavior::MoveToActiveSpace);
+}
+
+pub fn activate_app() {
+    let Some(mtm) = MainThreadMarker::new() else {
+        log::error!("Cannot activate app: not on main thread");
+        return;
+    };
+
+    let app = NSApplication::sharedApplication(mtm);
+    #[allow(deprecated)]
+    app.activateIgnoringOtherApps(true);
 }
 
 /// add a workspace path to the macos "Recent Items" dock menu

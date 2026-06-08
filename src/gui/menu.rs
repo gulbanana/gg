@@ -636,6 +636,12 @@ pub fn handle_event(window: &Window, event: MenuEvent) -> Result<()> {
     if !window.is_focused()? {
         if let Some(window_id) = event_id.strip_prefix("window:") {
             if let Some(w) = window.app_handle().get_webview_window(window_id) {
+                #[cfg(target_os = "macos")]
+                {
+                    crate::macos::remove_move_to_active_space(&w.as_ref().window());
+                    crate::macos::activate_app();
+                }
+
                 let _ = w.show();
                 let _ = w.set_focus();
             }

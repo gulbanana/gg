@@ -2,6 +2,7 @@ mod handler;
 mod menu;
 #[cfg(target_os = "macos")]
 mod recent_items;
+mod single_instance;
 mod sink;
 
 use std::collections::HashMap;
@@ -163,6 +164,10 @@ fn resolve_set(
     rx.recv()?
 }
 
+pub fn try_forward_to_instance(workspace: Option<&PathBuf>) -> bool {
+    single_instance::try_forward(workspace)
+}
+
 pub fn run_gui(options: super::RunOptions) -> Result<()> {
     let recent_workspaces = options.settings.ui_recent_workspaces();
     let initial_recent = recent_workspaces.clone();
@@ -265,6 +270,8 @@ pub fn run_gui(options: super::RunOptions) -> Result<()> {
             {
                 crate::macos::set_dock_icon();
             }
+
+            single_instance::listen(app.handle().clone());
 
             // open initial repo, unless a deep link's already done so
             #[cfg(target_os = "macos")]
@@ -864,8 +871,24 @@ pub fn try_create_window(app_handle: &AppHandle, workspace: Option<PathBuf>) -> 
 
     let label = label_for_path(workspace.as_ref());
 
-    if let Some(existing) = app_handle.get_webview_window(&label) {
-        existing.set_focus()?;
+    if let Some(_existing) = app_handle.get_webview_window(&label) {
+        #[cfg(target_os = "macos")]
+        {
+            let handle = app_handle.clone();
+            let label = label.clone();
+            app_handle
+                .run_on_main_thread(move || {
+                    if let Some(w) = handle.get_webview_window(&label) {
+                        crate::macos::remove_move_to_active_space(&w.as_ref().window());
+                        crate::macos::activate_app();
+                        let _ = w.set_focus();
+                    }
+                })
+                .ok();
+        }
+        #[cfg(not(target_os = "macos"))]
+        _existing.set_focus()?;
+
         return Ok(());
     }
 
@@ -881,6 +904,20 @@ pub fn try_create_window(app_handle: &AppHandle, workspace: Option<PathBuf>) -> 
     .visible(false)
     .disable_drag_drop_handler()
     .build()?;
+
+    // NSWindow methods must run on the main thread; dispatch regardless of caller
+    #[cfg(target_os = "macos")]
+    {
+        let label = window.label().to_owned();
+        let handle = app_handle.clone();
+        app_handle
+            .run_on_main_thread(move || {
+                if let Some(w) = handle.get_webview_window(&label) {
+                    crate::macos::set_move_to_active_space(&w);
+                }
+            })
+            .ok();
+    }
 
     let app_state = app_handle.state::<AppState>();
     let settings = app_state.settings.clone();
@@ -1141,6 +1178,9 @@ fn handle_window_event(window: &Window, event: &WindowEvent) -> Result<()> {
         }
         WindowEvent::Focused(true) => {
             log::debug!("window focused; notifying frontend");
+
+            #[cfg(target_os = "macos")]
+            crate::macos::remove_move_to_active_space(window);
 
             let app_state = window.state::<AppState>();
 
