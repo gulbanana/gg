@@ -5,7 +5,7 @@
 GG is a GUI for the version control system [Jujutsu](https://github.com/jj-vcs/jj). It takes advantage of Jujutsu's composable primitives to present an interactive view of your repository. The big idea: what if you were always in the middle of an interactive rebase, but this was actually a good thing?
 
 ## Installation
-GG is a desktop or web application with a keyboard & mouse interface, written in. It may be available in your favourite package manager, including...
+GG is a desktop or web application with a keyboard & mouse interface, written in rust. It may be available in your favourite package manager, including...
 ```
 # MacOS
 brew install --cask gg
