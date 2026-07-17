@@ -57,6 +57,10 @@
             path: change.path,
         });
     }
+
+    function onCopyPath() {
+        navigator.clipboard.writeText(change.path.relative_path);
+    }
 </script>
 
 <Object
@@ -71,6 +75,9 @@
     <Zone {operand} let:target>
         <div class="layout" class:target>
             <Icon name={icon} state={context ? null : state} />
+            <ActionLink tip="copy path" onClick={onCopyPath}>
+                <Icon name="copy" />
+            </ActionLink>
             <span>{hint ?? change.path.relative_path}</span>
             {#if hasMergeTool && change.has_conflict && operand}
                 <ActionWidget tip="resolve in merge tool" onClick={onExternalResolve}>
