@@ -75,18 +75,22 @@
     <Zone {operand} let:target>
         <div class="layout" class:target>
             <Icon name={icon} state={context ? null : state} />
+            <span class="path">{hint ?? change.path.relative_path}</span>
             <ActionLink tip="copy path" onClick={onCopyPath}>
                 <Icon name="copy" />
             </ActionLink>
-            <span>{hint ?? change.path.relative_path}</span>
             {#if hasMergeTool && change.has_conflict && operand}
-                <ActionWidget tip="resolve in merge tool" onClick={onExternalResolve}>
-                    <Icon name="external-link" /> Resolve
-                </ActionWidget>
+                <div class="push-right">
+                    <ActionWidget tip="resolve in merge tool" onClick={onExternalResolve}>
+                        <Icon name="external-link" /> Resolve
+                    </ActionWidget>
+                </div>
             {:else if hasDiffTool && operand}
-                <ActionLink tip="open in diff tool" onClick={onExternalDiff}>
-                    <Icon name="external-link" />
-                </ActionLink>
+                <div class="push-right">
+                    <ActionLink tip="open in diff tool" onClick={onExternalDiff}>
+                        <Icon name="external-link" />
+                    </ActionLink>
+                </div>
             {/if}
         </div>
     </Zone>
@@ -101,8 +105,18 @@
         padding-left: 3px;
     }
 
-    .layout span {
-        flex: 1;
+    .layout .path {
+        min-width: 0;
+        flex: 0 1 auto;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .push-right {
+        display: flex;
+        align-items: center;
+        margin-left: auto;
     }
 
     .layout.target {
