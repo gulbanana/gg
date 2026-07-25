@@ -1901,6 +1901,7 @@ dependencies = [
  "etcetera",
  "futures-util",
  "gix",
+ "gtk",
  "http-body-util",
  "humantime",
  "indexmap 2.14.0",

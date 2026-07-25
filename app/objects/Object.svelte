@@ -63,10 +63,15 @@ Core component for direct-manipulation objects. A drag&drop source.
             let effectiveOperand = getEffectiveOperand();
             currentContext.set(effectiveOperand);
 
+            // the backend can't ask wayland where the pointer is, so it has to be told
+            let mouseEvent = event as MouseEvent;
             if (isTauri()) {
-                trigger("forward_context_menu", { context: effectiveOperand });
+                trigger("forward_context_menu", {
+                    context: effectiveOperand,
+                    x: mouseEvent.clientX,
+                    y: mouseEvent.clientY,
+                });
             } else {
-                const mouseEvent = event as MouseEvent;
                 hasMenu.set({ x: mouseEvent.clientX, y: mouseEvent.clientY });
             }
         }

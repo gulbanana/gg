@@ -106,6 +106,10 @@ webbrowser = { version = "1", features = ["hardened"] }
 interprocess = "2"
 uuid = { version = "1", features = ["v4"] }
 
+[target."cfg(target_os = \"linux\")".dependencies]
+# must track tauri's gtk, which we borrow widgets from to place context menus
+gtk = "0.18"
+
 [target."cfg(windows)".dependencies]
 windows = { version = "0.61", features = [
     "Win32_Foundation",

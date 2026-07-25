@@ -4,7 +4,7 @@ use anyhow::{Context, Result, anyhow};
 #[cfg(target_os = "macos")]
 use tauri::menu::AboutMetadata;
 use tauri::{
-    AppHandle, Emitter, EventTarget, Manager, Window, Wry,
+    AppHandle, Emitter, EventTarget, LogicalPosition, Manager, Window, Wry,
     menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu},
 };
 use tauri_plugin_dialog::{DialogExt, FilePath};
@@ -439,8 +439,57 @@ pub fn handle_selection(
 }
 
 // enables context menu items for a revision and shows the menu
-pub fn handle_context(window: Window, ctx: Operand, ignore_immutable: bool) -> Result<()> {
+pub fn handle_context(
+    window: Window,
+    ctx: Operand,
+    ignore_immutable: bool,
+    position: LogicalPosition<f64>,
+) -> Result<()> {
     log::debug!("handling context {ctx:?}");
+
+    // gtk widgets are main-thread-only and popup_context measures them, so queue the
+    // whole popup instead of touching them from whichever thread handles the command
+    let target = window.clone();
+    window.run_on_main_thread(move || {
+        if let Err(err) = popup_context(&target, ctx, ignore_immutable, position) {
+            log::error!("failed to show context menu: {err:#}");
+        }
+    })?;
+
+    Ok(())
+}
+
+// anchors the popup at a point given in webview coordinates. muda positions menus
+// against the toplevel gdk window; on wayland gtk draws client-side decorations into
+// that window, so without this the menu lands offset by the titlebar and shadow
+#[cfg(target_os = "linux")]
+fn to_window_position(window: &Window, position: LogicalPosition<f64>) -> LogicalPosition<f64> {
+    use gtk::prelude::WidgetExt;
+
+    match window
+        .default_vbox()
+        .ok()
+        .zip(window.gtk_window().ok())
+        .and_then(|(vbox, gtk_window)| vbox.translate_coordinates(&gtk_window, 0, 0))
+    {
+        Some((dx, dy)) => LogicalPosition::new(position.x + dx as f64, position.y + dy as f64),
+        None => position,
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn to_window_position(_window: &Window, position: LogicalPosition<f64>) -> LogicalPosition<f64> {
+    position
+}
+
+fn popup_context(
+    window: &Window,
+    ctx: Operand,
+    ignore_immutable: bool,
+    position: LogicalPosition<f64>,
+) -> Result<()> {
+    let anchor = to_window_position(window, position);
+    log::debug!("popping context menu at {position:?} -> {anchor:?}");
 
     let state = window.state::<AppState>();
     let guard = state.windows.lock().expect("state mutex poisoned");
@@ -463,7 +512,7 @@ pub fn handle_context(window: Window, ctx: Operand, ignore_immutable: bool) -> R
             context_menu.enable("revision_restore", state.restore)?;
             context_menu.enable("revision_bookmark", state.bookmark)?;
 
-            window.popup_menu(context_menu)?;
+            window.popup_menu_at(context_menu, anchor)?;
         }
         Operand::Revisions { headers } => {
             let context_menu = &guard
@@ -482,7 +531,7 @@ pub fn handle_context(window: Window, ctx: Operand, ignore_immutable: bool) -> R
             context_menu.enable("revision_restore", state.restore)?;
             context_menu.enable("revision_bookmark", state.bookmark)?;
 
-            window.popup_menu(context_menu)?;
+            window.popup_menu_at(context_menu, anchor)?;
         }
         Operand::Change { headers, .. } => {
             let context_menu = &guard
@@ -507,7 +556,7 @@ pub fn handle_context(window: Window, ctx: Operand, ignore_immutable: bool) -> R
                         .is_some_and(|header| header.parent_ids.len() == 1),
             )?;
 
-            window.popup_menu(context_menu)?;
+            window.popup_menu_at(context_menu, anchor)?;
         }
         Operand::Ref { r#ref, .. } => {
             let context_menu = &guard
@@ -584,7 +633,7 @@ pub fn handle_context(window: Window, ctx: Operand, ignore_immutable: bool) -> R
                 ),
             )?;
 
-            window.popup_menu(context_menu)?;
+            window.popup_menu_at(context_menu, anchor)?;
         }
         Operand::Workspace { .. } => {
             let context_menu = &guard
@@ -592,7 +641,7 @@ pub fn handle_context(window: Window, ctx: Operand, ignore_immutable: bool) -> R
                 .expect("session not found")
                 .workspace_menu;
 
-            window.popup_menu(context_menu)?;
+            window.popup_menu_at(context_menu, anchor)?;
         }
         _ => (), // no popup required
     };
@@ -604,7 +653,8 @@ pub fn handle_event(window: &Window, event: MenuEvent) -> Result<()> {
     log::debug!("handling event {event:?}");
 
     // we use a shared menu due to cleanup issues
-    if !window.is_focused()? {
+    if !window.state::<AppState>().owns_menu_events(window)? {
+        log::debug!("ignoring event for unfocused window {}", window.label());
         return Ok(());
     }
 

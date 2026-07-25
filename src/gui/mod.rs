@@ -19,7 +19,10 @@ use tauri::async_runtime;
 use tauri::ipc::InvokeError;
 use tauri::menu::Menu;
 use tauri::webview::WebviewWindowBuilder;
-use tauri::{AppHandle, Emitter, EventTarget, Listener, Manager, State, Window, WindowEvent, Wry};
+use tauri::{
+    AppHandle, Emitter, EventTarget, Listener, LogicalPosition, Manager, State, Window,
+    WindowEvent, Wry,
+};
 use tauri_plugin_window_state::StateFlags;
 
 use gg_lib::config::GGSettings;
@@ -39,6 +42,10 @@ use sink::TauriSink;
 
 struct AppState {
     windows: Arc<Mutex<HashMap<String, WindowState>>>,
+    // menus are shared between windows, so events have to be routed to one of them. this
+    // can't be is_focused(), because a wayland popup grab takes focus off the toplevel for
+    // as long as the menu is open - exactly when we need to know who opened it
+    last_focused: Arc<Mutex<Option<String>>>,
     settings: UserSettings,
     initial_ignore_immutable: bool,
     enable_askpass: bool,
@@ -48,10 +55,21 @@ impl AppState {
     fn new(settings: UserSettings, initial_ignore_immutable: bool, enable_askpass: bool) -> Self {
         Self {
             windows: Arc::new(Mutex::new(HashMap::new())),
+            last_focused: Arc::new(Mutex::new(None)),
             settings,
             initial_ignore_immutable,
             enable_askpass,
         }
+    }
+
+    // the window that most recently gained focus, ignoring transient losses to menus
+    fn owns_menu_events(&self, window: &Window) -> Result<bool> {
+        Ok(
+            match &*self.last_focused.lock().expect("state mutex poisoned") {
+                Some(label) => label == window.label(),
+                None => window.is_focused()?,
+            },
+        )
     }
 }
 
@@ -310,6 +328,8 @@ fn forward_context_menu(
     window: Window,
     app_state: State<AppState>,
     context: messages::Operand,
+    x: f64,
+    y: f64,
 ) -> Result<(), InvokeError> {
     let ignore_immutable = {
         let guard = app_state.windows.lock().expect("state mutex poisoned");
@@ -318,7 +338,13 @@ fn forward_context_menu(
             .map(|s| s.ignore_immutable)
             .unwrap_or(false)
     };
-    menu::handle_context(window, context, ignore_immutable).map_err(InvokeError::from_anyhow)?;
+    menu::handle_context(
+        window,
+        context,
+        ignore_immutable,
+        LogicalPosition::new(x, y),
+    )
+    .map_err(InvokeError::from_anyhow)?;
     Ok(())
 }
 
@@ -1079,11 +1105,19 @@ fn handle_window_event(window: &Window, event: &WindowEvent) -> Result<()> {
         WindowEvent::Destroyed => {
             let app_state = window.state::<AppState>();
             app_state.windows.lock().unwrap().remove(window.label());
+
+            let mut last_focused = app_state.last_focused.lock().unwrap();
+            if last_focused.as_deref() == Some(window.label()) {
+                *last_focused = None;
+            }
         }
         WindowEvent::Focused(true) => {
             log::debug!("window focused; notifying frontend");
 
             let app_state = window.state::<AppState>();
+
+            *app_state.last_focused.lock().expect("state mutex poisoned") =
+                Some(window.label().to_owned());
 
             let (session_tx, selection, ignore_immutable) = {
                 let guard = app_state.windows.lock().expect("state mutex poisoned");
