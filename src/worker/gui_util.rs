@@ -708,6 +708,8 @@ impl WorkspaceSession<'_> {
             mark_unpushed_bookmarks: self.data.workspace_settings.ui_mark_unpushed_bookmarks(),
             track_recent_workspaces: self.data.workspace_settings.ui_track_recent_workspaces(),
             ignore_immutable: self.session.ignore_immutable,
+            description_font_family: self.data.workspace_settings.ui_description_font_family(),
+            description_marker_column: self.data.workspace_settings.ui_description_marker_column(),
             has_external_diff_tool,
             has_external_merge_tool,
         })

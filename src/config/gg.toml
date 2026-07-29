@@ -25,6 +25,12 @@ mark-unpushed-bookmarks = true
 # "light" or "dark". If empty, your OS settings will be used.
 theme-override = ""
 
+# Font family to use when editing a change's description.
+description-font-family = "monospace"
+
+# Column marked with a vertical line in the description field.
+description-marker-column = 72
+
 [gg.web]
 default-port = 0       # Port to bind to in web mode (0 = random)
 client-timeout = "10m" # Disconnect clients after this duration of inactivity
