@@ -35,3 +35,6 @@ dist-ssr
 # Agent config
 .claude/settings.local.json
 .mcp.json
+
+# Environment managers
+mise.local.toml
