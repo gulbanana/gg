@@ -34,6 +34,8 @@ pub trait GGSettings {
     fn query_log_page_size(&self) -> usize;
     fn query_large_repo_heuristic(&self) -> i64;
     fn query_auto_snapshot(&self) -> Option<bool>;
+    fn ui_description_font_family(&self) -> String;
+    fn ui_description_marker_column(&self) -> i64;
     fn ui_theme_override(&self) -> Option<String>;
     fn ui_mark_unpushed_bookmarks(&self) -> bool;
     fn ui_track_recent_workspaces(&self) -> bool;
@@ -56,6 +58,14 @@ impl GGSettings for UserSettings {
 
     fn query_auto_snapshot(&self) -> Option<bool> {
         self.get_bool("gg.queries.auto-snapshot").ok()
+    }
+
+    fn ui_description_font_family(&self) -> String {
+        self.get_string("gg.ui.description-font-family").unwrap_or("monospace".into())
+    }
+    
+    fn ui_description_marker_column(&self) -> i64 {
+        self.get_int("gg.ui.description-marker-column").unwrap_or(72)
     }
 
     fn ui_theme_override(&self) -> Option<String> {
