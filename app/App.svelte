@@ -72,7 +72,7 @@
 <style>
     .two-pane {
         display: grid;
-        grid-template-columns: 1fr 3px 1fr;
+        grid-template-columns: 1fr 3px 2fr;
         height: 100%;
         overflow: hidden;
     }
