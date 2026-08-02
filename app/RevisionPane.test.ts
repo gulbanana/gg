@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { render } from "@testing-library/svelte";
 import type { RevsResult } from "./messages/RevsResult";
 import { setupMocks, cleanupMocks } from "./mocks";
+import type { RepoConfig } from "./messages/RepoConfig";
+import type { CommitId } from "./messages/CommitId";
 
 function createMockRevs(): Extract<RevsResult, { type: "Detail" }> {
     let mockId = {
@@ -50,6 +52,25 @@ function createMockRevs(): Extract<RevsResult, { type: "Detail" }> {
     };
 }
 
+function createMockWorkspace(commit_id: CommitId) : Extract<RepoConfig, { type: "Workspace" }> {
+    return {
+        type: "Workspace" as const,
+        absolute_path: "/test",
+        git_remotes: [],
+        query_choices: {},
+        latest_query: "@",
+        status: { operation_description: "", working_copy: commit_id },
+        theme_override: null,
+        mark_unpushed_bookmarks: false,
+        description_font_family: "monospace",
+        description_marker_column: 72,
+        track_recent_workspaces: true,
+        ignore_immutable: false,
+        has_external_diff_tool: false,
+        has_external_merge_tool: false,
+    };
+}
+
 describe("RevisionPane", () => {
     beforeEach(() => {
         setupMocks();
@@ -63,9 +84,12 @@ describe("RevisionPane", () => {
         const { default: RevisionPane } = await import("./RevisionPane.svelte");
 
         let mockRevs = createMockRevs();
+        let mockWorkspace = createMockWorkspace(mockRevs.headers[0].id.commit);
+
         const { container } = render(RevisionPane, {
             props: {
                 revs: mockRevs,
+                workspace: mockWorkspace,
             },
         });
 

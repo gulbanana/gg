@@ -224,6 +224,8 @@ pub enum RepoConfig {
         mark_unpushed_bookmarks: bool,
         track_recent_workspaces: bool,
         ignore_immutable: bool,
+        description_font_family: String,
+        description_marker_column: i64,
         has_external_diff_tool: bool,
         has_external_merge_tool: bool,
     },

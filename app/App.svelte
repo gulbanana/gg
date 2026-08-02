@@ -20,7 +20,7 @@
     {:else if route.type === "revision"}
         <BoundQuery query={selection} let:data>
             {#if data.type == "Detail"}
-                <RevisionPane revs={data} />
+                <RevisionPane revs={data} {workspace} />
             {:else}
                 <Pane>
                     <h2 slot="header">Not Found</h2>
@@ -48,7 +48,7 @@
 
             <BoundQuery query={selection} let:data>
                 {#if data.type == "Detail"}
-                    <RevisionPane revs={data} />
+                    <RevisionPane revs={data} {workspace} />
                 {:else}
                     <Pane>
                         <h2 slot="header">Not Found</h2>
@@ -72,7 +72,7 @@
 <style>
     .two-pane {
         display: grid;
-        grid-template-columns: 1fr 3px 1fr;
+        grid-template-columns: 1fr 3px 2fr;
         height: 100%;
         overflow: hidden;
     }

@@ -1,5 +1,6 @@
 <script lang="ts">
     import type { RevsResult } from "./messages/RevsResult";
+    import type { RepoConfig } from "./messages/RepoConfig";
     import { ignoreToggled, changeSelectEvent, dragOverWidget } from "./stores";
     import ChangeObject from "./objects/ChangeObject.svelte";
     import HunkObject from "./objects/HunkObject.svelte";
@@ -20,6 +21,7 @@
     import TimestampRangeSpan from "./controls/TimestampRangeSpan.svelte";
 
     export let revs: Extract<RevsResult, { type: "Detail" }>;
+    export let workspace: Extract<RepoConfig, { type: "Workspace" }>;
 
     const CONTEXT = 3;
 
@@ -159,128 +161,159 @@
     </h2>
 
     <div slot="body" class="body">
-        {#if !singleton}
-            <!-- prettier-ignore -->
-            <div class="description-list">{#each revs.headers as header, i}{#if i > 0}<hr class="description-divider" />{/if}<div class="description-row">{header.description.lines.join("\n")}</div>{/each}</div>
-        {:else}
-            <textarea
-                class="description"
-                spellcheck="false"
-                disabled={newestImmutable}
-                bind:value={editableDescription}
-                on:dragenter={dragOverWidget}
-                on:dragover={dragOverWidget}
-                on:keydown={(ev) => {
-                    if (descriptionChanged && ev.key === "Enter" && (ev.metaKey || ev.ctrlKey)) {
-                        updateDescription();
-                    }
-                }}></textarea>
-        {/if}
+        <div class="two-pane">
+            <div>
+                <ListWidget {list} type="Change" descendant={$changeSelectEvent?.path.repo_path}>
+                    <div class="changes">
+                        {#each syntheticChanges as change}
+                            <ChangeObject
+                                {change}
+                                headers={revs.headers}
+                                selected={$changeSelectEvent?.path?.repo_path === change.path.repo_path} />
+                        {/each}
+                    </div>
+                </ListWidget>
+            </div>
 
-        <div class="signature-commands">
-            {#if singleton}
-                <span>Author:</span>
-                <AuthorSpan author={newest.author} />
-                <TimestampSpan timestamp={newest.author.timestamp} />
+            <div class="separator"></div>
 
-                <ToggleWidget
-                    safe
-                    secondary
-                    tip="reset author"
-                    bind:checked={resetAuthor}
-                    disabled={newestImmutable}
-                    on="unlock"
-                    off="lock" />
-                <span></span>
-                <ActionWidget
-                    tip="set commit message"
-                    onClick={() => mutator.onDescribe(editableDescription, resetAuthor)}
-                    disabled={newestImmutable || !descriptionChanged}>
-                    <Icon name="file-text" /> Describe
-                </ActionWidget>
-            {:else}
-                {#if authors.length > 1}
-                    <span>Authors:</span>
+            <div>
+                {#if !singleton}
+                    <!-- prettier-ignore -->
+                    <div class="description-list">{#each revs.headers as header, i}{#if i > 0}<hr class="description-divider" />{/if}<div class="description-row">{header.description.lines.join("\n")}</div>{/each}</div>
                 {:else}
-                    <span>Author:</span>
+                    <textarea
+                        class="description"
+                        spellcheck="false"
+                        disabled={newestImmutable}
+                        bind:value={editableDescription}
+                        style="--font-family: {workspace.description_font_family}; --marker-column: {workspace.description_marker_column}ch;"
+                        on:dragenter={dragOverWidget}
+                        on:dragover={dragOverWidget}
+                        on:keydown={(ev) => {
+                            if (descriptionChanged && ev.key === "Enter" && (ev.metaKey || ev.ctrlKey)) {
+                                updateDescription();
+                            }
+                        }}></textarea>
                 {/if}
-                <span>
-                    {#each authors as author, ix}
-                        <!-- prettier-ignore -->
-                        <AuthorSpan {author} />{#if ix < authors.length - 1},&nbsp;
-                        {/if}
-                    {/each}
-                </span>
-                <TimestampRangeSpan from={firstTimestamp} to={lastTimestamp} />
-            {/if}
-        </div>
 
-        {#if revs.parents.length > 0}
-            <Zone operand={{ type: "Merge", header: oldest }} let:target>
-                <div class="parents" class:target>
-                    {#each revs.parents as parent}
-                        <div class="parent">
-                            <span>Parent:</span>
-                            <RevisionObject header={parent} child={oldest} selected={false} noBookmarks />
+                <div class="signature-commands">
+                    {#if singleton}
+                        <span>Author:</span>
+                        <AuthorSpan author={newest.author} />
+                        <TimestampSpan timestamp={newest.author.timestamp} />
+
+                        <ToggleWidget
+                            safe
+                            secondary
+                            tip="reset author"
+                            bind:checked={resetAuthor}
+                            disabled={newestImmutable}
+                            on="unlock"
+                            off="lock" />
+                        <span></span>
+                        <ActionWidget
+                            tip="set commit message"
+                            onClick={() => mutator.onDescribe(editableDescription, resetAuthor)}
+                            disabled={newestImmutable || !descriptionChanged}>
+                            <Icon name="file-text" /> Describe
+                        </ActionWidget>
+                    {:else}
+                        {#if authors.length > 1}
+                            <span>Authors:</span>
+                        {:else}
+                            <span>Author:</span>
+                        {/if}
+                        <span>
+                            {#each authors as author, ix}
+                                <!-- prettier-ignore -->
+                                <AuthorSpan {author} />{#if ix < authors.length - 1},&nbsp;
+                                {/if}
+                            {/each}
+                        </span>
+                        <TimestampRangeSpan from={firstTimestamp} to={lastTimestamp} />
+                    {/if}
+                </div>
+
+                {#if revs.parents.length > 0}
+                    <Zone operand={{ type: "Merge", header: oldest }} let:target>
+                        <div class="parents" class:target>
+                            {#each revs.parents as parent}
+                                <div class="parent">
+                                    <span>Parent:</span>
+                                    <RevisionObject header={parent} child={oldest} selected={false} noBookmarks />
+                                </div>
+                            {/each}
                         </div>
-                    {/each}
-                </div>
-            </Zone>
-        {/if}
+                    </Zone>
+                {/if}
 
-        {#if syntheticChanges.length > 0}
-            <div class="move-commands">
-                <span>Changes:</span>
+                {#if syntheticChanges.length > 0}
+                    <div class="move-commands">
+                        <span>Changes:</span>
 
-                <ActionWidget
-                    tip="move all changes to parent"
-                    onClick={mutator.onSquash}
-                    disabled={oldestImmutable || oldest.parent_ids.length != 1}>
-                    <Icon name="upload" /> Squash
-                </ActionWidget>
+                        <ActionWidget
+                            tip="move all changes to parent"
+                            onClick={mutator.onSquash}
+                            disabled={oldestImmutable || oldest.parent_ids.length != 1}>
+                            <Icon name="upload" /> Squash
+                        </ActionWidget>
 
-                {#if singleton}
-                    <ActionWidget
-                        tip="copy all changes from parent"
-                        onClick={mutator.onRestore}
-                        disabled={newestImmutable || newest.parent_ids.length != 1}>
-                        <Icon name="download" /> Restore
-                    </ActionWidget>
+                        {#if singleton}
+                            <ActionWidget
+                                tip="copy all changes from parent"
+                                onClick={mutator.onRestore}
+                                disabled={newestImmutable || newest.parent_ids.length != 1}>
+                                <Icon name="download" /> Restore
+                            </ActionWidget>
+                        {/if}
+                    </div>
+
+                    <ListWidget {list} type="Change" descendant={$changeSelectEvent?.path.repo_path}>
+                        <div class="changes">
+                            {#each syntheticChanges as change}
+                                <!-- XXX implement, somehow, plural squash/restore -->
+                                <ChangeObject
+                                    {change}
+                                    headers={revs.headers}
+                                    selected={$changeSelectEvent?.path?.repo_path === change.path.repo_path} />
+                                {#if $changeSelectEvent?.path?.repo_path === change.path.repo_path}
+                                    <div class="change" style="--lines: {minLines(change)}" tabindex="-1">
+                                        {#each change.hunks as hunk}
+                                            <div class="hunk">
+                                                <HunkObject header={singleton ? newest : null} path={change.path} {hunk} />
+                                            </div>
+                                            <pre class="diff">{#each hunk.lines.lines as line}<span class={lineColour(line)}
+                                                        >{line}</span
+                                                    >{/each}</pre>
+                                        {/each}
+                                    </div>
+                                {/if}
+                            {/each}
+                        </div>
+                    </ListWidget>
+                {:else}
+                    <div class="move-commands">
+                        <span>Changes: <span class="no-changes">(empty)</span></span>
+                    </div>
                 {/if}
             </div>
-
-            <ListWidget {list} type="Change" descendant={$changeSelectEvent?.path.repo_path}>
-                <div class="changes">
-                    {#each syntheticChanges as change}
-                        <!-- XXX implement, somehow, plural squash/restore -->
-                        <ChangeObject
-                            {change}
-                            headers={revs.headers}
-                            selected={$changeSelectEvent?.path?.repo_path === change.path.repo_path} />
-                        {#if $changeSelectEvent?.path?.repo_path === change.path.repo_path}
-                            <div class="change" style="--lines: {minLines(change)}" tabindex="-1">
-                                {#each change.hunks as hunk}
-                                    <div class="hunk">
-                                        <HunkObject header={singleton ? newest : null} path={change.path} {hunk} />
-                                    </div>
-                                    <pre class="diff">{#each hunk.lines.lines as line}<span class={lineColour(line)}
-                                                >{line}</span
-                                            >{/each}</pre>
-                                {/each}
-                            </div>
-                        {/if}
-                    {/each}
-                </div>
-            </ListWidget>
-        {:else}
-            <div class="move-commands">
-                <span>Changes: <span class="no-changes">(empty)</span></span>
-            </div>
-        {/if}
+        </div>
     </div>
 </Pane>
 
 <style>
+    .two-pane {
+        display: grid;
+        grid-template-columns: 1fr 3px 2fr;
+        height: 100%;
+        overflow: hidden;
+    }
+
+    .separator {
+        background: var(--ctp-overlay0);
+    }
+
     .header {
         display: grid;
         grid-template-columns: minmax(0, 1fr) auto;
@@ -318,6 +351,13 @@
         resize: vertical;
         min-height: 90px;
         overflow: auto;
+        width: 100%;
+        font-family: var(--font-family);
+
+        /* Creates a 1px solid vertical line at 72ch, using a linear gradient. */
+        background-image: linear-gradient(to right, transparent var(--marker-column), var(--ctp-overlay0) var(--marker-column), var(--ctp-overlay0) calc(var(--marker-column) + 1px), transparent calc(var(--marker-column) + 1px));
+        background-size: 100% 100%;
+        background-repeat: no-repeat;
     }
 
     .description-list {
