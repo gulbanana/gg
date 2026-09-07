@@ -10,6 +10,7 @@ Core component for direct-manipulation objects. A drag&drop source.
     import { createEventDispatcher } from "svelte";
     import { get } from "svelte/store";
     import BinaryMutator from "../mutators/BinaryMutator";
+    import { handleCommand } from "../mutators/commands";
 
     interface $$Slots {
         default: { context: boolean; hint: string | null };
@@ -25,6 +26,7 @@ Core component for direct-manipulation objects. A drag&drop source.
     export let selected: boolean = false;
     export let conflicted: boolean;
     export let operand: Operand | null;
+    export let defaultCommand: string | null = null;
 
     let dispatch = createEventDispatcher();
 
@@ -37,7 +39,14 @@ Core component for direct-manipulation objects. A drag&drop source.
     }
 
     function onDoubleClick(event: MouseEvent) {
-        dispatch("dblclick", event);
+        // a default command consumes the event, so it doesn't also reach the revision underneath
+        if (defaultCommand && operand) {
+            event.preventDefault();
+            event.stopPropagation();
+            handleCommand(operand, defaultCommand, $ignoreToggled);
+        } else {
+            dispatch("dblclick", event);
+        }
     }
 
     function getEffectiveOperand(): Operand | null {

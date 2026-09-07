@@ -4,10 +4,8 @@
     import type { RevHeader } from "../messages/RevHeader";
     import type { StoreRef } from "../messages/StoreRef";
     import { ignoreToggled } from "../stores";
-    import RevisionMutator from "../mutators/RevisionMutator";
-    import ChangeMutator from "../mutators/ChangeMutator";
     import RefMutator from "../mutators/RefMutator";
-    import WorkspaceMutator from "../mutators/WorkspaceMutator";
+    import { handleCommand } from "../mutators/commands";
 
     export let operand: Operand;
     export let x: number;
@@ -24,16 +22,7 @@
     }
 
     function onClick(action: string) {
-        let ignoreImmutable = $ignoreToggled;
-        if (operand.type === "Revision" || operand.type === "Revisions") {
-            new RevisionMutator(getRevisionHeaders(), ignoreImmutable).handle(action);
-        } else if (operand.type === "Change") {
-            new ChangeMutator(operand.headers, operand.path, operand.hunk, ignoreImmutable).handle(action);
-        } else if (operand.type === "Ref") {
-            new RefMutator(operand.ref, ignoreImmutable).handle(action);
-        } else if (operand.type === "Workspace") {
-            new WorkspaceMutator(operand.name).handle(action);
-        }
+        handleCommand(operand, action, $ignoreToggled);
         onClose();
     }
 
@@ -100,6 +89,7 @@
             : null;
     $: changeEnabled = operand.type === "Change" ? isChangeEnabled(operand.headers, $ignoreToggled) : null;
     $: refEnabled = operand.type === "Ref" ? isRefEnabled(operand.ref) : null;
+    $: defaultCommand = operand.type === "Ref" ? RefMutator.defaultCommand(operand.ref) : null;
 
     // clamp to viewport
     let menuElement: HTMLDivElement;
@@ -145,8 +135,14 @@
         <button disabled={!changeEnabled.squash} on:click={() => onClick("squash")}>Squash into parent</button>
         <button disabled={!changeEnabled.restore} on:click={() => onClick("restore")}>Restore from parent</button>
     {:else if operand.type === "Ref" && refEnabled}
-        <button disabled={!refEnabled.track} on:click={() => onClick("track")}>Track</button>
-        <button disabled={!refEnabled.untrack} on:click={() => onClick("untrack")}>Untrack</button>
+        <button
+            disabled={!refEnabled.track}
+            class:defaulted={defaultCommand === "track"}
+            on:click={() => onClick("track")}>Track</button>
+        <button
+            disabled={!refEnabled.untrack}
+            class:defaulted={defaultCommand === "untrack"}
+            on:click={() => onClick("untrack")}>Untrack</button>
         <hr />
         <button disabled={!refEnabled.push_all} on:click={() => onClick("push-all")}>Push</button>
         <button disabled={!refEnabled.push_single} on:click={() => onClick("push-single")}>Push to remote...</button>
@@ -191,6 +187,11 @@
 
         &:disabled {
             color: var(--ctp-overlay0);
+        }
+
+        /* the command run by double-clicking the object */
+        &.defaulted:not(:disabled) {
+            font-weight: bold;
         }
 
         &:not(:disabled) {

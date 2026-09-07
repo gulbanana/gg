@@ -8,6 +8,7 @@
     import Chip from "../controls/Chip.svelte";
     import Object from "./Object.svelte";
     import Zone from "./Zone.svelte";
+    import RefMutator from "../mutators/RefMutator";
 
     export let header: RevHeader;
     export let ref: Extract<StoreRef, { type: "LocalBookmark" | "RemoteBookmark" }>;
@@ -27,6 +28,8 @@
         (ref.type === "LocalBookmark"
             ? ref.available_remotes == 0 && ref.potential_remotes > 0
             : ref.is_tracked && ref.is_absent);
+
+    $: defaultCommand = RefMutator.defaultCommand(ref);
 
     $: tip = computeTip(ref);
 
@@ -63,7 +66,7 @@
     }
 </script>
 
-<Object {operand} {label} conflicted={ref.has_conflict} let:context let:hint={dragHint}>
+<Object {operand} {label} {defaultCommand} conflicted={ref.has_conflict} let:context let:hint={dragHint}>
     <Zone {operand} let:target let:hint={dropHint}>
         <Chip {context} {target} {disconnected} {tip}>
             <Icon name="bookmark" state={context ? null : state} />
