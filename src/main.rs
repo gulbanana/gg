@@ -11,7 +11,7 @@ use std::path::PathBuf;
 #[allow(unused_imports)]
 use anyhow::{Result, anyhow};
 use clap::Parser;
-use gg_lib::config::read_config;
+use gg_lib::config::{self, read_config};
 use gg_lib::web;
 use gg_lib::{RunOptions, askpass};
 use jj_lib::settings::UserSettings;
@@ -204,7 +204,8 @@ fn spawn_app() -> Result<()> {
 }
 
 fn run_app(args: Args) -> Result<()> {
-    let (settings, _, _, _) = read_config(args.workspace().as_deref())?;
+    let repo_path = config::resolve_repo_path(args.workspace().as_deref());
+    let (settings, _, _, _) = read_config(repo_path.as_deref())?;
     let mode = args.mode().unwrap_or_else(|| default_mode(&settings));
     let context = tauri::generate_context!();
 

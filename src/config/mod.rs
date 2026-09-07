@@ -11,7 +11,7 @@
 pub mod tests;
 
 use std::collections::{HashMap, HashSet};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use anyhow::{Result, anyhow};
@@ -22,6 +22,7 @@ use jj_lib::{
     fileset::FilesetAliasesMap,
     revset::RevsetAliasesMap,
     settings::UserSettings,
+    workspace::{DefaultWorkspaceLoaderFactory, WorkspaceLoaderFactory},
 };
 
 /// Typed accessors for GG's `[gg.*]` config keys.
@@ -136,6 +137,23 @@ fn native_keys() -> HashSet<String> {
         keys.insert(extra.to_string());
     }
     keys
+}
+
+/// Find the repo inside a workspace (for callers that need config before a workspace has been loaded).
+pub fn resolve_repo_path(dir: Option<&Path>) -> Option<PathBuf> {
+    let cwd = match dir {
+        Some(dir) => dir.to_owned(),
+        None => std::env::var_os("OWD") // set by AppImage
+            .map(PathBuf::from)
+            .or_else(|| std::env::current_dir().ok())?,
+    };
+
+    let workspace_root = cwd.ancestors().find(|path| path.join(".jj").is_dir())?;
+
+    DefaultWorkspaceLoaderFactory
+        .create(workspace_root)
+        .ok()
+        .map(|loader| loader.repo_path().to_owned())
 }
 
 /// Load the merged jj + GG configuration.

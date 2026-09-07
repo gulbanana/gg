@@ -12,7 +12,8 @@ This release is based on Jujutsu 0.41.
 - The Changes line in the right pane shows diff stats for non-empty revisions.
 
 ### Fixed
-- The working directory is now canonicalised with `dunce`, which avoids Windows UNC paths; this may avert an error when the repository contains a file with a reserved name such as NUL.
+- The working directory is now canonicalised with `dunce`, which will hopefully avoid some reserved-name errors on Windows.
+- `gg.web.default-port` didn't work when set at the --repo level.
 
 ## [0.39.1](releases/tag/v0.39.1)
 

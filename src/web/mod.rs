@@ -41,7 +41,7 @@ use serde::Deserialize;
 use tauri_plugin_log::fern;
 use tokio::sync::{broadcast, oneshot};
 
-use crate::config::{GGSettings, read_config};
+use crate::config::{self, GGSettings, read_config};
 use crate::messages::mutations::{
     AbandonRevisions, AdoptRevision, BackoutRevisions, CheckoutRevision, CopyChanges, CopyHunk,
     CreateRef, CreateRevision, CreateRevisionBetween, DeleteRef, DescribeRevision,
@@ -76,7 +76,7 @@ impl<E: Into<anyhow::Error>> From<E> for ApiError {
 #[derive(Default)]
 pub struct WebOptions {
     /// TCP port to bind to. When `None`, uses the value from
-    /// `gg.web.default-port` in jj config (default 2178).
+    /// `gg.web.default-port` in jj config (default 0, i.e. random).
     pub port: Option<u16>,
     /// Force-open the browser regardless of config.
     pub launch: bool,
@@ -99,7 +99,8 @@ pub async fn run_web(options: super::RunOptions, web_options: WebOptions) -> Res
         .chain(std::io::stderr())
         .apply()?;
 
-    let (repo_settings, _, _, _) = read_config(options.workspace.as_deref())?;
+    let repo_path = config::resolve_repo_path(options.workspace.as_deref());
+    let (repo_settings, _, _, _) = read_config(repo_path.as_deref())?;
     let client_timeout = repo_settings.web_client_timeout();
     let (app, shutdown_rx) = create_app(options, Some(client_timeout))?;
 
