@@ -308,6 +308,41 @@ impl WorkspaceSession<'_> {
         Ok(Some(self.format_status()))
     }
 
+    pub fn workspace_root(&self, name: String) -> Result<PathBuf> {
+        let workspace_name: WorkspaceNameBuf = name.into();
+
+        anyhow::ensure!(
+            self.view().get_wc_commit_id(&workspace_name).is_some(),
+            "Workspace '{}' not found",
+            workspace_name.as_symbol()
+        );
+
+        // the loaded workspace knows where it is without consulting the store
+        if *workspace_name == *self.name() {
+            return absolute_workspace_path(self.workspace.workspace_root());
+        }
+
+        let repo_path = self.workspace.repo_path();
+        let workspace_store = SimpleWorkspaceStore::load(repo_path)?;
+
+        match workspace_store.get_workspace_path(&workspace_name)? {
+            // stored paths are relative to the repo directory
+            Some(stored_path) => absolute_workspace_path(&repo_path.join(stored_path)),
+            // repos created before jj tracked workspace paths have no entries, but
+            // the default workspace is the one hosting the repo, so we can find it
+            None if *workspace_name == *WorkspaceName::DEFAULT => repo_path
+                .parent()
+                .and_then(Path::parent)
+                .filter(|root| hosts_repo(root, repo_path))
+                .map(absolute_workspace_path)
+                .unwrap_or_else(|| Err(anyhow!("Workspace 'default' has no recorded path"))),
+            None => Err(anyhow!(
+                "Workspace '{}' has no recorded path",
+                workspace_name.as_symbol()
+            )),
+        }
+    }
+
     pub fn list_workspaces(&self) -> Vec<String> {
         let mut names: Vec<String> = self
             .view()
@@ -1346,6 +1381,24 @@ fn find_workspace_dir(cwd: &Path) -> &Path {
     cwd.ancestors()
         .find(|path| path.join(".jj").is_dir())
         .unwrap_or(cwd)
+}
+
+fn absolute_workspace_path(path: &Path) -> Result<PathBuf> {
+    dunce::canonicalize(path)
+        .with_context(|| format!("Cannot resolve absolute workspace path: {}", path.display()))
+}
+
+/// is the repo inside this workspace, rather than a pointer to one elsewhere?
+fn hosts_repo(workspace_root: &Path, repo_path: &Path) -> bool {
+    let Ok(repo_path) = dunce::canonicalize(repo_path) else {
+        return false;
+    };
+
+    DefaultWorkspaceLoaderFactory
+        .create(workspace_root)
+        .ok()
+        .and_then(|loader| dunce::canonicalize(loader.repo_path()).ok())
+        .is_some_and(|loaded_path| loaded_path == repo_path)
 }
 
 fn parse_revset(

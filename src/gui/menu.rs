@@ -348,6 +348,8 @@ pub fn build_context(
     let workspace_menu = Menu::with_items(
         app_handle,
         &[
+            &MenuItem::with_id(app_handle, "workspace_open", "Open", true, None::<&str>)?,
+            &MenuItem::with_id(app_handle, "workspace_forget", "Forget", true, None::<&str>)?,
             &MenuItem::with_id(
                 app_handle,
                 "workspace_rename",
@@ -355,7 +357,6 @@ pub fn build_context(
                 true,
                 None::<&str>,
             )?,
-            &MenuItem::with_id(app_handle, "workspace_forget", "Forget", true, None::<&str>)?,
         ],
     )?;
 
@@ -644,8 +645,9 @@ pub fn handle_event(window: &Window, event: MenuEvent) -> Result<()> {
         }
         "bookmark_rename" => window.emit_to(target, "gg://context/bookmark", "rename")?,
         "bookmark_delete" => window.emit_to(target, "gg://context/bookmark", "delete")?,
-        "workspace_rename" => window.emit_to(target, "gg://context/workspace", "rename")?,
+        "workspace_open" => window.emit_to(target, "gg://context/workspace", "open")?,
         "workspace_forget" => window.emit_to(target, "gg://context/workspace", "forget")?,
+        "workspace_rename" => window.emit_to(target, "gg://context/workspace", "rename")?,
         recent_id if recent_id.starts_with("recent:") => {
             let path = PathBuf::from(&recent_id["recent:".len()..]);
             let app_handle = window.app_handle().clone();

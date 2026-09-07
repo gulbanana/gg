@@ -47,7 +47,8 @@ use crate::messages::mutations::{
     CreateRef, CreateRevision, CreateRevisionBetween, DeleteRef, DescribeRevision,
     DuplicateRevisions, ExternalDiff, ExternalResolve, ForgetWorkspace, GitFetch, GitPush,
     InsertRevisions, MoveChanges, MoveHunk, MoveRef, MoveRevisions, MutationOptions,
-    RenameBookmark, RenameWorkspace, TrackBookmark, UndoOperation, UntrackBookmark,
+    MutationResult, OpenWorkspace, RenameBookmark, RenameWorkspace, TrackBookmark, UndoOperation,
+    UntrackBookmark,
 };
 use crate::worker::{Mutation, Session, SessionEvent, WorkerSession};
 use sink::{SseEvent, SseSink};
@@ -325,6 +326,40 @@ async fn handle_mutate(
         "external_resolve" => execute_mutation::<ExternalResolve>(&state, body),
         "forget_workspace" => execute_mutation::<ForgetWorkspace>(&state, body),
         "rename_workspace" => execute_mutation::<RenameWorkspace>(&state, body),
+        // web mode has no windows to open, so we reload this one
+        "open_workspace" => {
+            #[derive(Deserialize)]
+            struct OpenWorkspaceRequest {
+                mutation: OpenWorkspace,
+            }
+
+            let request: OpenWorkspaceRequest = serde_json::from_value(body)?;
+            let (tx, rx) = channel();
+            state.worker_tx.send(SessionEvent::QueryWorkspaceRoot {
+                tx,
+                name: request.mutation.name,
+            })?;
+
+            let result = match rx.recv()? {
+                Ok(wd) => {
+                    let (tx, rx) = channel();
+                    state
+                        .worker_tx
+                        .send(SessionEvent::OpenWorkspace { tx, wd: Some(wd) })?;
+                    match rx.recv()? {
+                        Ok(new_config) => MutationResult::Reconfigured { new_config },
+                        Err(err) => MutationResult::PreconditionError {
+                            message: format!("{err:#}"),
+                        },
+                    }
+                }
+                Err(err) => MutationResult::PreconditionError {
+                    message: format!("{err:#}"),
+                },
+            };
+
+            Ok(Json(serde_json::to_value(result)?))
+        }
         "undo_operation" => {
             let (tx, rx) = channel();
             state.worker_tx.send(SessionEvent::ExecuteMutation {

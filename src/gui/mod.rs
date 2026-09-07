@@ -30,8 +30,8 @@ use gg_lib::messages::{
         CopyChanges, CopyHunk, CreateRef, CreateRevision, CreateRevisionBetween, DeleteRef,
         DescribeRevision, DuplicateRevisions, ExternalDiff, ExternalResolve, ForgetWorkspace,
         GitFetch, GitPush, InitRepository, InsertRevisions, MoveChanges, MoveHunk, MoveRef,
-        MoveRevisions, MutationOptions, MutationResult, RenameBookmark, RenameWorkspace,
-        TrackBookmark, UndoOperation, UntrackBookmark,
+        MoveRevisions, MutationOptions, MutationResult, OpenWorkspace, RenameBookmark,
+        RenameWorkspace, TrackBookmark, UndoOperation, UntrackBookmark,
     },
 };
 use gg_lib::worker::{Mutation, Session, SessionEvent, WorkerSession};
@@ -209,6 +209,7 @@ pub fn run_gui(options: super::RunOptions) -> Result<()> {
             git_fetch,
             external_diff,
             external_resolve,
+            open_workspace,
             forget_workspace,
             rename_workspace,
             undo_operation,
@@ -761,6 +762,42 @@ fn external_resolve(
     options: MutationOptions,
 ) -> Result<MutationResult, InvokeError> {
     try_mutate(window, app_state, mutation, options)
+}
+
+#[tauri::command(async)]
+fn open_workspace(
+    window: Window,
+    app_state: State<AppState>,
+    mutation: OpenWorkspace,
+) -> Result<MutationResult, InvokeError> {
+    log::debug!("open_workspace {}", mutation.name);
+
+    let session_tx: Sender<SessionEvent> = app_state.get_session(window.label());
+    let (call_tx, call_rx) = channel();
+
+    session_tx
+        .send(SessionEvent::QueryWorkspaceRoot {
+            tx: call_tx,
+            name: mutation.name,
+        })
+        .map_err(InvokeError::from_error)?;
+
+    let wd = match call_rx.recv().map_err(InvokeError::from_error)? {
+        Ok(wd) => wd,
+        Err(err) => {
+            return Ok(MutationResult::PreconditionError {
+                message: format!("{err:#}"),
+            });
+        }
+    };
+
+    // avoid main-thread deadlock
+    let app_handle = window.app_handle().clone();
+    async_runtime::spawn(async move {
+        handler::nonfatal!(try_create_window(&app_handle, Some(wd)).context("try_create_window"));
+    });
+
+    Ok(MutationResult::Unchanged)
 }
 
 #[tauri::command(async)]

@@ -9,7 +9,7 @@
     $: operand = { type: "Workspace", name } as Operand;
 </script>
 
-<Object {operand} label={name} conflicted={false} let:context>
+<Object {operand} label={name} defaultCommand="open" conflicted={false} let:context>
     <Chip {context} target={false} immobile tip="workspace: {name}">
         <Icon name="at-sign" state="change" />
         <span>{name}</span>

@@ -4,10 +4,11 @@
 This release is based on Jujutsu 0.41.
 
 ### Added
-- Workspaces are now interactive objects. The `@`-chip shown on a workspace's working copy revision has a context menu with two new commands:
-  * Rename... - renames the workspace.
+- Workspace chips are now interactive. The '@'-chip shown on a workspace's working copy revision has a context menu with these new commands:
+  * Open - creates a new window (gui) or switches the current tab (web) to the selected workspace.
   * Forget - removes a workspace from the repository, abandoning its working copy if it's empty.
-- Chips support double-clicking to perform a default action - track/untrack for bookmarks.
+  * Rename... - renames the workspace.
+- Chips support double-clicking to perform a default action - track/untrack for bookmarks, open for workspaces.
 - The Changes line in the right pane shows diff stats for non-empty revisions.
 
 ### Fixed
