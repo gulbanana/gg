@@ -1,6 +1,9 @@
 [gg]
 default-mode = "gui" # "gui" or "web"
 
+# Runs `jj-hp push` when pushing. `jj-hp` must be available in PATH.
+use-jj-hooks = false
+
 [gg.queries]
 # Number of commits to load per call
 log-page-size = 1000

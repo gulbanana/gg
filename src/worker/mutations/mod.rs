@@ -47,9 +47,14 @@ use super::{
     gui_util::WorkspaceSession,
 };
 
-use crate::messages::mutations::{
-    ExternalDiff, ExternalResolve, ForgetWorkspace, GitFetch, GitPush, GitRefspec, MutationOptions,
-    MutationResult, RenameWorkspace, UndoOperation,
+use crate::config::GGSettings;
+
+use crate::messages::{
+    MultilineString,
+    mutations::{
+        ExternalDiff, ExternalResolve, ForgetWorkspace, GitFetch, GitPush, GitRefspec,
+        MutationOptions, MutationResult, RenameWorkspace, UndoOperation,
+    },
 };
 
 macro_rules! precondition {
@@ -480,6 +485,46 @@ impl Mutation for GitPush {
                     );
                 }
             }
+        }
+
+        if ws.data.workspace_settings.use_jj_hooks() {
+            let ws_root = ws.workspace.workspace_root();
+
+            let mut cmd = std::process::Command::new("jj-hp");
+            cmd.arg("push").current_dir(ws_root);
+
+            match &self.refspec {
+                GitRefspec::AllBookmarks { remote_name } => {
+                    cmd.arg("--remote").arg(remote_name);
+                }
+                GitRefspec::AllRemotes { bookmark_ref } => {
+                    cmd.arg("--branch").arg(bookmark_ref.as_bookmark()?);
+                }
+                GitRefspec::RemoteBookmark {
+                    remote_name,
+                    bookmark_ref,
+                } => {
+                    cmd.arg("--remote").arg(remote_name);
+                    cmd.arg("--branch").arg(bookmark_ref.as_bookmark()?);
+                }
+            }
+
+            let output = cmd.output().context("failed to spawn jj-hp push")?;
+
+            if !output.status.success() {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                return Ok(MutationResult::InternalError {
+                    message: MultilineString::from(stderr.as_ref()),
+                });
+            }
+
+            drop(tx);
+            ws.load_at_head().await?;
+
+            return Ok(MutationResult::Updated {
+                new_status: ws.format_status(),
+                new_selection: None,
+            });
         }
 
         // accumulate input requirements

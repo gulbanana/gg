@@ -43,6 +43,7 @@ pub trait GGSettings {
     fn web_default_port(&self) -> u16;
     fn web_client_timeout(&self) -> Duration;
     fn web_launch_browser(&self) -> bool;
+    fn use_jj_hooks(&self) -> bool;
 }
 
 impl GGSettings for UserSettings {
@@ -103,6 +104,10 @@ impl GGSettings for UserSettings {
 
     fn web_launch_browser(&self) -> bool {
         self.get_bool("gg.web.launch-browser").unwrap_or(true)
+    }
+
+    fn use_jj_hooks(&self) -> bool {
+        self.get_bool("gg.use-jj-hooks").unwrap_or(false)
     }
 }
 
