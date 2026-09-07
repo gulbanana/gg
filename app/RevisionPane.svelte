@@ -1,5 +1,6 @@
 <script lang="ts">
     import type { RevsResult } from "./messages/RevsResult";
+    import type { RepoConfig } from "./messages/RepoConfig";
     import { ignoreToggled, changeSelectEvent, dragOverWidget } from "./stores";
     import ChangeObject from "./objects/ChangeObject.svelte";
     import HunkObject from "./objects/HunkObject.svelte";
@@ -20,6 +21,7 @@
     import TimestampRangeSpan from "./controls/TimestampRangeSpan.svelte";
 
     export let revs: Extract<RevsResult, { type: "Detail" }>;
+    export let workspace: Extract<RepoConfig, { type: "Workspace" }>;
 
     const CONTEXT = 3;
 
@@ -196,6 +198,7 @@
                 spellcheck="false"
                 disabled={newestImmutable}
                 bind:value={editableDescription}
+                style="--font-family: {workspace.description_font_family}; --marker-column: {workspace.description_marker_column}ch;"
                 on:dragenter={dragOverWidget}
                 on:dragover={dragOverWidget}
                 on:keydown={(ev) => {
@@ -348,6 +351,12 @@
         resize: vertical;
         min-height: 90px;
         overflow: auto;
+        font-family: var(--font-family);
+
+        /* Creates a 1px solid vertical line at 72ch, using a linear gradient. */
+        background-image: linear-gradient(to right, transparent var(--marker-column), var(--ctp-overlay0) var(--marker-column), var(--ctp-overlay0) calc(var(--marker-column) + 1px), transparent calc(var(--marker-column) + 1px));
+        background-size: 100% 100%;
+        background-repeat: no-repeat;
     }
 
     .description-list {
