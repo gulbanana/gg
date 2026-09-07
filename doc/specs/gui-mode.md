@@ -170,14 +170,18 @@ Three context menus built in `menu::build_context()`:
 - **Tree menu**: Squash, restore operations on changes
 - **Ref menu**: Track, untrack, push, fetch, rename, delete bookmarks
 
-Context menus are shown via `window.popup_menu()` after enabling appropriate items based on the operand.
+Context menus are shown via `window.popup_menu_at()` after enabling appropriate items based on the operand. The frontend supplies the anchor point, because Wayland won't tell the backend where the pointer is.
 
 ### Menu → Action Flow
 
-1. User right-clicks object → `forward_context_menu` command
-2. `handle_context()` enables menu items, calls `window.popup_menu()`
-3. User selects item → `handle_event()` emits `gg://menu/*` event
-4. Frontend receives event, calls appropriate mutator
+1. User right-clicks object → `forward_context_menu` command, with the event's `clientX`/`clientY`
+2. `handle_context()` hops to the main thread, since GTK widgets can only be touched there
+3. `to_window_position()` converts the webview coordinates to window coordinates
+4. `handle_context_main_thread()` enables menu items, calls `window.popup_menu_at()`
+5. User selects item → `handle_event()` emits `gg://menu/*` event
+6. Frontend receives event, calls appropriate mutator
+
+Menus are shared between windows, so `handle_event()` routes each event to the window that most recently gained focus. This can't be `is_focused()` - a Wayland popup grab takes focus off the toplevel for exactly as long as the menu is open.
 
 ## Plugins
 
@@ -232,11 +236,15 @@ The update runs in a background thread to avoid blocking the UI.
 ### macOS
 - Dock icon set via `crate::macos::set_dock_icon()` when running as CLI
 - App menu includes standard macOS items (About, Services, Hide, Quit)
-- Native context menus via `popup_menu()`
+- Native context menus via `popup_menu_at()`
 
 ### Windows  
 - Drag-and-drop disabled on `WebviewWindow` (handled differently)
 - Jump list updated with recent workspaces
+
+### Linux
+- Depends on `gtk`, which must track the version tauri uses - we borrow its widgets to place context menus
+- `to_window_position()` shifts the popup anchor past the menubar and the client-side decorations; muda anchors menus against the toplevel GDK window, which on Wayland includes the titlebar and shadow
 
 ## Launching GUI Mode
 

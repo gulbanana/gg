@@ -106,6 +106,10 @@ webbrowser = { version = "1", features = ["hardened"] }
 interprocess = "2"
 uuid = { version = "1", features = ["v4"] }
 
+# deps shared with tauri to work around wayland issues
+[target."cfg(target_os = \"linux\")".dependencies]
+gtk = "0.18"
+
 [target."cfg(windows)".dependencies]
 windows = { version = "0.61", features = [
     "Win32_Foundation",

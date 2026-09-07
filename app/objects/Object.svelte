@@ -65,17 +65,26 @@ Core component for direct-manipulation objects. A drag&drop source.
     }
 
     function onMenu(event: Event) {
-        if (operand?.type == "Ref" || operand?.type == "Change" || operand?.type == "Revision" || operand?.type == "Workspace") {
+        if (
+            operand?.type == "Ref" ||
+            operand?.type == "Change" ||
+            operand?.type == "Revision" ||
+            operand?.type == "Workspace"
+        ) {
             event.preventDefault();
             event.stopPropagation();
 
             let effectiveOperand = getEffectiveOperand();
             currentContext.set(effectiveOperand);
 
+            let mouseEvent = event as MouseEvent;
             if (isTauri()) {
-                trigger("forward_context_menu", { context: effectiveOperand });
+                trigger("forward_context_menu", {
+                    context: effectiveOperand,
+                    x: mouseEvent.clientX,
+                    y: mouseEvent.clientY,
+                });
             } else {
-                const mouseEvent = event as MouseEvent;
                 hasMenu.set({ x: mouseEvent.clientX, y: mouseEvent.clientY });
             }
         }
