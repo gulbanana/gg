@@ -1,6 +1,7 @@
 <script lang="ts">
     import type { RevsResult } from "./messages/RevsResult";
-    import { ignoreToggled, changeSelectEvent, dragOverWidget } from "./stores";
+    import { get } from "svelte/store";
+    import { ignoreToggled, changeSelectEvent, descriptionDraft, dragOverWidget } from "./stores";
     import ChangeObject from "./objects/ChangeObject.svelte";
     import HunkObject from "./objects/HunkObject.svelte";
     import RevisionObject from "./objects/RevisionObject.svelte";
@@ -33,19 +34,25 @@
     $: mutator = new RevisionMutator(revs.headers, $ignoreToggled);
 
     // debounce for change detection
-    let lastSelectionKey = `${revs.set.from.commit.hex}::${revs.set.to.commit.hex}`;
-    $: selectionKey = `${revs.set.from.commit.hex}::${revs.set.to.commit.hex}`;
+    $: changeKey = revs.headers.map((h) => `${h.id.change.hex}/${h.id.change.offset ?? ""}`).join(",");
+    $: incomingDescription = revs.headers[revs.headers.length - 1].description.lines.join("\n");
 
-    // editable description for single-revision mode
-    let originalDescription = revs.headers[revs.headers.length - 1].description.lines.join("\n");
-    $: editableDescription = revs.headers[revs.headers.length - 1].description.lines.join("\n");
+    // editable description for single-revision mode, stored for the current chid
+    let editableDescription = "";
+    let baselineDescription = "";
+    let lastChangeKey: string | null = null;
     $: {
-        if (selectionKey !== lastSelectionKey) {
-            lastSelectionKey = selectionKey;
-            originalDescription = editableDescription;
+        if (changeKey !== lastChangeKey) {
+            let draft = get(descriptionDraft); // $ would reenter when saving
+            editableDescription = draft?.changeKey === changeKey ? draft.text : incomingDescription;
+        } else if (editableDescription === baselineDescription) {
+            editableDescription = incomingDescription;
         }
+        lastChangeKey = changeKey;
+        baselineDescription = incomingDescription;
     }
-    $: descriptionChanged = originalDescription !== editableDescription;
+    $: descriptionChanged = editableDescription !== baselineDescription;
+    $: descriptionDraft.set(descriptionChanged ? { changeKey, text: editableDescription } : null);
     let resetAuthor = false;
     function updateDescription() {
         mutator.onDescribe(editableDescription, resetAuthor);
@@ -292,9 +299,7 @@
                                         <HunkObject header={singleton ? newest : null} path={change.path} {hunk} />
                                     </div>
                                     <pre class="diff">{#each hunk.lines.lines as line}<span class={lineColour(line)}
-                                                ><span class="prefix">{line.slice(0, 1)}</span>{line.slice(
-                                                    1,
-                                                )}</span
+                                                ><span class="prefix">{line.slice(0, 1)}</span>{line.slice(1)}</span
                                             >{/each}</pre>
                                 {/each}
                             </div>

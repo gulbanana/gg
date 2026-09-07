@@ -11,6 +11,7 @@ This release is based on Jujutsu 0.41.
 - Chips support double-clicking to perform a default action - track/untrack for bookmarks, open for workspaces.
 - The Changes line in the right pane shows diff stats for non-empty revisions.
 - Bookmark->Rename... now pre-fills the previous name (thanks to @urbanij).
+- Draft descriptions are saved across operations as long as the change-id of your selection remains the same.
 
 ### Fixed
 - The working directory is now canonicalised with `dunce`, which will hopefully avoid some reserved-name errors on Windows.
