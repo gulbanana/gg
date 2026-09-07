@@ -1,8 +1,7 @@
 use std::{borrow::Borrow, collections::HashSet, io::Write, mem, ops::Range, pin::Pin};
 
 use anyhow::{Result, anyhow};
-
-use futures_util::{Stream, StreamExt, try_join};
+use futures_util::{AsyncReadExt, Stream, StreamExt, try_join};
 use gix::bstr::ByteVec;
 use itertools::Itertools;
 use jj_cli::diff_util::LineDiffOptions;
@@ -534,8 +533,6 @@ async fn get_value_hunks(
 }
 
 async fn get_value_contents(path: &RepoPath, value: MaterializedTreeValue) -> Result<Vec<u8>> {
-    use tokio::io::AsyncReadExt;
-
     match value {
         MaterializedTreeValue::Absent => Err(anyhow!(
             "Absent path {path:?} in diff should have been handled by caller"
@@ -826,7 +823,6 @@ fn diff_by_line<'input, T: AsRef<[u8]> + ?Sized + 'input>(
     // blank lines to the preceding range. Maybe it can also be implemented as a
     // post-process (similar to refine_changed_regions()) that expands unchanged
     // regions across blank lines.
-    use jj_lib::diff::ContentDiff;
     match options.compare_mode {
         LineCompareMode::Exact => {
             ContentDiff::for_tokenizer(inputs, find_line_ranges, CompareBytesExactly)

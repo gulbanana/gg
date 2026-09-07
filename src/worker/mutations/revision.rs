@@ -653,12 +653,12 @@ mod tests {
     };
     use anyhow::Result;
     use assert_matches::assert_matches;
+    use futures_util::AsyncReadExt;
     use jj_lib::{
         config::{ConfigLayer, ConfigSource},
         repo::Repo,
         settings::UserSettings,
     };
-    use tokio::io::AsyncReadExt;
 
     #[tokio::test]
     async fn abandon_revisions() -> Result<()> {

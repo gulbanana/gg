@@ -63,8 +63,8 @@ tauri-plugin-shell = "2.0.0"
 tauri-plugin-window-state = "2.0.0"
 tauri-plugin-log = "2.0.0"
 
-jj-lib = { version = "0.41.0", features = ["watchman"] }
-jj-cli = "0.41.0"
+jj-lib = { version = "0.42.0", features = ["watchman"] }
+jj-cli = "0.42.0"
 
 # deps shared with JJ, which we try to keep on the same version
 anyhow = "1.0.100"
@@ -79,7 +79,7 @@ etcetera = "0.11.0"
 dunce = "1.0.5"
 itertools = "0.14"
 indexmap = "2.14"
-gix = { version = "0.83.0", default-features = false, features = [
+gix = { version = "0.84.0", default-features = false, features = [
     "index",
     "max-performance-safe",
     "blob-diff",
@@ -97,7 +97,8 @@ chrono = { version = "0.4.44", features = ["serde"] }
 
 # extra deps not used by JJ
 log = "0.4"
-futures-util = "0.3.31"
+# "io" for the futures AsyncRead traits jj-lib now uses instead of tokio's
+futures-util = { version = "0.3.31", features = ["io"] }
 pollster = "0.4.0"
 humantime = "2"
 ts-rs = { version = "7.1.1", features = ["chrono-impl"], optional = true }
