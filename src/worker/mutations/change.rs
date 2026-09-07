@@ -758,8 +758,8 @@ mod tests {
     };
     use anyhow::Result;
     use assert_matches::assert_matches;
+    use futures_util::AsyncReadExt;
     use std::fs;
-    use tokio::io::AsyncReadExt;
 
     #[tokio::test]
     async fn move_changes_all_paths() -> Result<()> {

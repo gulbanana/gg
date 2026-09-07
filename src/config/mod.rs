@@ -19,6 +19,7 @@ use jj_cli::config::{ConfigEnv, config_from_environment, default_config_layers};
 use jj_cli::ui::Ui;
 use jj_lib::{
     config::{ConfigGetError, ConfigLayer, ConfigNamePathBuf, ConfigSource, StackedConfig},
+    dsl_util::{AliasDeclarationParser, AliasesMap},
     fileset::FilesetAliasesMap,
     revset::RevsetAliasesMap,
     settings::UserSettings,
@@ -303,42 +304,29 @@ fn read_preset_choices(stacked_config: &StackedConfig) -> HashMap<String, String
 
 fn build_aliases_map(stacked_config: &StackedConfig) -> Result<RevsetAliasesMap> {
     let table_name = ConfigNamePathBuf::from_iter(["revset-aliases"]);
-    let mut aliases_map = RevsetAliasesMap::new();
-    // Load from all config layers in order. 'f(x)' in default layer should be
-    // overridden by 'f(a)' in user.
-    for layer in stacked_config.layers() {
-        let table = match layer.look_up_table(&table_name) {
-            Ok(Some(table)) => table,
-            Ok(None) => continue,
-            Err(item) => {
-                return Err(ConfigGetError::Type {
-                    name: table_name.to_string(),
-                    error: format!("Expected a table, but is {}", item.type_name()).into(),
-                    source_path: layer.path.clone(),
-                }
-                .into());
-            }
-        };
-        for (decl, item) in table.iter() {
-            let r = item
-                .as_str()
-                .ok_or_else(|| format!("Expected a string, but is {}", item.type_name()))
-                .and_then(|v| aliases_map.insert(decl, v).map_err(|e| e.to_string()));
-            if let Err(s) = r {
-                return Err(anyhow!("Failed to load `{table_name}.{decl}`: {s}"));
-            }
-        }
-    }
-    Ok(aliases_map)
+    build_generic_aliases_map(stacked_config, &table_name)
 }
 
 pub fn build_fileset_aliases_map(stacked_config: &StackedConfig) -> Result<FilesetAliasesMap> {
     let table_name = ConfigNamePathBuf::from_iter(["fileset-aliases"]);
-    let mut aliases_map = FilesetAliasesMap::new();
+    build_generic_aliases_map(stacked_config, &table_name)
+}
+
+/// Mirrors jj-cli's `load_aliases_map`, but treats a bad alias as a hard error
+/// rather than a warning, since GG has no console to warn on.
+fn build_generic_aliases_map<P>(
+    stacked_config: &StackedConfig,
+    table_name: &ConfigNamePathBuf,
+) -> Result<AliasesMap<P, String>>
+where
+    P: AliasDeclarationParser + Default,
+    P::Error: std::fmt::Display,
+{
+    let mut aliases_map = AliasesMap::new();
     // Load from all config layers in order. 'f(x)' in default layer should be
     // overridden by 'f(a)' in user.
     for layer in stacked_config.layers() {
-        let table = match layer.look_up_table(&table_name) {
+        let table = match layer.look_up_table(table_name) {
             Ok(Some(table)) => table,
             Ok(None) => continue,
             Err(item) => {
@@ -351,10 +339,27 @@ pub fn build_fileset_aliases_map(stacked_config: &StackedConfig) -> Result<Files
             }
         };
         for (decl, item) in table.iter() {
-            let r = item
-                .as_str()
-                .ok_or_else(|| format!("Expected a string, but is {}", item.type_name()))
-                .and_then(|v| aliases_map.insert(decl, v).map_err(|e| e.to_string()));
+            // an alias is either a bare definition string or a table carrying
+            // a `definition` plus optional `doc`
+            let (definition, doc) = match item.as_table_like() {
+                Some(t) => (
+                    t.get("definition").and_then(|i| i.as_str()),
+                    t.get("doc").and_then(|i| i.as_str()).map(str::to_owned),
+                ),
+                None => (item.as_str(), None),
+            };
+            let r = definition
+                .ok_or_else(|| {
+                    format!(
+                        "Expected a string or a table with a `definition` string key, but is {}",
+                        item.type_name()
+                    )
+                })
+                .and_then(|v| {
+                    aliases_map
+                        .insert(decl, v, doc)
+                        .map_err(|e: P::Error| e.to_string())
+                });
             if let Err(s) = r {
                 return Err(anyhow!("Failed to load `{table_name}.{decl}`: {s}"));
             }

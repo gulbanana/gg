@@ -534,7 +534,7 @@ async fn get_value_hunks(
 }
 
 async fn get_value_contents(path: &RepoPath, value: MaterializedTreeValue) -> Result<Vec<u8>> {
-    use tokio::io::AsyncReadExt;
+    use futures_util::AsyncReadExt;
 
     match value {
         MaterializedTreeValue::Absent => Err(anyhow!(

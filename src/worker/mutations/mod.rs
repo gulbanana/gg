@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use anyhow::{Context, Error, Result};
 use async_trait::async_trait;
-use futures_util::TryStreamExt;
+use futures_util::{AsyncReadExt, TryStreamExt};
 use itertools::Itertools;
 use jj_cli::{
     git_util::load_git_import_options,
@@ -39,7 +39,6 @@ use jj_lib::{
     workspace_store::{SimpleWorkspaceStore, WorkspaceStore as _},
 };
 use pollster::FutureExt as _;
-use tokio::io::AsyncReadExt;
 
 use super::{
     Mutation,
