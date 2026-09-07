@@ -7,6 +7,7 @@ This release is based on Jujutsu 0.41.
 - Workspaces are now interactive objects. The `@`-chip shown on a workspace's working copy revision has a context menu with two new commands:
   * Rename... - renames the workspace.
   * Forget - removes a workspace from the repository, abandoning its working copy if it's empty.
+- The Changes line in the right pane shows diff stats for non-empty revisions.
 
 ### Fixed
 - The working directory is now canonicalised with `dunce`, which avoids Windows UNC paths; this may avert an error when the repository contains a file with a reserved name such as NUL.

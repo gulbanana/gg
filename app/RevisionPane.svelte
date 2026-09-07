@@ -60,6 +60,9 @@
     ).toISOString();
     $: authors = [...new Map(revs.headers.map((h) => [h.author.email, h.author])).values()];
 
+    // conflicts are excluded from line counts - their "hunk" is materialised markers, not a real diff
+    $: diffStat = formatDiffStat(revs.changes, revs.changes.length + revs.conflicts.length);
+
     let syntheticChanges = revs.changes
         .concat(
             revs.conflicts.map((conflict) => ({
@@ -113,6 +116,31 @@
             max = Math.max(hunk.lines.lines.length, max);
         }
         return Math.min(max, CONTEXT * 2 + 1);
+    }
+
+    function formatDiffStat(changes: RevChange[], fileCount: number): string {
+        let insertions = 0;
+        let deletions = 0;
+        for (let change of changes) {
+            for (let hunk of change.hunks) {
+                for (let line of hunk.lines.lines) {
+                    if (line.startsWith("+")) {
+                        insertions++;
+                    } else if (line.startsWith("-")) {
+                        deletions++;
+                    }
+                }
+            }
+        }
+
+        let parts = [`${fileCount} ${fileCount == 1 ? "file" : "files"} changed`];
+        if (insertions > 0) {
+            parts.push(`${insertions} ${insertions == 1 ? "insertion" : "insertions"}(+)`);
+        }
+        if (deletions > 0) {
+            parts.push(`${deletions} ${deletions == 1 ? "deletion" : "deletions"}(-)`);
+        }
+        return parts.join(", ");
     }
 
     function lineColour(line: string): string | null {
@@ -230,7 +258,7 @@
 
         {#if syntheticChanges.length > 0}
             <div class="move-commands">
-                <span>Changes:</span>
+                <span class="changes-label">Changes: <span class="stat">{diffStat}</span></span>
 
                 <ActionWidget
                     tip="move all changes to parent"
@@ -274,7 +302,7 @@
             </ListWidget>
         {:else}
             <div class="move-commands">
-                <span>Changes: <span class="no-changes">(empty)</span></span>
+                <span class="changes-label">Changes: <span class="stat">(empty)</span></span>
             </div>
         {/if}
     </div>
@@ -384,7 +412,13 @@
         margin-top: -1px;
     }
 
-    .no-changes {
+    .changes-label {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .stat {
         color: var(--ctp-subtext0);
     }
 
