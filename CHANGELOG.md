@@ -14,6 +14,7 @@ This release is based on Jujutsu 0.41.
 ### Fixed
 - The working directory is now canonicalised with `dunce`, which will hopefully avoid some reserved-name errors on Windows.
 - `gg.web.default-port` didn't work when set at the --repo level.
+- Text selection in the diff view no longer includes +/- prefixes (or an extra space for unchanged lines).
 
 ## [0.39.1](releases/tag/v0.39.1)
 

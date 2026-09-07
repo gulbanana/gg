@@ -292,7 +292,9 @@
                                         <HunkObject header={singleton ? newest : null} path={change.path} {hunk} />
                                     </div>
                                     <pre class="diff">{#each hunk.lines.lines as line}<span class={lineColour(line)}
-                                                >{line}</span
+                                                ><span class="prefix">{line.slice(0, 1)}</span>{line.slice(
+                                                    1,
+                                                )}</span
                                             >{/each}</pre>
                                 {/each}
                             </div>
@@ -481,6 +483,11 @@
         margin: 0;
         background: var(--ctp-base);
         user-select: text;
+    }
+
+    /* the +/-/space is a diff marker, not content - excluding it from selection keeps it out of copies */
+    .diff .prefix {
+        user-select: none;
     }
 
     .add {
