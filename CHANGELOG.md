@@ -10,12 +10,13 @@ This release is based on Jujutsu 0.41.
   * Rename... - renames the workspace.
 - Chips support double-clicking to perform a default action - track/untrack for bookmarks, open for workspaces.
 - The Changes line in the right pane shows diff stats for non-empty revisions.
+- Bookmark->Rename... now pre-fills the previous name (thanks to @urbanij).
 
 ### Fixed
 - The working directory is now canonicalised with `dunce`, which will hopefully avoid some reserved-name errors on Windows.
 - `gg.web.default-port` didn't work when set at the --repo level.
 - Text selection in the diff view no longer includes +/- prefixes (or an extra space for unchanged lines).
-- Context menus were incorrectly positioned in Wayland and nonfunctional on certain GTK versions.
+- Context menus were incorrectly positioned in Wayland and nonfunctional on certain GTK versions (thanks to @rielas).
 
 ## [0.39.1](releases/tag/v0.39.1)
 
