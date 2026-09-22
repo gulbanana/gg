@@ -228,3 +228,68 @@ describe("ContextMenu (revert)", () => {
         expect(revertButton!.disabled).toBe(false);
     });
 });
+
+describe("ContextMenu (file history)", () => {
+    beforeEach(() => {
+        setupMocks(() => undefined);
+    });
+
+    afterEach(async () => {
+        await cleanupMocks();
+    });
+
+    it("clicking 'View file history' requests a files() revset", async () => {
+        const { default: ContextMenu } = await import("./ContextMenu.svelte");
+        const { logQueryRequest } = await import("../stores");
+        const { get } = await import("svelte/store");
+        logQueryRequest.set(null);
+
+        let onClose = vi.fn();
+        let operand: Operand = {
+            type: "Change",
+            headers: [mockHeader],
+            path: { repo_path: "app/LogPane.svelte", relative_path: "app/LogPane.svelte" },
+            hunk: null,
+        };
+
+        const { container } = render(ContextMenu, {
+            props: { operand, x: 100, y: 100, onClose },
+        });
+
+        let buttons = container.querySelectorAll("button");
+        let historyButton = Array.from(buttons).find((b) => b.textContent === "View file history");
+
+        expect(historyButton).toBeTruthy();
+        expect(historyButton!.disabled).toBe(false);
+
+        historyButton!.click();
+
+        expect(onClose).toHaveBeenCalled();
+        expect(get(logQueryRequest)).toBe('files("app/LogPane.svelte")');
+    });
+
+    it("quotes in paths are escaped for the fileset parser", async () => {
+        const { default: ContextMenu } = await import("./ContextMenu.svelte");
+        const { logQueryRequest } = await import("../stores");
+        const { get } = await import("svelte/store");
+        logQueryRequest.set(null);
+
+        let operand: Operand = {
+            type: "Change",
+            headers: [mockHeader],
+            path: { repo_path: 'a "quoted" \\ name.txt', relative_path: 'a "quoted" \\ name.txt' },
+            hunk: null,
+        };
+
+        const { container } = render(ContextMenu, {
+            props: { operand, x: 100, y: 100, onClose: () => { } },
+        });
+
+        let buttons = container.querySelectorAll("button");
+        Array.from(buttons)
+            .find((b) => b.textContent === "View file history")!
+            .click();
+
+        expect(get(logQueryRequest)).toBe('files("a \\"quoted\\" \\\\ name.txt")');
+    });
+});

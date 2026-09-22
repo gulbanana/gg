@@ -296,6 +296,14 @@ pub fn build_context(
                 true,
                 None::<&str>,
             )?,
+            &PredefinedMenuItem::separator(app_handle)?,
+            &MenuItem::with_id(
+                app_handle,
+                "tree_file_history",
+                "View file history",
+                true,
+                None::<&str>,
+            )?,
         ],
     )?;
 
@@ -683,6 +691,7 @@ pub fn handle_event(window: &Window, event: MenuEvent) -> Result<()> {
         "revision_bookmark" => window.emit_to(target, "gg://context/revision", "bookmark")?,
         "tree_squash" => window.emit_to(target, "gg://context/tree", "squash")?,
         "tree_restore" => window.emit_to(target, "gg://context/tree", "restore")?,
+        "tree_file_history" => window.emit_to(target, "gg://context/tree", "file_history")?,
         "bookmark_track" => window.emit_to(target, "gg://context/bookmark", "track")?,
         "bookmark_untrack" => window.emit_to(target, "gg://context/bookmark", "untrack")?,
         "bookmark_push_all" => window.emit_to(target, "gg://context/bookmark", "push-all")?,

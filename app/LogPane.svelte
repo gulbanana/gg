@@ -6,7 +6,7 @@
     import type { RevSet } from "./messages/RevSet";
     import { getInput, query, trigger } from "./ipc.js";
     import { sameChange } from "./ids.js";
-    import { ignoreToggled, repoStatusEvent, revisionSelectEvent } from "./stores.js";
+    import { ignoreToggled, logQueryRequest, repoStatusEvent, revisionSelectEvent } from "./stores.js";
     import RevisionMutator from "./mutators/RevisionMutator.js";
     import Pane from "./shell/Pane.svelte";
     import RevisionObject from "./objects/RevisionObject.svelte";
@@ -127,6 +127,13 @@
 
     $: choices = getChoices(entered_query, presets);
     $: if ($repoStatusEvent) reloadLog();
+    $: if ($logQueryRequest) applyQueryRequest($logQueryRequest);
+
+    function applyQueryRequest(revset: string) {
+        logQueryRequest.set(null);
+        entered_query = revset;
+        reloadLog();
+    }
 
     function isInSelectedRange(row: EnhancedRow, selection: typeof $revisionSelectEvent): boolean {
         if (!selection || !graphRows) return false;

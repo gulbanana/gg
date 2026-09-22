@@ -134,6 +134,8 @@
     {:else if operand.type === "Change" && changeEnabled}
         <button disabled={!changeEnabled.squash} on:click={() => onClick("squash")}>Squash into parent</button>
         <button disabled={!changeEnabled.restore} on:click={() => onClick("restore")}>Restore from parent</button>
+        <hr />
+        <button on:click={() => onClick("file_history")}>View file history</button>
     {:else if operand.type === "Ref" && refEnabled}
         <button
             disabled={!refEnabled.track}

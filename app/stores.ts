@@ -25,6 +25,7 @@ export const currentInput = writable<InputRequest & { callback: (response: Input
 
 export const hasModal = writable<boolean>(false);
 export const hasMenu = writable<{ x: number; y: number; } | null>(null);
+export const logQueryRequest = writable<string | null>(null);
 export const lastFocus = writable<number>(Date.now());
 export const ignoreToggled = writable<boolean>(false);
 
