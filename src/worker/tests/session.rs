@@ -1,7 +1,7 @@
 use super::{mkid, mkrepo, revs};
 use crate::{
     messages::{
-        RepoConfig, RevSet,
+        RepoConfig, RepoStatus, RevSet,
         queries::{LogPage, RevsResult},
     },
     worker::{Session, SessionEvent, WorkerSession},
@@ -274,6 +274,63 @@ async fn query_log_multi_interrupt() -> Result<()> {
     let page2 = rx_page2.recv()??;
     assert_eq!(7, page2.rows.len());
     assert!(page2.has_more); // Still 4 more commits
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn query_log_multi_resume_missing_edge() -> Result<()> {
+    let repo = mkrepo();
+    let (tx, rx) = channel::<SessionEvent>();
+    let (tx_load, rx_load) = channel::<Result<RepoConfig>>();
+    let (tx_page1, rx_page1) = channel::<Result<LogPage>>();
+    let (tx_snapshot, rx_snapshot) = channel::<Option<RepoStatus>>();
+    let (tx_page2, rx_page2) = channel::<Result<LogPage>>();
+
+    tx.send(SessionEvent::OpenWorkspace {
+        tx: tx_load,
+        wd: Some(repo.path().to_owned()),
+    })?;
+    // small_child's parent is elided, so it has a missing edge
+    tx.send(SessionEvent::QueryLog {
+        tx: tx_page1,
+        query: "vnstymnv | wnpusytq | ywknyuol".to_owned(),
+    })?;
+    // leaves the query session, which must then resume from the right place
+    tx.send(SessionEvent::ExecuteSnapshot { tx: tx_snapshot })?;
+    tx.send(SessionEvent::QueryLogNextPage { tx: tx_page2 })?;
+    tx.send(SessionEvent::EndSession)?;
+
+    WorkerSession {
+        force_log_page_size: Some(2),
+        ..Default::default()
+    }
+    .handle_events(&rx)
+    .await?;
+
+    rx_load.recv()??;
+    rx_snapshot.recv()?;
+
+    let page1 = rx_page1.recv()??;
+    assert!(page1.has_more);
+
+    let page2 = rx_page2.recv()??;
+    assert!(!page2.has_more);
+
+    let ids: Vec<_> = page1
+        .rows
+        .iter()
+        .chain(&page2.rows)
+        .map(|row| row.revision.id.commit.hex.as_str())
+        .collect();
+    assert_eq!(
+        vec![
+            revs::small_child().commit.hex,
+            revs::main_bookmark().commit.hex,
+            revs::immutable_bookmark().commit.hex,
+        ],
+        ids
+    );
 
     Ok(())
 }

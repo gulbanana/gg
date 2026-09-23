@@ -55,6 +55,8 @@ pub struct QueryState {
     next_row: usize,
     /// ongoing vertical lines; nodes will be placed on or around these
     stems: Vec<Option<LogStem>>,
+    /// stem of a missing edge, kept until the next row so that nothing is drawn under its stub
+    missing_stem: Option<usize>,
 }
 
 impl QueryState {
@@ -63,6 +65,7 @@ impl QueryState {
             page_size,
             next_row: 0,
             stems: Vec::new(),
+            missing_stem: None,
         }
     }
 }
@@ -239,6 +242,7 @@ impl<'q, 'w> QuerySession<'q, 'w> {
                 for (slot, stem) in self.state.stems.iter().enumerate() {
                     if let Some(stem) = stem
                         && stem.target == edge.target
+                        && self.state.missing_stem != Some(slot)
                     {
                         lines.push(LogLine::ToIntersection {
                             indirect,
@@ -279,7 +283,12 @@ impl<'q, 'w> QuerySession<'q, 'w> {
             });
             row += 1;
 
-            // terminate any temporary stems created for missing edges
+            if let Some(slot) = self.state.missing_stem.take() {
+                self.state.stems[slot] = None;
+            }
+
+            // stub out missing edges into the next row, reserving the slot so nothing lands under the stub.
+            // the stub can't have a row of its own, because the frontend treats locations as row indices
             if let Some(slot) = next_missing
                 .take()
                 .and_then(|id| self.find_stem_for_commit(&id))
@@ -291,8 +300,7 @@ impl<'q, 'w> QuerySession<'q, 'w> {
                         target: LogCoordinates(slot, row),
                     });
                 }
-                self.state.stems[slot] = None;
-                row += 1;
+                self.state.missing_stem = Some(slot);
             };
 
             if row == max {

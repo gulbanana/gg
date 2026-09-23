@@ -12,9 +12,10 @@ This release is based on Jujutsu 0.45.1.
 - On MacOS and Windows, launching GG while it's already running opens a new window in the existing instance.
 
 ### Fixed
-- Truncation of revision descriptions on MacOS when the window was too wide (thanks to @riksteri).
+- On MacOS, revision descriptions were truncated when the window was too wide (thanks to @riksteri).
 - On MacOS, the GUI-mode window titlebar adapts to your colour scheme once again; on MacOS 26+, it makes use of the empty space that Tahoe leaves on the right.
 - The Reopen command didn't work. It may have *appeared* to work if you pressed F5, due to a webpage reload, but only on some platforms.
+- Revsets with elided rows didn't always display accurately - they could cut off and prevent further scrolling.
 
 ## [0.41.0](releases/tag/v0.41.0)
 This release is based on Jujutsu 0.41.

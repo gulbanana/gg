@@ -1,5 +1,8 @@
 use super::{mkid, mkrepo, revs};
-use crate::messages::{RevSet, StoreRef, queries::RevsResult};
+use crate::messages::{
+    RevSet, StoreRef,
+    queries::{LogCoordinates, LogLine, RevsResult},
+};
 use crate::worker::{WorkerSession, queries};
 use anyhow::Result;
 use assert_matches::assert_matches;
@@ -45,6 +48,43 @@ async fn log_subset() -> Result<()> {
     let several_rows = queries::query_log(&ws, "bookmarks()", 100)?;
 
     assert_eq!(4, several_rows.rows.len());
+
+    Ok(())
+}
+
+#[tokio::test]
+async fn log_missing_edge() -> Result<()> {
+    let repo = mkrepo();
+
+    let mut session = WorkerSession::default();
+    let ws = session.load_workspace(repo.path()).await?;
+
+    // small_child's parent is elided, and the stub for it must not take up a row
+    let page = queries::query_log(&ws, "vnstymnv | wnpusytq | ywknyuol", 100)?;
+
+    let ids: Vec<_> = page
+        .rows
+        .iter()
+        .map(|row| row.revision.id.commit.hex.as_str())
+        .collect();
+    assert_eq!(
+        vec![
+            revs::small_child().commit.hex,
+            revs::main_bookmark().commit.hex,
+            revs::immutable_bookmark().commit.hex,
+        ],
+        ids
+    );
+    for (index, row) in page.rows.iter().enumerate() {
+        assert_eq!(index, row.location.1);
+    }
+    assert_matches!(
+        &page.rows[0].lines[..],
+        [LogLine::ToMissing {
+            target: LogCoordinates(_, 1),
+            ..
+        }]
+    );
 
     Ok(())
 }
