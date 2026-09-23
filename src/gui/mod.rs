@@ -1016,8 +1016,12 @@ pub fn try_create_window(app_handle: &AppHandle, workspace: Option<PathBuf>) -> 
                 })
                 .ok();
         }
+        // set_focus() does nothing to a minimised window on windows
         #[cfg(not(target_os = "macos"))]
-        _existing.set_focus()?;
+        {
+            _existing.unminimize()?;
+            _existing.set_focus()?;
+        }
 
         return Ok(());
     }
