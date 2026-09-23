@@ -129,6 +129,26 @@
   }
 }
 
+/* on the macos 26 sdk, the titlebar floats over webkit's scroll pocket,
+   which is filled with the root background rather than #shell's */
+html {
+  background: var(--ctp-latte-crust);
+}
+
+@media (prefers-color-scheme: dark) {
+  html {
+    background: var(--ctp-macchiato-crust);
+  }
+}
+
+html:has(#shell.light) {
+  background: var(--ctp-latte-crust);
+}
+
+html:has(#shell.dark) {
+  background: var(--ctp-macchiato-crust);
+}
+
 ::selection {
   background-color: transparent;
   color: var(--ctp-rosewater);

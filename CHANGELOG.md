@@ -12,6 +12,7 @@ This release is based on Jujutsu 0.45.1.
 
 ### Fixed
 - Truncation of revision descriptions on MacOS when the window was too wide (thanks to @riksteri).
+- On MacOS 26+, the GUI-mode window titlebar adapts to your colour scheme once again.
 
 ## [0.41.0](releases/tag/v0.41.0)
 This release is based on Jujutsu 0.41.
