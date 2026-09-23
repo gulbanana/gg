@@ -6,6 +6,7 @@ This release is based on Jujutsu 0.45.1.
 ### Added
 - Panes can be resised using the central vertical separator (thanks to @urbanij).
 - On MacOS, a standard Window menu listing open repositories (thanks to @macgyver13).
+- On MacOS and Linux, you can scroll the log pane by dragging objects around it - previously this only worked on Windows.
 
 ### Changed
 - On MacOS and Windows, launching GG while it's already running opens a new window in the existing instance.

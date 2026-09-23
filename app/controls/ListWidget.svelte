@@ -17,6 +17,12 @@
     import { onMount } from "svelte";
 
     import type { Operand } from "../messages/Operand";
+    import { currentSource } from "../stores";
+
+    // chromium autoscrolls overflow containers during html5 drags, webkit doesn't
+    let dragScrollEnabled = !navigator.userAgent.includes("Chrome/");
+    let dragScrollBand = 30;
+    let dragScrollSpeed = 1000;
 
     interface $$Slots {
         default: {};
@@ -32,6 +38,8 @@
     let activedescendant = `${type}-${descendant}`;
     let box: HTMLElement;
     let pollFrame: number;
+    let lastFrame: number | undefined;
+    let dragPoint: { x: number; y: number } | null = null;
 
     onMount(() => {
         pollFrame = requestAnimationFrame(pollScroll);
@@ -40,8 +48,11 @@
         };
     });
 
-    function pollScroll() {
+    function pollScroll(time: number) {
         if (box) {
+            if (dragPoint && $currentSource) {
+                dragScroll(Math.min(time - (lastFrame ?? time), 100));
+            }
             if (box.scrollTop !== scrollTop) {
                 scrollTop = box.scrollTop;
             }
@@ -51,7 +62,42 @@
             }
         }
 
+        lastFrame = time;
         pollFrame = requestAnimationFrame(pollScroll);
+    }
+
+    // driven by the frame loop rather than dragover, which webkit only fires when the pointer moves
+    function dragScroll(elapsed: number) {
+        let { x, y } = dragPoint!;
+        let rect = box.getBoundingClientRect();
+        if (x < rect.left || x > rect.right) {
+            return;
+        }
+
+        // bands extend past the edges, so overshooting onto neighbouring elements keeps scrolling
+        let band = Math.min(dragScrollBand, rect.height / 4);
+        let depth = 0;
+        if (y > rect.top - band && y < rect.top + band) {
+            depth = -Math.min(1, (rect.top + band - y) / band);
+        } else if (y > rect.bottom - band && y < rect.bottom + band) {
+            depth = Math.min(1, (y - rect.bottom + band) / band);
+        }
+
+        if (depth != 0) {
+            let step = Math.max(1, Math.round((Math.abs(depth) * dragScrollSpeed * elapsed) / 1000));
+            box.scrollTop += Math.sign(depth) * step;
+        }
+    }
+
+    function onDragMove(event: DragEvent) {
+        if (dragScrollEnabled) {
+            dragPoint = { x: event.clientX, y: event.clientY };
+        }
+    }
+
+    // mousemove can't happen mid-drag, so it catches drags whose dragend never reached us
+    function onDragFinish() {
+        dragPoint = null;
     }
 
     function onKeyDown(event: KeyboardEvent) {
@@ -159,6 +205,14 @@
         }
     }
 </script>
+
+<!-- capture phase, because zones stop propagation -->
+<svelte:window
+    on:dragenter|capture={onDragMove}
+    on:dragover|capture={onDragMove}
+    on:drop|capture={onDragFinish}
+    on:dragend|capture={onDragFinish}
+    on:mousemove={onDragFinish} />
 
 <ol
     class="listbox"
