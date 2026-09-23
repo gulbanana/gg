@@ -846,7 +846,7 @@ fn extract_repo_name(url: &str) -> String {
     name.strip_suffix(".git").unwrap_or(name).to_string()
 }
 
-fn abbreviate_path(path: &str) -> String {
+pub fn abbreviate_path(path: &str) -> String {
     let path = Path::new(path);
 
     if let Ok(home) = etcetera::home_dir()

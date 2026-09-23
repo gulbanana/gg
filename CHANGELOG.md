@@ -13,7 +13,7 @@ This release is based on Jujutsu 0.45.1.
 
 ### Fixed
 - Truncation of revision descriptions on MacOS when the window was too wide (thanks to @riksteri).
-- On MacOS 26+, the GUI-mode window titlebar adapts to your colour scheme once again.
+- On MacOS, the GUI-mode window titlebar adapts to your colour scheme once again; on MacOS 26+, it makes use of the empty space that Tahoe leaves on the right.
 - The Reopen command didn't work. It may have *appeared* to work if you pressed F5, due to a webpage reload, but only on some platforms.
 
 ## [0.41.0](releases/tag/v0.41.0)

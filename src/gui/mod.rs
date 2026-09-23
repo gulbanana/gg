@@ -3,10 +3,12 @@ mod menu;
 #[cfg(target_os = "macos")]
 mod recent_items;
 mod sink;
+#[cfg(all(test, not(feature = "ts-rs")))]
+mod tests;
 
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
-use std::path::PathBuf;
+use std::path::{MAIN_SEPARATOR_STR, Path, PathBuf};
 use std::sync::mpsc::{Sender, channel};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
@@ -100,6 +102,9 @@ struct WindowState {
     has_workspace: bool,
     ignore_immutable: bool,
     workspace_path: Option<String>,
+    // where the frontend's titlebar content begins, if it has any
+    #[cfg(target_os = "macos")]
+    title_limit: Option<f64>,
 }
 
 impl AppState {
@@ -250,6 +255,8 @@ pub fn run_gui(options: super::RunOptions) -> Result<()> {
             forward_context_menu,
             forward_clone_url,
             set_modifier_state,
+            #[cfg(target_os = "macos")]
+            set_title_limit,
             init_repository,
             clone_repository,
             query_workspace,
@@ -466,6 +473,20 @@ fn set_modifier_state(
             .map_err(InvokeError::from_anyhow)?;
     }
     Ok(())
+}
+
+#[cfg(target_os = "macos")]
+#[tauri::command]
+fn set_title_limit(window: Window, app_state: State<AppState>, limit: f64) {
+    if let Some(state) = app_state
+        .windows
+        .lock()
+        .expect("state mutex poisoned")
+        .get_mut(window.label())
+    {
+        state.title_limit = Some(limit);
+    }
+    update_title(&window);
 }
 
 #[tauri::command(async)]
@@ -1009,15 +1030,20 @@ pub fn try_create_window(app_handle: &AppHandle, workspace: Option<PathBuf>) -> 
     .visible(false)
     .disable_drag_drop_handler();
 
-    // content extends under the titlebar, so the frontend has to keep clear of the traffic lights
+    // content extends under the titlebar, so the frontend has to keep clear of the traffic lights.
+    // not before tahoe, which centres the title - it would land on the right pane's header
     #[cfg(target_os = "macos")]
-    let builder = builder
-        .title_bar_style(TitleBarStyle::Overlay)
-        .initialization_script(format!(
-            "document.documentElement.classList.add('overlay-titlebar');
-            document.documentElement.style.setProperty('--titlebar-height', '{}px');",
-            app_state.titlebar_height
-        ));
+    let builder = if crate::macos::is_tahoe_or_later() {
+        builder
+            .title_bar_style(TitleBarStyle::Overlay)
+            .initialization_script(format!(
+                "document.documentElement.classList.add('overlay-titlebar');
+                document.documentElement.style.setProperty('--titlebar-height', '{}px');",
+                app_state.titlebar_height
+            ))
+    } else {
+        builder
+    };
 
     let window = builder.build()?;
 
@@ -1070,6 +1096,8 @@ pub fn try_create_window(app_handle: &AppHandle, workspace: Option<PathBuf>) -> 
             has_workspace: false,
             ignore_immutable: initial_ignore_immutable,
             workspace_path: None,
+            #[cfg(target_os = "macos")]
+            title_limit: None,
         },
     );
 
@@ -1223,8 +1251,8 @@ fn try_open_repository(window: &Window, cwd: Option<PathBuf>) -> Result<messages
             app_state.set_has_workspace(window.label(), true);
 
             let workspace_path = absolute_path.0.clone();
-            _ = window.set_title((String::from("GG - ") + workspace_path.as_str()).as_str());
             app_state.set_workspace_path(window.label(), Some(workspace_path.clone()));
+            update_title(window);
 
             // update config and jump lists - this can be slow
             if *track_recent_workspaces {
@@ -1239,13 +1267,70 @@ fn try_open_repository(window: &Window, cwd: Option<PathBuf>) -> Result<messages
         _ => {
             app_state.set_has_workspace(window.label(), false);
             app_state.set_workspace_path(window.label(), None);
+            update_title(window);
 
-            let _ = window.set_title("GG - Gui for JJ");
             rebuild_menu(window.app_handle());
         }
     }
 
     Ok(config)
+}
+
+fn update_title(window: &Window) {
+    let app_state = window.state::<AppState>();
+    let guard = app_state.windows.lock().expect("state mutex poisoned");
+    let Some(state) = guard.get(window.label()) else {
+        return;
+    };
+    let titles = title_candidates(state.workspace_path.as_deref());
+
+    // the title is drawn over the frontend, so it has to stop short of any content there
+    #[cfg(target_os = "macos")]
+    if let Some(limit) = state.title_limit {
+        drop(guard);
+        let handle = window.clone();
+        handler::optional!(window.run_on_main_thread(move || {
+            let title = crate::macos::fit_title(&handle, &titles, limit).unwrap_or(&titles[0]);
+            handler::optional!(handle.set_title(title));
+        }));
+        return;
+    }
+
+    drop(guard);
+    handler::optional!(window.set_title(&titles[0]));
+}
+
+// longest first - the full path, then eliding leading directories, down to just the name
+fn title_candidates(path: Option<&str>) -> Vec<String> {
+    let Some(path) = path else {
+        return vec![String::from("GG - Gui for JJ")];
+    };
+
+    let mut titles = vec![format!("GG - {path}")];
+
+    let abbreviated = menu::abbreviate_path(path);
+    if abbreviated != path {
+        titles.push(format!("GG - {abbreviated}"));
+    }
+
+    // the first component is a root or ~, which is no longer than an ellipsis
+    let components: Vec<_> = Path::new(&abbreviated)
+        .iter()
+        .map(|component| component.to_string_lossy())
+        .collect();
+    for start in 2..components.len().saturating_sub(1) {
+        titles.push(format!(
+            "GG - …{MAIN_SEPARATOR_STR}{}",
+            components[start..].join(MAIN_SEPARATOR_STR)
+        ));
+    }
+    if components.len() > 1
+        && let Some(name) = components.last()
+    {
+        titles.push(format!("GG - {name}"));
+    }
+
+    titles
 }
 
 fn rebuild_menu(app_handle: &AppHandle) {

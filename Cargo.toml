@@ -131,14 +131,25 @@ windows = { version = "0.61", features = [
 objc2 = "0.6"
 objc2-foundation = { version = "0.3", default-features = false, features = [
     "NSData",
+    "NSDictionary",
+    "NSProcessInfo",
     "NSString",
     "NSURL",
 ] }
 objc2-app-kit = { version = "0.3", default-features = false, features = [
     "NSApplication",
+    "NSAttributedString",
+    "NSButton",
+    "NSControl",
     "NSDocumentController",
+    "NSFont",
     "NSImage",
+    "NSResponder",
+    "NSStringDrawing",
+    "NSTextField",
+    "NSView",
     "NSWindow",
+    "objc2-core-foundation",
 ] }
 
 [profile.dev]

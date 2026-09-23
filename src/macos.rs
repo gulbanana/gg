@@ -1,9 +1,13 @@
+use objc2::runtime::AnyObject;
 use objc2::{AllocAnyThread, MainThreadMarker};
 use objc2_app_kit::{
-    NSApplication, NSDocumentController, NSImage, NSWindow, NSWindowCollectionBehavior,
-    NSWindowStyleMask,
+    NSApplication, NSDocumentController, NSFont, NSFontAttributeName, NSImage, NSStringDrawing,
+    NSTextField, NSWindow, NSWindowButton, NSWindowCollectionBehavior, NSWindowStyleMask,
 };
-use objc2_foundation::{NSData, NSPoint, NSRect, NSSize, NSString, NSURL};
+use objc2_foundation::{
+    NSData, NSDictionary, NSOperatingSystemVersion, NSPoint, NSProcessInfo, NSRect, NSSize,
+    NSString, NSURL,
+};
 
 /// Used when run without an .app bundle.
 #[cfg_attr(feature = "app", allow(dead_code))]
@@ -30,6 +34,16 @@ pub fn set_dock_icon() {
     }
 }
 
+/// macOS 26+, whose titlebar leaves room for content by left-aligning the title.
+pub fn is_tahoe_or_later() -> bool {
+    let tahoe = NSOperatingSystemVersion {
+        majorVersion: 26,
+        minorVersion: 0,
+        patchVersion: 0,
+    };
+    NSProcessInfo::processInfo().isOperatingSystemAtLeastVersion(tahoe)
+}
+
 /// Height of a standard titlebar, which varies by OS version and linked SDK.
 pub fn titlebar_height() -> f64 {
     let Some(mtm) = MainThreadMarker::new() else {
@@ -41,6 +55,45 @@ pub fn titlebar_height() -> f64 {
     let frame =
         NSWindow::frameRectForContentRect_styleMask(content, NSWindowStyleMask::Titled, mtm);
     frame.size.height - content.size.height
+}
+
+/// The first title which would end before `limit` (in window coordinates), or else the last.
+/// None if the titlebar can't be measured.
+pub fn fit_title<'a>(
+    window: &tauri::Window,
+    titles: &'a [String],
+    limit: f64,
+) -> Option<&'a String> {
+    // leaves a gap before whatever follows, beyond the field's own text inset
+    const MARGIN: f64 = 12.0;
+
+    let ptr = window.ns_window().ok()?;
+    let ns_win = unsafe { &*(ptr as *const NSWindow) };
+
+    // appkit's title field lives alongside the traffic lights
+    let titlebar = unsafe {
+        ns_win
+            .standardWindowButton(NSWindowButton::CloseButton)?
+            .superview()?
+    };
+    let field = titlebar
+        .subviews()
+        .iter()
+        .find_map(|view| view.downcast::<NSTextField>().ok())?;
+    let origin = field.convertRect_toView(field.bounds(), None).origin.x;
+
+    let font = NSFont::titleBarFontOfSize(0.0);
+    let font: &AnyObject = &font;
+    let attributes = NSDictionary::from_slices(&[unsafe { NSFontAttributeName }], &[font]);
+
+    titles
+        .iter()
+        .find(|title| {
+            let width =
+                unsafe { NSString::from_str(title).sizeWithAttributes(Some(&attributes)) }.width;
+            origin + width + MARGIN <= limit
+        })
+        .or(titles.last())
 }
 
 /// Ensure a newly created window appears on the active Space rather than
