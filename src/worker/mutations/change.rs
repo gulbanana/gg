@@ -105,7 +105,12 @@ impl Mutation for MoveChanges {
         }
 
         // rebase descendants of source, which may include destination
-        if tx.repo().index().is_ancestor(from_oldest.id(), to.id())? {
+        if tx
+            .repo()
+            .index()
+            .is_ancestor(from_oldest.id(), to.id())
+            .await?
+        {
             let mut rebase_map = std::collections::HashMap::new();
             tx.repo_mut()
                 .rebase_descendants_with_options(
@@ -350,8 +355,8 @@ impl Mutation for MoveHunk {
 
         // Check ancestry to determine rebase strategy. The hunk must be applied to the destination's
         // tree AFTER any ancestry-related rebasing, so we do it early if moving from an ancestor.
-        let from_is_ancestor = tx.repo().index().is_ancestor(from.id(), to.id())?;
-        let to_is_ancestor = tx.repo().index().is_ancestor(to.id(), from.id())?;
+        let from_is_ancestor = tx.repo().index().is_ancestor(from.id(), to.id()).await?;
+        let to_is_ancestor = tx.repo().index().is_ancestor(to.id(), from.id()).await?;
 
         if to_is_ancestor {
             // Child→Parent: apply hunk to ancestor, then handle source
@@ -1002,7 +1007,7 @@ mod tests {
         // A should be abandoned (only touched z.txt)
         let a_exists = ws.evaluate_revset_str(&a_id.change.hex);
         assert!(
-            a_exists.is_err() || a_exists.unwrap().is_empty(),
+            a_exists.is_err() || a_exists.unwrap().is_empty()?,
             "commit A should be abandoned"
         );
 

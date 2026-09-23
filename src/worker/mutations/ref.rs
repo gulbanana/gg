@@ -65,7 +65,9 @@ impl Mutation for TrackBookmark {
                     );
                 }
 
-                tx.repo_mut().track_remote_bookmark(remote_ref_symbol)?;
+                tx.repo_mut()
+                    .track_remote_bookmark(remote_ref_symbol)
+                    .await?;
 
                 match ws
                     .finish_transaction(

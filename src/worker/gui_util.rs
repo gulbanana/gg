@@ -23,6 +23,7 @@ use jj_cli::{
 use jj_lib::{
     backend::{BackendError, ChangeId, CommitId},
     commit::Commit,
+    default_backend_factories,
     default_index::DefaultReadonlyIndex,
     file_util,
     fileset::{self, FilesetAliasesMap, FilesetDiagnostics, FilesetParseContext},
@@ -35,7 +36,7 @@ use jj_lib::{
     op_heads_store,
     operation::Operation,
     ref_name::{WorkspaceName, WorkspaceNameBuf},
-    repo::{ReadonlyRepo, Repo, RepoLoaderError, StoreFactories},
+    repo::{ReadonlyRepo, Repo, RepoLoaderError},
     repo_path::{RepoPath, RepoPathUiConverter},
     revset::{
         self, Revset, RevsetAliasesMap, RevsetDiagnostics, RevsetEvaluationError, RevsetExpression,
@@ -47,7 +48,7 @@ use jj_lib::{
     transaction::Transaction,
     view::View,
     working_copy::{CheckoutStats, SnapshotOptions, WorkingCopyFreshness},
-    workspace::{self, DefaultWorkspaceLoaderFactory, Workspace, WorkspaceLoaderFactory},
+    workspace::{DefaultWorkspaceLoaderFactory, Workspace, WorkspaceLoaderFactory},
     workspace_store::{SimpleWorkspaceStore, WorkspaceStore as _},
 };
 use pollster::FutureExt as _;
@@ -124,8 +125,8 @@ impl WorkerSession {
 
         let workspace = loader.load(
             &settings,
-            &StoreFactories::default(),
-            &workspace::default_working_copy_factories(),
+            &default_backend_factories::default_backend_factories(),
+            &default_backend_factories::default_working_copy_factories(),
         )?;
 
         let path_converter = RepoPathUiConverter::Fs {
@@ -155,7 +156,7 @@ impl WorkerSession {
             true
         };
 
-        let is_colocated = is_colocated_git_workspace(&workspace, &operation.repo);
+        let is_colocated = is_colocated_git_workspace(&workspace);
 
         Ok(WorkspaceSession {
             session: self,
@@ -206,7 +207,7 @@ impl WorkspaceSession<'_> {
             &path,
             self.workspace.repo_path(),
             &self.operation.repo,
-            &*workspace::default_working_copy_factory(),
+            &*default_backend_factories::default_working_copy_factory(),
             workspace_name.clone(),
         )
         .await?;
@@ -885,7 +886,7 @@ impl WorkspaceSession<'_> {
         let intersection_revset = check_revset.intersection(&immutable_revset);
 
         let immutable_revs = self.evaluate_revset_expr(repo, intersection_revset)?;
-        Ok(!immutable_revs.is_empty())
+        Ok(!immutable_revs.is_empty()?)
     }
 
     /// checks if any commit in an iterator is immutable
@@ -901,7 +902,7 @@ impl WorkspaceSession<'_> {
         let contains = immutable_revset.containing_fn();
         let mut stream = revset.stream();
         while let Some(id) = stream.try_next().block_on()? {
-            if contains(&id)? {
+            if contains(&id).block_on()? {
                 return Ok(true);
             }
         }
@@ -1529,20 +1530,11 @@ async fn load_at_head(workspace: &Workspace, data: &WorkspaceData) -> Result<Ope
         loader.op_heads_store().as_ref(),
         loader.op_store(),
         async |op_heads| {
-            let base_repo = loader.load_at(&op_heads[0]).await?;
             // might want to set some tags
-            let mut tx = base_repo.start_transaction();
-            for other_op_head in op_heads.into_iter().skip(1) {
-                tx.merge_operation(other_op_head).await?;
-                tx.repo_mut().rebase_descendants().await?;
-            }
-            Ok::<Operation, RepoLoaderError>(
-                tx.write("resolve concurrent operations")
-                    .await?
-                    .leave_unpublished()
-                    .operation()
-                    .clone(),
-            )
+            let (merged_repo, _num_rebased) = loader
+                .merge_operations(op_heads, None, Some("resolve concurrent operations"), [])
+                .await?;
+            Ok::<Operation, RepoLoaderError>(merged_repo.operation().clone())
         },
     )
     .await?;

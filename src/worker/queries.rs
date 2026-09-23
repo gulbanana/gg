@@ -25,7 +25,7 @@ use jj_lib::{
     ref_name::{RefNameBuf, RemoteNameBuf, RemoteRefSymbol},
     repo::Repo,
     repo_path::RepoPath,
-    revset::{Revset, RevsetEvaluationError},
+    revset::{Revset, RevsetContainingFn, RevsetEvaluationError},
     rewrite,
     tree_merge::MergeOptions,
 };
@@ -77,8 +77,7 @@ pub struct QuerySession<'q, 'w: 'q> {
     lookahead: Option<Result<GraphNode<CommitId>, RevsetEvaluationError>>,
     /// once the underlying stream returns None we must not poll it again
     stream_done: bool,
-    #[allow(clippy::type_complexity)]
-    is_immutable: Box<dyn Fn(&CommitId) -> Result<bool, RevsetEvaluationError> + 'q>,
+    is_immutable: Box<RevsetContainingFn<'q>>,
 }
 
 impl<'q, 'w> QuerySession<'q, 'w> {
@@ -205,7 +204,7 @@ impl<'q, 'w> QuerySession<'q, 'w> {
             let known_immutable = if stem_known_immutable {
                 Some(true)
             } else {
-                Some((self.is_immutable)(&commit_id)?)
+                Some((self.is_immutable)(&commit_id).block_on()?)
             };
 
             let header = self

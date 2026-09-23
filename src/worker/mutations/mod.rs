@@ -12,6 +12,7 @@ use itertools::Itertools;
 use jj_cli::{
     git_util::load_git_import_options,
     merge_tools::{self, ConflictResolveError, ExternalMergeTool, MergeEditor},
+    revset_util,
     ui::Ui,
 };
 use jj_lib::{
@@ -239,15 +240,27 @@ impl Mutation for GitFetch {
             .map_err(|e| Error::new(e.error))?;
 
         for (remote_name, pattern) in &remote_patterns {
-            let bookmark_expr = pattern
-                .clone()
-                .map(StringExpression::exact)
-                .unwrap_or_else(StringExpression::all);
+            let (bookmark_expr, tag_expr) = match pattern {
+                Some(pattern) => (
+                    StringExpression::exact(pattern.clone()),
+                    StringExpression::none(),
+                ),
+                None => (
+                    StringExpression::all(),
+                    revset_util::parse_remote_fetch_tags(
+                        &Ui::null(),
+                        &remote_settings,
+                        RemoteName::new(remote_name),
+                    )
+                    .map_err(|e| Error::new(e.error))?
+                    .unwrap_or_else(StringExpression::all),
+                ),
+            };
             let refspecs = git::expand_fetch_refspecs(
                 RemoteName::new(remote_name),
                 GitFetchRefExpression {
                     bookmark: bookmark_expr,
-                    tag: StringExpression::none(),
+                    tag: tag_expr,
                 },
             )?;
 
@@ -262,7 +275,7 @@ impl Mutation for GitFetch {
                         git::GitFetch::new(tx.repo_mut(), subprocess_options, &import_options)?;
 
                     fetcher
-                        .fetch(RemoteName::new(remote_name), refspecs, cb, None, None)
+                        .fetch(RemoteName::new(remote_name), refspecs, cb, None)
                         .context("failed to fetch")?;
 
                     pollster::block_on(fetcher.import_refs()).context("failed to import refs")?;
