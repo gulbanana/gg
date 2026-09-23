@@ -1363,7 +1363,8 @@ mod tests {
         ] {
             let targets = ws
                 .repo()
-                .resolve_change_id(commit.change_id())?
+                .resolve_change_id(commit.change_id())
+                .await?
                 .expect("commit should resolve");
             assert!(
                 !targets.is_divergent(),

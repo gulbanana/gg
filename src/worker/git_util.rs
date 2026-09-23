@@ -148,7 +148,7 @@ pub fn get_git_remote_names(git_repo: &gix::Repository) -> Vec<String> {
         .into_iter()
         .filter(|name| {
             matches!(
-                git_repo.try_find_remote(&**name),
+                git_repo.try_find_remote(name.as_slice()),
                 Some(Ok(remote)) if remote.url(gix::remote::Direction::Fetch).is_some()
             )
         })

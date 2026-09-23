@@ -662,7 +662,7 @@ impl Mutation for ForgetWorkspace {
         let wc_commit = ws.get_commit(wc_id)?;
 
         let mut tx = ws.start_transaction().await?;
-        tx.repo_mut().remove_wc_commit(&workspace_name).await?;
+        tx.repo_mut().remove_workspace(&workspace_name).await?;
 
         // abandon the old WC commit if it's empty (same tree as parent merge)
         let parents = wc_commit.parents().await?;

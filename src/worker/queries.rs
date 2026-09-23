@@ -6,7 +6,7 @@ use gix::bstr::ByteVec;
 use itertools::Itertools;
 use jj_cli::diff_util::LineDiffOptions;
 use jj_lib::{
-    backend::CommitId,
+    backend::{CommitId, MergedTreeValueExt as _},
     conflict_labels::ConflictLabels,
     conflicts::{
         self, ConflictMarkerStyle, ConflictMaterializeOptions, MaterializedFileValue,
