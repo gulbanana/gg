@@ -13,10 +13,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: awalsh128/cache-apt-pkgs-action@v1
+      # v1.6.2+ can silently fail to install and then cache the empty result (awalsh128/cache-apt-pkgs-action#218)
+      - uses: awalsh128/cache-apt-pkgs-action@v1.6.1
         with:
           packages: libgtk-3-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
-          version: 1.0                  
+          version: 1.1
 
       # build frontend, required for backend build 
       - uses: actions/setup-node@v4
