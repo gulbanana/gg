@@ -37,7 +37,7 @@ use jj_lib::{
     operation::Operation,
     ref_name::{WorkspaceName, WorkspaceNameBuf},
     repo::{ReadonlyRepo, Repo, RepoLoaderError},
-    repo_path::{RepoPath, RepoPathUiConverter},
+    repo_path::RepoPath,
     revset::{
         self, Revset, RevsetAliasesMap, RevsetDiagnostics, RevsetEvaluationError, RevsetExpression,
         RevsetExtensions, RevsetParseContext, RevsetResolutionError, RevsetStreamExt,
@@ -46,6 +46,7 @@ use jj_lib::{
     rewrite,
     settings::{HumanByteSize, UserSettings},
     transaction::Transaction,
+    ui_path::RepoPathUiConverter,
     view::View,
     working_copy::{CheckoutStats, SnapshotOptions, WorkingCopyFreshness},
     workspace::{DefaultWorkspaceLoaderFactory, Workspace, WorkspaceLoaderFactory},
@@ -156,7 +157,8 @@ impl WorkerSession {
             true
         };
 
-        let is_colocated = is_colocated_git_workspace(&workspace);
+        let is_colocated =
+            is_colocated_git_workspace(&workspace).map_err(|e| Error::new(e.error))?;
 
         Ok(WorkspaceSession {
             session: self,
@@ -254,7 +256,7 @@ impl WorkspaceSession<'_> {
         );
 
         let mut tx = self.start_transaction().await?;
-        tx.repo_mut().remove_wc_commit(&workspace_name).await?;
+        tx.repo_mut().remove_workspace(&workspace_name).await?;
 
         let workspace_store = SimpleWorkspaceStore::load(self.workspace.repo_path())?;
         workspace_store.forget(&[&*workspace_name])?;
@@ -783,33 +785,33 @@ impl WorkspaceSession<'_> {
         let prefix_len = self
             .prefix_index()
             .shortest_change_prefix_len(self.operation.repo.as_ref(), change_id)
+            .block_on()
             .unwrap_or_else(|_| change_id.reverse_hex().len());
 
         let hex = change_id.reverse_hex();
         let prefix = hex[..prefix_len].to_string();
         let rest = hex[prefix_len..].to_string();
 
-        let offset = self
+        let targets = self
             .repo()
             .resolve_change_id(change_id)
+            .block_on()
             .ok()
-            .flatten()
-            .and_then(|targets| {
-                let is_hidden = !targets.has_visible(commit_id);
-                let is_divergent = targets.is_divergent();
+            .flatten();
 
-                if is_hidden || is_divergent {
-                    targets.find_offset(commit_id)
-                } else {
-                    None
-                }
-            });
+        let offset = targets.as_ref().and_then(|targets| {
+            let is_hidden = !targets.has_visible(commit_id);
+            let is_divergent = targets.is_divergent();
 
-        let is_divergent = self
-            .repo()
-            .resolve_change_id(change_id)
-            .ok()
-            .flatten()
+            if is_hidden || is_divergent {
+                targets.find_offset(commit_id)
+            } else {
+                None
+            }
+        });
+
+        let is_divergent = targets
+            .as_ref()
             .map(|targets| targets.is_divergent())
             .unwrap_or(false);
 
@@ -981,7 +983,13 @@ impl WorkspaceSession<'_> {
             .transpose()?;
         if self.is_colocated {
             if let Some(wc_commit) = &maybe_new_wc_commit {
-                git::reset_head(tx.repo_mut(), wc_commit).await?;
+                git::reset_head(
+                    tx.repo_mut(),
+                    self.workspace.workspace_name(),
+                    self.workspace.workspace_root(),
+                    wc_commit,
+                )
+                .await?;
             }
             git::export_refs(tx.repo_mut())?;
         }
@@ -1183,16 +1191,20 @@ impl WorkspaceSession<'_> {
     }
 
     async fn import_git_head(&mut self) -> Result<()> {
+        let workspace_name = self.workspace.workspace_name().to_owned();
         let mut tx = self.operation.repo.start_transaction();
-        git::import_head(tx.repo_mut()).await?;
+        git::import_head(
+            tx.repo_mut(),
+            &workspace_name,
+            self.workspace.workspace_root(),
+        )
+        .await?;
         if !tx.repo().has_changes() {
             return Ok(());
         }
 
-        let new_git_head = tx.repo().view().git_head().clone();
+        let new_git_head = tx.repo().view().git_head(&workspace_name).clone();
         if let Some(new_git_head_id) = new_git_head.as_normal() {
-            let workspace_name = self.workspace.workspace_name().to_owned();
-
             if let Some(old_wc_commit_id) =
                 self.operation.repo.view().get_wc_commit_id(&workspace_name)
             {

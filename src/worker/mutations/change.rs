@@ -1131,7 +1131,8 @@ mod tests {
         for (label, commit) in [("middle", &middle_after), ("target", &target_after)] {
             let targets = ws
                 .repo()
-                .resolve_change_id(commit.change_id())?
+                .resolve_change_id(commit.change_id())
+                .await?
                 .expect("commit should resolve");
             assert!(
                 !targets.is_divergent(),
@@ -1698,7 +1699,8 @@ mod tests {
 
         let dest_targets = ws
             .repo()
-            .resolve_change_id(dest_after.change_id())?
+            .resolve_change_id(dest_after.change_id())
+            .await?
             .expect("destination should resolve");
         assert!(
             !dest_targets.is_divergent(),
