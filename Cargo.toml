@@ -110,6 +110,10 @@ uuid = { version = "1", features = ["v4"] }
 [target."cfg(target_os = \"linux\")".dependencies]
 gtk = "0.18"
 
+# not linux, see open_forwarded_launch()
+[target."cfg(any(target_os = \"macos\", windows))".dependencies]
+tauri-plugin-single-instance = "2.4.5"
+
 [target."cfg(windows)".dependencies]
 windows = { version = "0.61", features = [
     "Win32_Foundation",
@@ -134,6 +138,7 @@ objc2-app-kit = { version = "0.3", default-features = false, features = [
     "NSApplication",
     "NSDocumentController",
     "NSImage",
+    "NSWindow",
 ] }
 
 [profile.dev]

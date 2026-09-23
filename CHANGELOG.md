@@ -5,6 +5,10 @@ This release is based on Jujutsu 0.45.1.
 
 ### Added
 - Panes can be resised using the central vertical separator (thanks to @urbanij).
+- On MacOS, a standard Window menu listing open repositories (thanks to @macgyver13).
+
+### Changed
+- On MacOS and Windows, launching GG while it's already running opens a new window in the existing instance.
 
 ### Fixed
 - Truncation of revision descriptions on MacOS when the window was too wide (thanks to @riksteri).

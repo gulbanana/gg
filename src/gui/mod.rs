@@ -12,6 +12,8 @@ use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 
 use anyhow::{Context, Result};
+#[cfg(any(target_os = "macos", windows))]
+use clap::Parser;
 use jj_lib::config::ConfigSource;
 use jj_lib::settings::UserSettings;
 use log::LevelFilter;
@@ -49,16 +51,23 @@ struct AppState {
     settings: UserSettings,
     initial_ignore_immutable: bool,
     enable_askpass: bool,
+    recent_workspaces: Mutex<Vec<String>>,
 }
 
 impl AppState {
-    fn new(settings: UserSettings, initial_ignore_immutable: bool, enable_askpass: bool) -> Self {
+    fn new(
+        settings: UserSettings,
+        initial_ignore_immutable: bool,
+        enable_askpass: bool,
+        recent_workspaces: Vec<String>,
+    ) -> Self {
         Self {
             windows: Arc::new(Mutex::new(HashMap::new())),
             last_focused: Arc::new(Mutex::new(None)),
             settings,
             initial_ignore_immutable,
             enable_askpass,
+            recent_workspaces: Mutex::new(recent_workspaces),
         }
     }
 
@@ -83,6 +92,7 @@ struct WindowState {
     selection: Option<messages::RevSet>,
     has_workspace: bool,
     ignore_immutable: bool,
+    workspace_path: Option<String>,
 }
 
 impl AppState {
@@ -123,12 +133,44 @@ impl AppState {
             state.has_workspace = has_workspace;
         }
     }
+
+    fn set_workspace_path(&self, window_label: &str, path: Option<String>) {
+        if let Some(state) = self
+            .windows
+            .lock()
+            .expect("state mutex poisoned")
+            .get_mut(window_label)
+        {
+            state.workspace_path = path;
+        }
+    }
+
+    fn window_entries(&self) -> Vec<(String, String)> {
+        let mut entries: Vec<(String, String)> = self
+            .windows
+            .lock()
+            .expect("state mutex poisoned")
+            .iter()
+            .filter_map(|(label, state)| {
+                let path = state.workspace_path.as_ref()?;
+                let name = std::path::Path::new(path)
+                    .file_name()
+                    .map(|s| s.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| path.clone());
+                Some((label.clone(), name))
+            })
+            .collect();
+        entries.sort_by(|a, b| a.1.cmp(&b.1));
+        entries
+    }
 }
 
 fn label_for_path(path: Option<&PathBuf>) -> String {
     let path = path
         .cloned()
         .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+    // forwarded launches are absolute, but the initial one may be relative
+    let path = dunce::canonicalize(&path).unwrap_or(path);
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     path.hash(&mut hasher);
     let hash = hasher.finish();
@@ -146,8 +188,15 @@ fn resolve_set(
 
 pub fn run_gui(options: super::RunOptions) -> Result<()> {
     let recent_workspaces = options.settings.ui_recent_workspaces();
+    let initial_recent = recent_workspaces.clone();
 
-    let app = tauri::Builder::default()
+    let app = tauri::Builder::default();
+
+    // must be first - a second instance exits during this plugin's setup
+    #[cfg(any(target_os = "macos", windows))]
+    let app = app.plugin(tauri_plugin_single_instance::init(open_forwarded_launch));
+
+    let app = app
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(
@@ -233,11 +282,12 @@ pub fn run_gui(options: super::RunOptions) -> Result<()> {
             undo_operation,
             write_config_table,
         ])
-        .menu(move |handle| menu::build_main(handle, &recent_workspaces))
+        .menu(move |handle| menu::build_main(handle, &recent_workspaces, &[]))
         .manage(AppState::new(
             options.settings,
             options.ignore_immutable,
             options.enable_askpass,
+            initial_recent,
         ))
         .setup(move |app| {
             // after tauri initialises NSApplication, set the dock icon if we're running as CLI
@@ -269,6 +319,28 @@ pub fn run_gui(options: super::RunOptions) -> Result<()> {
     app.run(options.context)?;
 
     Ok(())
+}
+
+// another gg was launched while this one is running - relative paths are relative to *its* cwd.
+// not on linux: appimages get their original cwd from $OWD, which the plugin doesn't forward
+#[cfg(any(target_os = "macos", windows))]
+fn open_forwarded_launch(app_handle: &AppHandle, argv: Vec<String>, cwd: String) {
+    log::debug!("open_forwarded_launch: {argv:?} in {cwd}");
+
+    let args = handler::nonfatal!(super::Args::try_parse_from(&argv));
+    let cwd = PathBuf::from(cwd);
+    let workspace = match args.workspace() {
+        Some(workspace) => cwd.join(workspace),
+        None => cwd,
+    };
+
+    // avoid main-thread deadlock
+    let app_handle = app_handle.clone();
+    async_runtime::spawn(async move {
+        handler::nonfatal!(
+            try_create_window(&app_handle, Some(workspace)).context("try_create_window")
+        );
+    });
 }
 
 #[tauri::command(async)]
@@ -888,8 +960,24 @@ pub fn try_create_window(app_handle: &AppHandle, workspace: Option<PathBuf>) -> 
 
     let label = label_for_path(workspace.as_ref());
 
-    if let Some(existing) = app_handle.get_webview_window(&label) {
-        existing.set_focus()?;
+    if let Some(_existing) = app_handle.get_webview_window(&label) {
+        #[cfg(target_os = "macos")]
+        {
+            let handle = app_handle.clone();
+            let label = label.clone();
+            app_handle
+                .run_on_main_thread(move || {
+                    if let Some(w) = handle.get_webview_window(&label) {
+                        crate::macos::remove_move_to_active_space(&w.as_ref().window());
+                        crate::macos::activate_app();
+                        let _ = w.set_focus();
+                    }
+                })
+                .ok();
+        }
+        #[cfg(not(target_os = "macos"))]
+        _existing.set_focus()?;
+
         return Ok(());
     }
 
@@ -905,6 +993,20 @@ pub fn try_create_window(app_handle: &AppHandle, workspace: Option<PathBuf>) -> 
     .visible(false)
     .disable_drag_drop_handler()
     .build()?;
+
+    // NSWindow methods must run on the main thread; dispatch regardless of caller
+    #[cfg(target_os = "macos")]
+    {
+        let label = window.label().to_owned();
+        let handle = app_handle.clone();
+        app_handle
+            .run_on_main_thread(move || {
+                if let Some(w) = handle.get_webview_window(&label) {
+                    crate::macos::set_move_to_active_space(&w);
+                }
+            })
+            .ok();
+    }
 
     let app_state = app_handle.state::<AppState>();
     let settings = app_state.settings.clone();
@@ -941,6 +1043,7 @@ pub fn try_create_window(app_handle: &AppHandle, workspace: Option<PathBuf>) -> 
             selection: None,
             has_workspace: false,
             ignore_immutable: initial_ignore_immutable,
+            workspace_path: None,
         },
     );
 
@@ -1095,6 +1198,7 @@ fn try_open_repository(window: &Window, cwd: Option<PathBuf>) -> Result<messages
 
             let workspace_path = absolute_path.0.clone();
             _ = window.set_title((String::from("GG - ") + workspace_path.as_str()).as_str());
+            app_state.set_workspace_path(window.label(), Some(workspace_path.clone()));
 
             // update config and jump lists - this can be slow
             if *track_recent_workspaces {
@@ -1102,16 +1206,33 @@ fn try_open_repository(window: &Window, cwd: Option<PathBuf>) -> Result<messages
                 thread::spawn(move || {
                     handler::nonfatal!(add_recent_workspaces(window, workspace_path));
                 });
+            } else {
+                rebuild_menu(window.app_handle());
             }
         }
         _ => {
             app_state.set_has_workspace(window.label(), false);
+            app_state.set_workspace_path(window.label(), None);
 
             let _ = window.set_title("GG - Gui for JJ");
+            rebuild_menu(window.app_handle());
         }
     }
 
     Ok(config)
+}
+
+fn rebuild_menu(app_handle: &AppHandle) {
+    let app_state = app_handle.state::<AppState>();
+    let recent = app_state.recent_workspaces.lock().unwrap().clone();
+    let open_windows = app_state.window_entries();
+    let handle = app_handle.clone();
+    let handle2 = handle.clone();
+    handle
+        .run_on_main_thread(move || {
+            handler::nonfatal!(menu::rebuild_main(&handle2, recent, &open_windows));
+        })
+        .ok();
 }
 
 fn try_mutate<T: Mutation + Send + Sync + 'static>(
@@ -1143,13 +1264,20 @@ fn handle_window_event(window: &Window, event: &WindowEvent) -> Result<()> {
             let app_state = window.state::<AppState>();
             app_state.windows.lock().unwrap().remove(window.label());
 
-            let mut last_focused = app_state.last_focused.lock().unwrap();
-            if last_focused.as_deref() == Some(window.label()) {
-                *last_focused = None;
+            {
+                let mut last_focused = app_state.last_focused.lock().unwrap();
+                if last_focused.as_deref() == Some(window.label()) {
+                    *last_focused = None;
+                }
             }
+
+            rebuild_menu(window.app_handle());
         }
         WindowEvent::Focused(true) => {
             log::debug!("window focused; notifying frontend");
+
+            #[cfg(target_os = "macos")]
+            crate::macos::remove_move_to_active_space(window);
 
             let app_state = window.state::<AppState>();
 
@@ -1223,14 +1351,12 @@ fn add_recent_workspaces(window: Window, workspace_path: String) -> Result<()> {
             .ok();
     }
 
-    let app_handle = window.app_handle().clone();
-    let recent_for_menu = recent.clone();
-    let app_handle_inner = app_handle.clone();
-    app_handle
-        .run_on_main_thread(move || {
-            handler::nonfatal!(menu::rebuild_main(&app_handle_inner, recent_for_menu));
-        })
-        .ok();
+    {
+        let app_state = window.state::<AppState>();
+        *app_state.recent_workspaces.lock().unwrap() = recent.clone();
+    }
+
+    rebuild_menu(window.app_handle());
 
     session_tx.send(SessionEvent::WriteConfigArray {
         key: vec![
