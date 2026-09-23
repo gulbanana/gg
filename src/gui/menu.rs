@@ -173,6 +173,10 @@ pub fn build_main(
         ],
     )?;
 
+    // only macos has a window menu
+    #[cfg(not(target_os = "macos"))]
+    let _ = open_windows;
+
     #[cfg(target_os = "macos")]
     let window_submenu = {
         let submenu = Submenu::new(app_handle, "Window", true)?;
