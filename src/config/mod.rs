@@ -283,6 +283,16 @@ fn set_in_doc(doc: &mut toml_edit::DocumentMut, path: &str, item: &toml_edit::It
     table.insert(leaf[0], item.clone());
 }
 
+pub fn read_log_revset(settings: &UserSettings, aliases_map: &RevsetAliasesMap) -> String {
+    let log_revset = settings.get_string("revsets.log").unwrap_or_default();
+    if log_revset.trim() == "builtin_log()"
+        && let Some((_, _, definition, _)) = aliases_map.get_function("builtin_log", 0)
+    {
+        return definition.clone();
+    }
+    log_revset
+}
+
 fn read_preset_choices(stacked_config: &StackedConfig) -> HashMap<String, String> {
     let table_name = ConfigNamePathBuf::from_iter(["gg", "presets"]);
     let mut choices = HashMap::new();

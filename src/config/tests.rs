@@ -208,6 +208,46 @@ fn resolve_repo_path_is_none_outside_workspace() {
     assert!(resolve_repo_path(Some(dir.path())).is_none());
 }
 
+/// Resolve the log revset with jj's real defaults, so builtin_log() is defined.
+fn log_revset_with_jj_defaults(toml: &str) -> String {
+    let mut config = StackedConfig::empty();
+    config.extend_layers(default_config_layers());
+    config.add_layer(ConfigLayer::parse(ConfigSource::Default, JJ_TEST_DEFAULTS).unwrap());
+    config.add_layer(ConfigLayer::parse(ConfigSource::User, toml).unwrap());
+    let aliases_map = build_aliases_map(&config).unwrap();
+    let settings = UserSettings::from_config(config).unwrap();
+    read_log_revset(&settings, &aliases_map)
+}
+
+#[test]
+fn log_revset_default_is_expanded() {
+    let revset = log_revset_with_jj_defaults("");
+    assert!(!revset.is_empty());
+    assert!(!revset.contains("builtin_log"), "not expanded: {revset}");
+}
+
+#[test]
+fn log_revset_uses_overridden_alias() {
+    let revset = log_revset_with_jj_defaults(
+        r#"
+            [revset-aliases]
+            'builtin_log()' = "@ | trunk()"
+            "#,
+    );
+    assert_eq!(revset, "@ | trunk()");
+}
+
+#[test]
+fn log_revset_custom_is_unchanged() {
+    let revset = log_revset_with_jj_defaults(
+        r#"
+            [revsets]
+            log = "builtin_log() | bookmarks()"
+            "#,
+    );
+    assert_eq!(revset, "builtin_log() | bookmarks()");
+}
+
 mod extract_overrides {
     use super::super::{GGSettings, extract_overrides, native_keys};
     use super::{JJ_TEST_DEFAULTS, settings_with_extracted_overrides};

@@ -58,7 +58,7 @@ use thiserror::Error;
 use super::{WorkerSession, git_util::get_git_remote_names};
 
 use crate::{
-    config::{GGSettings, read_config},
+    config::{self, GGSettings, read_config},
     messages::{self, *},
 };
 
@@ -701,11 +701,8 @@ impl WorkspaceSession<'_> {
             None => vec![],
         };
 
-        let default_revset = self
-            .data
-            .workspace_settings
-            .get_string("revsets.log")
-            .unwrap_or_default();
+        let default_revset =
+            config::read_log_revset(&self.data.workspace_settings, &self.data.aliases_map);
 
         let mut query_choices = HashMap::new();
         query_choices.insert("default".to_string(), default_revset.clone());
