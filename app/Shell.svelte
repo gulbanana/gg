@@ -154,6 +154,8 @@
     $: if ($repoStatusEvent && $revisionSelectEvent) {
         loadChange($revisionSelectEvent);
     }
+    // gui mode: the backend needs the selection for native menu enablement
+    $: if (isTauri()) trigger("set_selection", { set: $revisionSelectEvent ?? null });
     $: if (!isTauri()) {
         document.title =
             $repoConfigEvent.type === "Workspace"

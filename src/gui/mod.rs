@@ -26,8 +26,7 @@ use tauri::ipc::InvokeError;
 use tauri::menu::Menu;
 use tauri::webview::WebviewWindowBuilder;
 use tauri::{
-    AppHandle, Emitter, EventTarget, Listener, LogicalPosition, Manager, State, Window,
-    WindowEvent, Wry,
+    AppHandle, Emitter, EventTarget, LogicalPosition, Manager, State, Window, WindowEvent, Wry,
 };
 use tauri_plugin_log::{Target, TargetKind};
 use tauri_plugin_window_state::StateFlags;
@@ -261,6 +260,7 @@ pub fn run_gui(options: super::RunOptions) -> Result<()> {
             forward_context_menu,
             forward_clone_url,
             set_modifier_state,
+            set_selection,
             #[cfg(target_os = "macos")]
             set_title_limit,
             init_repository,
@@ -1120,39 +1120,34 @@ pub fn try_create_window(app_handle: &AppHandle, workspace: Option<PathBuf>) -> 
     // menu selection events
     window.on_menu_event(|w, e| handler::fatal!(menu::handle_event(w, e)));
 
-    // menu enablement events
-    let windows = app_state.windows.clone();
-    let handle = app_handle.clone();
-    let label = window.label().to_owned();
-    window.listen("gg://revision/select", move |event| {
-        let payload: Result<Option<messages::RevSet>, serde_json::Error> =
-            serde_json::from_str(event.payload());
-        if let Ok(set) = payload {
-            let (session_tx, ignore_immutable) = {
-                let mut guard = windows.lock().unwrap();
-                if let Some(state) = guard.get_mut(&label) {
-                    state.selection = set.clone();
-                    (state.worker_channel.clone(), state.ignore_immutable)
-                } else {
-                    return;
-                }
-            };
-            let headers: Option<Vec<messages::RevHeader>> =
-                set.and_then(|set| match resolve_set(&session_tx, set) {
-                    Ok(messages::queries::RevsResult::Detail { headers, .. }) => Some(headers),
-                    _ => None,
-                });
-            if let Some(menu) = handle.menu() {
-                handler::fatal!(menu::handle_selection(
-                    menu,
-                    headers.as_deref(),
-                    ignore_immutable
-                ));
-            }
-        }
-    });
-
     Ok(())
+}
+
+// menu enablement "event" (actually a command because tauri is not reliable about scoping)
+#[tauri::command(async)]
+fn set_selection(window: Window, app_state: State<AppState>, set: Option<messages::RevSet>) {
+    let (session_tx, ignore_immutable) = {
+        let mut guard = app_state.windows.lock().expect("state mutex poisoned");
+        let Some(state) = guard.get_mut(window.label()) else {
+            return;
+        };
+        state.selection = set.clone();
+        (state.worker_channel.clone(), state.ignore_immutable)
+    };
+
+    let headers: Option<Vec<messages::RevHeader>> =
+        set.and_then(|set| match resolve_set(&session_tx, set) {
+            Ok(messages::queries::RevsResult::Detail { headers, .. }) => Some(headers),
+            _ => None,
+        });
+
+    if let Some(menu) = window.app_handle().menu() {
+        handler::fatal!(menu::handle_selection(
+            menu,
+            headers.as_deref(),
+            ignore_immutable
+        ));
+    }
 }
 
 async fn worker_thread(
