@@ -6,6 +6,9 @@ This release is based on Jujutsu 0.45.1.
 ### Added
 - Panes can be resised using the central vertical separator (thanks to @urbanij).
 
+### Fixed
+- Truncation of revision descriptions on MacOS when the window was too wide (thanks to @riksteri).
+
 ## [0.41.0](releases/tag/v0.41.0)
 This release is based on Jujutsu 0.41.
 
