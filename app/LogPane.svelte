@@ -389,7 +389,14 @@
         <SelectWidget options={choices} bind:value={entered_query} on:change={reloadLog}>
             <svelte:fragment let:option>{option.label}</svelte:fragment>
         </SelectWidget>
-        <input type="text" bind:value={entered_query} on:change={reloadLog} />
+        <input
+            type="text"
+            autocapitalize="off"
+            autocorrect="off"
+            autocomplete="off"
+            spellcheck="false"
+            bind:value={entered_query}
+            on:change={reloadLog} />
         {#if isCustom}
             <ActionWidget secondary tip="Save revset" onClick={handleSavePreset}>
                 <Icon name="save" />

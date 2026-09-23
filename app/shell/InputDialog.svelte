@@ -88,6 +88,7 @@
                 autocapitalize="off"
                 autocorrect="off"
                 autocomplete="off"
+                spellcheck="false"
                 value={field.choices.length == 1 ? field.choices[0] : ""} />
         {:else if getType(field) == "password"}
             <input id="field-{field.label}" type="password" />
@@ -98,6 +99,7 @@
                 autocapitalize="off"
                 autocorrect="off"
                 autocomplete="off"
+                spellcheck="false"
                 value={field.choices.length == 1 ? field.choices[0] : ""} />
         {:else if getType(field) == "select"}
             <SelectWidget
