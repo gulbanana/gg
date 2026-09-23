@@ -29,6 +29,7 @@ use tauri::{
     AppHandle, Emitter, EventTarget, Listener, LogicalPosition, Manager, State, Window,
     WindowEvent, Wry,
 };
+use tauri_plugin_log::{Target, TargetKind};
 use tauri_plugin_window_state::StateFlags;
 
 use gg_lib::config::GGSettings;
@@ -223,6 +224,11 @@ pub fn run_gui(options: super::RunOptions) -> Result<()> {
         )
         .plugin(
             tauri_plugin_log::Builder::default()
+                // not stdout - a spawning parent exits after the first line it reads there
+                .targets([
+                    Target::new(TargetKind::Stderr),
+                    Target::new(TargetKind::LogDir { file_name: None }),
+                ])
                 .level(LevelFilter::Warn)
                 .level_for(
                     "gg",
