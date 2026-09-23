@@ -29,15 +29,14 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::{Context, Error, Result, anyhow};
-use jj_cli::{git_util::load_git_import_options, ui::Ui};
+use jj_cli::{git_util::load_git_import_options, revset_util, ui::Ui};
+use jj_lib::default_backend_factories;
 use jj_lib::git::{self, GitFetch, GitFetchRefExpression, GitSettings};
 use jj_lib::ref_name::{RefNameBuf, RemoteName, RemoteNameBuf, RemoteRefSymbol};
-use jj_lib::repo::{Repo, StoreFactories};
+use jj_lib::repo::Repo;
 use jj_lib::settings::UserSettings;
 use jj_lib::str_util::StringExpression;
-use jj_lib::workspace::{
-    self, DefaultWorkspaceLoaderFactory, Workspace, WorkspaceLoaderFactory as _,
-};
+use jj_lib::workspace::{DefaultWorkspaceLoaderFactory, Workspace, WorkspaceLoaderFactory as _};
 use serde::Serialize;
 
 use crate::messages::mutations::{MutationOptions, MutationResult};
@@ -171,16 +170,17 @@ impl WorkerSession {
 
         let canonical_location = dunce::canonicalize(location)?;
         let (settings, _, _, _) = crate::config::read_config(None)?;
+        let object_hash = read_object_hash(&settings)?;
 
         if colocated {
             let git_path = location.join(".git");
             if git_path.exists() {
                 Workspace::init_external_git(&settings, &canonical_location, &git_path).await?; // existing .git/, create .jj
             } else {
-                Workspace::init_colocated_git(&settings, &canonical_location).await?; // create .git/ and .jj/
+                Workspace::init_colocated_git(&settings, &canonical_location, object_hash).await?; // create .git/ and .jj/
             }
         } else {
-            Workspace::init_internal_git(&settings, &canonical_location).await?; // create .jj/ with a .git/ inside it
+            Workspace::init_internal_git(&settings, &canonical_location, object_hash).await?; // create .jj/ with a .git/ inside it
         }
 
         Ok(canonical_location)
@@ -216,12 +216,13 @@ impl WorkerSession {
 
         let canonical_location = dunce::canonicalize(location)?;
         let (settings, _, _, _) = crate::config::read_config(None)?;
+        let object_hash = read_object_hash(&settings)?;
 
         // init empty
         let (_workspace, repo) = if colocated {
-            Workspace::init_colocated_git(&settings, &canonical_location).await?
+            Workspace::init_colocated_git(&settings, &canonical_location, object_hash).await?
         } else {
-            Workspace::init_internal_git(&settings, &canonical_location).await?
+            Workspace::init_internal_git(&settings, &canonical_location, object_hash).await?
         };
 
         // add origin
@@ -233,8 +234,6 @@ impl WorkerSession {
                 remote_name,
                 source_url,
                 None, // push_url = fetch_url
-                gix::remote::fetch::Tags::Included,
-                &StringExpression::all(),
             )
             .context("add_remote(origin)")?;
             tx.commit("add git remote origin").await?;
@@ -244,17 +243,21 @@ impl WorkerSession {
         let loader = DefaultWorkspaceLoaderFactory.create(&canonical_location)?;
         let workspace = loader.load(
             &settings,
-            &StoreFactories::default(),
-            &workspace::default_working_copy_factories(),
+            &default_backend_factories::default_backend_factories(),
+            &default_backend_factories::default_working_copy_factories(),
         )?;
         let repo = workspace.repo_loader().load_at_head().await?;
 
-        // fetch from origin
+        // fetch from origin, including all tags
         let mut auth_ctx = AuthContext::new(None);
         let git_settings = GitSettings::from_settings(&settings)?;
         let remote_settings = settings.remote_settings()?;
         let import_options = load_git_import_options(&Ui::null(), &git_settings, &remote_settings)
             .map_err(|e| Error::new(e.error))?;
+        let tag_expr =
+            revset_util::parse_remote_fetch_tags(&Ui::null(), &remote_settings, remote_name)
+                .map_err(|e| Error::new(e.error))?
+                .unwrap_or_else(StringExpression::all);
 
         // perform sync git operations in with_callbacks, return the transaction for async finalization
         let fetch_result =
@@ -269,15 +272,15 @@ impl WorkerSession {
                     remote_name,
                     GitFetchRefExpression {
                         bookmark: StringExpression::all(),
-                        tag: StringExpression::none(),
+                        tag: tag_expr,
                     },
                 )?;
 
                 fetcher
-                    .fetch(remote_name, refspecs, cb, None, None)
+                    .fetch(remote_name, refspecs, cb, None)
                     .context("Failed to fetch from remote")?;
 
-                fetcher.import_refs().context("Failed to import refs")?;
+                pollster::block_on(fetcher.import_refs()).context("Failed to import refs")?;
 
                 // find HEAD if at all possible
                 let workspace_name = workspace.workspace_name().to_owned();
@@ -292,7 +295,7 @@ impl WorkerSession {
                     let remote_bookmark = tx.repo().view().get_remote_bookmark(symbol);
                     if let Some(commit_id) = remote_bookmark.target.as_normal().cloned() {
                         let commit = tx.repo().store().get_commit(&commit_id)?;
-                        tx.repo_mut().track_remote_bookmark(symbol)?;
+                        pollster::block_on(tx.repo_mut().track_remote_bookmark(symbol))?;
                         default_branch = Some((workspace_name, commit, commit_id));
                     }
                 }
@@ -317,8 +320,8 @@ impl WorkerSession {
             let loader = DefaultWorkspaceLoaderFactory.create(&canonical_location)?;
             let mut workspace = loader.load(
                 &settings,
-                &jj_lib::repo::StoreFactories::default(),
-                &jj_lib::workspace::default_working_copy_factories(),
+                &default_backend_factories::default_backend_factories(),
+                &default_backend_factories::default_working_copy_factories(),
             )?;
             let repo = workspace.repo_loader().load_at_head().await?;
 
@@ -372,4 +375,12 @@ impl WorkerSession {
             })
             .unwrap_or_else(|| env::current_dir().map_err(Error::new))
     }
+}
+
+/// jj-cli's parser for `git.object-hash` is private, but gix accepts the same values.
+fn read_object_hash(settings: &UserSettings) -> Result<gix::hash::Kind> {
+    settings
+        .get_string("git.object-hash")?
+        .parse()
+        .map_err(|value| anyhow!("invalid git.object-hash: {value}"))
 }

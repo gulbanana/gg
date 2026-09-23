@@ -1,1 +1,1 @@
-The codebase has changed since `AGENTS.md` was written. Use `jj log -r 'files("AGENTS.md")..@'` to see the changes, then analyse the relevant parts of the codebase and update the instructions file.
+The codebase has changed since `AGENTS.md` was written. Use `jj log -r 'files("AGENTS.md")..@'` to see the changes, then analyse the relevant parts of the codebase and update the instructions file. Also check every path, symbol and ID that `AGENTS.md` names against the current code, since drift from before its last edit won't show up in that log.

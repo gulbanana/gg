@@ -70,6 +70,11 @@ pub enum SessionEvent {
         wd: PathBuf,
         colocated: bool,
     },
+    /// Look up the working-copy directory of a workspace in the loaded repo.
+    QueryWorkspaceRoot {
+        tx: Sender<Result<PathBuf>>,
+        name: String,
+    },
     /// Look up one or more revisions by change/commit ID.
     QueryRevisions {
         tx: Sender<Result<messages::queries::RevsResult>>,
@@ -270,6 +275,9 @@ impl Session for WorkspaceSession<'_> {
                             .clone_repository(&source_url, &wd, colocated)
                             .await,
                     )?;
+                }
+                SessionEvent::QueryWorkspaceRoot { tx, name } => {
+                    tx.send(self.workspace_root(name))?
                 }
                 SessionEvent::QueryRevisions { tx, set } => {
                     tx.send(queries::query_revisions(&self, set).await)?

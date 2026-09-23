@@ -263,6 +263,14 @@ pub struct ForgetWorkspace {
     pub name: String,
 }
 
+/// Global pseudomutation: opens another workspace of this repo, in a new window
+/// if the platform has them.
+#[derive(Deserialize, Debug)]
+#[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
+pub struct OpenWorkspace {
+    pub name: String,
+}
+
 /// Renames a workspace.
 #[derive(Deserialize, Debug)]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]

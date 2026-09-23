@@ -1,20 +1,12 @@
-use std::{
-    borrow::Borrow,
-    collections::HashSet,
-    io::Write,
-    iter::{Peekable, Skip},
-    mem,
-    ops::Range,
-};
+use std::{borrow::Borrow, collections::HashSet, io::Write, mem, ops::Range, pin::Pin};
 
 use anyhow::{Result, anyhow};
-
-use futures_util::{StreamExt, try_join};
+use futures_util::{AsyncReadExt, Stream, StreamExt, try_join};
 use gix::bstr::ByteVec;
 use itertools::Itertools;
 use jj_cli::diff_util::LineDiffOptions;
 use jj_lib::{
-    backend::CommitId,
+    backend::{CommitId, MergedTreeValueExt as _},
     conflict_labels::ConflictLabels,
     conflicts::{
         self, ConflictMarkerStyle, ConflictMaterializeOptions, MaterializedFileValue,
@@ -26,17 +18,18 @@ use jj_lib::{
     },
     diff_presentation::LineCompareMode,
     files::FileMergeHunkLevel,
-    graph::{GraphEdge, GraphEdgeType, TopoGroupedGraphIterator},
+    graph::{GraphEdgeType, GraphNode, TopoGroupedGraph},
     matchers::EverythingMatcher,
     merge::{Diff, SameChange},
     merged_tree::{TreeDiffEntry, TreeDiffStream},
     ref_name::{RefNameBuf, RemoteNameBuf, RemoteRefSymbol},
     repo::Repo,
     repo_path::RepoPath,
-    revset::{Revset, RevsetEvaluationError},
+    revset::{Revset, RevsetContainingFn, RevsetEvaluationError},
     rewrite,
     tree_merge::MergeOptions,
 };
+use pollster::FutureExt as _;
 
 use crate::messages::{
     ChangeHunk, ChangeLocation, ChangeRange, MultilineString, RevSet, queries::*,
@@ -79,25 +72,12 @@ pub struct QuerySession<'q, 'w: 'q> {
     pub ws: &'q WorkspaceSession<'w>,
     pub state: QueryState,
     #[allow(clippy::type_complexity)]
-    iter: Peekable<
-        Skip<
-            TopoGroupedGraphIterator<
-                CommitId,
-                CommitId,
-                Box<
-                    dyn Iterator<
-                            Item = Result<
-                                (CommitId, Vec<GraphEdge<CommitId>>),
-                                RevsetEvaluationError,
-                            >,
-                        > + 'q,
-                >,
-                for<'a> fn(&'a CommitId) -> &'a CommitId,
-            >,
-        >,
-    >,
-    #[allow(clippy::type_complexity)]
-    is_immutable: Box<dyn Fn(&CommitId) -> Result<bool, RevsetEvaluationError> + 'q>,
+    stream: Pin<Box<dyn Stream<Item = Result<GraphNode<CommitId>, RevsetEvaluationError>> + 'q>>,
+    /// pre-fetched node used for has_more peek semantics
+    lookahead: Option<Result<GraphNode<CommitId>, RevsetEvaluationError>>,
+    /// once the underlying stream returns None we must not poll it again
+    stream_done: bool,
+    is_immutable: Box<RevsetContainingFn<'q>>,
 }
 
 impl<'q, 'w> QuerySession<'q, 'w> {
@@ -107,18 +87,65 @@ impl<'q, 'w> QuerySession<'q, 'w> {
         state: QueryState,
     ) -> QuerySession<'q, 'w> {
         let as_id: for<'a> fn(&'a CommitId) -> &'a CommitId = commit_id_identity;
-        let iter = TopoGroupedGraphIterator::new(revset.iter_graph(), as_id)
-            .skip(state.next_row)
-            .peekable();
+        let mut stream: Pin<Box<dyn Stream<Item = _> + 'q>> =
+            Box::pin(TopoGroupedGraph::new(revset.stream_graph(), as_id).stream());
+        // skip already-yielded rows
+        let mut stream_done = false;
+        for _ in 0..state.next_row {
+            match stream.next().block_on() {
+                Some(_) => {}
+                None => {
+                    stream_done = true;
+                    break;
+                }
+            }
+        }
 
         let immutable_revset = ws.evaluate_immutable().unwrap();
         let is_immutable = immutable_revset.containing_fn();
 
         QuerySession {
             ws,
-            iter,
+            stream,
+            lookahead: None,
+            stream_done,
             state,
             is_immutable,
+        }
+    }
+
+    fn next_node(&mut self) -> Option<Result<GraphNode<CommitId>, RevsetEvaluationError>> {
+        if let Some(item) = self.lookahead.take() {
+            return Some(item);
+        }
+        if self.stream_done {
+            return None;
+        }
+        match self.stream.next().block_on() {
+            Some(item) => Some(item),
+            None => {
+                self.stream_done = true;
+                None
+            }
+        }
+    }
+
+    fn has_more(&mut self) -> bool {
+        if self.lookahead.is_some() {
+            return true;
+        }
+        if self.stream_done {
+            return false;
+        }
+        match self.stream.next().block_on() {
+            Some(item) => {
+                self.lookahead = Some(item);
+                true
+            }
+            None => {
+                self.stream_done = true;
+                false
+            }
         }
     }
 
@@ -129,7 +156,7 @@ impl<'q, 'w> QuerySession<'q, 'w> {
 
         let root_id = self.ws.repo().store().root_commit_id().clone();
 
-        while let Some(Ok((commit_id, commit_edges))) = self.iter.next() {
+        while let Some(Ok((commit_id, commit_edges))) = self.next_node() {
             // output lines to draw for the current row
             let mut lines: Vec<LogLine> = Vec::new();
 
@@ -177,7 +204,7 @@ impl<'q, 'w> QuerySession<'q, 'w> {
             let known_immutable = if stem_known_immutable {
                 Some(true)
             } else {
-                Some((self.is_immutable)(&commit_id)?)
+                Some((self.is_immutable)(&commit_id).block_on()?)
             };
 
             let header = self
@@ -274,10 +301,8 @@ impl<'q, 'w> QuerySession<'q, 'w> {
         }
 
         self.state.next_row = row;
-        Ok(LogPage {
-            rows,
-            has_more: self.iter.peek().is_some(),
-        })
+        let has_more = self.has_more();
+        Ok(LogPage { rows, has_more })
     }
 
     fn find_stem_for_commit(&self, id: &CommitId) -> Option<usize> {
@@ -507,8 +532,6 @@ async fn get_value_hunks(
 }
 
 async fn get_value_contents(path: &RepoPath, value: MaterializedTreeValue) -> Result<Vec<u8>> {
-    use tokio::io::AsyncReadExt;
-
     match value {
         MaterializedTreeValue::Absent => Err(anyhow!(
             "Absent path {path:?} in diff should have been handled by caller"
@@ -799,7 +822,6 @@ fn diff_by_line<'input, T: AsRef<[u8]> + ?Sized + 'input>(
     // blank lines to the preceding range. Maybe it can also be implemented as a
     // post-process (similar to refine_changed_regions()) that expands unchanged
     // regions across blank lines.
-    use jj_lib::diff::ContentDiff;
     match options.compare_mode {
         LineCompareMode::Exact => {
             ContentDiff::for_tokenizer(inputs, find_line_ranges, CompareBytesExactly)

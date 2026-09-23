@@ -5,7 +5,7 @@
 GG is a GUI for the version control system [Jujutsu](https://github.com/jj-vcs/jj). It takes advantage of Jujutsu's composable primitives to present an interactive view of your repository. The big idea: what if you were always in the middle of an interactive rebase, but this was actually a good thing?
 
 ## Installation
-GG is a desktop or web application with a keyboard & mouse interface, written in. It may be available in your favourite package manager, including...
+GG is a desktop or web application with a keyboard & mouse interface. It may be available in your favourite package manager, including...
 ```
 # MacOS
 brew install --cask gg
@@ -24,7 +24,14 @@ Run `gg` in a Jujutsu workspace, pass the workspace directory as an argument or 
 - When using a POSIX shell on Windows, `start gg` can be used to run in the background.
 
 ### Configuration
-GG uses `jj config`; `revset-aliases.immutable_heads()` is particularly important, as it determines how much history you can edit. GG has some additional settings of its own, with defaults and documentation [here](src/config/gg.toml).
+GG uses `jj config`; `revset-aliases.immutable_heads()` is particularly important, as it determines how much history you can edit. GG has some additional settings of its own, with defaults and documentation [here](src/config/gg.toml). They can be set in your JJ `config.toml` like this:
+```
+[gg]
+default-mode = "gui"
+
+[gg.web]
+default-port = 0
+```
 
 ## Features
 GG doesn't require [JJ](https://jj-vcs.github.io/jj/latest/install-and-setup/) installed, but you'll want it for tasks GG doesn't cover. What it *does* cover:

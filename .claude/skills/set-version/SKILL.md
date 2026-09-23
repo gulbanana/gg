@@ -5,7 +5,7 @@ description: Updates GG's version number for all components. Use when asked to u
 
 <background-information>
 GG has multiple components: a Rust crate, a Node package and a Tauri application. All of these need to be kept in sync, as does the documentation.
-The versioning numbering scheme is 0.xx.y, where xx is the JJ version number and y is the number of a GG release for that JJ version. For example, the first GG release for JJ 0.37.0 was called GG 0.38.0, and the second was called GG 0.38.1.
+The versioning numbering scheme is 0.xx.y, where xx is the JJ version number and y is the number of a GG release for that JJ version. For example, the first GG release for JJ 0.37.0 was called GG 0.37.0, and the second was called GG 0.37.1.
 </background-information>
 
 Version update procedure

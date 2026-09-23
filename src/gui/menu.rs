@@ -4,7 +4,7 @@ use anyhow::{Context, Result, anyhow};
 #[cfg(target_os = "macos")]
 use tauri::menu::AboutMetadata;
 use tauri::{
-    AppHandle, Emitter, EventTarget, Manager, Window, Wry,
+    AppHandle, Emitter, EventTarget, LogicalPosition, Manager, Window, Wry,
     menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu},
 };
 use tauri_plugin_dialog::{DialogExt, FilePath};
@@ -296,6 +296,14 @@ pub fn build_context(
                 true,
                 None::<&str>,
             )?,
+            &PredefinedMenuItem::separator(app_handle)?,
+            &MenuItem::with_id(
+                app_handle,
+                "tree_file_history",
+                "View file history",
+                true,
+                None::<&str>,
+            )?,
         ],
     )?;
 
@@ -348,6 +356,8 @@ pub fn build_context(
     let workspace_menu = Menu::with_items(
         app_handle,
         &[
+            &MenuItem::with_id(app_handle, "workspace_open", "Open", true, None::<&str>)?,
+            &MenuItem::with_id(app_handle, "workspace_forget", "Forget", true, None::<&str>)?,
             &MenuItem::with_id(
                 app_handle,
                 "workspace_rename",
@@ -355,7 +365,6 @@ pub fn build_context(
                 true,
                 None::<&str>,
             )?,
-            &MenuItem::with_id(app_handle, "workspace_forget", "Forget", true, None::<&str>)?,
         ],
     )?;
 
@@ -438,9 +447,56 @@ pub fn handle_selection(
     Ok(())
 }
 
-// enables context menu items for a revision and shows the menu
-pub fn handle_context(window: Window, ctx: Operand, ignore_immutable: bool) -> Result<()> {
+// switches to the main thread (required for GTK)
+pub fn handle_context(
+    window: Window,
+    ctx: Operand,
+    ignore_immutable: bool,
+    position: LogicalPosition<f64>,
+) -> Result<()> {
     log::debug!("handling context {ctx:?}");
+
+    let target = window.clone();
+    window.run_on_main_thread(move || {
+        if let Err(err) = handle_context_main_thread(&target, ctx, ignore_immutable, position) {
+            log::error!("failed to show context menu: {err:#}");
+        }
+    })?;
+
+    Ok(())
+}
+
+// offsets the anchor for GTK Wayland CSDs and menubar
+#[cfg(target_os = "linux")]
+fn to_window_position(window: &Window, position: LogicalPosition<f64>) -> LogicalPosition<f64> {
+    use gtk::prelude::{ContainerExt, WidgetExt};
+
+    match window
+        .default_vbox()
+        .ok()
+        .and_then(|vbox| vbox.children().pop())
+        .zip(window.gtk_window().ok())
+        .and_then(|(webview, gtk_window)| webview.translate_coordinates(&gtk_window, 0, 0))
+    {
+        Some((dx, dy)) => LogicalPosition::new(position.x + dx as f64, position.y + dy as f64),
+        None => position,
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn to_window_position(_window: &Window, position: LogicalPosition<f64>) -> LogicalPosition<f64> {
+    position
+}
+
+// enables context menu items for a revision and shows the menu
+fn handle_context_main_thread(
+    window: &Window,
+    ctx: Operand,
+    ignore_immutable: bool,
+    position: LogicalPosition<f64>,
+) -> Result<()> {
+    let anchor = to_window_position(window, position);
+    log::debug!("popping context menu at {position:?} -> {anchor:?}");
 
     let state = window.state::<AppState>();
     let guard = state.windows.lock().expect("state mutex poisoned");
@@ -463,7 +519,7 @@ pub fn handle_context(window: Window, ctx: Operand, ignore_immutable: bool) -> R
             context_menu.enable("revision_restore", state.restore)?;
             context_menu.enable("revision_bookmark", state.bookmark)?;
 
-            window.popup_menu(context_menu)?;
+            window.popup_menu_at(context_menu, anchor)?;
         }
         Operand::Revisions { headers } => {
             let context_menu = &guard
@@ -482,7 +538,7 @@ pub fn handle_context(window: Window, ctx: Operand, ignore_immutable: bool) -> R
             context_menu.enable("revision_restore", state.restore)?;
             context_menu.enable("revision_bookmark", state.bookmark)?;
 
-            window.popup_menu(context_menu)?;
+            window.popup_menu_at(context_menu, anchor)?;
         }
         Operand::Change { headers, .. } => {
             let context_menu = &guard
@@ -507,7 +563,7 @@ pub fn handle_context(window: Window, ctx: Operand, ignore_immutable: bool) -> R
                         .is_some_and(|header| header.parent_ids.len() == 1),
             )?;
 
-            window.popup_menu(context_menu)?;
+            window.popup_menu_at(context_menu, anchor)?;
         }
         Operand::Ref { r#ref, .. } => {
             let context_menu = &guard
@@ -584,7 +640,7 @@ pub fn handle_context(window: Window, ctx: Operand, ignore_immutable: bool) -> R
                 ),
             )?;
 
-            window.popup_menu(context_menu)?;
+            window.popup_menu_at(context_menu, anchor)?;
         }
         Operand::Workspace { .. } => {
             let context_menu = &guard
@@ -592,7 +648,7 @@ pub fn handle_context(window: Window, ctx: Operand, ignore_immutable: bool) -> R
                 .expect("session not found")
                 .workspace_menu;
 
-            window.popup_menu(context_menu)?;
+            window.popup_menu_at(context_menu, anchor)?;
         }
         _ => (), // no popup required
     };
@@ -604,7 +660,8 @@ pub fn handle_event(window: &Window, event: MenuEvent) -> Result<()> {
     log::debug!("handling event {event:?}");
 
     // we use a shared menu due to cleanup issues
-    if !window.is_focused()? {
+    if !window.state::<AppState>().owns_menu_events(window)? {
+        log::debug!("ignoring event for unfocused window {}", window.label());
         return Ok(());
     }
 
@@ -634,6 +691,7 @@ pub fn handle_event(window: &Window, event: MenuEvent) -> Result<()> {
         "revision_bookmark" => window.emit_to(target, "gg://context/revision", "bookmark")?,
         "tree_squash" => window.emit_to(target, "gg://context/tree", "squash")?,
         "tree_restore" => window.emit_to(target, "gg://context/tree", "restore")?,
+        "tree_file_history" => window.emit_to(target, "gg://context/tree", "file_history")?,
         "bookmark_track" => window.emit_to(target, "gg://context/bookmark", "track")?,
         "bookmark_untrack" => window.emit_to(target, "gg://context/bookmark", "untrack")?,
         "bookmark_push_all" => window.emit_to(target, "gg://context/bookmark", "push-all")?,
@@ -644,8 +702,9 @@ pub fn handle_event(window: &Window, event: MenuEvent) -> Result<()> {
         }
         "bookmark_rename" => window.emit_to(target, "gg://context/bookmark", "rename")?,
         "bookmark_delete" => window.emit_to(target, "gg://context/bookmark", "delete")?,
-        "workspace_rename" => window.emit_to(target, "gg://context/workspace", "rename")?,
+        "workspace_open" => window.emit_to(target, "gg://context/workspace", "open")?,
         "workspace_forget" => window.emit_to(target, "gg://context/workspace", "forget")?,
+        "workspace_rename" => window.emit_to(target, "gg://context/workspace", "rename")?,
         recent_id if recent_id.starts_with("recent:") => {
             let path = PathBuf::from(&recent_id["recent:".len()..]);
             let app_handle = window.app_handle().clone();

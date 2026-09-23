@@ -28,9 +28,9 @@
         let containerWidth = rect.width;
         let mouseX = e.clientX - rect.left;
 
-        // Clamp between 20% and 80% of container width
-        let minWidth = containerWidth * 0.05;
-        let maxWidth = containerWidth * 0.95;
+        // Clamp between 10% and 90% of container width
+        let minWidth = containerWidth * 0.1;
+        let maxWidth = containerWidth * 0.9;
         let clampedX = Math.max(minWidth, Math.min(maxWidth, mouseX));
 
         // Calculate left pane fraction (convert pixel position to fraction)
@@ -44,12 +44,10 @@
     }
 </script>
 
-<Shell revsetOverride={route.type === "revision" ? route.revset : null}
-       let:workspace let:selection>
+<Shell revsetOverride={route.type === "revision" ? route.revset : null} let:workspace let:selection>
     {#if route.type === "log"}
         {#key workspace.absolute_path}
-            <LogPane query_choices={workspace.query_choices}
-                     latest_query={route.revset ?? workspace.latest_query} />
+            <LogPane query_choices={workspace.query_choices} latest_query={route.revset ?? workspace.latest_query} />
         {/key}
     {:else if route.type === "revision"}
         <BoundQuery query={selection} let:data>
@@ -72,10 +70,9 @@
             </Pane>
         </BoundQuery>
     {:else}
-        <div class="two-pane" style="grid-template-columns: {leftFraction}fr 4px {1 - leftFraction}fr;">
+        <div class="two-pane" style="--left-fraction: {leftFraction}fr; --right-fraction: {1 - leftFraction}fr;">
             {#key workspace.absolute_path}
-                <LogPane query_choices={workspace.query_choices}
-                         latest_query={workspace.latest_query} />
+                <LogPane query_choices={workspace.query_choices} latest_query={workspace.latest_query} />
             {/key}
 
             <div class="separator" on:mousedown={onMouseDown} class:dragging={isDragging}></div>
@@ -106,6 +103,7 @@
 <style>
     .two-pane {
         display: grid;
+        grid-template-columns: var(--left-fraction) 4px var(--right-fraction);
         height: 100%;
         overflow: hidden;
     }
@@ -120,10 +118,15 @@
     }
 
     .separator:hover {
-        background: var(--ctp-surface0);
+        background: var(--ctp-overlay2);
     }
 
-    .separator.dragging {
-        background: var(--ctp-blue);
+    .separator:focus-visible {
+        outline: none;
+    }
+
+    .separator.dragging,
+    .separator:focus-visible {
+        background: var(--ctp-lavender);
     }
 </style>

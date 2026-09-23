@@ -18,6 +18,29 @@ export default class RefMutator {
         this.#ignoreImmutable = ignoreImmutable;
     }
 
+    /**
+     * The command run by double-clicking a bookmark; tracking is a toggle, so it's whichever
+     * direction is currently possible. Mirrors the enablement rules of the context menu.
+     */
+    static defaultCommand(ref: StoreRef): "track" | "untrack" | null {
+        switch (ref.type) {
+            case "LocalBookmark":
+                return ref.tracking_remotes.length > 0 ? "untrack" : null;
+
+            case "RemoteBookmark":
+                if (!ref.is_tracked) {
+                    return "track";
+                } else if (!ref.is_synced && !ref.is_absent) {
+                    return "untrack";
+                } else {
+                    return null;
+                }
+
+            default:
+                return null;
+        }
+    }
+
     handle(event: string | undefined) {
         if (!event) {
             return;
@@ -74,7 +97,8 @@ export default class RefMutator {
     };
 
     onRename = async (options?: MutationOptions) => {
-        let response = await getInput("Rename Bookmark", "", ["Bookmark Name"]);
+        let currentName = this.#ref.type === "Tag" ? this.#ref.tag_name : this.#ref.bookmark_name;
+        let response = await getInput("Rename Bookmark", "", [{ label: "Bookmark Name", choices: [currentName || ""] }]);
         if (response) {
             let new_name = response["Bookmark Name"];
             mutate<RenameBookmark>("rename_bookmark", {

@@ -12,7 +12,7 @@ cargo check                    # Check whether backend compiles
 cargo test                     # Run backend tests
 npm run check                  # Check whether frontend compiles
 npm run test                   # Run frontend tests
-cargo gen                      # CRITICAL: Regenerate TypeScript types after modifying Rust structs
+cargo gen                      # Regenerate TypeScript types after changing ts-rs structs in src/messages/
 cargo run                      # Launch GUI (uses prebuilt assets)
 cargo run -- web               # Launch in web mode (opens browser)
 ```
@@ -25,7 +25,7 @@ Each window has a dedicated worker thread owning a `Session` (jj-lib is not thre
 
 ### Key Boundaries
 
-- **`app/ipc.ts`**: Frontend transport abstraction. `isTauri()` detects runtime. Exports `query()`, `mutate()`, `trigger()`, `event()`.
+- **`app/ipc.ts`**: Frontend transport abstraction. `isTauri()` detects runtime. Exports `query()`, `mutate()`, `trigger()`; the `event()` store lives in `app/events.ts`.
 - **`src/worker/mod.rs`**: Worker thread state machine processing `SessionEvent`s.
 - **`src/gui/mod.rs`**: Tauri setup, multi-window state (`HashMap<String, WindowState>`), IPC handlers.
 - **`src/web/mod.rs`**: Axum HTTP server with `/api/{query|trigger|mutate}/{command}` endpoints.
@@ -35,9 +35,9 @@ Each window has a dedicated worker thread owning a `Session` (jj-lib is not thre
 1. **Triggers**: Fire-and-forget backend actions (native UI operations)
 2. **Queries**: Request data without side effects
 3. **Mutations**: Structured repository modifications
-4. **Events**: Push updates to frontend (Tauri events in GUI, local-only in web)
+4. **Events**: Push updates to frontend (Tauri events in GUI; SSE from `/api/events` in web, where the store's `set()` is local-only)
 
-## Type Generation (CRITICAL)
+## Type Generation
 
 After modifying Rust structs with `#[cfg_attr(feature = "ts-rs", ...)]` in `src/messages/`:
 ```bash
@@ -48,7 +48,7 @@ This exports TypeScript types to `app/messages/`. **Frontend breaks without this
 ## Adding New Mutations
 
 1. Define struct in `src/messages/mutations.rs` with `#[cfg_attr(feature = "ts-rs", derive(TS))]`
-2. Implement `Mutation` trait in `src/worker/mutations.rs`:
+2. Implement the `Mutation` trait (defined in `src/worker/mod.rs`) in the matching file under `src/worker/mutations/` (`revision.rs`, `change.rs`, `ref.rs`; others in `mod.rs`):
    - Start transaction first
    - Use `from`/`to` variable names (not `source`/`target`)
    - Check immutability immediately after resolving commits
@@ -58,11 +58,11 @@ This exports TypeScript types to `app/messages/`. **Frontend breaks without this
 
 ## Testing Mutations
 
-Test repository (`res/test-repo.zip`) contains pre-defined commits. Key test commits (from `src/worker/tests/mod.rs`):
-- `working_copy()` - mntpnnrk (empty, child of main)
-- `main_bookmark()` - mnkoropy (renamed c.txt)
-- `conflict_bookmark()` - nwrnuwyp (has conflict in b.txt)
-- `resolve_conflict()` - rrxroxys (resolved the conflict)
+Test repository (`res/test-repo.zip`) contains pre-defined commits. Key test commits (helpers in the `revs` module of `src/worker/tests/mod.rs`):
+- `working_copy()` - empty, child of main
+- `main_bookmark()` - renamed c.txt
+- `conflict_bookmark()` - has conflict in b.txt
+- `resolve_conflict()` - resolved the conflict
 
 Test patterns:
 - `mkid("change_id", "commit_id")` to reference commits
@@ -89,10 +89,10 @@ UI metaphor: drag-and-drop to edit repository. Policy centralized in `app/mutato
 
 ### Svelte Virtualization
 
-The log pane uses virtualization. Key by slot index, not content:
+The log pane (`app/GraphLog.svelte`) uses virtualization. Key by slot index, not content:
 ```svelte
 <!-- CORRECT -->
-{#each visibleSlice.rows as row, i (i)}
+{#each visibleSlice as row, i (i)}
 
 <!-- WRONG - fights virtualization -->
 {#key row?.revision.id.commit.hex ?? i}
@@ -153,8 +153,8 @@ Use `let` instead of `const` for variable declarations.
 
 ## Key Files Reference
 
-- `DESIGN.md` - Core metaphors, bookmark state machine
+- `doc/DESIGN.md` - Core metaphors, bookmark state machine
 - `app/mutators/BinaryMutator.ts` - All drag-drop policies
 - `app/ipc.ts` - IPC abstraction with runtime detection
-- `src/worker/mutations.rs` - All mutation implementations
+- `src/worker/mutations/` - All mutation implementations, by category
 - `src/config/gg.toml` - Default configuration with inline docs

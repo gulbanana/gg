@@ -75,7 +75,8 @@ impl RunOptions {
     /// Loads Jujutsu settings from the standard config locations and generates
     /// a Tauri context. All boolean flags default to `false`.
     pub fn new(workspace: PathBuf) -> Self {
-        let (settings, _, _, _) = read_config(Some(workspace.as_ref())).unwrap();
+        let repo_path = config::resolve_repo_path(Some(workspace.as_ref()));
+        let (settings, _, _, _) = read_config(repo_path.as_deref()).unwrap();
         let context = read_context();
         RunOptions {
             context,

@@ -12,6 +12,7 @@ use std::{
 
 use anyhow::{Context, Error, Result, anyhow};
 use chrono::TimeZone;
+use futures_util::TryStreamExt;
 use itertools::Itertools;
 use jj_cli::{
     cli_util::{default_ignored_remote_name, short_operation_hash},
@@ -22,6 +23,7 @@ use jj_cli::{
 use jj_lib::{
     backend::{BackendError, ChangeId, CommitId},
     commit::Commit,
+    default_backend_factories,
     default_index::DefaultReadonlyIndex,
     file_util,
     fileset::{self, FilesetAliasesMap, FilesetDiagnostics, FilesetParseContext},
@@ -34,21 +36,23 @@ use jj_lib::{
     op_heads_store,
     operation::Operation,
     ref_name::{WorkspaceName, WorkspaceNameBuf},
-    repo::{ReadonlyRepo, Repo, RepoLoaderError, StoreFactories},
-    repo_path::{RepoPath, RepoPathUiConverter},
+    repo::{ReadonlyRepo, Repo, RepoLoaderError},
+    repo_path::RepoPath,
     revset::{
         self, Revset, RevsetAliasesMap, RevsetDiagnostics, RevsetEvaluationError, RevsetExpression,
-        RevsetExtensions, RevsetIteratorExt, RevsetParseContext, RevsetResolutionError,
+        RevsetExtensions, RevsetParseContext, RevsetResolutionError, RevsetStreamExt,
         RevsetWorkspaceContext, SymbolResolverExtension, UserRevsetExpression,
     },
     rewrite,
     settings::{HumanByteSize, UserSettings},
     transaction::Transaction,
+    ui_path::RepoPathUiConverter,
     view::View,
     working_copy::{CheckoutStats, SnapshotOptions, WorkingCopyFreshness},
-    workspace::{self, DefaultWorkspaceLoaderFactory, Workspace, WorkspaceLoaderFactory},
+    workspace::{DefaultWorkspaceLoaderFactory, Workspace, WorkspaceLoaderFactory},
     workspace_store::{SimpleWorkspaceStore, WorkspaceStore as _},
 };
+use pollster::FutureExt as _;
 use thiserror::Error;
 
 use super::{WorkerSession, git_util::get_git_remote_names};
@@ -122,8 +126,8 @@ impl WorkerSession {
 
         let workspace = loader.load(
             &settings,
-            &StoreFactories::default(),
-            &workspace::default_working_copy_factories(),
+            &default_backend_factories::default_backend_factories(),
+            &default_backend_factories::default_working_copy_factories(),
         )?;
 
         let path_converter = RepoPathUiConverter::Fs {
@@ -153,7 +157,8 @@ impl WorkerSession {
             true
         };
 
-        let is_colocated = is_colocated_git_workspace(&workspace, &operation.repo);
+        let is_colocated =
+            is_colocated_git_workspace(&workspace).map_err(|e| Error::new(e.error))?;
 
         Ok(WorkspaceSession {
             session: self,
@@ -204,7 +209,7 @@ impl WorkspaceSession<'_> {
             &path,
             self.workspace.repo_path(),
             &self.operation.repo,
-            &*workspace::default_working_copy_factory(),
+            &*default_backend_factories::default_working_copy_factory(),
             workspace_name.clone(),
         )
         .await?;
@@ -251,7 +256,7 @@ impl WorkspaceSession<'_> {
         );
 
         let mut tx = self.start_transaction().await?;
-        tx.repo_mut().remove_wc_commit(&workspace_name).await?;
+        tx.repo_mut().remove_workspace(&workspace_name).await?;
 
         let workspace_store = SimpleWorkspaceStore::load(self.workspace.repo_path())?;
         workspace_store.forget(&[&*workspace_name])?;
@@ -276,7 +281,7 @@ impl WorkspaceSession<'_> {
         let repo_path = self.workspace.repo_path().to_owned();
         let is_colocated = self.is_colocated;
 
-        let mut locked_ws = self.workspace.start_working_copy_mutation()?;
+        let mut locked_ws = self.workspace.start_working_copy_mutation().await?;
 
         locked_ws.locked_wc().rename_workspace(new_name.clone());
         tx.repo_mut()
@@ -299,9 +304,46 @@ impl WorkspaceSession<'_> {
             ))
             .await?,
         );
-        locked_ws.finish(self.operation.repo.op_id().clone())?;
+        locked_ws
+            .finish(self.operation.repo.op_id().clone())
+            .await?;
 
         Ok(Some(self.format_status()))
+    }
+
+    pub fn workspace_root(&self, name: String) -> Result<PathBuf> {
+        let workspace_name: WorkspaceNameBuf = name.into();
+
+        anyhow::ensure!(
+            self.view().get_wc_commit_id(&workspace_name).is_some(),
+            "Workspace '{}' not found",
+            workspace_name.as_symbol()
+        );
+
+        // the loaded workspace knows where it is without consulting the store
+        if *workspace_name == *self.name() {
+            return absolute_workspace_path(self.workspace.workspace_root());
+        }
+
+        let repo_path = self.workspace.repo_path();
+        let workspace_store = SimpleWorkspaceStore::load(repo_path)?;
+
+        match workspace_store.get_workspace_path(&workspace_name)? {
+            // stored paths are relative to the repo directory
+            Some(stored_path) => absolute_workspace_path(&repo_path.join(stored_path)),
+            // repos created before jj tracked workspace paths have no entries, but
+            // the default workspace is the one hosting the repo, so we can find it
+            None if *workspace_name == *WorkspaceName::DEFAULT => repo_path
+                .parent()
+                .and_then(Path::parent)
+                .filter(|root| hosts_repo(root, repo_path))
+                .map(absolute_workspace_path)
+                .unwrap_or_else(|| Err(anyhow!("Workspace 'default' has no recorded path"))),
+            None => Err(anyhow!(
+                "Workspace '{}' has no recorded path",
+                workspace_name.as_symbol()
+            )),
+        }
     }
 
     pub fn list_workspaces(&self) -> Vec<String> {
@@ -407,13 +449,12 @@ impl WorkspaceSession<'_> {
         &'op self,
         revset: T,
     ) -> Result<Option<Commit>, RevsetError> {
-        let mut iter = revset
-            .as_ref()
-            .iter()
-            .commits(self.operation.repo.store())
-            .fuse();
-        match (iter.next(), iter.next()) {
-            (Some(commit), None) => Ok(Some(commit?)),
+        let store = self.operation.repo.store();
+        let mut stream = revset.as_ref().stream().commits(store);
+        let first = stream.try_next().block_on()?;
+        let second = stream.try_next().block_on()?;
+        match (first, second) {
+            (Some(commit), None) => Ok(Some(commit)),
             (None, _) => Ok(None),
             (Some(_), Some(_)) => Err(RevsetError::Other(anyhow!(
                 r#"Revset "{:?}" resolved to more than one revision"#,
@@ -452,23 +493,18 @@ impl WorkspaceSession<'_> {
             Err(err) => return Err(err),
         };
 
-        let mut change_iter = change_revset
-            .as_ref()
-            .iter()
-            .commits(self.operation.repo.store())
-            .fuse();
-        match (change_iter.next(), change_iter.next()) {
-            (Some(commit), None) => Ok(Some(commit?)),
+        let store = self.operation.repo.store();
+        let mut change_stream = change_revset.as_ref().stream().commits(store);
+        let first = change_stream.try_next().block_on()?;
+        let second = change_stream.try_next().block_on()?;
+        match (first, second) {
+            (Some(commit), None) => Ok(Some(commit)),
             (None, _) => Ok(None),
             (Some(_), Some(_)) => {
                 let commit_revset = self.evaluate_revset_commits(slice::from_ref(&id.commit))?;
-                let mut commit_iter = commit_revset
-                    .as_ref()
-                    .iter()
-                    .commits(self.operation.repo.store())
-                    .fuse();
-                match commit_iter.next() {
-                    Some(commit) => Ok(Some(commit?)),
+                let mut commit_stream = commit_revset.as_ref().stream().commits(store);
+                match commit_stream.try_next().block_on()? {
+                    Some(commit) => Ok(Some(commit)),
                     None => Ok(None),
                 }
             }
@@ -507,13 +543,12 @@ impl WorkspaceSession<'_> {
     pub(crate) fn resolve_change_id(&self, id: &RevId) -> Result<Commit, RevsetError> {
         let id_str = Self::format_id_str(id);
         let revset = self.evaluate_revset_str(&id_str)?;
-        let mut iter = revset
-            .as_ref()
-            .iter()
-            .commits(self.operation.repo.store())
-            .fuse();
-        let optional_change = match (iter.next(), iter.next()) {
-            (Some(commit), None) => Some(commit?),
+        let store = self.operation.repo.store();
+        let mut stream = revset.as_ref().stream().commits(store);
+        let first = stream.try_next().block_on()?;
+        let second = stream.try_next().block_on()?;
+        let optional_change = match (first, second) {
+            (Some(commit), None) => Some(commit),
             (None, _) => None,
             (Some(_), Some(_)) => Some(self.resolve_commit_id(&id.commit)?),
         };
@@ -578,11 +613,14 @@ impl WorkspaceSession<'_> {
         &'op self,
         revset: T,
     ) -> Result<Vec<Commit>, RevsetError> {
-        let commits = revset
+        let store = self.operation.repo.store();
+        let commits: Vec<Commit> = revset
             .as_ref()
-            .iter()
-            .commits(self.operation.repo.store())
-            .collect::<Result<Vec<Commit>, RevsetEvaluationError>>()?;
+            .stream()
+            .commits(store)
+            .try_collect()
+            .block_on()
+            .map_err(RevsetError::from)?;
         Ok(commits)
     }
 
@@ -747,33 +785,33 @@ impl WorkspaceSession<'_> {
         let prefix_len = self
             .prefix_index()
             .shortest_change_prefix_len(self.operation.repo.as_ref(), change_id)
+            .block_on()
             .unwrap_or_else(|_| change_id.reverse_hex().len());
 
         let hex = change_id.reverse_hex();
         let prefix = hex[..prefix_len].to_string();
         let rest = hex[prefix_len..].to_string();
 
-        let offset = self
+        let targets = self
             .repo()
             .resolve_change_id(change_id)
+            .block_on()
             .ok()
-            .flatten()
-            .and_then(|targets| {
-                let is_hidden = !targets.has_visible(commit_id);
-                let is_divergent = targets.is_divergent();
+            .flatten();
 
-                if is_hidden || is_divergent {
-                    targets.find_offset(commit_id)
-                } else {
-                    None
-                }
-            });
+        let offset = targets.as_ref().and_then(|targets| {
+            let is_hidden = !targets.has_visible(commit_id);
+            let is_divergent = targets.is_divergent();
 
-        let is_divergent = self
-            .repo()
-            .resolve_change_id(change_id)
-            .ok()
-            .flatten()
+            if is_hidden || is_divergent {
+                targets.find_offset(commit_id)
+            } else {
+                None
+            }
+        });
+
+        let is_divergent = targets
+            .as_ref()
             .map(|targets| targets.is_divergent())
             .unwrap_or(false);
 
@@ -850,9 +888,7 @@ impl WorkspaceSession<'_> {
         let intersection_revset = check_revset.intersection(&immutable_revset);
 
         let immutable_revs = self.evaluate_revset_expr(repo, intersection_revset)?;
-        let first = immutable_revs.iter().next();
-
-        Ok(first.is_some())
+        Ok(!immutable_revs.is_empty()?)
     }
 
     /// checks if any commit in an iterator is immutable
@@ -866,8 +902,9 @@ impl WorkspaceSession<'_> {
     pub(crate) fn check_immutable_revset(&self, revset: &dyn Revset) -> Result<bool> {
         let immutable_revset = self.evaluate_immutable()?;
         let contains = immutable_revset.containing_fn();
-        for id in revset.iter() {
-            if contains(&id?)? {
+        let mut stream = revset.stream();
+        while let Some(id) = stream.try_next().block_on()? {
+            if contains(&id).block_on()? {
                 return Ok(true);
             }
         }
@@ -946,7 +983,13 @@ impl WorkspaceSession<'_> {
             .transpose()?;
         if self.is_colocated {
             if let Some(wc_commit) = &maybe_new_wc_commit {
-                git::reset_head(tx.repo_mut(), wc_commit)?;
+                git::reset_head(
+                    tx.repo_mut(),
+                    self.workspace.workspace_name(),
+                    self.workspace.workspace_root(),
+                    wc_commit,
+                )
+                .await?;
             }
             git::export_refs(tx.repo_mut())?;
         }
@@ -1008,13 +1051,15 @@ impl WorkspaceSession<'_> {
             .base_ignores(self.workspace.workspace_root())?;
 
         // Compare working-copy tree and operation with repo's, and reload as needed.
-        let mut locked_ws = self.workspace.start_working_copy_mutation()?;
+        let mut locked_ws = self.workspace.start_working_copy_mutation().await?;
         let old_op_id = locked_ws.locked_wc().old_operation_id().clone();
         let (repo, wc_commit) = match WorkingCopyFreshness::check_stale(
             locked_ws.locked_wc(),
             &wc_commit,
             &repo,
-        )? {
+        )
+        .await?
+        {
             WorkingCopyFreshness::Fresh => (repo, wc_commit),
             WorkingCopyFreshness::Updated(wc_operation) => {
                 let repo = repo.reload_at(&wc_operation).await?;
@@ -1053,7 +1098,7 @@ impl WorkspaceSession<'_> {
                 self.workspace
                     .check_out(repo.op_id().clone(), old_tree.as_ref(), &new_wc_commit)
                     .await?;
-                locked_ws = self.workspace.start_working_copy_mutation()?;
+                locked_ws = self.workspace.start_working_copy_mutation().await?;
 
                 (repo, new_wc_commit)
             }
@@ -1110,7 +1155,9 @@ impl WorkspaceSession<'_> {
             );
         }
 
-        locked_ws.finish(self.operation.repo.op_id().clone())?;
+        locked_ws
+            .finish(self.operation.repo.op_id().clone())
+            .await?;
 
         Ok(did_anything)
     }
@@ -1134,24 +1181,30 @@ impl WorkspaceSession<'_> {
                         .await?,
                 )
             } else {
-                let locked_ws = self.workspace.start_working_copy_mutation()?;
-                locked_ws.finish(self.operation.repo.op_id().clone())?;
+                let locked_ws = self.workspace.start_working_copy_mutation().await?;
+                locked_ws
+                    .finish(self.operation.repo.op_id().clone())
+                    .await?;
                 None
             },
         )
     }
 
     async fn import_git_head(&mut self) -> Result<()> {
+        let workspace_name = self.workspace.workspace_name().to_owned();
         let mut tx = self.operation.repo.start_transaction();
-        git::import_head(tx.repo_mut())?;
+        git::import_head(
+            tx.repo_mut(),
+            &workspace_name,
+            self.workspace.workspace_root(),
+        )
+        .await?;
         if !tx.repo().has_changes() {
             return Ok(());
         }
 
-        let new_git_head = tx.repo().view().git_head().clone();
+        let new_git_head = tx.repo().view().git_head(&workspace_name).clone();
         if let Some(new_git_head_id) = new_git_head.as_normal() {
-            let workspace_name = self.workspace.workspace_name().to_owned();
-
             if let Some(old_wc_commit_id) =
                 self.operation.repo.view().get_wc_commit_id(&workspace_name)
             {
@@ -1164,7 +1217,7 @@ impl WorkspaceSession<'_> {
                 .check_out(workspace_name.clone(), &new_git_head_commit)
                 .await?;
 
-            let mut locked_ws = self.workspace.start_working_copy_mutation()?;
+            let mut locked_ws = self.workspace.start_working_copy_mutation().await?;
 
             locked_ws.locked_wc().reset(&new_git_head_commit).await?;
             tx.repo_mut().rebase_descendants().await?;
@@ -1175,7 +1228,9 @@ impl WorkspaceSession<'_> {
                 tx.commit("import git head").await?,
             );
 
-            locked_ws.finish(self.operation.repo.op_id().clone())?;
+            locked_ws
+                .finish(self.operation.repo.op_id().clone())
+                .await?;
         } else {
             self.finish_transaction(tx, "import git head").await?;
         }
@@ -1189,6 +1244,7 @@ impl WorkspaceSession<'_> {
             .map_err(|e| Error::new(e.error))?;
         let mut tx = self.operation.repo.start_transaction();
         let stats = git::import_refs(tx.repo_mut(), &import_options)
+            .await
             .context("automated import failed despite reserved remote name")?;
         if !tx.repo().has_changes() {
             return Ok(());
@@ -1229,7 +1285,6 @@ impl WorkspaceData {
             fileset_aliases_map: &self.fileset_aliases_map,
             extensions: &self.extensions,
             workspace: Some(workspace_context),
-            use_glob_by_default: false,
         }
     }
 
@@ -1319,14 +1374,16 @@ impl OperationData {
             if let Some(excludes_file_path) =
                 get_excludes_file_path(git_repo.config_snapshot().plumbing())
             {
-                git_ignores = git_ignores.chain_with_file("", excludes_file_path)?;
+                git_ignores = git_ignores.chain_with_file(RepoPath::root(), excludes_file_path)?;
             }
-            git_ignores = git_ignores
-                .chain_with_file("", git_backend.git_repo_path().join("info").join("exclude"))?;
+            git_ignores = git_ignores.chain_with_file(
+                RepoPath::root(),
+                git_backend.git_repo_path().join("info").join("exclude"),
+            )?;
         } else if let Ok(git_config) = gix::config::File::from_globals()
             && let Some(excludes_file_path) = get_excludes_file_path(&git_config)
         {
-            git_ignores = git_ignores.chain_with_file("", excludes_file_path)?;
+            git_ignores = git_ignores.chain_with_file(RepoPath::root(), excludes_file_path)?;
         }
         Ok(git_ignores)
     }
@@ -1336,6 +1393,24 @@ fn find_workspace_dir(cwd: &Path) -> &Path {
     cwd.ancestors()
         .find(|path| path.join(".jj").is_dir())
         .unwrap_or(cwd)
+}
+
+fn absolute_workspace_path(path: &Path) -> Result<PathBuf> {
+    dunce::canonicalize(path)
+        .with_context(|| format!("Cannot resolve absolute workspace path: {}", path.display()))
+}
+
+/// is the repo inside this workspace, rather than a pointer to one elsewhere?
+fn hosts_repo(workspace_root: &Path, repo_path: &Path) -> bool {
+    let Ok(repo_path) = dunce::canonicalize(repo_path) else {
+        return false;
+    };
+
+    DefaultWorkspaceLoaderFactory
+        .create(workspace_root)
+        .ok()
+        .and_then(|loader| dunce::canonicalize(loader.repo_path()).ok())
+        .is_some_and(|loaded_path| loaded_path == repo_path)
 }
 
 fn parse_revset(
@@ -1467,20 +1542,11 @@ async fn load_at_head(workspace: &Workspace, data: &WorkspaceData) -> Result<Ope
         loader.op_heads_store().as_ref(),
         loader.op_store(),
         async |op_heads| {
-            let base_repo = loader.load_at(&op_heads[0]).await?;
             // might want to set some tags
-            let mut tx = base_repo.start_transaction();
-            for other_op_head in op_heads.into_iter().skip(1) {
-                tx.merge_operation(other_op_head).await?;
-                tx.repo_mut().rebase_descendants().await?;
-            }
-            Ok::<Operation, RepoLoaderError>(
-                tx.write("resolve concurrent operations")
-                    .await?
-                    .leave_unpublished()
-                    .operation()
-                    .clone(),
-            )
+            let (merged_repo, _num_rebased) = loader
+                .merge_operations(op_heads, None, Some("resolve concurrent operations"), [])
+                .await?;
+            Ok::<Operation, RepoLoaderError>(merged_repo.operation().clone())
         },
     )
     .await?;

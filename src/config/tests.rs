@@ -187,6 +187,27 @@ fn recent_workspaces_returns_configured_paths() {
     );
 }
 
+#[test]
+fn resolve_repo_path_finds_repo_from_subdir() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo_path = dir.path().join(".jj").join("repo");
+    std::fs::create_dir_all(&repo_path).unwrap();
+    let subdir = dir.path().join("nested").join("deeper");
+    std::fs::create_dir_all(&subdir).unwrap();
+
+    let resolved = resolve_repo_path(Some(&subdir)).expect("repo path should resolve");
+    assert_eq!(
+        dunce::canonicalize(resolved).unwrap(),
+        dunce::canonicalize(repo_path).unwrap()
+    );
+}
+
+#[test]
+fn resolve_repo_path_is_none_outside_workspace() {
+    let dir = tempfile::tempdir().unwrap();
+    assert!(resolve_repo_path(Some(dir.path())).is_none());
+}
+
 mod extract_overrides {
     use super::super::{GGSettings, extract_overrides, native_keys};
     use super::{JJ_TEST_DEFAULTS, settings_with_extracted_overrides};

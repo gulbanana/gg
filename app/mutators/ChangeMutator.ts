@@ -7,6 +7,7 @@ import type { MoveChanges } from "../messages/MoveChanges";
 import type { MoveHunk } from "../messages/MoveHunk";
 import type { TreePath } from "../messages/TreePath";
 import { mutate } from "../ipc";
+import { logQueryRequest } from "../stores";
 
 export type MutationOptions = { ignoreImmutable?: boolean };
 
@@ -42,6 +43,9 @@ export default class ChangeMutator {
                 break;
             case "restore":
                 this.onRestore();
+                break;
+            case "file_history":
+                this.onFileHistory();
                 break;
             default:
                 console.log(`unimplemented mutation '${event}'`, this);
@@ -88,5 +92,12 @@ export default class ChangeMutator {
                 paths: [this.#path]
             }, { ignoreImmutable: this.#ignoreImmutable });
         }
+    };
+
+    // not a mutation - repoints the log at the file's history. repo_path is relative to the workspace
+    // root, which is also the fileset cwd (see RepoPathUiConverter in gui_util.rs)
+    onFileHistory = () => {
+        let pattern = this.#path.repo_path.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+        logQueryRequest.set(`files("${pattern}")`);
     };
 }

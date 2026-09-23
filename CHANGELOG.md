@@ -1,5 +1,30 @@
 # GG Changelog
 
+## Unreleased
+This release is based on Jujutsu 0.45.1.
+
+### Added
+- Panes can be resised using the central vertical separator (thanks to @urbanij).
+
+## [0.41.0](releases/tag/v0.41.0)
+This release is based on Jujutsu 0.41.
+
+### Added
+- Workspace chips are now interactive. The '@'-chip shown on a workspace's working copy revision has a context menu with these new commands:
+  * Open - creates a new window (gui) or switches the current tab (web) to the selected workspace.
+  * Forget - removes a workspace from the repository, abandoning its working copy if it's empty.
+  * Rename... - renames the workspace.
+- Chips support double-clicking to perform a default action - track/untrack for bookmarks, open for workspaces.
+- The Changes line in the right pane shows diff stats for non-empty revisions.
+- Bookmark->Rename... now pre-fills the previous name (thanks to @urbanij).
+- Draft descriptions are saved across operations as long as the change-id of your selection remains the same.
+
+### Fixed
+- The working directory is now canonicalised with `dunce`, which will hopefully avoid some reserved-name errors on Windows.
+- `gg.web.default-port` didn't work when set at the --repo level.
+- Text selection in the diff view no longer includes +/- prefixes (or an extra space for unchanged lines).
+- Context menus were incorrectly positioned in Wayland and nonfunctional on certain GTK versions (thanks to @rielas).
+
 ## [0.39.1](releases/tag/v0.39.1)
 
 ### Added

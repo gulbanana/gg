@@ -2,6 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use anyhow::{Context, Result, anyhow};
 use async_trait::async_trait;
+use futures_util::TryStreamExt;
 use indexmap::IndexMap;
 use itertools::Itertools;
 use jj_lib::{
@@ -11,10 +12,11 @@ use jj_lib::{
     merged_tree::MergedTree,
     object_id::ObjectId as ObjectIdTrait,
     repo::Repo,
-    revset::{RevsetExpression, RevsetIteratorExt},
+    revset::{RevsetExpression, RevsetStreamExt},
     rewrite::{self, RebaseOptions, RebasedCommit},
     transaction::Transaction,
 };
+use pollster::FutureExt as _;
 
 use super::precondition;
 
@@ -537,6 +539,7 @@ impl Mutation for InsertRevisions {
             let mut mapping = HashMap::new();
             tx.repo_mut()
                 .rebase_descendants_with_options(
+                    &RevsetExpression::none(),
                     &RebaseOptions::default(),
                     |old_commit, rebased| {
                         mapping.insert(
@@ -651,12 +654,12 @@ mod tests {
     };
     use anyhow::Result;
     use assert_matches::assert_matches;
+    use futures_util::AsyncReadExt;
     use jj_lib::{
         config::{ConfigLayer, ConfigSource},
         repo::Repo,
         settings::UserSettings,
     };
-    use tokio::io::AsyncReadExt;
 
     #[tokio::test]
     async fn abandon_revisions() -> Result<()> {
@@ -768,9 +771,9 @@ mod tests {
         let tree = wc.tree();
         let repo_path = jj_lib::repo_path::RepoPath::from_internal_string("small.txt")?;
 
-        match tree.path_value(&repo_path)?.into_resolved() {
+        match tree.path_value(repo_path).await?.into_resolved() {
             Ok(Some(jj_lib::backend::TreeValue::File { id, .. })) => {
-                let mut reader = ws.repo().store().read_file(&repo_path, &id).await?;
+                let mut reader = ws.repo().store().read_file(repo_path, &id).await?;
                 let mut content = Vec::new();
                 reader.read_to_end(&mut content).await?;
                 let content_str = String::from_utf8_lossy(&content);
@@ -813,9 +816,9 @@ mod tests {
         let tree = wc.tree();
         let repo_path = jj_lib::repo_path::RepoPath::from_internal_string("hunk_test.txt")?;
 
-        match tree.path_value(&repo_path)?.into_resolved() {
+        match tree.path_value(repo_path).await?.into_resolved() {
             Ok(Some(jj_lib::backend::TreeValue::File { id, .. })) => {
-                let mut reader = ws.repo().store().read_file(&repo_path, &id).await?;
+                let mut reader = ws.repo().store().read_file(repo_path, &id).await?;
                 let mut content = Vec::new();
                 reader.read_to_end(&mut content).await?;
                 let content_str = String::from_utf8_lossy(&content);
@@ -1080,7 +1083,7 @@ mod tests {
         .await?;
         assert_matches!(result, MutationResult::Updated { .. });
 
-        let page = queries::query_log(&ws, "description(unsynced)", 3)?;
+        let page = queries::query_log(&ws, "description(substring:unsynced)", 3)?;
         assert_eq!(2, page.rows.len());
 
         Ok(())
@@ -1360,7 +1363,8 @@ mod tests {
         ] {
             let targets = ws
                 .repo()
-                .resolve_change_id(commit.change_id())?
+                .resolve_change_id(commit.change_id())
+                .await?
                 .expect("commit should resolve");
             assert!(
                 !targets.is_divergent(),
@@ -1927,11 +1931,13 @@ async fn disinherit_children(
     let mut external_children: Vec<Commit> = Vec::new();
     for target in range {
         let children_expr = RevsetExpression::commit(target.id().clone()).children();
+        let store = ws.repo().store().clone();
         let children: Vec<Commit> = children_expr
             .evaluate(ws.repo())?
-            .iter()
-            .commits(ws.repo().store())
-            .try_collect()?;
+            .stream()
+            .commits(&store)
+            .try_collect()
+            .block_on()?;
 
         for child in children {
             if !range_ids.contains(child.id()) {
@@ -1972,8 +1978,9 @@ async fn disinherit_children(
             );
         let new_child_parents: Result<Vec<CommitId>, _> = new_child_parents_expression
             .evaluate(tx.base_repo().as_ref())?
-            .iter()
-            .collect();
+            .stream()
+            .try_collect()
+            .block_on();
 
         rebased_commit_ids.insert(
             child_commit.id().clone(),
@@ -1987,15 +1994,19 @@ async fn disinherit_children(
     // rebase descendants of modified commits, tracking new ids
     let mut mapping = HashMap::new();
     tx.repo_mut()
-        .rebase_descendants_with_options(&RebaseOptions::default(), |old_commit, rebased| {
-            mapping.insert(
-                old_commit.id().clone(),
-                match rebased {
-                    RebasedCommit::Rewritten(new_commit) => new_commit.id().clone(),
-                    RebasedCommit::Abandoned { parent_id } => parent_id,
-                },
-            );
-        })
+        .rebase_descendants_with_options(
+            &RevsetExpression::none(),
+            &RebaseOptions::default(),
+            |old_commit, rebased| {
+                mapping.insert(
+                    old_commit.id().clone(),
+                    match rebased {
+                        RebasedCommit::Rewritten(new_commit) => new_commit.id().clone(),
+                        RebasedCommit::Abandoned { parent_id } => parent_id,
+                    },
+                );
+            },
+        )
         .await?;
     rebased_commit_ids.extend(mapping);
 

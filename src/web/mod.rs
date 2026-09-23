@@ -41,13 +41,14 @@ use serde::Deserialize;
 use tauri_plugin_log::fern;
 use tokio::sync::{broadcast, oneshot};
 
-use crate::config::{GGSettings, read_config};
+use crate::config::{self, GGSettings, read_config};
 use crate::messages::mutations::{
     AbandonRevisions, AdoptRevision, BackoutRevisions, CheckoutRevision, CopyChanges, CopyHunk,
     CreateRef, CreateRevision, CreateRevisionBetween, DeleteRef, DescribeRevision,
     DuplicateRevisions, ExternalDiff, ExternalResolve, ForgetWorkspace, GitFetch, GitPush,
     InsertRevisions, MoveChanges, MoveHunk, MoveRef, MoveRevisions, MutationOptions,
-    RenameBookmark, RenameWorkspace, TrackBookmark, UndoOperation, UntrackBookmark,
+    MutationResult, OpenWorkspace, RenameBookmark, RenameWorkspace, TrackBookmark, UndoOperation,
+    UntrackBookmark,
 };
 use crate::worker::{Mutation, Session, SessionEvent, WorkerSession};
 use sink::{SseEvent, SseSink};
@@ -75,7 +76,7 @@ impl<E: Into<anyhow::Error>> From<E> for ApiError {
 #[derive(Default)]
 pub struct WebOptions {
     /// TCP port to bind to. When `None`, uses the value from
-    /// `gg.web.default-port` in jj config (default 2178).
+    /// `gg.web.default-port` in jj config (default 0, i.e. random).
     pub port: Option<u16>,
     /// Force-open the browser regardless of config.
     pub launch: bool,
@@ -98,7 +99,8 @@ pub async fn run_web(options: super::RunOptions, web_options: WebOptions) -> Res
         .chain(std::io::stderr())
         .apply()?;
 
-    let (repo_settings, _, _, _) = read_config(options.workspace.as_deref())?;
+    let repo_path = config::resolve_repo_path(options.workspace.as_deref());
+    let (repo_settings, _, _, _) = read_config(repo_path.as_deref())?;
     let client_timeout = repo_settings.web_client_timeout();
     let (app, shutdown_rx) = create_app(options, Some(client_timeout))?;
 
@@ -325,6 +327,40 @@ async fn handle_mutate(
         "external_resolve" => execute_mutation::<ExternalResolve>(&state, body),
         "forget_workspace" => execute_mutation::<ForgetWorkspace>(&state, body),
         "rename_workspace" => execute_mutation::<RenameWorkspace>(&state, body),
+        // web mode has no windows to open, so we reload this one
+        "open_workspace" => {
+            #[derive(Deserialize)]
+            struct OpenWorkspaceRequest {
+                mutation: OpenWorkspace,
+            }
+
+            let request: OpenWorkspaceRequest = serde_json::from_value(body)?;
+            let (tx, rx) = channel();
+            state.worker_tx.send(SessionEvent::QueryWorkspaceRoot {
+                tx,
+                name: request.mutation.name,
+            })?;
+
+            let result = match rx.recv()? {
+                Ok(wd) => {
+                    let (tx, rx) = channel();
+                    state
+                        .worker_tx
+                        .send(SessionEvent::OpenWorkspace { tx, wd: Some(wd) })?;
+                    match rx.recv()? {
+                        Ok(new_config) => MutationResult::Reconfigured { new_config },
+                        Err(err) => MutationResult::PreconditionError {
+                            message: format!("{err:#}"),
+                        },
+                    }
+                }
+                Err(err) => MutationResult::PreconditionError {
+                    message: format!("{err:#}"),
+                },
+            };
+
+            Ok(Json(serde_json::to_value(result)?))
+        }
         "undo_operation" => {
             let (tx, rx) = channel();
             state.worker_tx.send(SessionEvent::ExecuteMutation {
