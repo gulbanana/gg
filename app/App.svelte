@@ -11,6 +11,14 @@
     let leftFraction = 0.5; // 50/50 split
     let isDragging = false;
 
+    let minFraction = 0.1;
+    let maxFraction = 0.9;
+    let keyboardStep = 0.05;
+
+    function resize(fraction: number) {
+        leftFraction = Math.max(minFraction, Math.min(maxFraction, fraction));
+    }
+
     function onMouseDown(e: MouseEvent) {
         e.preventDefault();
         isDragging = true;
@@ -25,22 +33,33 @@
         if (!container) return;
 
         let rect = container.getBoundingClientRect();
-        let containerWidth = rect.width;
-        let mouseX = e.clientX - rect.left;
-
-        // Clamp between 10% and 90% of container width
-        let minWidth = containerWidth * 0.1;
-        let maxWidth = containerWidth * 0.9;
-        let clampedX = Math.max(minWidth, Math.min(maxWidth, mouseX));
-
-        // Calculate left pane fraction (convert pixel position to fraction)
-        leftFraction = clampedX / (containerWidth - 4); // 4px is separator width
+        resize((e.clientX - rect.left) / (rect.width - 4)); // 4px is separator width
     }
 
     function onMouseUp() {
         isDragging = false;
         document.removeEventListener("mousemove", onMouseMove);
         document.removeEventListener("mouseup", onMouseUp);
+    }
+
+    function onKeyDown(e: KeyboardEvent) {
+        switch (e.key) {
+            case "ArrowLeft":
+                resize(leftFraction - keyboardStep);
+                break;
+            case "ArrowRight":
+                resize(leftFraction + keyboardStep);
+                break;
+            case "Home":
+                resize(minFraction);
+                break;
+            case "End":
+                resize(maxFraction);
+                break;
+            default:
+                return;
+        }
+        e.preventDefault();
     }
 </script>
 
@@ -75,7 +94,20 @@
                 <LogPane query_choices={workspace.query_choices} latest_query={workspace.latest_query} />
             {/key}
 
-            <div class="separator" on:mousedown={onMouseDown} class:dragging={isDragging}></div>
+            <!-- svelte-ignore a11y_no_interactive_element_to_noninteractive_role (a focusable separator is a widget, per the aria window splitter pattern) -->
+            <button
+                type="button"
+                class="separator"
+                role="separator"
+                aria-label="Resize log pane"
+                aria-orientation="vertical"
+                aria-valuenow={Math.round(leftFraction * 100)}
+                aria-valuemin={minFraction * 100}
+                aria-valuemax={maxFraction * 100}
+                on:mousedown={onMouseDown}
+                on:keydown={onKeyDown}
+                class:dragging={isDragging}>
+            </button>
 
             <BoundQuery query={selection} let:data>
                 {#if data.type == "Detail"}
@@ -112,9 +144,10 @@
         background: var(--ctp-overlay0);
         cursor: col-resize;
         user-select: none;
-        pointer-events: auto;
         width: 4px;
         margin-left: -2.5px;
+        border: none;
+        padding: 0;
     }
 
     .separator:hover {
