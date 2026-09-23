@@ -54,7 +54,8 @@
     if (isTauri()) {
         document.addEventListener("keydown", (event) => {
             const key = event.key.toLowerCase();
-            if ((key === "n" || key === "m" || key === "o") && event.ctrlKey) {
+            // webviews don't pass these to the native menu, and webview2 would reload on f5
+            if (((key === "n" || key === "m" || key === "o") && event.ctrlKey) || key === "f5") {
                 event.preventDefault();
                 trigger("forward_accelerator", {
                     key,

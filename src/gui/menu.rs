@@ -713,7 +713,7 @@ pub fn handle_event(window: &Window, event: MenuEvent) -> Result<()> {
         "menu_repo_init" => repo_init(window),
         "menu_repo_clone" => repo_clone(window),
         "menu_repo_open" => repo_open(window),
-        "menu_repo_reopen" => repo_reopen(window),
+        "menu_repo_reopen" => repo_reopen(window)?,
         "menu_revision_new_child" => window.emit_to(target, "gg://menu/revision", "new_child")?,
         "menu_revision_new_parent" => window.emit_to(target, "gg://menu/revision", "new_parent")?,
         "menu_revision_edit" => window.emit_to(target, "gg://menu/revision", "edit")?,
@@ -772,8 +772,14 @@ pub fn repo_open(window: &Window) {
     });
 }
 
-fn repo_reopen(window: &Window) {
-    handler::fatal!(super::try_open_repository(window, None).context("try_open_repository"));
+pub fn repo_reopen(window: &Window) -> Result<()> {
+    let config = super::try_open_repository(window, None).context("try_open_repository")?;
+    window.emit_to(
+        EventTarget::window(window.label()),
+        "gg://repo/config",
+        config,
+    )?;
+    Ok(())
 }
 
 pub fn repo_init(window: &Window) {

@@ -362,12 +362,19 @@ fn query_workspace(
 }
 
 #[tauri::command]
-fn forward_accelerator(window: Window, state: State<AppState>, key: char, ctrl: bool, shift: bool) {
-    match (key, ctrl, shift) {
-        ('o', true, false) => menu::repo_open(&window),
-        ('o', true, true) => menu::repo_clone(&window),
-        ('n', true, true) => menu::repo_init(&window),
-        ('n', true, false) => {
+fn forward_accelerator(
+    window: Window,
+    state: State<AppState>,
+    key: String,
+    ctrl: bool,
+    shift: bool,
+) {
+    match (key.as_str(), ctrl, shift) {
+        ("o", true, false) => menu::repo_open(&window),
+        ("o", true, true) => menu::repo_clone(&window),
+        ("n", true, true) => menu::repo_init(&window),
+        ("f5", _, _) => handler::fatal!(menu::repo_reopen(&window)),
+        ("n", true, false) => {
             if state.get_selection(window.label()).is_some() {
                 handler::nonfatal!(window.emit_to(
                     EventTarget::window(window.label()),
@@ -376,7 +383,7 @@ fn forward_accelerator(window: Window, state: State<AppState>, key: char, ctrl: 
                 ));
             }
         }
-        ('m', true, false) => {
+        ("m", true, false) => {
             // new_parent only works for singleton selection with single parent
             if let Some(set) = state.get_selection(window.label())
                 && set.from.commit.hex == set.to.commit.hex

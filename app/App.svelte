@@ -66,7 +66,8 @@
 
 <Shell revsetOverride={route.type === "revision" ? route.revset : null} let:workspace let:selection>
     {#if route.type === "log"}
-        {#key workspace.absolute_path}
+        <!-- key on the whole config, not its path - reopening the same repo must remount -->
+        {#key workspace}
             <LogPane query_choices={workspace.query_choices} latest_query={route.revset ?? workspace.latest_query} />
         {/key}
     {:else if route.type === "revision"}
@@ -92,7 +93,8 @@
     {:else}
         <div class="two-pane" style="--left-fraction: {leftFraction}fr; --right-fraction: {1 - leftFraction}fr;">
             <TitlebarInset>
-                {#key workspace.absolute_path}
+                <!-- key on the whole config, not its path - reopening the same repo must remount -->
+                {#key workspace}
                     <LogPane query_choices={workspace.query_choices} latest_query={workspace.latest_query} />
                 {/key}
             </TitlebarInset>
