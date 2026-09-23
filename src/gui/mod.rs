@@ -99,10 +99,10 @@ struct WindowState {
     ref_menu: Menu<Wry>,
     workspace_menu: Menu<Wry>,
     selection: Option<messages::RevSet>,
+    selection_headers: Option<Vec<messages::RevHeader>>,
     has_workspace: bool,
     ignore_immutable: bool,
     workspace_path: Option<String>,
-    // where the frontend's titlebar content begins, if it has any
     #[cfg(target_os = "macos")]
     title_limit: Option<f64>,
 }
@@ -196,6 +196,64 @@ fn resolve_set(
     let (tx, rx) = channel();
     session_tx.send(SessionEvent::QueryRevisions { tx, set })?;
     rx.recv()?
+}
+
+fn update_selection_headers(app_handle: &AppHandle, window_label: &str) -> Result<()> {
+    let app_state = app_handle.state::<AppState>();
+    let window = app_state
+        .windows
+        .lock()
+        .expect("state mutex poisoned")
+        .get(window_label)
+        .map(|state| (state.worker_channel.clone(), state.selection.clone()));
+
+    if let Some((session_tx, selection)) = window {
+        let headers = selection
+            .clone()
+            .and_then(|set| match resolve_set(&session_tx, set) {
+                Ok(messages::queries::RevsResult::Detail { headers, .. }) => Some(headers),
+                _ => None,
+            });
+
+        // the selection may have changed again while it was being resolved
+        if let Some(state) = app_state
+            .windows
+            .lock()
+            .expect("state mutex poisoned")
+            .get_mut(window_label)
+            && state.selection == selection
+        {
+            state.selection_headers = headers;
+        }
+    }
+
+    enable_menu_items(app_handle)
+}
+
+// the menu is shared, so it has to look up the window which was focused at click time
+fn enable_menu_items(app_handle: &AppHandle) -> Result<()> {
+    let Some(menu) = app_handle.menu() else {
+        return Ok(());
+    };
+
+    let app_state = app_handle.state::<AppState>();
+    let owner = app_state
+        .last_focused
+        .lock()
+        .expect("state mutex poisoned")
+        .clone();
+    let (headers, ignore_immutable) = owner
+        .and_then(|label| {
+            app_state
+                .windows
+                .lock()
+                .expect("state mutex poisoned")
+                .get(&label)
+                .map(|state| (state.selection_headers.clone(), state.ignore_immutable))
+        })
+        .unwrap_or((None, false));
+
+    menu::handle_selection(menu, headers.as_deref(), ignore_immutable)
 }
 
 pub fn run_gui(options: super::RunOptions) -> Result<()> {
@@ -454,31 +512,15 @@ fn set_modifier_state(
     app_state: State<AppState>,
     alt: bool,
 ) -> Result<(), InvokeError> {
-    let (session_tx, selection, ignore_immutable) = {
-        let mut guard = app_state.windows.lock().expect("state mutex poisoned");
-        let ws = guard
-            .get_mut(window.label())
-            .ok_or_else(|| InvokeError::from_anyhow(anyhow::anyhow!("window not found")))?;
-        ws.ignore_immutable = alt;
-        (
-            ws.worker_channel.clone(),
-            ws.selection.clone(),
-            ws.ignore_immutable,
-        )
-    };
+    app_state
+        .windows
+        .lock()
+        .expect("state mutex poisoned")
+        .get_mut(window.label())
+        .ok_or_else(|| InvokeError::from_anyhow(anyhow::anyhow!("window not found")))?
+        .ignore_immutable = alt;
 
-    // re-resolve selection and update menu enablement
-    let headers: Option<Vec<messages::RevHeader>> =
-        selection.and_then(|set| match resolve_set(&session_tx, set) {
-            Ok(messages::queries::RevsResult::Detail { headers, .. }) => Some(headers),
-            _ => None,
-        });
-
-    if let Some(menu) = window.app_handle().menu() {
-        menu::handle_selection(menu, headers.as_deref(), ignore_immutable)
-            .map_err(InvokeError::from_anyhow)?;
-    }
-    Ok(())
+    update_selection_headers(window.app_handle(), window.label()).map_err(InvokeError::from_anyhow)
 }
 
 #[cfg(target_os = "macos")]
@@ -1103,6 +1145,7 @@ pub fn try_create_window(app_handle: &AppHandle, workspace: Option<PathBuf>) -> 
             ref_menu,
             workspace_menu,
             selection: None,
+            selection_headers: None,
             has_workspace: false,
             ignore_immutable: initial_ignore_immutable,
             workspace_path: None,
@@ -1126,28 +1169,19 @@ pub fn try_create_window(app_handle: &AppHandle, workspace: Option<PathBuf>) -> 
 // menu enablement "event" (actually a command because tauri is not reliable about scoping)
 #[tauri::command(async)]
 fn set_selection(window: Window, app_state: State<AppState>, set: Option<messages::RevSet>) {
-    let (session_tx, ignore_immutable) = {
-        let mut guard = app_state.windows.lock().expect("state mutex poisoned");
-        let Some(state) = guard.get_mut(window.label()) else {
-            return;
-        };
-        state.selection = set.clone();
-        (state.worker_channel.clone(), state.ignore_immutable)
-    };
-
-    let headers: Option<Vec<messages::RevHeader>> =
-        set.and_then(|set| match resolve_set(&session_tx, set) {
-            Ok(messages::queries::RevsResult::Detail { headers, .. }) => Some(headers),
-            _ => None,
-        });
-
-    if let Some(menu) = window.app_handle().menu() {
-        handler::fatal!(menu::handle_selection(
-            menu,
-            headers.as_deref(),
-            ignore_immutable
-        ));
+    if let Some(state) = app_state
+        .windows
+        .lock()
+        .expect("state mutex poisoned")
+        .get_mut(window.label())
+    {
+        state.selection = set;
     }
+
+    handler::fatal!(update_selection_headers(
+        window.app_handle(),
+        window.label()
+    ));
 }
 
 async fn worker_thread(
@@ -1266,7 +1300,7 @@ fn try_open_repository(window: &Window, cwd: Option<PathBuf>) -> Result<messages
                     handler::nonfatal!(add_recent_workspaces(window, workspace_path));
                 });
             } else {
-                rebuild_menu(window.app_handle());
+                update_window_menu(window.app_handle());
             }
         }
         _ => {
@@ -1274,7 +1308,7 @@ fn try_open_repository(window: &Window, cwd: Option<PathBuf>) -> Result<messages
             app_state.set_workspace_path(window.label(), None);
             update_title(window);
 
-            rebuild_menu(window.app_handle());
+            update_window_menu(window.app_handle());
         }
     }
 
@@ -1347,8 +1381,17 @@ fn rebuild_menu(app_handle: &AppHandle) {
     handle
         .run_on_main_thread(move || {
             handler::nonfatal!(menu::rebuild_main(&handle2, recent, &open_windows));
+            // the new menu has everything enabled
+            handler::nonfatal!(enable_menu_items(&handle2));
         })
         .ok();
+}
+
+// only macos has a window menu listing open repositories
+fn update_window_menu(app_handle: &AppHandle) {
+    if cfg!(target_os = "macos") {
+        rebuild_menu(app_handle);
+    }
 }
 
 fn try_mutate<T: Mutation + Send + Sync + 'static>(
@@ -1387,7 +1430,7 @@ fn handle_window_event(window: &Window, event: &WindowEvent) -> Result<()> {
                 }
             }
 
-            rebuild_menu(window.app_handle());
+            update_window_menu(window.app_handle());
         }
         WindowEvent::Focused(true) => {
             log::debug!("window focused; notifying frontend");
@@ -1400,26 +1443,7 @@ fn handle_window_event(window: &Window, event: &WindowEvent) -> Result<()> {
             *app_state.last_focused.lock().expect("state mutex poisoned") =
                 Some(window.label().to_owned());
 
-            let (session_tx, selection, ignore_immutable) = {
-                let guard = app_state.windows.lock().expect("state mutex poisoned");
-                if let Some(state) = guard.get(window.label()) {
-                    (
-                        state.worker_channel.clone(),
-                        state.selection.clone(),
-                        state.ignore_immutable,
-                    )
-                } else {
-                    return Ok(());
-                }
-            };
-            let headers: Option<Vec<messages::RevHeader>> =
-                selection.and_then(|set| match resolve_set(&session_tx, set) {
-                    Ok(messages::queries::RevsResult::Detail { headers, .. }) => Some(headers),
-                    _ => None,
-                });
-            if let Some(menu) = window.app_handle().menu() {
-                menu::handle_selection(menu, headers.as_deref(), ignore_immutable)?;
-            }
+            update_selection_headers(window.app_handle(), window.label())?;
 
             window.emit_to(EventTarget::labeled(window.label()), "gg://focus", ())?;
         }

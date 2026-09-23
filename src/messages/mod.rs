@@ -92,7 +92,7 @@ pub trait Id {
 }
 
 /// A commit's unique hash identifier with disambiguated prefix.
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 #[serde(tag = "type")]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
 pub struct CommitId {
@@ -114,7 +114,7 @@ impl Id for CommitId {
 }
 
 /// A change's unique identifier with disambiguated prefix.
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 #[serde(tag = "type")]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
 pub struct ChangeId {
@@ -140,7 +140,7 @@ impl Id for ChangeId {
 /// A pair of ids representing the ui's view of a revision.
 ///
 /// The worker may use one or both depending on policy.
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
 pub struct RevId {
     pub change: ChangeId,
@@ -150,7 +150,7 @@ pub struct RevId {
 /// A sequence (specifically) of revision ids.
 ///
 /// Equivalent to either `from::to` or `to::from` - whichever one is nonempty.
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
 pub struct RevSet {
     pub from: RevId,
