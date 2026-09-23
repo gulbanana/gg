@@ -1163,6 +1163,11 @@ pub fn try_create_window(app_handle: &AppHandle, workspace: Option<PathBuf>) -> 
     // menu selection events
     window.on_menu_event(|w, e| handler::fatal!(menu::handle_event(w, e)));
 
+    // once the event loop is running, a new window can gain focus before its handler exists
+    if window.is_focused()? {
+        update_menu_owner(&window.as_ref().window())?;
+    }
+
     Ok(())
 }
 
@@ -1438,12 +1443,7 @@ fn handle_window_event(window: &Window, event: &WindowEvent) -> Result<()> {
             #[cfg(target_os = "macos")]
             crate::macos::remove_move_to_active_space(window);
 
-            let app_state = window.state::<AppState>();
-
-            *app_state.last_focused.lock().expect("state mutex poisoned") =
-                Some(window.label().to_owned());
-
-            update_selection_headers(window.app_handle(), window.label())?;
+            update_menu_owner(window)?;
 
             window.emit_to(EventTarget::labeled(window.label()), "gg://focus", ())?;
         }
@@ -1451,6 +1451,14 @@ fn handle_window_event(window: &Window, event: &WindowEvent) -> Result<()> {
     }
 
     Ok(())
+}
+
+fn update_menu_owner(window: &Window) -> Result<()> {
+    let app_state = window.state::<AppState>();
+
+    *app_state.last_focused.lock().expect("state mutex poisoned") = Some(window.label().to_owned());
+
+    update_selection_headers(window.app_handle(), window.label())
 }
 
 // we're working with OS bindings that _don't_ use OsStr/PathBuf
