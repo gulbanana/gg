@@ -13,6 +13,7 @@ use jj_lib::{
     object_id::ObjectId as ObjectIdTrait,
     repo::Repo,
     repo_path::RepoPath,
+    revset::RevsetExpression,
     rewrite::{self, RebaseOptions, RebasedCommit},
 };
 
@@ -108,6 +109,7 @@ impl Mutation for MoveChanges {
             let mut rebase_map = std::collections::HashMap::new();
             tx.repo_mut()
                 .rebase_descendants_with_options(
+                    &RevsetExpression::none(),
                     &RebaseOptions::default(),
                     |old_commit, rebased_commit| {
                         rebase_map.insert(
@@ -389,6 +391,7 @@ impl Mutation for MoveHunk {
                 let mut rebase_map = std::collections::HashMap::new();
                 tx.repo_mut()
                     .rebase_descendants_with_options(
+                        &RevsetExpression::none(),
                         &RebaseOptions::default(),
                         |old_commit, rebased_commit| {
                             rebase_map.insert(

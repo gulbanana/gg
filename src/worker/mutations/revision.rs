@@ -539,6 +539,7 @@ impl Mutation for InsertRevisions {
             let mut mapping = HashMap::new();
             tx.repo_mut()
                 .rebase_descendants_with_options(
+                    &RevsetExpression::none(),
                     &RebaseOptions::default(),
                     |old_commit, rebased| {
                         mapping.insert(
@@ -1082,7 +1083,7 @@ mod tests {
         .await?;
         assert_matches!(result, MutationResult::Updated { .. });
 
-        let page = queries::query_log(&ws, "description(unsynced)", 3)?;
+        let page = queries::query_log(&ws, "description(substring:unsynced)", 3)?;
         assert_eq!(2, page.rows.len());
 
         Ok(())
@@ -1992,15 +1993,19 @@ async fn disinherit_children(
     // rebase descendants of modified commits, tracking new ids
     let mut mapping = HashMap::new();
     tx.repo_mut()
-        .rebase_descendants_with_options(&RebaseOptions::default(), |old_commit, rebased| {
-            mapping.insert(
-                old_commit.id().clone(),
-                match rebased {
-                    RebasedCommit::Rewritten(new_commit) => new_commit.id().clone(),
-                    RebasedCommit::Abandoned { parent_id } => parent_id,
-                },
-            );
-        })
+        .rebase_descendants_with_options(
+            &RevsetExpression::none(),
+            &RebaseOptions::default(),
+            |old_commit, rebased| {
+                mapping.insert(
+                    old_commit.id().clone(),
+                    match rebased {
+                        RebasedCommit::Rewritten(new_commit) => new_commit.id().clone(),
+                        RebasedCommit::Abandoned { parent_id } => parent_id,
+                    },
+                );
+            },
+        )
         .await?;
     rebased_commit_ids.extend(mapping);
 
