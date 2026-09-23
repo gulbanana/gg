@@ -72,7 +72,7 @@
     {:else if route.type === "revision"}
         <BoundQuery query={selection} let:data>
             {#if data.type == "Detail"}
-                <RevisionPane revs={data} />
+                <RevisionPane revs={data} {workspace} />
             {:else}
                 <Pane>
                     <h2 slot="header">Not Found</h2>
@@ -114,7 +114,7 @@
 
             <BoundQuery query={selection} let:data>
                 {#if data.type == "Detail"}
-                    <RevisionPane revs={data} />
+                    <RevisionPane revs={data} {workspace} />
                 {:else}
                     <Pane titlebar>
                         <h2 slot="header">Not Found</h2>
