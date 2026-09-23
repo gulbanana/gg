@@ -1,8 +1,9 @@
 use objc2::{AllocAnyThread, MainThreadMarker};
 use objc2_app_kit::{
     NSApplication, NSDocumentController, NSImage, NSWindow, NSWindowCollectionBehavior,
+    NSWindowStyleMask,
 };
-use objc2_foundation::{NSData, NSString, NSURL};
+use objc2_foundation::{NSData, NSPoint, NSRect, NSSize, NSString, NSURL};
 
 /// Used when run without an .app bundle.
 #[cfg_attr(feature = "app", allow(dead_code))]
@@ -27,6 +28,19 @@ pub fn set_dock_icon() {
     unsafe {
         app.setApplicationIconImage(Some(&icon));
     }
+}
+
+/// Height of a standard titlebar, which varies by OS version and linked SDK.
+pub fn titlebar_height() -> f64 {
+    let Some(mtm) = MainThreadMarker::new() else {
+        log::error!("Cannot measure titlebar: not on main thread");
+        return 0.0;
+    };
+
+    let content = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(100.0, 100.0));
+    let frame =
+        NSWindow::frameRectForContentRect_styleMask(content, NSWindowStyleMask::Titled, mtm);
+    frame.size.height - content.size.height
 }
 
 /// Ensure a newly created window appears on the active Space rather than

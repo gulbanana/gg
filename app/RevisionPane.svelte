@@ -161,7 +161,7 @@
     }
 </script>
 
-<Pane>
+<Pane titlebar>
     <h2 slot="header" class="header">
         <span class="title">
             {#if singleton}
@@ -328,6 +328,11 @@
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
+    }
+
+    /* the header may be click-through, but selection needs a click target */
+    .title :global(.selectable) {
+        pointer-events: auto;
     }
 
     .checkout-commands {

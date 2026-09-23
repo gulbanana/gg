@@ -11,6 +11,8 @@
 </script>
 
 <div id="overlay">
+    <!-- the overlay covers the window's drag handles, so it needs its own -->
+    <div class="titlebar" data-tauri-drag-region></div>
     <slot />
 </div>
 
@@ -29,5 +31,14 @@
         display: grid;
         grid-template-columns: minmax(16.6%, 1fr) auto minmax(16.6%, 1fr);
         grid-template-rows: 1fr auto 2fr;
+    }
+
+    .titlebar {
+        position: absolute;
+        top: 0;
+        right: 0;
+        left: 0;
+        height: var(--titlebar-height, 0px);
+        pointer-events: auto;
     }
 </style>

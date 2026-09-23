@@ -5,6 +5,7 @@
     import RevisionPane from "./RevisionPane.svelte";
     import BoundQuery from "./controls/BoundQuery.svelte";
     import Pane from "./shell/Pane.svelte";
+    import TitlebarInset from "./shell/TitlebarInset.svelte";
     import SetSpan from "./controls/SetSpan.svelte";
 
     let route = parseRoute();
@@ -90,9 +91,11 @@
         </BoundQuery>
     {:else}
         <div class="two-pane" style="--left-fraction: {leftFraction}fr; --right-fraction: {1 - leftFraction}fr;">
-            {#key workspace.absolute_path}
-                <LogPane query_choices={workspace.query_choices} latest_query={workspace.latest_query} />
-            {/key}
+            <TitlebarInset>
+                {#key workspace.absolute_path}
+                    <LogPane query_choices={workspace.query_choices} latest_query={workspace.latest_query} />
+                {/key}
+            </TitlebarInset>
 
             <!-- svelte-ignore a11y_no_interactive_element_to_noninteractive_role (a focusable separator is a widget, per the aria window splitter pattern) -->
             <button
@@ -113,18 +116,18 @@
                 {#if data.type == "Detail"}
                     <RevisionPane revs={data} />
                 {:else}
-                    <Pane>
+                    <Pane titlebar>
                         <h2 slot="header">Not Found</h2>
                         <p slot="body">
                             Empty revision set <SetSpan set={data.set} />.
                         </p>
                     </Pane>
                 {/if}
-                <Pane slot="error" let:message>
+                <Pane titlebar slot="error" let:message>
                     <h2 slot="header">Error</h2>
                     <p slot="body">{message}</p>
                 </Pane>
-                <Pane slot="wait">
+                <Pane titlebar slot="wait">
                     <h2 slot="header">Loading...</h2>
                 </Pane>
             </BoundQuery>

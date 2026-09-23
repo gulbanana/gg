@@ -23,6 +23,7 @@
     import RevisionMutator from "./mutators/RevisionMutator";
     import WorkspaceMutator from "./mutators/WorkspaceMutator";
     import Pane from "./shell/Pane.svelte";
+    import TitlebarInset from "./shell/TitlebarInset.svelte";
     import Zone from "./objects/Zone.svelte";
     import StatusBar from "./shell/StatusBar.svelte";
     import ModalOverlay from "./shell/ModalOverlay.svelte";
@@ -271,9 +272,11 @@
 <Zone operand={{ type: "Repository" }} alwaysTarget let:target>
     <div id="shell" class={$repoConfigEvent?.type == "Workspace" ? $repoConfigEvent.theme_override : ""}>
         {#if $repoConfigEvent.type == "Initial"}
-            <Pane>
-                <h2 slot="header">Loading...</h2>
-            </Pane>
+            <TitlebarInset>
+                <Pane>
+                    <h2 slot="header">Loading...</h2>
+                </Pane>
+            </TitlebarInset>
         {:else if $repoConfigEvent.type == "Workspace"}
             <slot workspace={$repoConfigEvent} {selection} />
         {:else if $repoConfigEvent.type == "LoadError"}

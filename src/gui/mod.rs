@@ -17,6 +17,8 @@ use clap::Parser;
 use jj_lib::config::ConfigSource;
 use jj_lib::settings::UserSettings;
 use log::LevelFilter;
+#[cfg(target_os = "macos")]
+use tauri::TitleBarStyle;
 use tauri::async_runtime;
 use tauri::ipc::InvokeError;
 use tauri::menu::Menu;
@@ -52,6 +54,9 @@ struct AppState {
     initial_ignore_immutable: bool,
     enable_askpass: bool,
     recent_workspaces: Mutex<Vec<String>>,
+    // measured up front, because windows can be created off the main thread
+    #[cfg(target_os = "macos")]
+    titlebar_height: f64,
 }
 
 impl AppState {
@@ -68,6 +73,8 @@ impl AppState {
             initial_ignore_immutable,
             enable_askpass,
             recent_workspaces: Mutex::new(recent_workspaces),
+            #[cfg(target_os = "macos")]
+            titlebar_height: crate::macos::titlebar_height(),
         }
     }
 
@@ -981,8 +988,10 @@ pub fn try_create_window(app_handle: &AppHandle, workspace: Option<PathBuf>) -> 
         return Ok(());
     }
 
+    let app_state = app_handle.state::<AppState>();
+
     // configure and register a new window
-    let window = WebviewWindowBuilder::new(
+    let builder = WebviewWindowBuilder::new(
         app_handle,
         &label,
         tauri::WebviewUrl::App("index.html".into()),
@@ -991,8 +1000,19 @@ pub fn try_create_window(app_handle: &AppHandle, workspace: Option<PathBuf>) -> 
     .inner_size(1280.0, 720.0)
     .focused(true)
     .visible(false)
-    .disable_drag_drop_handler()
-    .build()?;
+    .disable_drag_drop_handler();
+
+    // content extends under the titlebar, so the frontend has to keep clear of the traffic lights
+    #[cfg(target_os = "macos")]
+    let builder = builder
+        .title_bar_style(TitleBarStyle::Overlay)
+        .initialization_script(format!(
+            "document.documentElement.classList.add('overlay-titlebar');
+            document.documentElement.style.setProperty('--titlebar-height', '{}px');",
+            app_state.titlebar_height
+        ));
+
+    let window = builder.build()?;
 
     // NSWindow methods must run on the main thread; dispatch regardless of caller
     #[cfg(target_os = "macos")]
@@ -1008,7 +1028,6 @@ pub fn try_create_window(app_handle: &AppHandle, workspace: Option<PathBuf>) -> 
             .ok();
     }
 
-    let app_state = app_handle.state::<AppState>();
     let settings = app_state.settings.clone();
 
     // create a worker for the specified path
