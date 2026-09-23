@@ -1,6 +1,6 @@
 # GG Changelog
 
-## Unreleased
+## [0.45.0](releases/tag/v0.45.0)
 This release is based on Jujutsu 0.45.1.
 
 ### Added
