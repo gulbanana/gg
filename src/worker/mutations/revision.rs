@@ -770,9 +770,9 @@ mod tests {
         let tree = wc.tree();
         let repo_path = jj_lib::repo_path::RepoPath::from_internal_string("small.txt")?;
 
-        match tree.path_value(&repo_path).await?.into_resolved() {
+        match tree.path_value(repo_path).await?.into_resolved() {
             Ok(Some(jj_lib::backend::TreeValue::File { id, .. })) => {
-                let mut reader = ws.repo().store().read_file(&repo_path, &id).await?;
+                let mut reader = ws.repo().store().read_file(repo_path, &id).await?;
                 let mut content = Vec::new();
                 reader.read_to_end(&mut content).await?;
                 let content_str = String::from_utf8_lossy(&content);
@@ -815,9 +815,9 @@ mod tests {
         let tree = wc.tree();
         let repo_path = jj_lib::repo_path::RepoPath::from_internal_string("hunk_test.txt")?;
 
-        match tree.path_value(&repo_path).await?.into_resolved() {
+        match tree.path_value(repo_path).await?.into_resolved() {
             Ok(Some(jj_lib::backend::TreeValue::File { id, .. })) => {
-                let mut reader = ws.repo().store().read_file(&repo_path, &id).await?;
+                let mut reader = ws.repo().store().read_file(repo_path, &id).await?;
                 let mut content = Vec::new();
                 reader.read_to_end(&mut content).await?;
                 let content_str = String::from_utf8_lossy(&content);

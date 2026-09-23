@@ -305,10 +305,12 @@ async fn transaction_snapshot_path_is_visible() -> Result<()> {
     Ok(())
 }
 
-// serialize tests that mutate XDG_CONFIG_HOME
+// serialize tests that mutate XDG_CONFIG_HOME. holding it across awaits is fine:
+// each #[tokio::test] has its own runtime thread, so it only blocks the other test
 static XDG_ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 #[tokio::test]
+#[allow(clippy::await_holding_lock)]
 async fn snapshot_respects_xdg_gitignore_colocated() -> Result<()> {
     let _lock = XDG_ENV_LOCK.lock().unwrap();
 
@@ -349,6 +351,7 @@ async fn snapshot_respects_xdg_gitignore_colocated() -> Result<()> {
 }
 
 #[tokio::test]
+#[allow(clippy::await_holding_lock)]
 async fn snapshot_respects_xdg_gitignore_internal() -> Result<()> {
     let _lock = XDG_ENV_LOCK.lock().unwrap();
 

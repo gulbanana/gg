@@ -915,13 +915,8 @@ mod tests {
         assert_matches!(ws.check_immutable([after_change]), Ok(true));
 
         // checked-out rev is not immutable (because we made a new one):
-        let current_ws_heads: Vec<jj_lib::backend::CommitId> = ws
-            .repo()
-            .view()
-            .wc_commit_ids()
-            .iter()
-            .map(|(_, id)| id.clone())
-            .collect();
+        let current_ws_heads: Vec<jj_lib::backend::CommitId> =
+            ws.repo().view().wc_commit_ids().values().cloned().collect();
         assert_matches!(ws.check_immutable(current_ws_heads), Ok(false));
 
         Ok(())

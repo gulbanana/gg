@@ -816,7 +816,7 @@ async fn clone_workspace_dest_empty_ok() -> Result<()> {
 }
 
 #[cfg(windows)]
-const EOL: &'static str = "\r\n";
+const EOL: &str = "\r\n";
 #[cfg(not(windows))]
 const EOL: &'static str = "\n";
 
