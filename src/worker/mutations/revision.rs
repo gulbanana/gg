@@ -991,7 +991,7 @@ mod tests {
             )
             .unwrap(),
         );
-        ws.data.workspace_settings = UserSettings::from_config(config).unwrap();
+        ws.data.workspace_settings = UserSettings::from_config_and_home_dir(config, None).unwrap();
 
         let result = DescribeRevision {
             id: revs::working_copy(),
@@ -1021,7 +1021,7 @@ mod tests {
             )
             .unwrap(),
         );
-        ws.data.workspace_settings = UserSettings::from_config(config).unwrap();
+        ws.data.workspace_settings = UserSettings::from_config_and_home_dir(config, None).unwrap();
 
         let result = DescribeRevision {
             id: revs::working_copy(),
@@ -1051,7 +1051,7 @@ mod tests {
             )
             .unwrap(),
         );
-        ws.data.workspace_settings = UserSettings::from_config(config).unwrap();
+        ws.data.workspace_settings = UserSettings::from_config_and_home_dir(config, None).unwrap();
 
         let result = DescribeRevision {
             id: revs::working_copy(),

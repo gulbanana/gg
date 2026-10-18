@@ -21,7 +21,7 @@ pub fn settings_with_gg_defaults() -> UserSettings {
     config.add_layer(
         ConfigLayer::parse(ConfigSource::Default, include_str!("../config/gg.toml")).unwrap(),
     );
-    UserSettings::from_config(config).unwrap()
+    UserSettings::from_config_and_home_dir(config, None).unwrap()
 }
 
 /// Create test settings with custom TOML layered on top of defaults.
@@ -32,7 +32,7 @@ fn settings_with_overrides(toml: &str) -> UserSettings {
         ConfigLayer::parse(ConfigSource::Default, include_str!("../config/gg.toml")).unwrap(),
     );
     config.add_layer(ConfigLayer::parse(ConfigSource::User, toml).unwrap());
-    UserSettings::from_config(config).unwrap()
+    UserSettings::from_config_and_home_dir(config, None).unwrap()
 }
 
 /// Create test settings with gg.* config override extraction applied.
@@ -46,7 +46,7 @@ fn settings_with_extracted_overrides(toml: &str) -> UserSettings {
     if let Some(overrides) = extract_overrides(&config) {
         config.add_layer(overrides);
     }
-    UserSettings::from_config(config).unwrap()
+    UserSettings::from_config_and_home_dir(config, None).unwrap()
 }
 
 #[test]
@@ -94,7 +94,7 @@ fn mark_unpushed_bookmarks_legacy_name_fallback() {
         )
         .unwrap(),
     );
-    let settings = UserSettings::from_config(config).unwrap();
+    let settings = UserSettings::from_config_and_home_dir(config, None).unwrap();
     assert!(!settings.ui_mark_unpushed_bookmarks());
 }
 
@@ -215,7 +215,7 @@ fn log_revset_with_jj_defaults(toml: &str) -> String {
     config.add_layer(ConfigLayer::parse(ConfigSource::Default, JJ_TEST_DEFAULTS).unwrap());
     config.add_layer(ConfigLayer::parse(ConfigSource::User, toml).unwrap());
     let aliases_map = build_aliases_map(&config).unwrap();
-    let settings = UserSettings::from_config(config).unwrap();
+    let settings = UserSettings::from_config_and_home_dir(config, None).unwrap();
     read_log_revset(&settings, &aliases_map)
 }
 
@@ -361,7 +361,7 @@ mod extract_overrides {
         if let Some(overrides) = extract_overrides(&config) {
             config.add_layer(overrides);
         }
-        let settings = UserSettings::from_config(config).unwrap();
+        let settings = UserSettings::from_config_and_home_dir(config, None).unwrap();
         assert_eq!(settings.user_name(), "Repo Level");
     }
 
@@ -382,7 +382,7 @@ mod extract_overrides {
         if let Some(overrides) = extract_overrides(&config) {
             config.add_layer(overrides);
         }
-        let settings = UserSettings::from_config(config).unwrap();
+        let settings = UserSettings::from_config_and_home_dir(config, None).unwrap();
         assert_eq!(settings.user_name(), "GG User");
     }
 
@@ -516,7 +516,7 @@ mod extract_overrides {
         if let Some(overrides) = extract_overrides(&config) {
             config.add_layer(overrides);
         }
-        let settings = UserSettings::from_config(config).unwrap();
+        let settings = UserSettings::from_config_and_home_dir(config, None).unwrap();
         assert_eq!(settings.get_string("signing.behavior").unwrap(), "own");
         assert_eq!(settings.get_string("signing.backend").unwrap(), "gpg");
     }

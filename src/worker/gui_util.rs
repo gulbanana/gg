@@ -50,7 +50,6 @@ use jj_lib::{
     view::View,
     working_copy::{CheckoutStats, SnapshotOptions, WorkingCopyFreshness},
     workspace::{DefaultWorkspaceLoaderFactory, Workspace, WorkspaceLoaderFactory},
-    workspace_store::{SimpleWorkspaceStore, WorkspaceStore as _},
 };
 use pollster::FutureExt as _;
 use thiserror::Error;
@@ -258,8 +257,10 @@ impl WorkspaceSession<'_> {
         let mut tx = self.start_transaction().await?;
         tx.repo_mut().remove_workspace(&workspace_name).await?;
 
-        let workspace_store = SimpleWorkspaceStore::load(self.workspace.repo_path())?;
-        workspace_store.forget(&[&*workspace_name])?;
+        self.repo()
+            .loader()
+            .workspace_store()
+            .forget(&[&*workspace_name])?;
 
         self.finish_transaction(
             tx,
@@ -278,7 +279,7 @@ impl WorkspaceSession<'_> {
         let mut tx = self.start_transaction().await?;
 
         // capture before locking the working copy
-        let repo_path = self.workspace.repo_path().to_owned();
+        let workspace_store = self.repo().loader().workspace_store().clone();
         let is_colocated = self.is_colocated;
 
         let mut locked_ws = self.workspace.start_working_copy_mutation().await?;
@@ -287,7 +288,6 @@ impl WorkspaceSession<'_> {
         tx.repo_mut()
             .rename_workspace(&old_name, new_name.clone())?;
 
-        let workspace_store = SimpleWorkspaceStore::load(&repo_path)?;
         workspace_store.rename(&old_name, &new_name)?;
 
         if is_colocated {
@@ -326,11 +326,10 @@ impl WorkspaceSession<'_> {
         }
 
         let repo_path = self.workspace.repo_path();
-        let workspace_store = SimpleWorkspaceStore::load(repo_path)?;
+        let workspace_store = self.repo().loader().workspace_store();
 
         match workspace_store.get_workspace_path(&workspace_name)? {
-            // stored paths are relative to the repo directory
-            Some(stored_path) => absolute_workspace_path(&repo_path.join(stored_path)),
+            Some(path) => absolute_workspace_path(&path),
             // repos created before jj tracked workspace paths have no entries, but
             // the default workspace is the one hosting the repo, so we can find it
             None if *workspace_name == *WorkspaceName::DEFAULT => repo_path
@@ -401,7 +400,7 @@ impl WorkspaceSession<'_> {
         revset_expr: Arc<UserRevsetExpression>,
     ) -> Result<Box<dyn Revset + 'op>, RevsetError> {
         let resolved_expression = revset_expr.resolve_user_expression(repo, &self.resolver())?;
-        let revset = resolved_expression.evaluate(repo)?;
+        let revset = resolved_expression.evaluate()?;
         Ok(revset)
     }
 
@@ -1354,11 +1353,12 @@ impl OperationData {
             etcetera::home_dir().ok().map(|home| home.join(".config"))
         }
 
+        let home_dir = etcetera::home_dir().ok();
         let get_excludes_file_path = |config: &gix::config::File| -> Option<PathBuf> {
             if let Some(value) = config.string("core.excludesFile") {
                 let path = std::str::from_utf8(&value)
                     .ok()
-                    .map(file_util::expand_home_path)?;
+                    .map(|value| file_util::expand_home_path(value, home_dir.as_deref()))?;
                 Some(workspace_root.join(path))
             } else {
                 xdg_config_home().map(|x| x.join("git").join("ignore"))
@@ -1464,10 +1464,10 @@ fn build_ref_index(repo: &ReadonlyRepo) -> RefIndex {
         let remote_refs = bookmark_target.remote_refs;
         if local_target.is_present() {
             index.insert(
-                local_target.added_ids(),
+                local_target.present_adds(),
                 messages::StoreRef::LocalBookmark {
                     bookmark_name: bookmark_name.as_str().to_owned(),
-                    has_conflict: local_target.has_conflict(),
+                    has_conflict: !local_target.is_resolved(),
                     is_synced: remote_refs.iter().all(|&(remote_name, remote_ref)| {
                         remote_name == REMOTE_NAME_FOR_LOCAL_GIT_REPO
                             || !remote_ref.is_tracked()
@@ -1494,11 +1494,11 @@ fn build_ref_index(repo: &ReadonlyRepo) -> RefIndex {
                 continue;
             }
             index.insert(
-                remote_ref.target.added_ids(),
+                remote_ref.target.present_adds(),
                 messages::StoreRef::RemoteBookmark {
                     bookmark_name: bookmark_name.as_str().to_owned(),
                     remote_name: remote_name.as_str().to_owned(),
-                    has_conflict: remote_ref.target.has_conflict(),
+                    has_conflict: !remote_ref.target.is_resolved(),
                     is_synced: remote_ref.target == *local_target,
                     is_tracked: remote_ref.is_tracked(),
                     is_absent: local_target.is_absent(),
@@ -1509,7 +1509,7 @@ fn build_ref_index(repo: &ReadonlyRepo) -> RefIndex {
 
     for (tag_name, tag_target) in repo.view().local_tags() {
         index.insert(
-            tag_target.added_ids(),
+            tag_target.present_adds(),
             messages::StoreRef::Tag {
                 tag_name: tag_name.as_str().to_owned(),
             },

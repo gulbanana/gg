@@ -198,7 +198,10 @@ pub fn read_config(
         config.add_layer(overrides);
     }
 
-    let workspace_settings = UserSettings::from_config(config)?;
+    let workspace_settings = UserSettings::from_config_and_home_dir(
+        config,
+        config_env.home_dir().map(ToOwned::to_owned),
+    )?;
 
     Ok((
         workspace_settings,

@@ -37,7 +37,6 @@ use jj_lib::{
     store::Store,
     str_util::StringExpression,
     tree_merge::MergeOptions,
-    workspace_store::{SimpleWorkspaceStore, WorkspaceStore as _},
 };
 use pollster::FutureExt as _;
 
@@ -106,19 +105,17 @@ impl Mutation for ExternalDiff {
                 let left_rel = left_path
                     .strip_prefix(temp_dir.path())
                     .unwrap()
-                    .to_str()
-                    .unwrap()
+                    .as_os_str()
                     .to_owned();
                 let right_rel = right_path
                     .strip_prefix(temp_dir.path())
                     .unwrap()
-                    .to_str()
-                    .unwrap()
+                    .as_os_str()
                     .to_owned();
                 let patterns = HashMap::from([
                     ("left", left_rel),
                     ("right", right_rel),
-                    ("width", "80".to_owned()),
+                    ("width", "80".into()),
                 ]);
 
                 let ui = Ui::null();
@@ -430,7 +427,7 @@ impl Mutation for GitPush {
 
         let mut old_heads = remote_bookmark_refs
             .into_iter()
-            .flat_map(|(_, old_head)| old_head.target.added_ids())
+            .flat_map(|(_, old_head)| old_head.target.present_adds())
             .cloned()
             .collect_vec();
         if old_heads.is_empty() {
@@ -672,8 +669,10 @@ impl Mutation for ForgetWorkspace {
             tx.repo_mut().rebase_descendants().await?;
         }
 
-        let workspace_store = SimpleWorkspaceStore::load(ws.workspace.repo_path())?;
-        workspace_store.forget(&[&*workspace_name])?;
+        ws.repo()
+            .loader()
+            .workspace_store()
+            .forget(&[&*workspace_name])?;
 
         match ws
             .finish_transaction(
