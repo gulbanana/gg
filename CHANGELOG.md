@@ -3,7 +3,7 @@
 ## [Unreleased]
 
 ### Added
-- Workspace management is now more consistent with JJ: historical paths are preserved.
+- Workspace management is now more consistent with JJ: historical paths are preserved and git worktrees are included when colocated.
 
 ## [0.45.1](releases/tag/v0.45.1)
 

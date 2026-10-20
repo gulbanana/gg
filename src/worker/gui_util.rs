@@ -201,8 +201,16 @@ impl WorkspaceSession<'_> {
                 .with_context(|| format!("failed to create directory {}", path.display()))?;
         }
 
-        // snapshot current workspace before creating the new one
+        // snapshot current workspace before creating the new one, with a gitignore if colocating
         self.import_and_snapshot(true, false).await?;
+
+        let colocate =
+            self.is_colocated && self.data.workspace_settings.get_bool("git.colocate")?;
+        if colocate {
+            let subprocess_options =
+                GitSubprocessOptions::from_settings(&self.data.workspace_settings)?;
+            git::create_worktree(self.repo().store(), subprocess_options, &path)?;
+        }
 
         let (mut new_workspace, repo) = Workspace::init_workspace_with_existing_repo(
             &path,
@@ -212,6 +220,12 @@ impl WorkspaceSession<'_> {
             workspace_name.clone(),
         )
         .await?;
+
+        if colocate {
+            let gitignore_path = path.join(".jj").join(".gitignore");
+            std::fs::write(&gitignore_path, "/*\n")
+                .with_context(|| format!("failed to write {}", gitignore_path.display()))?;
+        }
 
         // set up the real WC commit for the new workspace
         let mut tx = repo.start_transaction();
@@ -224,6 +238,10 @@ impl WorkspaceSession<'_> {
         tx.repo_mut()
             .edit(workspace_name.clone(), &new_wc_commit)
             .await?;
+
+        if colocate {
+            git::reset_head(tx.repo_mut(), &workspace_name, &path, &new_wc_commit).await?;
+        }
 
         self.finish_transaction(
             tx,
