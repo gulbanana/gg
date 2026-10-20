@@ -15,7 +15,7 @@ use chrono::TimeZone;
 use futures_util::TryStreamExt;
 use itertools::Itertools;
 use jj_cli::{
-    cli_util::{default_ignored_remote_name, short_operation_hash},
+    cli_util::{self, default_ignored_remote_name, short_operation_hash},
     git_util::{is_colocated_git_workspace, load_git_import_options},
     revset_util,
     ui::Ui,
@@ -228,7 +228,7 @@ impl WorkspaceSession<'_> {
         }
 
         // set up the real WC commit for the new workspace
-        let mut tx = repo.start_transaction();
+        let mut tx = cli_util::start_repo_transaction(&repo, &workspace_name, &[]);
 
         let wc_commit = tx.repo().store().get_commit(self.wc_id())?;
         let parents = wc_commit.parents().await?;
@@ -978,7 +978,11 @@ impl WorkspaceSession<'_> {
             .get_bool("snapshot.auto-update-stale")
             .unwrap_or(false);
         self.import_and_snapshot(true, auto_update_stale).await?;
-        Ok(self.operation.repo.start_transaction())
+        Ok(cli_util::start_repo_transaction(
+            &self.operation.repo,
+            self.name(),
+            &[],
+        ))
     }
 
     /// Finish a transaction, protecting against the working copy landing on an immutable commit.
@@ -1188,7 +1192,7 @@ impl WorkspaceSession<'_> {
         let did_anything = new_tree_id.tree_ids() != wc_commit.tree_ids();
 
         if did_anything {
-            let mut tx = repo.start_transaction();
+            let mut tx = cli_util::start_repo_transaction(&repo, &workspace_name, &[]);
             let mut_repo = tx.repo_mut();
             let commit = mut_repo
                 .rewrite_commit(&wc_commit)
@@ -1247,7 +1251,7 @@ impl WorkspaceSession<'_> {
 
     async fn import_git_head(&mut self) -> Result<()> {
         let workspace_name = self.workspace.workspace_name().to_owned();
-        let mut tx = self.operation.repo.start_transaction();
+        let mut tx = cli_util::start_repo_transaction(&self.operation.repo, &workspace_name, &[]);
         git::import_head(
             tx.repo_mut(),
             &workspace_name,
@@ -1297,7 +1301,7 @@ impl WorkspaceSession<'_> {
         let remote_settings = self.data.workspace_settings.remote_settings()?;
         let import_options = load_git_import_options(&Ui::null(), &git_settings, &remote_settings)
             .map_err(|e| Error::new(e.error))?;
-        let mut tx = self.operation.repo.start_transaction();
+        let mut tx = cli_util::start_repo_transaction(&self.operation.repo, self.name(), &[]);
         let stats = git::import_refs(tx.repo_mut(), &import_options)
             .await
             .context("automated import failed despite reserved remote name")?;

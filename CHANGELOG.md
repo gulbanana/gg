@@ -3,7 +3,7 @@
 ## [Unreleased]
 
 ### Added
-- Workspace management is now more consistent with JJ: historical paths are preserved and git worktrees are included when colocated.
+- Workspace management is now more consistent with JJ: historical paths are preserved, git worktrees are included when colocated and Undo no longer touches operations from another workspace. 
 
 ## [0.45.1](releases/tag/v0.45.1)
 

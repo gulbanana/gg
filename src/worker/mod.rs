@@ -29,7 +29,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::{Context, Error, Result, anyhow};
-use jj_cli::{git_util::load_git_import_options, revset_util, ui::Ui};
+use jj_cli::{cli_util, git_util::load_git_import_options, revset_util, ui::Ui};
 use jj_lib::default_backend_factories;
 use jj_lib::git::{self, GitFetch, GitFetchRefExpression, GitSettings};
 use jj_lib::ref_name::{RefNameBuf, RemoteName, RemoteNameBuf, RemoteRefSymbol};
@@ -219,7 +219,7 @@ impl WorkerSession {
         let object_hash = read_object_hash(&settings)?;
 
         // init empty
-        let (_workspace, repo) = if colocated {
+        let (workspace, repo) = if colocated {
             Workspace::init_colocated_git(&settings, &canonical_location, object_hash).await?
         } else {
             Workspace::init_internal_git(&settings, &canonical_location, object_hash).await?
@@ -228,7 +228,7 @@ impl WorkerSession {
         // add origin
         let remote_name = RemoteName::new("origin");
         {
-            let mut tx = repo.start_transaction();
+            let mut tx = cli_util::start_repo_transaction(&repo, workspace.workspace_name(), &[]);
             git::add_remote(
                 tx.repo_mut(),
                 remote_name,
@@ -265,7 +265,8 @@ impl WorkerSession {
                 let mut subprocess_options = git_settings.to_subprocess_options();
                 subprocess_options.environment = env;
 
-                let mut tx = repo.start_transaction();
+                let mut tx =
+                    cli_util::start_repo_transaction(&repo, workspace.workspace_name(), &[]);
                 let mut fetcher =
                     GitFetch::new(tx.repo_mut(), subprocess_options, &import_options)?;
                 let refspecs = git::expand_fetch_refspecs(

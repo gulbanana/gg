@@ -10,6 +10,7 @@ use async_trait::async_trait;
 use futures_util::{AsyncReadExt, TryStreamExt};
 use itertools::Itertools;
 use jj_cli::{
+    cli_util::short_operation_hash,
     git_util::load_git_import_options,
     merge_tools::{self, ConflictResolveError, ExternalMergeTool, MergeEditor},
     revset_util,
@@ -605,6 +606,17 @@ impl Mutation for UndoOperation {
         _options: &MutationOptions,
     ) -> Result<MutationResult> {
         let head_op = op_walk::resolve_op_with_repo(ws.repo(), "@").await?; // XXX this should be behind an abstraction, maybe reused in snapshot
+
+        if let Some(op_workspace_name) = &head_op.metadata().workspace_name
+            && op_workspace_name != ws.name()
+        {
+            precondition!(
+                "Refusing to undo operation {} because it was performed in workspace {}",
+                short_operation_hash(head_op.id()),
+                op_workspace_name.as_symbol()
+            );
+        }
+
         let mut parent_ops = head_op.parents().await?.into_iter();
 
         let Some(parent_op) = parent_ops.next() else {
@@ -1065,6 +1077,42 @@ auto-track = "glob:*.txt"
             ws.workspace_root("second".to_owned())?,
             dunce::canonicalize(&second_path)?
         );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn undo_refuses_operation_from_other_workspace() -> Result<()> {
+        let repo = mkrepo();
+        // outside the first workspace, so that it doesn't get snapshotted there
+        let second_dir = tempfile::tempdir()?;
+        let second_path = second_dir.path().join("second");
+
+        {
+            let mut session = WorkerSession::default();
+            let mut ws = session.load_workspace(repo.path()).await?;
+            ws.add_workspace("second".to_owned(), second_path.clone())
+                .await?;
+        }
+
+        {
+            let mut session = WorkerSession::default();
+            let mut ws = session.load_workspace(&second_path).await?;
+            let wc = ws.get_commit(ws.wc_id())?;
+            DescribeRevision {
+                id: ws.format_id(&wc),
+                new_description: "described in second".to_owned(),
+                reset_author: false,
+            }
+            .execute_unboxed(&mut ws)
+            .await?;
+        }
+
+        let mut session = WorkerSession::default();
+        let mut ws = session.load_workspace(repo.path()).await?;
+        let result = UndoOperation.execute_unboxed(&mut ws).await?;
+
+        assert_matches!(result, MutationResult::PreconditionError { message } if message.contains("performed in workspace second"));
 
         Ok(())
     }
