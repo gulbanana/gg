@@ -6,6 +6,9 @@
 - Workspace management is now more consistent with JJ: historical paths are preserved, git worktrees are included when colocated and Undo no longer touches operations from another workspace. 
 - Init and Clone commands create a .gitignore for `.jj/` when colocated.
 
+### Changed
+- Since JJ 0.33, `jj undo` has worked like a stack, with `jj redo` for replaying undone operations. GG kept the old semantics, where you could undo an undo - not very useful, but we hadn't got around to catching up. The Undo command is now accompanied by a Redo command unless you're at the top of the stack. It's interoperable with JJ, so you can `undo` from the CLI and Redo from a GUI or vice versa.
+
 ## [0.45.1](releases/tag/v0.45.1)
 
 ### Deprecated

@@ -211,6 +211,7 @@ pub struct RevHeader {
 #[derive(Serialize, Clone, Debug)]
 #[serde(tag = "type")]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
+#[allow(clippy::large_enum_variant)]
 pub enum RepoConfig {
     #[allow(dead_code)] // used by frontend
     Initial,
@@ -244,6 +245,7 @@ pub enum RepoConfig {
 pub struct RepoStatus {
     pub operation_description: String,
     pub working_copy: CommitId,
+    pub can_redo: bool,
 }
 
 /// Events requiring user interaction during clone/init flows.

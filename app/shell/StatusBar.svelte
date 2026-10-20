@@ -7,6 +7,7 @@
     import type { GitFetch } from "../messages/GitFetch";
     import type { GitPush } from "../messages/GitPush";
     import type { UndoOperation } from "../messages/UndoOperation";
+    import type { RedoOperation } from "../messages/RedoOperation";
     import type { RichHint } from "../mutators/BinaryMutator";
     import BinaryMutator from "../mutators/BinaryMutator";
     import { ignoreToggled, currentSource, currentTarget, hasModal, repoConfigEvent, repoStatusEvent } from "../stores";
@@ -50,6 +51,10 @@
 
     function onUndo() {
         mutate<UndoOperation>("undo_operation", null);
+    }
+
+    function onRedo() {
+        mutate<RedoOperation>("redo_operation", null);
     }
 
     function onPush(remote_name: string) {
@@ -101,6 +106,11 @@
             <ActionWidget tip="undo latest operation" onClick={onUndo} disabled={$repoConfigEvent?.type != "Workspace"}>
                 <Icon name="rotate-ccw" /> Undo
             </ActionWidget>
+            {#if $repoConfigEvent?.type == "Workspace" && $repoStatusEvent?.can_redo}
+                <ActionWidget tip="redo latest undone operation" onClick={onRedo}>
+                    <Icon name="rotate-cw" /> Redo
+                </ActionWidget>
+            {/if}
         </div>
     </div>
 {:else}

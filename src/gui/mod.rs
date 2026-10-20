@@ -39,8 +39,8 @@ use gg_lib::messages::{
         CopyChanges, CopyHunk, CreateRef, CreateRevision, CreateRevisionBetween, DeleteRef,
         DescribeRevision, DuplicateRevisions, ExternalDiff, ExternalResolve, ForgetWorkspace,
         GitFetch, GitPush, InitRepository, InsertRevisions, MoveChanges, MoveHunk, MoveRef,
-        MoveRevisions, MutationOptions, MutationResult, OpenWorkspace, RenameBookmark,
-        RenameWorkspace, TrackBookmark, UndoOperation, UntrackBookmark,
+        MoveRevisions, MutationOptions, MutationResult, OpenWorkspace, RedoOperation,
+        RenameBookmark, RenameWorkspace, TrackBookmark, UndoOperation, UntrackBookmark,
     },
 };
 use gg_lib::worker::{Mutation, Session, SessionEvent, WorkerSession};
@@ -358,6 +358,7 @@ pub fn run_gui(options: super::RunOptions) -> Result<()> {
             forget_workspace,
             rename_workspace,
             undo_operation,
+            redo_operation,
             write_config_table,
         ])
         .menu(move |handle| menu::build_main(handle, &recent_workspaces, &[]))
@@ -1008,6 +1009,15 @@ fn undo_operation(
     options: MutationOptions,
 ) -> Result<MutationResult, InvokeError> {
     try_mutate(window, app_state, UndoOperation, options)
+}
+
+#[tauri::command(async)]
+fn redo_operation(
+    window: Window,
+    app_state: State<AppState>,
+    options: MutationOptions,
+) -> Result<MutationResult, InvokeError> {
+    try_mutate(window, app_state, RedoOperation, options)
 }
 
 #[tauri::command(async)]

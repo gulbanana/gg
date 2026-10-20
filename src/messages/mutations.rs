@@ -250,10 +250,15 @@ pub struct GitFetch {
     pub input: Option<InputResponse>,
 }
 
-/// Reverts the most recent jj operation.
+/// Restores the repo to before the most recent jj operation. Repeated undos step further back.
 #[derive(Deserialize, Debug)]
 #[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
 pub struct UndoOperation;
+
+/// Restores the repo to before the most recent undo, if nothing else has happened since.
+#[derive(Deserialize, Debug)]
+#[cfg_attr(feature = "ts-rs", derive(TS), ts(export, export_to = "app/messages/"))]
+pub struct RedoOperation;
 
 /// Forgets a workspace, removing it from the repository.
 /// If the workspace's working copy commit is empty, it is abandoned.

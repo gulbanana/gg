@@ -47,8 +47,8 @@ use crate::messages::mutations::{
     CreateRef, CreateRevision, CreateRevisionBetween, DeleteRef, DescribeRevision,
     DuplicateRevisions, ExternalDiff, ExternalResolve, ForgetWorkspace, GitFetch, GitPush,
     InsertRevisions, MoveChanges, MoveHunk, MoveRef, MoveRevisions, MutationOptions,
-    MutationResult, OpenWorkspace, RenameBookmark, RenameWorkspace, TrackBookmark, UndoOperation,
-    UntrackBookmark,
+    MutationResult, OpenWorkspace, RedoOperation, RenameBookmark, RenameWorkspace, TrackBookmark,
+    UndoOperation, UntrackBookmark,
 };
 use crate::worker::{Mutation, Session, SessionEvent, WorkerSession};
 use sink::{SseEvent, SseSink};
@@ -346,6 +346,18 @@ async fn handle_mutate(
             state.worker_tx.send(SessionEvent::ExecuteMutation {
                 tx,
                 mutation: Box::new(UndoOperation),
+                options: MutationOptions {
+                    ignore_immutable: false,
+                },
+            })?;
+            let result = rx.recv()?;
+            Ok(Json(serde_json::to_value(result)?))
+        }
+        "redo_operation" => {
+            let (tx, rx) = channel();
+            state.worker_tx.send(SessionEvent::ExecuteMutation {
+                tx,
+                mutation: Box::new(RedoOperation),
                 options: MutationOptions {
                     ignore_immutable: false,
                 },

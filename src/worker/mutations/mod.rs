@@ -5,7 +5,7 @@ mod revision;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use anyhow::{Context, Error, Result};
+use anyhow::{Context, Error, Result, anyhow};
 use async_trait::async_trait;
 use futures_util::{AsyncReadExt, TryStreamExt};
 use itertools::Itertools;
@@ -27,7 +27,8 @@ use jj_lib::{
     merge::{Diff, SameChange},
     merged_tree::MergedTree,
     object_id::ObjectId as ObjectIdTrait,
-    op_walk,
+    op_store,
+    operation::Operation,
     ref_name::WorkspaceNameBuf,
     ref_name::{GitRefNameBuf, RefNameBuf, RemoteName, RemoteNameBuf, RemoteRefSymbol},
     refs::{self, LocalAndRemoteRef, RefPushAction},
@@ -37,6 +38,7 @@ use jj_lib::{
     rewrite::{self},
     store::Store,
     str_util::StringExpression,
+    transaction::Transaction,
     tree_merge::MergeOptions,
 };
 use pollster::FutureExt as _;
@@ -44,12 +46,12 @@ use pollster::FutureExt as _;
 use super::{
     Mutation,
     git_util::{AuthContext, get_git_remote_names},
-    gui_util::WorkspaceSession,
+    gui_util::{REDO_OP_DESC_PREFIX, UNDO_OP_DESC_PREFIX, WorkspaceSession, restored_operation},
 };
 
 use crate::messages::mutations::{
     ExternalDiff, ExternalResolve, ForgetWorkspace, GitFetch, GitPush, GitRefspec, MutationOptions,
-    MutationResult, RenameWorkspace, UndoOperation,
+    MutationResult, RedoOperation, RenameWorkspace, UndoOperation,
 };
 
 macro_rules! precondition {
@@ -605,50 +607,139 @@ impl Mutation for UndoOperation {
         ws: &mut WorkspaceSession,
         _options: &MutationOptions,
     ) -> Result<MutationResult> {
-        let head_op = op_walk::resolve_op_with_repo(ws.repo(), "@").await?; // XXX this should be behind an abstraction, maybe reused in snapshot
+        // snapshot first, so that unsaved changes are the next thing undone
+        let tx = ws.start_transaction().await?;
+        let repo_loader = tx.base_repo().loader().clone();
 
-        if let Some(op_workspace_name) = &head_op.metadata().workspace_name
-            && op_workspace_name != ws.name()
+        // undoing an undo steps further back, to before the operation it restored
+        let mut target_op = tx.base_repo().operation().clone();
+        if let Some(restored_op) =
+            restored_operation(&repo_loader, &target_op, UNDO_OP_DESC_PREFIX).await?
         {
+            target_op = restored_op;
+        }
+
+        if let Some(op_workspace_name) = other_workspace_name(ws, &target_op) {
             precondition!(
                 "Refusing to undo operation {} because it was performed in workspace {}",
-                short_operation_hash(head_op.id()),
+                short_operation_hash(target_op.id()),
                 op_workspace_name.as_symbol()
             );
         }
 
-        let mut parent_ops = head_op.parents().await?.into_iter();
-
-        let Some(parent_op) = parent_ops.next() else {
+        let mut parent_ops = target_op.parents().await?.into_iter();
+        let Some(mut restore_op) = parent_ops.next() else {
             precondition!("Cannot undo repo initialization");
         };
-
         if parent_ops.next().is_some() {
             precondition!("Cannot undo a merge operation");
         };
 
-        let mut tx = ws.start_transaction().await?;
-        let repo_loader = tx.base_repo().loader();
-        let head_repo = repo_loader.load_at(&head_op).await?;
-        let parent_repo = repo_loader.load_at(&parent_op).await?;
-        tx.repo_mut().merge(&head_repo, &parent_repo).await?;
-        let restored_view = tx.repo().view().store_view().clone();
-        tx.repo_mut().set_view(restored_view);
-
-        match ws
-            .finish_transaction(tx, format!("undo operation {}", head_op.id().hex()))
-            .await?
+        // restore what an undo restored rather than the undo itself
+        if let Some(restored_op) =
+            restored_operation(&repo_loader, &restore_op, UNDO_OP_DESC_PREFIX).await?
         {
-            Some(new_status) => {
-                let working_copy = ws.get_commit(ws.wc_id())?;
-                let new_selection = Some(ws.format_header(&working_copy, None)?);
-                Ok(MutationResult::Updated {
-                    new_status,
-                    new_selection,
-                })
-            }
-            None => Ok(MutationResult::Unchanged),
+            restore_op = restored_op;
         }
+
+        finish_restore(ws, tx, &restore_op, UNDO_OP_DESC_PREFIX).await
+    }
+}
+
+#[async_trait(?Send)]
+impl Mutation for RedoOperation {
+    async fn execute(
+        self: Box<Self>,
+        ws: &mut WorkspaceSession,
+        _options: &MutationOptions,
+    ) -> Result<MutationResult> {
+        let tx = ws.start_transaction().await?;
+        let repo_loader = tx.base_repo().loader().clone();
+
+        // redoing a redo steps further forward, to the undo before the operation it restored
+        let mut target_op = tx.base_repo().operation().clone();
+        if let Some(restored_op) =
+            restored_operation(&repo_loader, &target_op, REDO_OP_DESC_PREFIX).await?
+        {
+            target_op = restored_op;
+        }
+
+        if !target_op
+            .metadata()
+            .description
+            .starts_with(UNDO_OP_DESC_PREFIX)
+        {
+            precondition!("Nothing to redo");
+        }
+
+        if let Some(op_workspace_name) = other_workspace_name(ws, &target_op) {
+            precondition!(
+                "Refusing to redo operation {} because it was performed in workspace {}",
+                short_operation_hash(target_op.id()),
+                op_workspace_name.as_symbol()
+            );
+        }
+
+        let mut restore_op = target_op
+            .parents()
+            .await?
+            .into_iter()
+            .exactly_one()
+            .map_err(|_| anyhow!("Undo operation should have a single parent"))?;
+
+        // restore what a redo restored rather than the redo itself
+        if let Some(restored_op) =
+            restored_operation(&repo_loader, &restore_op, REDO_OP_DESC_PREFIX).await?
+        {
+            restore_op = restored_op;
+        }
+
+        finish_restore(ws, tx, &restore_op, REDO_OP_DESC_PREFIX).await
+    }
+}
+
+/// the workspace an operation was performed in, if it's not this one. undoing or redoing another
+/// workspace's operations is usually a mistake, so jj refuses to do it
+fn other_workspace_name<'op>(
+    ws: &WorkspaceSession,
+    op: &'op Operation,
+) -> Option<&'op WorkspaceNameBuf> {
+    op.metadata()
+        .workspace_name
+        .as_ref()
+        .filter(|op_workspace_name| *op_workspace_name != ws.name())
+}
+
+/// commits the repo view of an earlier operation, restored as `jj op restore` does by default
+async fn finish_restore(
+    ws: &mut WorkspaceSession<'_>,
+    mut tx: Transaction,
+    restore_op: &Operation,
+    description_prefix: &str,
+) -> Result<MutationResult> {
+    // update the working copy and export to git
+    let restored_view = restore_op.view().await?.store_view().clone();
+    let current_view = tx.base_repo().view().store_view();
+    let new_view = op_store::View {
+        git_refs: current_view.git_refs.clone(),
+        git_heads: current_view.git_heads.clone(),
+        ..restored_view
+    };
+    tx.repo_mut().set_view(new_view);
+
+    match ws
+        .finish_transaction(tx, format!("{description_prefix}{}", restore_op.id().hex()))
+        .await?
+    {
+        Some(new_status) => {
+            let working_copy = ws.get_commit(ws.wc_id())?;
+            let new_selection = Some(ws.format_header(&working_copy, None)?);
+            Ok(MutationResult::Updated {
+                new_status,
+                new_selection,
+            })
+        }
+        None => Ok(MutationResult::Unchanged),
     }
 }
 
@@ -823,7 +914,7 @@ mod tests {
         },
         worker::{
             WorkerSession, queries,
-            tests::{mkrepo, query_by_id, revs},
+            tests::{get_by_chid, mkrepo, query_by_id, revs},
         },
     };
     use anyhow::Result;
@@ -1077,6 +1168,81 @@ auto-track = "glob:*.txt"
             ws.workspace_root("second".to_owned())?,
             dunce::canonicalize(&second_path)?
         );
+
+        Ok(())
+    }
+
+    async fn describe_wc(ws: &mut WorkspaceSession<'_>, description: &str) -> Result<()> {
+        DescribeRevision {
+            id: revs::working_copy(),
+            new_description: description.to_owned(),
+            reset_author: false,
+        }
+        .execute_unboxed(ws)
+        .await?;
+        Ok(())
+    }
+
+    fn wc_description(ws: &WorkspaceSession) -> Result<String> {
+        Ok(get_by_chid(ws, &revs::working_copy())?
+            .description()
+            .to_owned())
+    }
+
+    fn can_redo(result: &MutationResult) -> bool {
+        match result {
+            MutationResult::Updated { new_status, .. } => new_status.can_redo,
+            _ => panic!("expected an update, got {result:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn undo_and_redo_are_sequential() -> Result<()> {
+        let repo = mkrepo();
+
+        let mut session = WorkerSession::default();
+        let mut ws = session.load_workspace(repo.path()).await?;
+        let original = wc_description(&ws)?;
+
+        describe_wc(&mut ws, "first\n").await?;
+        describe_wc(&mut ws, "second\n").await?;
+
+        let result = UndoOperation.execute_unboxed(&mut ws).await?;
+        assert!(can_redo(&result));
+        assert_eq!(wc_description(&ws)?, "first\n");
+
+        UndoOperation.execute_unboxed(&mut ws).await?;
+        assert_eq!(wc_description(&ws)?, original);
+
+        let result = RedoOperation.execute_unboxed(&mut ws).await?;
+        assert!(can_redo(&result));
+        assert_eq!(wc_description(&ws)?, "first\n");
+
+        let result = RedoOperation.execute_unboxed(&mut ws).await?;
+        assert!(!can_redo(&result));
+        assert_eq!(wc_description(&ws)?, "second\n");
+
+        let result = RedoOperation.execute_unboxed(&mut ws).await?;
+        assert_matches!(result, MutationResult::PreconditionError { message } if message.contains("Nothing to redo"));
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn new_operation_discards_redo() -> Result<()> {
+        let repo = mkrepo();
+
+        let mut session = WorkerSession::default();
+        let mut ws = session.load_workspace(repo.path()).await?;
+
+        describe_wc(&mut ws, "undone\n").await?;
+        UndoOperation.execute_unboxed(&mut ws).await?;
+        describe_wc(&mut ws, "replacement\n").await?;
+        assert!(!ws.format_status().can_redo);
+
+        let result = RedoOperation.execute_unboxed(&mut ws).await?;
+        assert_matches!(result, MutationResult::PreconditionError { message } if message.contains("Nothing to redo"));
+        assert_eq!(wc_description(&ws)?, "replacement\n");
 
         Ok(())
     }

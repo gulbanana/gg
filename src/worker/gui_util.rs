@@ -34,9 +34,10 @@ use jj_lib::{
     matchers::{Matcher, NothingMatcher},
     object_id::ObjectId,
     op_heads_store,
+    op_store::OperationId,
     operation::Operation,
     ref_name::{WorkspaceName, WorkspaceNameBuf},
-    repo::{ReadonlyRepo, Repo, RepoLoaderError},
+    repo::{ReadonlyRepo, Repo, RepoLoader, RepoLoaderError},
     repo_path::RepoPath,
     revset::{
         self, Revset, RevsetAliasesMap, RevsetDiagnostics, RevsetEvaluationError, RevsetExpression,
@@ -813,7 +814,24 @@ impl WorkspaceSession<'_> {
                 .description
                 .clone(),
             working_copy: self.format_commit_id(&self.operation.wc_id),
+            can_redo: self.can_redo(),
         }
+    }
+
+    fn can_redo(&self) -> bool {
+        let repo = &self.operation.repo;
+        let target_op =
+            match restored_operation(repo.loader(), repo.operation(), REDO_OP_DESC_PREFIX)
+                .block_on()
+            {
+                Ok(Some(restored_op)) => restored_op,
+                Ok(None) => repo.operation().clone(),
+                Err(_) => return false,
+            };
+        target_op
+            .metadata()
+            .description
+            .starts_with(UNDO_OP_DESC_PREFIX)
     }
 
     pub(crate) fn format_commit_id(&self, id: &CommitId) -> messages::CommitId {
@@ -1453,6 +1471,28 @@ pub(crate) fn maybe_add_gitignore(workspace: &Workspace) -> Result<()> {
             .with_context(|| format!("Failed to write {}", gitignore_path.display()))?;
     }
     Ok(())
+}
+
+// must match jj-cli, so that gg and jj share an undo stack
+pub(crate) const UNDO_OP_DESC_PREFIX: &str = "undo: restore to operation ";
+pub(crate) const REDO_OP_DESC_PREFIX: &str = "redo: restore to operation ";
+
+/// if `op` is an undo or redo (whichever `prefix` identifies), the operation it restored
+pub(crate) async fn restored_operation(
+    repo_loader: &RepoLoader,
+    op: &Operation,
+    prefix: &str,
+) -> Result<Option<Operation>> {
+    let Some(restored_hex) = op.metadata().description.strip_prefix(prefix) else {
+        return Ok(None);
+    };
+    let restored_id = OperationId::try_from_hex(restored_hex).ok_or_else(|| {
+        anyhow!(
+            "Failed to parse ID of the operation restored by {}",
+            short_operation_hash(op.id())
+        )
+    })?;
+    Ok(Some(repo_loader.load_operation(&restored_id).await?))
 }
 
 fn find_workspace_dir(cwd: &Path) -> &Path {
