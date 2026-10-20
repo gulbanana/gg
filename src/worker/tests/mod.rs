@@ -1,3 +1,4 @@
+mod colocated;
 mod queries;
 mod session;
 
