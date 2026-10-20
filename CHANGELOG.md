@@ -1,6 +1,7 @@
 # GG Changelog
 
-## [Unreleased]
+## [0.46.0](releases/tag/v0.46.0)
+This release is based on Jujutsu 0.46.
 
 ### Added
 - Workspace management is now more consistent with JJ: historical paths are preserved, git worktrees are included when colocated and Undo no longer touches operations from another workspace. 
