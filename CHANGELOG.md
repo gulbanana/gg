@@ -1,5 +1,10 @@
 # GG Changelog
 
+## [Unreleased]
+
+### Added
+- Workspace management is now more consistent with JJ: historical paths are preserved.
+
 ## [0.45.1](releases/tag/v0.45.1)
 
 ### Deprecated

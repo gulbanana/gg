@@ -657,6 +657,7 @@ impl Mutation for ForgetWorkspace {
         }
 
         let wc_commit = ws.get_commit(wc_id)?;
+        let worktree_path = ws.reachable_workspace_path(&workspace_name);
 
         let mut tx = ws.start_transaction().await?;
         tx.repo_mut().remove_workspace(&workspace_name).await?;
@@ -669,18 +670,18 @@ impl Mutation for ForgetWorkspace {
             tx.repo_mut().rebase_descendants().await?;
         }
 
-        ws.repo()
-            .loader()
-            .workspace_store()
-            .forget(&[&*workspace_name])?;
-
-        match ws
+        let new_status = ws
             .finish_transaction(
                 tx,
                 format!("forget workspace '{}'", workspace_name.as_symbol()),
             )
-            .await?
-        {
+            .await?;
+
+        if let Some(worktree_path) = worktree_path {
+            ws.unlink_git_worktree(&worktree_path);
+        }
+
+        match new_status {
             Some(new_status) => Ok(MutationResult::Updated {
                 new_status,
                 new_selection: None,
@@ -1033,6 +1034,36 @@ auto-track = "glob:*.txt"
             count_before - 1,
             count_after,
             "empty WC commit should be abandoned"
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn forget_workspace_can_be_undone() -> Result<()> {
+        let repo = mkrepo();
+
+        let mut session = WorkerSession::default();
+        let mut ws = session.load_workspace(repo.path()).await?;
+
+        let second_path = repo.path().join("second-workspace");
+        ws.add_workspace("second".to_owned(), second_path.clone())
+            .await?;
+
+        ForgetWorkspace {
+            name: "second".to_owned(),
+        }
+        .execute_unboxed(&mut ws)
+        .await?;
+        assert!(ws.workspace_root("second".to_owned()).is_err());
+
+        let result = UndoOperation.execute_unboxed(&mut ws).await?;
+        assert_matches!(result, MutationResult::Updated { .. });
+
+        // the recorded path survives the forget, so the restored workspace can still be found
+        assert_eq!(
+            ws.workspace_root("second".to_owned())?,
+            dunce::canonicalize(&second_path)?
         );
 
         Ok(())

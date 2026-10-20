@@ -27,7 +27,7 @@ use jj_lib::{
     default_index::DefaultReadonlyIndex,
     file_util,
     fileset::{self, FilesetAliasesMap, FilesetDiagnostics, FilesetParseContext},
-    git::{self, GitSettings, REMOTE_NAME_FOR_LOCAL_GIT_REPO},
+    git::{self, GitSettings, GitSubprocessOptions, REMOTE_NAME_FOR_LOCAL_GIT_REPO},
     git_backend::GitBackend,
     gitignore::GitIgnoreFile,
     id_prefix::{IdPrefixContext, IdPrefixIndex},
@@ -254,13 +254,10 @@ impl WorkspaceSession<'_> {
             "cannot forget the current workspace"
         );
 
+        let worktree_path = self.reachable_workspace_path(&workspace_name);
+
         let mut tx = self.start_transaction().await?;
         tx.repo_mut().remove_workspace(&workspace_name).await?;
-
-        self.repo()
-            .loader()
-            .workspace_store()
-            .forget(&[&*workspace_name])?;
 
         self.finish_transaction(
             tx,
@@ -268,7 +265,51 @@ impl WorkspaceSession<'_> {
         )
         .await?;
 
+        if let Some(worktree_path) = worktree_path {
+            self.unlink_git_worktree(&worktree_path);
+        }
+
         Ok(())
+    }
+
+    /// the path a workspace has or had. outlives forget, but must be captured first
+    pub(crate) fn reachable_workspace_path(&self, name: &WorkspaceName) -> Option<PathBuf> {
+        let path = self
+            .repo()
+            .loader()
+            .workspace_store()
+            .get_workspace_path(name)
+            .ok()
+            .flatten()?;
+        dunce::canonicalize(path).ok()
+    }
+
+    /// the inverse of create_worktree() - removes the .git link and metadata
+    pub(crate) fn unlink_git_worktree(&self, worktree_path: &Path) {
+        // refuse to delete a .git belonging to some other repo (jj doesn't have this check, but probably should)
+        let Ok(git_backend) = git::get_git_backend(self.repo().store()) else {
+            return;
+        };
+
+        // if `worktree prune` isn't working we don't need to fail the actual `workspace forget`
+        if git_backend.open_git_repo_at_workdir(worktree_path).is_err() {
+            return;
+        }
+
+        let result = GitSubprocessOptions::from_settings(&self.data.workspace_settings)
+            .map_err(Error::new)
+            .and_then(|options| {
+                git::unlink_worktree(self.repo().store(), options, worktree_path)
+                    .map_err(Error::new)
+            });
+        match result {
+            Ok(true) => log::info!("Removed Git worktree for {}", worktree_path.display()),
+            Ok(false) => (),
+            Err(err) => log::warn!(
+                "Failed to remove Git worktree for {}: {err:#}",
+                worktree_path.display()
+            ),
+        }
     }
 
     pub async fn rename_workspace(
