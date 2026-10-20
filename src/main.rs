@@ -1,4 +1,6 @@
 #![cfg_attr(feature = "app", windows_subsystem = "windows")]
+// temporarily continue to use gg_lib until it's merged back in
+#![allow(deprecated)]
 
 mod gui;
 #[cfg(target_os = "macos")]

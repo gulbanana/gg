@@ -1,5 +1,10 @@
 # GG Changelog
 
+## [Unreleased]
+
+### Deprecated
+- The `gg_lib` library target hasn't turned out to be worth the complexity - soon, JJ is introducing a `jj-frontend` crate which makes it easier to build custom clients, and which GG will be using. The `[lib]` target will be removed from the gg-cli crate in some future release, unless someone comes up with a use for it.
+
 ## [0.45.0](releases/tag/v0.45.0)
 This release is based on Jujutsu 0.45.1.
 

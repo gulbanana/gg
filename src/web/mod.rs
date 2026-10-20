@@ -140,7 +140,6 @@ pub async fn run_web(options: super::RunOptions, web_options: WebOptions) -> Res
 
 /// Build an Axum [`Router`] that serves the GG frontend and JSON API.
 ///
-/// This is the primary integration point for embedding GG in another service.
 /// It spawns a background worker thread (via [`WorkerSession`]) and wires up
 /// all routes. The returned [`oneshot::Receiver`] fires when the server should
 /// shut down (e.g. the last SSE client disconnected after `client_timeout`).
@@ -150,25 +149,6 @@ pub async fn run_web(options: super::RunOptions, web_options: WebOptions) -> Res
 /// - `options` — workspace path, settings, and flags (see [`RunOptions`](super::RunOptions))
 /// - `client_timeout` — when `Some`, the server shuts itself down after all
 ///   SSE clients have been disconnected for this duration
-///
-/// # Example
-///
-/// ```no_run
-/// use std::path::PathBuf;
-/// use gg_lib::{RunOptions, web};
-///
-/// #[tokio::main]
-/// async fn main() -> anyhow::Result<()> {
-///     let options = RunOptions::new(PathBuf::from("."));
-///     let (app, shutdown_rx) = web::create_app(options, None)?;
-///
-///     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
-///     axum::serve(listener, app)
-///         .with_graceful_shutdown(async { let _ = shutdown_rx.await; })
-///         .await?;
-///     Ok(())
-/// }
-/// ```
 pub fn create_app(
     options: super::RunOptions,
     client_timeout: Option<Duration>,

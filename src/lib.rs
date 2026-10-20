@@ -1,24 +1,14 @@
 //! # GG: Gui for [JJ](https://jj-vcs.github.io/jj/)
 //!
-//! This crate exposes two ways to embed GG's functionality in your own application:
-//!
-//! ## Axum router (for embedding `gg web`)
-//!
-//! [`web::create_app`] returns an [`axum::Router`] that serves both the embedded
-//! UI and a JSON API. This is the easiest integration path — you get a fully
-//! working GG instance that can be composed with other Axum services or bound to
-//! any [`tokio::net::TcpListener`].
-//!
-//! ## Worker session (for a custom embedding or use as an API)
-//!
-//! For lower-level control, create a [`worker::WorkerSession`] and drive it with
-//! [`worker::SessionEvent`] messages over a standard [`std::sync::mpsc`] channel.
-//! This is how both the Tauri GUI and the web server work internally — each
-//! window/tab owns one worker thread because jj-lib is single-threaded.
-//!
-//! The worker thread is a state machine: [`worker::WorkerSession`] (unloaded) →
-//! `WorkspaceSession` (loaded) → `QuerySession` (pagination). Only the first state
-//! is public; transitions happen automatically in response to [`worker::SessionEvent`] messages.
+//! **Deprecated:** `gg_lib` is an implementation detail of the `gg` application, not a
+//! supported API, and will be removed in a future release. To use GG, install it with
+//! `cargo install gg-cli` or from package managers. If you depend on GG as a library,
+//! or would like to in future, please [comment about your use cases](https://github.com/gulbanana/gg/discussions/152).
+
+#![deprecated(
+    since = "0.45.1",
+    note = "gg_lib will be removed in a future release; if you depend on it, please post a comment at https://github.com/gulbanana/gg/discussions/152"
+)]
 
 pub mod askpass;
 pub mod config;
