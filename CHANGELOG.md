@@ -4,6 +4,7 @@
 
 ### Added
 - Workspace management is now more consistent with JJ: historical paths are preserved, git worktrees are included when colocated and Undo no longer touches operations from another workspace. 
+- Init and Clone commands create a .gitignore for `.jj/` when colocated.
 
 ## [0.45.1](releases/tag/v0.45.1)
 

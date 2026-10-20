@@ -221,11 +221,7 @@ impl WorkspaceSession<'_> {
         )
         .await?;
 
-        if colocate {
-            let gitignore_path = path.join(".jj").join(".gitignore");
-            std::fs::write(&gitignore_path, "/*\n")
-                .with_context(|| format!("failed to write {}", gitignore_path.display()))?;
-        }
+        maybe_add_gitignore(&new_workspace)?;
 
         // set up the real WC commit for the new workspace
         let mut tx = cli_util::start_repo_transaction(&repo, &workspace_name, &[]);
@@ -1447,6 +1443,16 @@ impl OperationData {
         }
         Ok(git_ignores)
     }
+}
+
+/// jj-cli has this, but it needs a `WorkspaceCommandHelper`
+pub(crate) fn maybe_add_gitignore(workspace: &Workspace) -> Result<()> {
+    if is_colocated_git_workspace(workspace).map_err(|e| Error::new(e.error))? {
+        let gitignore_path = workspace.workspace_root().join(".jj").join(".gitignore");
+        std::fs::write(&gitignore_path, "/*\n")
+            .with_context(|| format!("Failed to write {}", gitignore_path.display()))?;
+    }
+    Ok(())
 }
 
 fn find_workspace_dir(cwd: &Path) -> &Path {

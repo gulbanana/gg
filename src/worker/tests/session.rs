@@ -522,6 +522,7 @@ async fn init_workspace_internal() -> Result<()> {
 
     assert!(dir.path().join(".jj").exists());
     assert!(!dir.path().join(".git").exists());
+    assert!(!dir.path().join(".jj").join(".gitignore").exists());
 
     Ok(())
 }
@@ -548,6 +549,7 @@ async fn init_workspace_colocated() -> Result<()> {
     // Verify both .jj and .git were created
     assert!(dir.path().join(".jj").exists());
     assert!(dir.path().join(".git").exists());
+    assert!(dir.path().join(".jj").join(".gitignore").exists());
 
     Ok(())
 }
@@ -581,6 +583,7 @@ async fn init_workspace_colocated_existing_git() -> Result<()> {
 
     assert!(dir.path().join(".jj").exists());
     assert!(dir.path().join(".git").exists());
+    assert!(dir.path().join(".jj").join(".gitignore").exists());
 
     Ok(())
 }
@@ -727,6 +730,7 @@ async fn clone_workspace_colocated() -> Result<()> {
     // Verify both .jj and .git were created
     assert!(dest_dir.path().join(".jj").exists());
     assert!(dest_dir.path().join(".git").exists());
+    assert!(dest_dir.path().join(".jj").join(".gitignore").exists());
 
     Ok(())
 }

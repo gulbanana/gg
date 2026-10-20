@@ -172,16 +172,17 @@ impl WorkerSession {
         let (settings, _, _, _) = crate::config::read_config(None)?;
         let object_hash = read_object_hash(&settings)?;
 
-        if colocated {
+        let (workspace, _) = if colocated {
             let git_path = location.join(".git");
             if git_path.exists() {
-                Workspace::init_external_git(&settings, &canonical_location, &git_path).await?; // existing .git/, create .jj
+                Workspace::init_external_git(&settings, &canonical_location, &git_path).await? // existing .git/, create .jj
             } else {
-                Workspace::init_colocated_git(&settings, &canonical_location, object_hash).await?; // create .git/ and .jj/
+                Workspace::init_colocated_git(&settings, &canonical_location, object_hash).await? // create .git/ and .jj/
             }
         } else {
-            Workspace::init_internal_git(&settings, &canonical_location, object_hash).await?; // create .jj/ with a .git/ inside it
-        }
+            Workspace::init_internal_git(&settings, &canonical_location, object_hash).await? // create .jj/ with a .git/ inside it
+        };
+        gui_util::maybe_add_gitignore(&workspace)?;
 
         Ok(canonical_location)
     }
@@ -224,6 +225,7 @@ impl WorkerSession {
         } else {
             Workspace::init_internal_git(&settings, &canonical_location, object_hash).await?
         };
+        gui_util::maybe_add_gitignore(&workspace)?;
 
         // add origin
         let remote_name = RemoteName::new("origin");
